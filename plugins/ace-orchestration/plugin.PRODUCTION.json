@@ -25,11 +25,11 @@
   "agents": "./agents",
   "mcpServers": {
     "ace-pattern-learning": {
-      "command": "python",
-      "args": ["-m", "ace_client"],
+      "command": "uvx",
+      "args": ["ce-ai-ace-client"],
       "env": {
-        "ACE_SERVER_URL": "http://localhost:8000/mcp",
-        "ACE_API_TOKEN": "local-dev-token",
+        "ACE_SERVER_URL": "https://ace.your-domain.com/mcp",
+        "ACE_API_TOKEN": "${ACE_API_TOKEN}",
         "ACE_STORAGE_PATH": "${CLAUDE_PLUGIN_ROOT}/.ace-memory/patterns.db"
       }
     }
