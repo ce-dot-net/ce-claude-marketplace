@@ -12,8 +12,27 @@ Public repository for Claude Code plugins and MCP clients.
 - **Features**: Pattern learning, offline training, playbook generation
 
 **Installation**:
+
+**Local Testing (Development)**:
 ```bash
-claude-code plugin install ce-dot-net/ace-orchestration
+# 1. Install MCP client locally
+cd mcp-clients/ce-ai-ace-client
+pip install -e .
+
+# 2. Add marketplace (from local path)
+/plugin marketplace add /path/to/ce-claude-marketplace
+
+# 3. Install plugin
+/plugin install ace-orchestration@ce-dot-net-marketplace
+```
+
+**Production (After PyPI publish)**:
+```bash
+# Add marketplace from GitHub
+/plugin marketplace add ce-dot-net/ce-claude-marketplace
+
+# Install plugin
+/plugin install ace-orchestration@ce-dot-net-marketplace
 ```
 
 **Slash Commands**:
@@ -33,11 +52,39 @@ claude-code plugin install ce-dot-net/ace-orchestration
 - **Purpose**: Connects Claude Code to remote ACE server
 
 **Installation**:
+
+**Local Development**:
+```bash
+cd mcp-clients/ce-ai-ace-client
+pip install -e .
+```
+
+**Production (After PyPI publish)**:
 ```bash
 uvx ce-ai-ace-client
 ```
 
 **Configuration**:
+
+The MCP client is automatically configured when you install the plugin via marketplace.
+
+**Local Testing** (default in plugin.json):
+```json
+{
+  "mcpServers": {
+    "ace-pattern-learning": {
+      "command": "python",
+      "args": ["-m", "ace_client"],
+      "env": {
+        "ACE_SERVER_URL": "http://localhost:8000/mcp",
+        "ACE_API_TOKEN": "local-dev-token"
+      }
+    }
+  }
+}
+```
+
+**Production** (use plugin.PRODUCTION.json):
 ```json
 {
   "mcpServers": {

@@ -1,0 +1,39 @@
+{
+  "name": "ce-dot-net-marketplace",
+  "owner": {
+    "name": "CE Dot Net",
+    "email": "ace@ce-dot-net.com"
+  },
+  "metadata": {
+    "description": "Public marketplace for Claude Code plugins and MCP clients from CE Dot Net",
+    "version": "1.0.0",
+    "pluginRoot": "./plugins"
+  },
+  "plugins": [
+    {
+      "name": "ace-orchestration",
+      "source": "./plugins/ace-orchestration",
+      "description": "ACE (Agentic Context Engineering) - Self-improving Claude Code plugin based on Stanford/SambaNova/UC Berkeley research (arXiv:2510.04618v1)",
+      "version": "2.5.0",
+      "author": {
+        "name": "ACE Team",
+        "email": "ace@ce-dot-net.com"
+      },
+      "homepage": "https://github.com/ce-dot-net/ce-ai-ace",
+      "repository": "https://github.com/ce-dot-net/ce-claude-marketplace",
+      "license": "MIT",
+      "keywords": [
+        "claude-code",
+        "ace",
+        "pattern-learning",
+        "self-improving",
+        "context-engineering",
+        "agentic",
+        "research",
+        "stanford",
+        "autonomous"
+      ],
+      "category": "productivity"
+    }
+  ]
+}
