@@ -1,0 +1,11 @@
+README.md
+pyproject.toml
+ace_client/__init__.py
+ace_client/__main__.py
+ace_client/client.py
+ce_ai_ace_client.egg-info/PKG-INFO
+ce_ai_ace_client.egg-info/SOURCES.txt
+ce_ai_ace_client.egg-info/dependency_links.txt
+ce_ai_ace_client.egg-info/entry_points.txt
+ce_ai_ace_client.egg-info/requires.txt
+ce_ai_ace_client.egg-info/top_level.txt

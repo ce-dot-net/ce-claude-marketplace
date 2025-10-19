@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "After editing/writing code, consider using the ace_reflect MCP tool to discover patterns from the changes:\n\nCall mcp__ace-pattern-learning__ace_reflect with:\n- code: <file content>\n- language: <detected language>\n- file_path: <relative path>\n\nThis will automatically discover and curate patterns using the ACE research framework."
+          }
+        ]
+      }
+    ],
+    "PostTaskCompletion": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/PostTaskCompletion.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

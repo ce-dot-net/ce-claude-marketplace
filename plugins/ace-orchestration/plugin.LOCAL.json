@@ -1,0 +1,36 @@
+{
+  "name": "ace-orchestration",
+  "version": "2.5.0",
+  "description": "ACE (Agentic Context Engineering) - LOCAL MODE for development. Python FastMCP server with TRUE LLM-based pattern discovery via MCP Sampling (no API key needed!). Based on Stanford/SambaNova/UC Berkeley research (arXiv:2510.04618v1)",
+  "author": {
+    "name": "ACE Team",
+    "email": "ace@ce-dot-net.com"
+  },
+  "homepage": "https://github.com/ce-dot-net/ce-ai-ace",
+  "repository": "https://github.com/ce-dot-net/ce-ai-ace",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "ace",
+    "pattern-learning",
+    "self-improving",
+    "context-engineering",
+    "agentic",
+    "research",
+    "stanford",
+    "autonomous"
+  ],
+  "hooks": "./hooks/hooks.json",
+  "commands": "./commands",
+  "agents": "./agents",
+  "mcpServers": {
+    "ace-pattern-learning": {
+      "command": "python3",
+      "args": ["-m", "ace_server"],
+      "cwd": "${CLAUDE_PLUGIN_ROOT}/../../../ce-ai-ace-server",
+      "env": {
+        "ACE_STORAGE_PATH": "${CLAUDE_PLUGIN_ROOT}/.ace-memory/patterns.db"
+      }
+    }
+  }
+}
