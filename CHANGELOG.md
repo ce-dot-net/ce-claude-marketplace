@@ -5,6 +5,42 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.6] - 2025-10-21
+
+### 🔧 MCP Configuration Fix - Use .mcp.json File
+
+**CHANGED: MCP server configuration moved to separate .mcp.json file**
+
+### Changes
+
+**Configuration Approach**:
+- Created `.mcp.json` file in plugin directory with MCP server configuration
+- Changed `plugin.json` to reference: `"mcpServers": "./.mcp.json"`
+- Removed inline `mcpServers` object from plugin.json
+
+### Why This Matters
+
+Based on research of Claude Code plugin ecosystem and GitHub issues:
+- Some plugins have issues with inline `mcpServers` in plugin.json
+- Separate `.mcp.json` file is the documented alternative approach
+- Environment variable expansion works better with `.mcp.json` files
+- Follows the pattern used by other Claude Code plugins
+
+### Files Added
+- `plugins/ace-orchestration/.mcp.json` - MCP server configuration
+- `plugins/ace-orchestration/.mcp.template.json` - Template for version updates
+
+### Testing
+1. Update plugin: `/plugin update ace-orchestration@ce-dot-net-marketplace`
+2. Restart Claude Code completely
+3. Check `/mcp` to see if `ace-pattern-learning` server appears
+4. Try `/ace-init` to verify tools are available
+
+### Version Updates
+- ace-orchestration plugin: 3.1.5 → 3.1.6
+
+---
+
 ## [3.1.5] - 2025-10-21
 
 ### 🔧 Configuration Fix - Project-Local Config Priority
