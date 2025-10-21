@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
   "version": "3.1.0",
-  "description": "Code Engine ACE - Intelligent pattern learning and code generation with Three-Agent Architecture (Generator → Reflector → Curator). Learns from execution feedback to improve coding outcomes. Bundled MCP server with interactive configuration.",
+  "description": "Code Engine ACE - Intelligent pattern learning and code generation with Three-Agent Architecture (Generator → Reflector → Curator). Learns from execution feedback to improve coding outcomes. Downloads latest MCP client from npm with interactive configuration.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
@@ -25,8 +25,8 @@
   "agents": "./agents",
   "mcpServers": {
     "ace-pattern-learning": {
-      "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/index.js"],
+      "command": "npx",
+      "args": ["--yes", "@ce-dot-net/ace-client@3.1.0"],
       "env": {
         "ACE_SERVER_URL": "${env:ACE_SERVER_URL}",
         "ACE_API_TOKEN": "${env:ACE_API_TOKEN}",
