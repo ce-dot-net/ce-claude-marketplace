@@ -1,6 +1,5 @@
 ---
 description: Export ACE playbook to JSON for backup or sharing
-allowed-tools: mcp__ace-pattern-learning__ace_get_playbook, Write
 ---
 
 # ACE Export Playbook

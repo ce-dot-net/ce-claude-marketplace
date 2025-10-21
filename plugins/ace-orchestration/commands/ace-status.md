@@ -1,7 +1,6 @@
 ---
 description: Show ACE playbook statistics and learning status
 argument-hint:
-allowed-tools: mcp__ace-pattern-learning__ace_status
 ---
 
 # ACE Status

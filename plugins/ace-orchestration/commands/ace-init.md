@@ -1,17 +1,29 @@
 ---
 description: Initialize ACE playbook from existing codebase (offline learning)
 argument-hint: [--commits N] [--days N] [--merge|--replace]
-allowed-tools: mcp__ace-pattern-learning__ace_init
 ---
 
 # ACE Init
 
 Initialize ACE playbook by analyzing your existing codebase's git history (offline learning).
 
+## Instructions for Claude
+
+When the user runs `/ace-init`, follow these steps:
+
+1. **Call the ace_init MCP tool** with the following parameters:
+   - Tool name: `mcp__ace-pattern-learning__ace_init`
+   - Parameters: `commit_limit`, `days_back`, `merge_with_existing`
+
+2. **If the tool is not available:**
+   - Check if ACE is configured (look for .ace/config.json or environment variables)
+   - Tell the user they need to run `/ace-configure` first to set up the ACE connection
+   - Explain that the MCP server must be running to use ACE features
+
 ## Usage
 
 ```
-Use the mcp__ace-pattern-learning__ace_init tool to bootstrap your playbook.
+Call the mcp__ace-pattern-learning__ace_init tool to bootstrap your playbook.
 
 Parameters:
 - repo_path: Path to git repository (defaults to current directory)

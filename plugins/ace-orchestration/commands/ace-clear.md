@@ -1,7 +1,6 @@
 ---
 description: Clear ACE playbook (reset all learned bullets)
 argument-hint: [--confirm]
-allowed-tools: mcp__ace-pattern-learning__ace_clear
 ---
 
 # ACE Clear

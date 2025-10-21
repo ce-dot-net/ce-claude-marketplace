@@ -23,8 +23,18 @@ When the user runs `/ace-configure`, follow these steps:
    - Required - usually starts with `prj_`
 
 4. **Save Configuration:**
-   - Use the `ace_save_config` MCP tool with the provided values
-   - Show the confirmation message from the tool
+   - Find the project root using: `git rev-parse --show-toplevel` (or use current directory if not in git)
+   - Create `.ace` directory in project root if it doesn't exist
+   - Write configuration to `.ace/config.json` with the provided values:
+     ```json
+     {
+       "serverUrl": "[provided URL]",
+       "apiToken": "[provided token]",
+       "projectId": "[provided project ID]"
+     }
+     ```
+   - Use the Write or Bash tool to create the file
+   - Show success message with the config file path
 
 5. **Next Steps:**
    - Tell user to restart Claude Code for changes to take effect
@@ -46,9 +56,9 @@ User: ace_your_api_token_here
 What is your ACE project ID? (Get from your ACE server dashboard)
 User: prj_your_project_id
 
-[Claude calls ace_save_config tool]
+[Claude writes config file to project root]
 
-✅ Configuration saved to: /Users/you/.ace/config.json
+✅ Configuration saved to: /Users/you/project/.ace/config.json
 
 Next steps:
 1. Restart Claude Code (Cmd+Q, then reopen)
@@ -149,9 +159,7 @@ Your project identifier in ACE. Check:
 
 ## Running the Configuration
 
-This command runs an interactive Node.js script that prompts for input.
-
-**Note**: Make sure Node.js is installed (v18+).
+This command runs an interactive wizard that prompts for your ACE server details and saves the configuration to your project directory.
 
 ## Testing the Configuration
 
@@ -165,7 +173,7 @@ This will show if ACE server is reachable and authenticated.
 
 ## Manual Configuration
 
-If you prefer to configure manually, create `~/.ace/config.json`:
+If you prefer to configure manually, create `.ace/config.json` in your project root:
 
 ```json
 {
