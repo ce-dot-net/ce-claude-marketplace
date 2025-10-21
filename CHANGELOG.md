@@ -5,6 +5,40 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.2] - 2025-10-21
+
+### 🏗️ Configuration Update - Project-Local Config Storage
+
+**Configuration now saves to project directory by default!**
+
+### Changed
+
+#### Configuration Storage Location
+- **NEW**: Configuration saves to `./.ace/config.json` (project root) by default
+- Global fallback: `~/.ace/config.json` (home directory)
+- **Priority**: Environment variables → Project-local → Global → Defaults
+- Git repository detection: Uses `git rev-parse --show-toplevel` to find project root
+- Falls back to current working directory if not in a git repository
+
+### Benefits
+- ✅ Each project can have its own ACE server and credentials
+- ✅ Configuration travels with the project for team collaboration
+- ✅ Environment-specific configurations (dev, staging, prod)
+- ✅ Global fallback still available for personal default settings
+
+### Configuration Priority (Updated)
+1. **Environment variables** (highest priority)
+2. **`./.ace/config.json`** (project-local, NEW default)
+3. **`~/.ace/config.json`** (global fallback)
+4. **Default values** (lowest priority)
+
+### Migration
+- **Automatic** - Existing global configs (`~/.ace/config.json`) still work
+- New configs created with `/ace-configure` will save to project directory
+- To migrate: Run `/ace-configure` in your project directory
+
+---
+
 ## [3.1.1] - 2025-10-21
 
 ### 🔄 Plugin Update - npm Package Integration
