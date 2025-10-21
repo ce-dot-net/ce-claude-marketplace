@@ -1,7 +1,7 @@
 {
   "name": "@ce-dot-net/ace-client",
-  "version": "3.1.0",
-  "description": "Code Engine ACE - TypeScript MCP Client for intelligent pattern learning and code generation",
+  "version": "3.0.4",
+  "description": "ACE Pattern Learning - TypeScript MCP Client (Full ACE Paper Implementation - Three-Agent Architecture)",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "type": "module",
@@ -28,9 +28,9 @@
     "agentic",
     "self-improving",
     "context-engineering",
-    "code-engine",
     "typescript",
-    "ai-assistant"
+    "research",
+    "stanford"
   ],
   "author": {
     "name": "CE.NET Team",

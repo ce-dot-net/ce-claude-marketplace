@@ -8,7 +8,7 @@ export interface ACEConfig {
   apiToken: string;
   projectId: string;
 
-  // Curation thresholds (from ACE paper)
+  // Curation thresholds
   similarityThreshold: number;  // Default: 0.85
   confidenceThreshold: number;  // Default: 0.30
 }

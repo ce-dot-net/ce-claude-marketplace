@@ -1,5 +1,5 @@
 /**
- * ACE Pattern Learning - Type Definitions (Full ACE Paper Implementation)
+ * Code Engine ACE - Type Definitions
  */
 
 // ============================================================================

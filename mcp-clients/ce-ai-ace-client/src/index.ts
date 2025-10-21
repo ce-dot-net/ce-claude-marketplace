@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 /**
- * ACE Pattern Learning - TypeScript MCP Client (Full ACE Paper Implementation)
+ * Code Engine ACE - TypeScript MCP Client
  *
  * Three-Agent Architecture:
  * - Generator: Main agent (Claude Code) that executes tasks
  * - Reflector: Analyzes execution outcomes and generates delta operations
  * - Curator: Applies delta operations and performs grow-and-refine
  *
- * Paper: Agentic Context Engineering (arXiv:2510.04618)
+ * Intelligent pattern learning and code generation for AI assistants
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -54,6 +54,28 @@ const server = new Server(
 
 // Define tools
 const tools: Tool[] = [
+  {
+    name: 'ace_save_config',
+    description: 'Save ACE configuration to ~/.ace/config.json (used by /ace-configure command)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        serverUrl: {
+          type: 'string',
+          description: 'ACE server URL (e.g., http://localhost:9000)'
+        },
+        apiToken: {
+          type: 'string',
+          description: 'ACE API token (e.g., ace_xxxxx)'
+        },
+        projectId: {
+          type: 'string',
+          description: 'ACE project ID (e.g., prj_xxxxx)'
+        }
+      },
+      required: ['serverUrl', 'apiToken', 'projectId']
+    }
+  },
   {
     name: 'ace_init',
     description: 'Initialize playbook from existing codebase (offline learning from git history)',
@@ -167,6 +189,51 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   try {
     switch (name) {
+      case 'ace_save_config': {
+        const { serverUrl, apiToken, projectId } = args as {
+          serverUrl: string;
+          apiToken: string;
+          projectId: string;
+        };
+
+        // Import needed modules
+        const { writeFileSync, mkdirSync, existsSync } = await import('fs');
+        const { homedir } = await import('os');
+        const { join } = await import('path');
+
+        // Create config directory
+        const configDir = join(homedir(), '.ace');
+        if (!existsSync(configDir)) {
+          mkdirSync(configDir, { recursive: true });
+        }
+
+        // Write config file
+        const configPath = join(configDir, 'config.json');
+        const config = {
+          serverUrl,
+          apiToken,
+          projectId
+        };
+        writeFileSync(configPath, JSON.stringify(config, null, 2));
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                message: `✅ Configuration saved to: ${configPath}`,
+                config: {
+                  serverUrl,
+                  apiToken: apiToken.substring(0, 10) + '...',
+                  projectId
+                }
+              }, null, 2)
+            }
+          ]
+        };
+      }
+
       case 'ace_init': {
         const { repo_path, commit_limit, days_back, merge_with_existing } = args as {
           repo_path?: string;
@@ -557,7 +624,7 @@ async function main() {
   await server.connect(transport);
 
   // Log to stderr (stdout is for MCP protocol)
-  console.error('🚀 ACE Client MCP started (v3.0.2 - Full ACE Paper Implementation)');
+  console.error('🚀 Code Engine ACE - MCP Client v3.1.0');
   console.error('   Server: ', config.serverUrl);
   console.error('   Architecture: Generator → Reflector → Curator');
   console.error('   Thresholds: 0.85 similarity, 0.30 confidence');

@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
-  "version": "3.0.0",
-  "description": "ACE (Agentic Context Engineering) - Full ACE Paper Implementation with Three-Agent Architecture (Generator → Reflector → Curator). Learns from execution feedback. Based on Stanford/SambaNova/UC Berkeley research (arXiv:2510.04618v1)",
+  "version": "3.1.0",
+  "description": "Code Engine ACE - Intelligent pattern learning and code generation with Three-Agent Architecture (Generator → Reflector → Curator). Learns from execution feedback to improve coding outcomes. Bundled MCP server with interactive configuration.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
@@ -16,8 +16,8 @@
     "self-improving",
     "context-engineering",
     "agentic",
-    "research",
-    "stanford",
+    "code-engine",
+    "ai-assistant",
     "autonomous"
   ],
   "hooks": "./hooks/hooks.json",
@@ -26,11 +26,11 @@
   "mcpServers": {
     "ace-pattern-learning": {
       "command": "node",
-      "args": ["${CLAUDE_PLUGIN_ROOT}/../../mcp-clients/ce-ai-ace-client/dist/index.js"],
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/dist/index.js"],
       "env": {
-        "ACE_SERVER_URL": "http://localhost:9000",
-        "ACE_API_TOKEN": "ace_wFIuXzQvaR5IVn2SoizOf-ncOKP6bmHDmocaQ3b5aWU",
-        "ACE_PROJECT_ID": "prj_5bc0b560221052c1"
+        "ACE_SERVER_URL": "${env:ACE_SERVER_URL}",
+        "ACE_API_TOKEN": "${env:ACE_API_TOKEN}",
+        "ACE_PROJECT_ID": "${env:ACE_PROJECT_ID}"
       }
     }
   }

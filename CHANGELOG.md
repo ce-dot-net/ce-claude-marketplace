@@ -5,6 +5,108 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.0] - 2025-10-21
+
+### 🎉 Major Release - Code Engine ACE Public Launch
+
+**First public release on npm!** Now available at: https://www.npmjs.com/package/@ce-dot-net/ace-client
+
+### ✨ New Features
+
+#### Interactive Configuration Wizard
+- **NEW MCP Tool**: `ace_save_config` for saving credentials
+- **Enhanced `/ace-configure` command**: Interactive prompts for server URL, API token, and project ID
+- Automatic configuration storage to `~/.ace/config.json`
+- Multi-source configuration support:
+  1. Environment variables (highest priority)
+  2. `~/.ace/config.json` file
+  3. Default values (localhost:9000)
+
+#### Simplified Installation
+- **Zero authentication required** - Published to public npm registry
+- **One-command install**: `npm install @ce-dot-net/ace-client` or `npx @ce-dot-net/ace-client`
+- **Bundled MCP server option** - Works offline with no downloads
+- Universal compatibility: Claude Code, Claude Desktop, Cursor, and any MCP-compatible client
+
+### 🔄 Changes
+
+#### Rebranding
+- **Name**: "ACE Pattern Learning" → **"Code Engine ACE"**
+- **Focus**: Research implementation → Production-ready code intelligence
+- Removed all academic paper references (arXiv, Stanford, SambaNova, UC Berkeley)
+- Updated descriptions across all packages and plugins
+- New tagline: "Intelligent pattern learning and code generation for AI assistants"
+
+#### Security & Privacy
+- **Removed all real credentials** from documentation and examples
+- Using placeholder values: `ace_your_api_token_here`, `prj_your_project_id`
+- `.env` file properly gitignored and excluded from npm package
+- Package only ships: `dist/`, `README.md`, `LICENSE`
+
+#### Package Distribution
+- **Published to npm public registry** (npmjs.org) instead of GitHub Packages
+- No authentication required for installation
+- Available for standalone use in any Node.js project
+- Keywords updated: `code-engine`, `ai-assistant`, `pattern-learning`
+
+### 🐛 Bug Fixes
+- Fixed `/ace-configure` command - now actually saves configuration via MCP tool
+- Fixed startup message to show correct version number
+- Removed references to non-existent research papers in production code
+
+### 📚 Documentation
+- Updated `INSTALL.md` with simplified 3-step installation
+- Rewrote `/ace-configure` command documentation with example interactions
+- Added configuration priority documentation
+- Removed GitHub Packages authentication instructions (no longer needed)
+
+### 🔧 Technical Details
+
+**MCP Client (`@ce-dot-net/ace-client@3.1.0`)**
+- New tool: `ace_save_config(serverUrl, apiToken, projectId)`
+- Startup message: "🚀 Code Engine ACE - MCP Client v3.1.0"
+- Description: "Code Engine ACE - TypeScript MCP Client for intelligent pattern learning and code generation"
+- Keywords: `code-engine`, `ai-assistant`, `mcp`, `claude-code`, `pattern-learning`
+
+**Claude Code Plugin (`ace-orchestration@3.1.0`)**
+- Description: "Code Engine ACE - Intelligent pattern learning and code generation"
+- Bundled MCP server with all dependencies included
+- Interactive `/ace-configure` command using `ace_save_config` tool
+- Works offline - no external downloads required
+
+### 📦 Installation
+
+**For npm users (standalone):**
+```bash
+npm install -g @ce-dot-net/ace-client
+ace-client
+```
+
+**For Claude Code users:**
+```bash
+# Clone and install plugin
+git clone https://github.com/ce-dot-net/ce-claude-marketplace.git
+cd ce-claude-marketplace/plugins/ace-orchestration
+ln -s "$(pwd)" ~/.config/claude-code/plugins/ace-orchestration
+
+# Restart Claude Code, then configure:
+/ace-configure
+```
+
+### 🙏 Migration Guide
+
+**From v3.0.x:**
+- Update package: `npm install @ce-dot-net/ace-client@3.1.0`
+- Run `/ace-configure` to set up credentials
+- No breaking changes - existing configurations still work
+
+### 🔗 Links
+- **npm Package**: https://www.npmjs.com/package/@ce-dot-net/ace-client
+- **Documentation**: https://github.com/ce-dot-net/ce-claude-marketplace
+- **Issues**: https://github.com/ce-dot-net/ce-claude-marketplace/issues
+
+---
+
 ## [3.0.3] - 2025-10-21
 
 ### 🚀 Production Release - GitHub Packages Deployment

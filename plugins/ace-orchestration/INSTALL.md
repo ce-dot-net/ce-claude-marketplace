@@ -1,11 +1,11 @@
 # ACE Plugin Installation Guide
 
-**Version**: 3.0.0
-**Package**: @ce-dot-net/ace-client (GitHub Packages)
+**Version**: 3.0.4
+**Type**: Bundled MCP Server (No Authentication Required)
 
 ---
 
-## 🚀 Quick Install (Automated)
+## 🚀 Quick Install (3 Steps!)
 
 ### Step 1: Clone Repository
 
@@ -14,50 +14,11 @@ git clone https://github.com/ce-dot-net/ce-claude-marketplace.git
 cd ce-claude-marketplace
 ```
 
-### Step 2: Run Installation Script
+### Step 2: Install Plugin in Claude Code
 
 ```bash
 cd plugins/ace-orchestration
 
-# Run automated setup
-./scripts/install.sh
-
-# Or using Node.js
-node scripts/setup.js
-```
-
-**What it does**:
-- ✅ Creates `.npmrc` for GitHub Packages registry
-- ✅ Checks environment variables
-- ✅ Verifies configuration files
-- ✅ Shows next steps
-
-### Step 3: Set Environment Variables
-
-Add to your shell profile (`~/.zshrc` or `~/.bashrc`):
-
-```bash
-export ACE_SERVER_URL="http://localhost:9000"
-export ACE_API_TOKEN="ace_wFIuXzQvaR5IVn2SoizOf-ncOKP6bmHDmocaQ3b5aWU"
-export ACE_PROJECT_ID="prj_5bc0b560221052c1"
-```
-
-Then reload:
-
-```bash
-source ~/.zshrc  # or ~/.bashrc
-```
-
-### Step 4: Configure Plugin
-
-```bash
-cd plugins/ace-orchestration
-cp plugin.template.json plugin.json
-```
-
-### Step 5: Install Plugin in Claude Code
-
-```bash
 # Via symlink (recommended)
 ln -s "$(pwd)" ~/.config/claude-code/plugins/ace-orchestration
 
@@ -65,40 +26,70 @@ ln -s "$(pwd)" ~/.config/claude-code/plugins/ace-orchestration
 # Plugins → Install from Filesystem → Select this directory
 ```
 
-### Step 6: Restart Claude Code
+### Step 3: Restart Claude Code
 
 Restart Claude Code to load the plugin.
 
-### Step 7: Test Installation
+### Step 4: Configure ACE Credentials
 
-In Claude Code:
+In Claude Code, run the interactive configuration wizard:
+
+```
+/ace-configure
+```
+
+**Prompts for**:
+- ACE Server URL (default: http://localhost:9000)
+- API Token (from your ACE server)
+- Project ID (from your ACE dashboard)
+
+**Saves to**: `~/.ace/config.json`
+
+### Step 5: Test Installation
 
 ```
 /ace-status
 ```
 
-**Expected**: Shows ACE system status (may download @ce-dot-net/ace-client first)
+**Expected**: Shows ACE system status and connection info
 
 ---
 
-## 📋 Manual Install (Step-by-Step)
+## ✨ What's New in v3.0.4
 
-### 1. Configure npm Registry
+- **Bundled MCP Server** - No package download required!
+- **Zero Authentication** - Works offline, no GitHub token needed
+- **Interactive Configuration** - `/ace-configure` wizard for credentials
+- **Config File Support** - Saves to `~/.ace/config.json`
 
-Create `.npmrc` in the marketplace root:
+---
 
-```bash
-cd ce-claude-marketplace
+## 🎯 How It Works
 
-cat > .npmrc <<EOF
-# ACE Plugin - GitHub Packages Configuration
-@ce-dot-net:registry=https://npm.pkg.github.com
-EOF
-```
+**Everything is bundled!** No separate installation needed.
 
-**Why**: Tells npm/npx to download `@ce-dot-net/ace-client` from GitHub Packages
+When you install the plugin:
 
-### 2. Set Environment Variables
+1. **Plugin installed** → Claude Code finds it at `~/.config/claude-code/plugins/ace-orchestration`
+2. **MCP server starts** → Automatically launched from `mcp-server/dist/index.js` (bundled!)
+3. **Commands available** → All `/ace-*` commands ready to use
+4. **Tools available** → MCP tools (`ace_status`, `ace_init`, etc.) ready
+
+**What's included:**
+- ✅ MCP Server (bundled in plugin)
+- ✅ All dependencies (node_modules included)
+- ✅ Slash commands (/ace-configure, /ace-status, etc.)
+- ✅ Configuration wizard (interactive prompts)
+
+**No external downloads, no authentication, works offline!**
+
+---
+
+## 📋 Alternative: Manual Configuration
+
+If you prefer to configure manually instead of using `/ace-configure`:
+
+### Option 1: Environment Variables
 
 ```bash
 # Add to ~/.zshrc or ~/.bashrc
@@ -108,28 +99,30 @@ export ACE_PROJECT_ID="your-project-id"
 
 # Reload shell
 source ~/.zshrc
+
+# Restart Claude Code to pick up new variables
 ```
 
-### 3. Copy Plugin Configuration
+### Option 2: Config File
 
 ```bash
-cd plugins/ace-orchestration
-cp plugin.template.json plugin.json
+# Create config directory
+mkdir -p ~/.ace
+
+# Create config file
+cat > ~/.ace/config.json <<EOF
+{
+  "serverUrl": "http://localhost:9000",
+  "apiToken": "your-token-here",
+  "projectId": "your-project-id"
+}
+EOF
 ```
 
-### 4. Install Plugin
-
-```bash
-ln -s "$(pwd)" ~/.config/claude-code/plugins/ace-orchestration
-```
-
-### 5. Restart Claude Code
-
-### 6. Test
-
-```
-/ace-status
-```
+**Configuration Priority:**
+1. Environment variables (highest)
+2. `~/.ace/config.json`
+3. Default values (lowest)
 
 ---
 
