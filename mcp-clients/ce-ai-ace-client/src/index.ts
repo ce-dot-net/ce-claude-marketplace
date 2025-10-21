@@ -198,11 +198,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         // Import needed modules
         const { writeFileSync, mkdirSync, existsSync } = await import('fs');
-        const { homedir } = await import('os');
+        const { execSync } = await import('child_process');
         const { join } = await import('path');
 
-        // Create config directory
-        const configDir = join(homedir(), '.ace');
+        // Find git repository root, or use current working directory
+        let projectRoot: string;
+        try {
+          projectRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+        } catch (error) {
+          // Not in a git repo, use current working directory
+          projectRoot = process.cwd();
+        }
+
+        // Create config directory in project root
+        const configDir = join(projectRoot, '.ace');
         if (!existsSync(configDir)) {
           mkdirSync(configDir, { recursive: true });
         }
@@ -222,7 +231,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               type: 'text',
               text: JSON.stringify({
                 success: true,
-                message: `✅ Configuration saved to: ${configPath}`,
+                message: `✅ Configuration saved to project: ${configPath}`,
+                location: 'project-local',
+                projectRoot,
                 config: {
                   serverUrl,
                   apiToken: apiToken.substring(0, 10) + '...',

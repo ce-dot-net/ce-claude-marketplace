@@ -1,6 +1,10 @@
 /**
  * Configuration Loader
- * Loads ACE configuration from multiple sources with priority order
+ * Loads ACE configuration from multiple sources with priority order:
+ * 1. Environment variables (highest)
+ * 2. ./.ace/config.json (project-local)
+ * 3. ~/.ace/config.json (global fallback)
+ * 4. Default values (lowest)
  */
 
 import { readFileSync, existsSync } from 'fs';
@@ -26,18 +30,43 @@ export function loadConfig(): AceConfig {
     projectId: ''
   };
 
-  // Priority 3: Try config file
-  const configPath = join(homedir(), '.ace', 'config.json');
-  if (existsSync(configPath)) {
+  // Priority 4: Try global config file (fallback)
+  const globalConfigPath = join(homedir(), '.ace', 'config.json');
+  if (existsSync(globalConfigPath)) {
     try {
-      const fileConfig = JSON.parse(readFileSync(configPath, 'utf8'));
+      const fileConfig = JSON.parse(readFileSync(globalConfigPath, 'utf8'));
       if (fileConfig.serverUrl) config.serverUrl = fileConfig.serverUrl;
       if (fileConfig.apiToken) config.apiToken = fileConfig.apiToken;
       if (fileConfig.projectId) config.projectId = fileConfig.projectId;
 
-      console.error('✅ Loaded config from:', configPath);
+      console.error('✅ Loaded global config from:', globalConfigPath);
     } catch (error) {
-      console.error('⚠️  Failed to load config from:', configPath);
+      console.error('⚠️  Failed to load global config from:', globalConfigPath);
+      console.error('   Error:', error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  // Priority 3: Try project-local config file (overrides global)
+  const { execSync } = require('child_process');
+  let projectRoot: string;
+  try {
+    projectRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+  } catch (error) {
+    // Not in a git repo, use current working directory
+    projectRoot = process.cwd();
+  }
+
+  const projectConfigPath = join(projectRoot, '.ace', 'config.json');
+  if (existsSync(projectConfigPath)) {
+    try {
+      const fileConfig = JSON.parse(readFileSync(projectConfigPath, 'utf8'));
+      if (fileConfig.serverUrl) config.serverUrl = fileConfig.serverUrl;
+      if (fileConfig.apiToken) config.apiToken = fileConfig.apiToken;
+      if (fileConfig.projectId) config.projectId = fileConfig.projectId;
+
+      console.error('✅ Loaded project config from:', projectConfigPath);
+    } catch (error) {
+      console.error('⚠️  Failed to load project config from:', projectConfigPath);
       console.error('   Error:', error instanceof Error ? error.message : String(error));
     }
   }
@@ -75,12 +104,14 @@ export function loadConfig(): AceConfig {
     console.error('   export ACE_API_TOKEN="your-token-here"');
     console.error('   export ACE_PROJECT_ID="your-project-id"');
     console.error('');
-    console.error('3. Create ~/.ace/config.json:');
+    console.error('3. Create ./.ace/config.json (project-local):');
     console.error('   {');
     console.error('     "serverUrl": "http://localhost:9000",');
     console.error('     "apiToken": "your-token-here",');
     console.error('     "projectId": "your-project-id"');
     console.error('   }');
+    console.error('');
+    console.error('4. Or create ~/.ace/config.json (global fallback)');
     console.error('');
   }
 
