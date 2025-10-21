@@ -1,0 +1,37 @@
+{
+  "name": "ace-orchestration",
+  "version": "3.0.0",
+  "description": "ACE (Agentic Context Engineering) - LOCAL DEVELOPMENT MODE - Uses local build instead of npm package",
+  "author": {
+    "name": "ACE Team",
+    "email": "ace@ce-dot-net.com"
+  },
+  "homepage": "https://github.com/ce-dot-net/ce-ai-ace",
+  "repository": "https://github.com/ce-dot-net/ce-ai-ace",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "ace",
+    "pattern-learning",
+    "self-improving",
+    "context-engineering",
+    "agentic",
+    "research",
+    "stanford",
+    "autonomous"
+  ],
+  "hooks": "./hooks/hooks.json",
+  "commands": "./commands",
+  "agents": "./agents",
+  "mcpServers": {
+    "ace-pattern-learning": {
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/../../mcp-clients/ce-ai-ace-client/dist/index.js"],
+      "env": {
+        "ACE_SERVER_URL": "${env:ACE_SERVER_URL}",
+        "ACE_API_TOKEN": "${env:ACE_API_TOKEN}",
+        "ACE_PROJECT_ID": "${env:ACE_PROJECT_ID}"
+      }
+    }
+  }
+}
