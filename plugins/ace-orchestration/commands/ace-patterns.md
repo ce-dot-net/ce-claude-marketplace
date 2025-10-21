@@ -1,37 +1,55 @@
 ---
-description: List learned patterns with filtering options
-argument-hint: [domain] [min-confidence]
-allowed-tools: mcp__ace-pattern-learning__ace_get_patterns
+description: View ACE playbook organized by section (strategies, snippets, troubleshooting, APIs)
+argument-hint: [section] [min-helpful]
+allowed-tools: mcp__ace-pattern-learning__ace_get_playbook
 ---
 
-# ACE Patterns
+# ACE Playbook
 
-Display learned patterns with optional filtering using the MCP server.
+Display the ACE playbook (4 sections per ACE research paper Figure 3).
 
 ## Usage:
-- `/ace-patterns` - Show all patterns
-- `/ace-patterns error-handling` - Show only error-handling domain patterns
-- `/ace-patterns api-usage 0.7` - Show api-usage patterns with ≥70% confidence
+- `/ace-patterns` - Show entire playbook
+- `/ace-patterns strategies` - Show strategies_and_hard_rules section only
+- `/ace-patterns troubleshooting 5` - Show troubleshooting bullets with ≥5 helpful count
+
+## Playbook Sections
+
+The ACE paper defines 4 sections:
+- `strategies_and_hard_rules` - Core strategies and rules
+- `useful_code_snippets` - Reusable code patterns
+- `troubleshooting_and_pitfalls` - Common issues and solutions
+- `apis_to_use` - API usage patterns
 
 ```
-Use the mcp__ace-pattern-learning__ace_get_patterns tool to retrieve patterns.
+Use the mcp__ace-pattern-learning__ace_get_playbook tool.
 
 Arguments:
-- domain: Optional domain filter (e.g., "error-handling", "api-usage", "code-snippets")
-- min_confidence: Optional minimum confidence threshold (0.0-1.0)
+- section: Optional section filter (strategies_and_hard_rules, useful_code_snippets, troubleshooting_and_pitfalls, apis_to_use)
+- min_helpful: Optional minimum helpful count (bullets with fewer helpful marks filtered out)
 
 Examples:
-- All patterns: Call with no arguments
-- Domain filter: { "domain": "error-handling" }
-- Confidence filter: { "min_confidence": 0.7 }
-- Both: { "domain": "api-usage", "min_confidence": 0.5 }
+- All sections: Call with no arguments {}
+- Single section: { "section": "strategies_and_hard_rules" }
+- High-value bullets: { "min_helpful": 5 }
+- Both filters: { "section": "troubleshooting_and_pitfalls", "min_helpful": 3 }
 ```
 
-The MCP server will return patterns as JSON with:
-- id: Pattern identifier (e.g., "err-00001")
-- name: Pattern name
-- domain: Category
-- content: Pattern description
-- confidence: Confidence score (0-1)
-- observations: Number of helpful observations
-- harmful: Number of harmful observations
+The tool returns markdown with bullets sorted by helpful count.
+
+Each bullet shows:
+- **ID**: ctx-{timestamp}-{random}
+- **Helpful/Harmful**: ✅ 5 | ❌ 0
+- **Confidence**: 100%
+- **Content**: The learned insight
+- **Evidence**: File paths, errors, line numbers
+
+## How Bullets Are Created
+
+ACE learns from **execution feedback**:
+
+**Successful task** → adds to `strategies_and_hard_rules` or `useful_code_snippets`
+**Failed task** → adds to `troubleshooting_and_pitfalls`
+**API usage** → adds to `apis_to_use`
+
+Bullets accumulate helpful/harmful counts over time as they prove useful or misleading.

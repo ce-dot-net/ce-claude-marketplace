@@ -1,0 +1,36 @@
+# Source files (only publish dist/)
+src/
+tests/
+scripts/
+
+# Development files
+*.ts
+!*.d.ts
+tsconfig.json
+.env*
+
+# Testing artifacts
+.ace-cache/
+test-results/
+
+# Documentation (except README)
+FRESH_START_COMPLETE.md
+DISCOVERED_PATTERNS.md
+API_ENDPOINT_FIXES.md
+TEST_RESULTS.md
+INTEGRATION_READY.md
+WHAT_TO_TEST_NOW.md
+
+# Development
+node_modules/
+.DS_Store
+*.log
+*.tmp
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/

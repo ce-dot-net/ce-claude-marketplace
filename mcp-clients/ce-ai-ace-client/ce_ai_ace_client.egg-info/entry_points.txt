@@ -1,2 +1,0 @@
-[console_scripts]
-ce-ai-ace-client = ace_client.__main__:main

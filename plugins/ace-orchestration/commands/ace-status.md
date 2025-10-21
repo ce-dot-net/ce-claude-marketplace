@@ -1,24 +1,76 @@
 ---
-description: Show ACE pattern learning statistics and status
+description: Show ACE playbook statistics and learning status
 argument-hint:
 allowed-tools: mcp__ace-pattern-learning__ace_status
 ---
 
 # ACE Status
 
-Display comprehensive statistics about the ACE pattern learning system using the MCP server.
+Display comprehensive statistics about your ACE playbook.
 
 Call the MCP tool to get current statistics:
 
 ```
-Use the mcp__ace-pattern-learning__ace_status tool to retrieve ACE pattern database statistics.
+Use the mcp__ace-pattern-learning__ace_status tool to retrieve playbook statistics.
 ```
 
-This will show:
-- Total patterns in database
-- High confidence patterns (≥70%)
-- Medium confidence patterns (30-70%)
-- Low confidence patterns (<30%)
-- Active domains
+## What You'll See
 
-The MCP server reads from `.ace-memory/patterns.db` (SQLite database).
+**Playbook Summary**:
+- Total bullets across all sections
+- Bullets by section (strategies, snippets, troubleshooting, APIs)
+- Average confidence score
+
+**Top Helpful Bullets**:
+- 5 most helpful bullets (highest ✅ counts)
+- Shows which patterns are most valuable
+
+**Top Harmful Bullets**:
+- 5 most harmful bullets (highest ❌ counts)
+- Shows which patterns are misleading
+
+## Example Output
+
+```json
+{
+  "total_bullets": 42,
+  "by_section": {
+    "strategies_and_hard_rules": 10,
+    "useful_code_snippets": 15,
+    "troubleshooting_and_pitfalls": 12,
+    "apis_to_use": 5
+  },
+  "avg_confidence": 0.78,
+  "top_helpful": [
+    {
+      "id": "ctx-1737387600-a1b2c",
+      "section": "strategies_and_hard_rules",
+      "content": "Always verify npm package names...",
+      "helpful": 12,
+      "harmful": 0,
+      "confidence": 1.0
+    },
+    ...
+  ],
+  "top_harmful": [...]
+}
+```
+
+## How to Interpret
+
+**High helpful count** → Pattern proven useful across multiple tasks
+**High harmful count** → Pattern caused errors, needs revision
+**High confidence** → helpful/(helpful+harmful) ratio is strong
+**Low confidence** → Pattern unreliable, may be pruned at 0.30 threshold
+
+## Storage
+
+ACE v3.0 stores playbooks in:
+- **Remote**: ACE Storage Server (FastAPI + ChromaDB)
+- **Project-specific**: Isolated by project ID
+- **Multi-tenant**: Your org's patterns are private
+
+## See Also
+
+- `/ace-patterns` - View the full playbook
+- `/ace-clear` - Clear the playbook

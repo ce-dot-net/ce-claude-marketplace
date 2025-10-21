@@ -1,0 +1,70 @@
+{
+  "name": "@ce-dot-net/ace-client",
+  "version": "3.0.3",
+  "description": "ACE Pattern Learning - TypeScript MCP Client (Full ACE Paper Implementation - Three-Agent Architecture)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "bin": {
+    "ace-client": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "dev": "tsx src/index.ts",
+    "prepack": "npm run build",
+    "test": "npm run test:integration:dev",
+    "test:integration": "npm run build && node dist/tests/integration-test.js",
+    "test:integration:dev": "tsx tests/integration-test.ts",
+    "fresh-start": "npm run build && node dist/scripts/fresh-start.js",
+    "publish:github": "./scripts/publish-github.sh",
+    "publish:npm": "./scripts/publish-npm.sh"
+  },
+  "keywords": [
+    "mcp",
+    "claude-code",
+    "ace",
+    "pattern-learning",
+    "agentic",
+    "self-improving",
+    "context-engineering",
+    "typescript",
+    "research",
+    "stanford"
+  ],
+  "author": {
+    "name": "CE.NET Team",
+    "email": "ace@ce-dot-net.com"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/ce-dot-net/ce-claude-marketplace#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ce-dot-net/ce-claude-marketplace.git",
+    "directory": "mcp-clients/ce-ai-ace-client"
+  },
+  "bugs": {
+    "url": "https://github.com/ce-dot-net/ce-claude-marketplace/issues"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.6.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "better-sqlite3": "^12.4.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

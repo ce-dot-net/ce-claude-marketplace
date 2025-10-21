@@ -1,0 +1,20 @@
+{
+  "mcpServers": {
+    "ace-pattern-learning": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--with",
+        "fastmcp",
+        "fastmcp",
+        "run",
+        "ace_client/client.py"
+      ],
+      "env": {
+        "ACE_SERVER_URL": "http://localhost:8000",
+        "ACE_API_TOKEN": "ace_sZlqtF9-jY8M_4dXXRWMu4e0MyMcyAzargm_TK21YSs",
+        "ACE_PROJECT_ID": "prj_6bba0d15c5a6abc1"
+      }
+    }
+  }
+}

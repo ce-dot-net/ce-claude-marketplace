@@ -1,0 +1,30 @@
+# Example .npmrc Configuration for Users
+# Copy this to .npmrc and configure based on your needs
+
+# ===================================================================
+# OPTION 1: Use npm public registry (default)
+# ===================================================================
+# No configuration needed! Just:
+# npm install @ce-dot-net/ace-client
+
+# ===================================================================
+# OPTION 2: Use GitHub Packages
+# ===================================================================
+# Uncomment these lines to use GitHub Packages:
+
+# @ce-dot-net:registry=https://npm.pkg.github.com
+# //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+
+# Then set your GitHub token:
+# export GITHUB_TOKEN=ghp_xxxxxxxxxxxxx
+
+# ===================================================================
+# OPTION 3: Use both (npm fallback to GitHub Packages)
+# ===================================================================
+# Try npm first, use GitHub Packages for @ce-dot-net scope:
+
+# @ce-dot-net:registry=https://npm.pkg.github.com
+# //npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}
+
+# Default registry stays npm for other packages
+# registry=https://registry.npmjs.org

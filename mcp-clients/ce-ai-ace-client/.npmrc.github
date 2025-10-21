@@ -1,0 +1,13 @@
+# GitHub Packages Configuration
+# Use this for publishing to GitHub Packages instead of npm
+
+# Set registry to GitHub Packages
+registry=https://npm.pkg.github.com
+
+# Scoped packages (@ce-dot-net) always use GitHub Packages
+@ce-dot-net:registry=https://npm.pkg.github.com
+
+# Authentication (replace with your GitHub token)
+# Get token from: https://github.com/settings/tokens
+# Required scopes: write:packages, read:packages, delete:packages
+//npm.pkg.github.com/:_authToken=${GITHUB_TOKEN}

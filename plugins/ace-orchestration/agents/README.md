@@ -1,168 +1,100 @@
 # ACE Plugin Agents
 
-This directory contains the three agent roles defined by the ACE research paper (arXiv:2510.04618v1).
+**Note:** As of v3.0.0, the ACE architecture has been refactored. The three-agent system is now implemented as **services within the MCP client**, not as separate Claude Code agents.
 
-## Agent Architecture
+## Agent Architecture (v3.0.0)
 
 ACE implements a **Generator-Reflector-Curator** architecture (Figure 4 of research paper):
 
-1. **Generator** - Produces reasoning trajectories (this is the main Claude instance)
-2. **Reflector** - Analyzes pattern effectiveness from execution feedback
-3. **Curator** - Integrates insights into structured context (deterministic algorithm in `ace-cycle.py`)
+1. **Generator** - Claude Code itself (executes tasks)
+2. **Reflector** - Service in TypeScript MCP client (uses MCP Sampling)
+3. **Curator** - Service in TypeScript MCP client (delta operations + grow-and-refine)
 
-## Defined Agents
+**All three agents are now implemented in `/mcp-clients/ce-ai-ace-client/src/`**:
+- `src/services/reflector.ts` - ReflectorService
+- `src/services/curator.ts` - CurationService
+- `src/services/initialization.ts` - InitializationService (offline learning)
 
-### 1. `domain-discoverer.md`
-**Name:** `domain-discoverer`
-**Invoked as:** `ace-orchestration:domain-discoverer` (via Task tool)
+## Old Agent Files (Removed)
 
-**Purpose:** Discovers domain taxonomy from coding patterns through bottom-up analysis (NO hardcoded domains)
+These agent files were removed in v3.0.0 as they are now built into the MCP client:
 
-**Invoked by:**
-- `domain_discovery.py` when pattern count threshold is met
-- Outputs request to stderr asking Claude to invoke via Task tool
+### ~~1. `domain-discoverer.md`~~ (REMOVED)
+- **Old purpose:** Domain taxonomy discovery
+- **v3.0.0:** Replaced by `InitializationService` (offline learning from git history)
 
-**Output:** JSON with concrete domains, abstract patterns, and principles
+### ~~2. `reflector.md`~~ (REMOVED)
+- **Old purpose:** Manual pattern analysis via Claude Code agents
+- **v3.0.0:** Replaced by `ReflectorService` (automatic execution analysis via MCP Sampling)
 
----
+### ~~3. `reflector-prompt.md`~~ (REMOVED)
+- **Old purpose:** Iterative refinement via agent prompts
+- **v3.0.0:** Replaced by `ReflectorService.refineReflection()` method
 
-### 2. `reflector.md`
-**Name:** `reflector`
-**Invoked as:** `ace-orchestration:reflector` (via Task tool)
+## How v3.0.0 Works
 
-**Purpose:** Analyzes coding patterns for effectiveness based on execution feedback and test results
+Instead of invoking separate agents, the MCP client automatically:
 
-**Invoked by:**
-- `ace-cycle.py` → `invoke_reflector_agent()` function
-- Called after pattern detection and evidence gathering
-- Outputs request to stderr asking Claude to invoke via Task tool
+1. **ace_learn** tool is called after task execution
+2. ReflectorService analyzes the execution trace via MCP Sampling
+3. CurationService applies delta operations and grow-and-refine
+4. Updated playbook is saved to server
 
-**Output:** JSON with pattern analysis (applied_correctly, contributed_to, confidence, insight, recommendation)
-
----
-
-### 3. `reflector-prompt.md`
-**Name:** `reflector-prompt`
-**Invoked as:** `ace-orchestration:reflector-prompt` (via Task tool)
-
-**Purpose:** Refines previous reflector analysis through iterative improvement (up to 5 rounds)
-
-**Invoked by:**
-- `ace-cycle.py` → `invoke_reflector_agent_with_feedback()` function
-- Called in refinement loop with previous insights
-- Implements ACE paper's "Iterative Refinement" mechanism (Figure 4)
-- Outputs request to stderr asking Claude to invoke via Task tool
-
-**Output:** JSON with refined pattern analysis (more specific evidence, higher confidence)
+**No manual agent invocation needed!** The three-agent architecture runs automatically within the MCP client
 
 ---
 
-## How Agents are Invoked
+## MCP Tools (v3.0.0)
 
-### 1. Agent Definition Format
+The three-agent architecture is now exposed via MCP tools:
 
-Each agent is a markdown file with YAML frontmatter:
+### 1. `ace_init`
+**Initialize playbook from existing codebase** (offline learning)
+- Analyzes git history (commits, refactorings, bug fixes)
+- Extracts patterns from code changes
+- Builds initial playbook with 4 sections
+- Merges with existing playbook or replaces
 
-```yaml
----
-name: agent-name              # Required: lowercase with hyphens
-description: What this agent does  # Required: when to invoke
-tools: Read, Grep, Glob       # Optional: comma-separated tool list
-model: sonnet                 # Optional: sonnet, opus, haiku, or 'inherit'
----
+### 2. `ace_learn`
+**Learn from execution feedback** (online learning)
+- Takes execution trace (task, trajectory, success/failure)
+- ReflectorService analyzes via MCP Sampling
+- CurationService applies delta operations
+- Updates playbook with helpful/harmful tracking
 
-# Agent prompt/instructions here...
+### 3. `ace_get_playbook`
+**Get structured playbook** (4 sections)
+- Returns strategies_and_hard_rules
+- Returns useful_code_snippets
+- Returns troubleshooting_and_pitfalls
+- Returns apis_to_use
+
+### 4. `ace_status`
+**Playbook statistics**
+- Total bullets by section
+- Top helpful/harmful bullets
+- Average confidence scores
+
+### 5. `ace_clear`
+**Clear entire playbook** (requires confirmation)
+
+## Migration from v2.x
+
+**Old approach (v2.x):**
+```
+Python scripts → Invoke agents via Task tool → Agents analyze code → Python updates storage
 ```
 
-### 2. Agent Registration
-
-Agents are **automatically discovered** by Claude Code from the `agents/` directory.
-- NO explicit registration in `plugin.json` required
-- Plugin agents appear in `/agents` interface
-- Can be invoked explicitly or automatically by Claude
-
-### 3. Agent Invocation
-
-**Option A: Automatic (Claude decides)**
-Claude can invoke agents automatically based on task context and the `description` field.
-
-**Option B: Explicit (Request via stderr)**
-ACE uses this approach - Python scripts output to stderr:
-
-```python
-print(f"""
-🔬 ACE Reflector Request
-
-Please invoke the reflector agent to analyze pattern effectiveness.
-
-<reflector_analysis_request>
-{json.dumps(reflector_input, indent=2)}
-</reflector_analysis_request>
-
-Use the Task tool to invoke ace-orchestration:reflector agent with the data above.
-""", file=sys.stderr)
+**New approach (v3.0.0):**
+```
+ace_learn tool → ReflectorService (MCP Sampling) → CurationService → Server storage
 ```
 
-Claude sees this in stderr and uses Task tool to invoke:
-```python
-Task(
-    description="Analyze coding patterns for effectiveness",
-    prompt="<full agent prompt with data>",
-    subagent_type="ace-orchestration:reflector"
-)
-```
-
-### 4. Agent Naming Convention
-
-- **File name:** `agent-name.md` (can be anything)
-- **YAML `name` field:** `agent-name` (THIS is what matters!)
-- **Invocation reference:** `plugin-name:agent-name`
-  - Example: `ace-orchestration:reflector`
-  - Example: `ace-orchestration:domain-discoverer`
-
----
-
-## Key Design Decisions
-
-### Why NO Fallback Heuristics?
-
-The ACE research paper does NOT specify fallback heuristics. From Appendix B:
-
-> "A potential limitation of ACE is its reliance on a reasonably strong Reflector: if the Reflector fails to extract meaningful insights from generated traces or outcomes, the constructed context may become noisy or even harmful."
-
-This is an **acknowledged limitation**, not something to solve with hardcoded fallbacks.
-
-When agent invocation fails or no reliable feedback signals exist:
-- Return empty result or previous insights unchanged
-- This gracefully degrades (no patterns learned) rather than polluting context with unreliable heuristics
-
-### Agent Tools Access
-
-All ACE agents have access to:
-- `Read` - Read files from codebase
-- `Grep` - Search for patterns in code
-- `Glob` - Find files by name patterns
-
-Agents do NOT have access to:
-- `Edit`, `Write` - Reflector only analyzes, doesn't modify code
-- `Bash` - No command execution needed for analysis
-
----
-
-## Testing Agents
-
-To test agent invocation manually:
-
-```bash
-# From project root
-cd /Users/ptsafaridis/repos/github_com/ce-dot-net/ce-ai-ace
-
-# Make a code change to trigger ACE cycle
-echo "# test change" >> test.py
-
-# Watch stderr for agent invocation requests
-# Claude should see the request and invoke the agent via Task tool
-```
+**Benefits:**
+- ✅ No Python dependencies
+- ✅ No agent coordination overhead
+- ✅ Faster (built into MCP protocol)
+- ✅ Simpler deployment (just TypeScript + Node.js)
 
 ---
 

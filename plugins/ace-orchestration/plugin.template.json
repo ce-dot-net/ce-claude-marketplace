@@ -1,6 +1,6 @@
 {
   "name": "ace-orchestration",
-  "version": "3.0.0",
+  "version": "3.0.3",
   "description": "ACE (Agentic Context Engineering) - Full ACE Paper Implementation with Three-Agent Architecture (Generator → Reflector → Curator). Learns from execution feedback. Based on Stanford/SambaNova/UC Berkeley research (arXiv:2510.04618v1)",
   "author": {
     "name": "ACE Team",
@@ -26,11 +26,11 @@
   "mcpServers": {
     "ace-pattern-learning": {
       "command": "npx",
-      "args": ["-y", "@ce-dot-net/ace-client"],
+      "args": ["--package=@ce-dot-net/ace-client", "ace-client"],
       "env": {
-        "ACE_SERVER_URL": "https://ace.your-domain.com",
-        "ACE_API_TOKEN": "${ACE_API_TOKEN}",
-        "ACE_PROJECT_ID": "${ACE_PROJECT_ID}"
+        "ACE_SERVER_URL": "${env:ACE_SERVER_URL}",
+        "ACE_API_TOKEN": "${env:ACE_API_TOKEN}",
+        "ACE_PROJECT_ID": "${env:ACE_PROJECT_ID}"
       }
     }
   }

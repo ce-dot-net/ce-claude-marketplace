@@ -17,91 +17,110 @@ Based on [Agentic Context Engineering (ACE)](https://arxiv.org/abs/2510.04618v1)
 
 ## 🚀 Installation
 
-### Option 1: From Claude Code Marketplace (Recommended)
-```bash
-claude-code plugin install ce-dot-net/ace-orchestration
-```
+### Prerequisites
 
-### Option 2: From Source
+1. **Node.js 18+** - For TypeScript MCP client
+2. **Python 3.11+** - For ACE server
+3. **Claude Code** - Latest version
+
+### Step 1: Clone Repository
+
 ```bash
-# Clone the marketplace repo
 git clone https://github.com/ce-dot-net/ce-claude-marketplace.git
-cd ce-claude-marketplace/plugins/ace-orchestration
-
-# Copy appropriate config
-cp plugin.LOCAL.json plugin.json  # For local testing
-# OR keep plugin.json for remote (production)
-
-# Install in Claude Code
-# Via UI: Plugins → Install from Filesystem → Select this directory
+cd ce-claude-marketplace
 ```
 
-## 📦 Requirements
+### Step 2: Build MCP Client
 
-### For Remote Mode (Production)
 ```bash
-# Install MCP client (published to PyPI)
-uvx ce-ai-ace-client
-
-# Set environment variable
-export ACE_API_TOKEN="your-token-here"
+cd mcp-clients/ce-ai-ace-client
+npm install
+npm run build
+cd ../..
 ```
 
-### For Local Mode (Testing)
-```bash
-# Install server locally
-cd ../../../ce-mcp-ace  # Private server repo
-pip install -e ./ce-ai-ace-server
+### Step 3: Configure Plugin
 
-# Use LOCAL config
-cd ce-claude-marketplace/plugins/ace-orchestration
-cp plugin.LOCAL.json plugin.json
+⚠️ **Important**: You must configure your own credentials!
+
+```bash
+cd plugins/ace-orchestration
+
+# Copy the template
+cp plugin.template.json plugin.json
+
+# Set up environment variables (choose one method):
+
+# Method 1: Add to shell profile (recommended)
+echo 'export ACE_SERVER_URL="http://localhost:9000"' >> ~/.zshrc
+echo 'export ACE_API_TOKEN="ace_wFIuXzQvaR5IVn2SoizOf-ncOKP6bmHDmocaQ3b5aWU"' >> ~/.zshrc
+echo 'export ACE_PROJECT_ID="prj_5bc0b560221052c1"' >> ~/.zshrc
+source ~/.zshrc
+
+# Method 2: Edit plugin.json directly (local testing only)
+# Replace ${env:*} with actual values
+```
+
+**📖 Full configuration guide**: See [CONFIGURATION.md](./CONFIGURATION.md)
+
+### Step 4: Install Plugin
+
+```bash
+# Via symlink (recommended for development)
+ln -s "$(pwd)/plugins/ace-orchestration" ~/.config/claude-code/plugins/ace-orchestration
+
+# OR via Claude Code UI
+# Plugins → Install from Filesystem → Select plugins/ace-orchestration
+```
+
+### Step 5: Start ACE Server
+
+```bash
+# In a separate terminal
+cd ~/repos/github_com/ce-dot-net/ce-ai-ace/server
+python -m uvicorn main:app --reload --port 9000
+```
+
+### Step 6: Verify Installation
+
+```bash
+# Restart Claude Code
+
+# In Claude Code:
+/ace-status
+
+# Expected: Shows pattern database statistics
 ```
 
 ## 🔧 Configuration
 
-The plugin supports **two modes**:
+**⚠️ Security Warning**: Never commit `plugin.json` with real credentials!
 
-### Remote Mode (Production) - `plugin.json`
-```json
-{
-  "mcpServers": {
-    "ace-pattern-learning": {
-      "command": "uvx",
-      "args": ["ce-ai-ace-client"],
-      "env": {
-        "ACE_SERVER_URL": "https://ace.your-domain.com/mcp",
-        "ACE_API_TOKEN": "${ACE_API_TOKEN}"
-      }
-    }
-  }
-}
+### Quick Start (Environment Variables)
+
+```bash
+# Add to ~/.zshrc or ~/.bashrc
+export ACE_SERVER_URL="http://localhost:9000"
+export ACE_API_TOKEN="ace_wFIuXzQvaR5IVn2SoizOf-ncOKP6bmHDmocaQ3b5aWU"
+export ACE_PROJECT_ID="prj_5bc0b560221052c1"
 ```
 
-**Use when**:
-- Running in production
-- Want fastest performance (cloud server)
-- Using subscription/credits system
-- Don't want to run server locally
+### Configuration Files
 
-### Local Mode (Testing) - `plugin.LOCAL.json`
-```json
-{
-  "mcpServers": {
-    "ace-pattern-learning": {
-      "command": "python3",
-      "args": ["-m", "ace_server"],
-      "cwd": "${CLAUDE_PLUGIN_ROOT}/../../../ce-mcp-ace/ce-ai-ace-server"
-    }
-  }
-}
-```
+- **`plugin.template.json`** - Template with env vars (✅ safe to commit)
+- **`plugin.json`** - Your config with real values (❌ DON'T commit)
+- **`.env.example`** - Example environment file
+- **`CONFIGURATION.md`** - Complete configuration guide
 
-**Use when**:
-- Testing locally
-- Development/debugging
-- Don't need remote features
-- Want to see server code
+### Environment Variables
+
+| Variable | Required | Example |
+|----------|----------|---------|
+| `ACE_SERVER_URL` | Yes | `http://localhost:9000` |
+| `ACE_API_TOKEN` | Yes | `ace_wFIuXzQ...` |
+| `ACE_PROJECT_ID` | Yes | `prj_5bc0b56...` |
+
+**📖 See [CONFIGURATION.md](./CONFIGURATION.md) for detailed setup instructions**
 
 ## 💻 Slash Commands
 
