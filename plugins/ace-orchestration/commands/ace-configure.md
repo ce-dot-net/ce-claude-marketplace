@@ -57,7 +57,7 @@ Next steps:
 
 ## Configuration Storage
 
-Configuration is saved to `~/.ace/config.json`:
+Configuration is saved to **project root** (`./.ace/config.json`):
 ```json
 {
   "serverUrl": "http://localhost:9000",
@@ -65,6 +65,13 @@ Configuration is saved to `~/.ace/config.json`:
   "projectId": "prj_your_project_id"
 }
 ```
+
+**Location**: `.ace/config.json` in your git repository root (or current directory if not in a git repo)
+
+**Benefits of project-local config:**
+- Each project can have its own ACE server and credentials
+- Configuration travels with the project
+- Team members can share the same ACE server
 
 ## Alternative: Environment Variables
 
