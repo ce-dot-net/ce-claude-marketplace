@@ -49,11 +49,26 @@ export function loadConfig(): AceConfig {
 
   // Priority 3: Try project-local config file (overrides global)
   let projectRoot: string;
-  try {
-    projectRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
-  } catch (error) {
-    // Not in a git repo, use current working directory
-    projectRoot = process.cwd();
+
+  // First check if ACE_CONFIG_DIR environment variable is set
+  if (process.env.ACE_CONFIG_DIR) {
+    projectRoot = process.env.ACE_CONFIG_DIR;
+    console.error('ℹ️  Using project root from ACE_CONFIG_DIR:', projectRoot);
+  } else {
+    // Try current working directory first (where user is working)
+    const cwdConfigPath = join(process.cwd(), '.ace', 'config.json');
+    if (existsSync(cwdConfigPath)) {
+      projectRoot = process.cwd();
+      console.error('ℹ️  Using current working directory as project root:', projectRoot);
+    } else {
+      // Otherwise try git to find project root
+      try {
+        projectRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
+      } catch (error) {
+        // Not in a git repo, use current working directory anyway
+        projectRoot = process.cwd();
+      }
+    }
   }
 
   const projectConfigPath = join(projectRoot, '.ace', 'config.json');

@@ -31,6 +31,14 @@ import {
   PlaybookBullet
 } from './types/pattern.js';
 
+// Parse command-line arguments for --config-dir
+const args = process.argv.slice(2);
+const configDirIndex = args.indexOf('--config-dir');
+if (configDirIndex !== -1 && args[configDirIndex + 1]) {
+  process.env.ACE_CONFIG_DIR = args[configDirIndex + 1];
+  console.error('ℹ️  Config directory set from command line:', args[configDirIndex + 1]);
+}
+
 // Initialize services
 const config = getConfig();
 const serverClient = new ACEServerClient(config);
