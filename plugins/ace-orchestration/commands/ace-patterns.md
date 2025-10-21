@@ -1,7 +1,6 @@
 ---
 description: View ACE playbook organized by section (strategies, snippets, troubleshooting, APIs)
 argument-hint: [section] [min-helpful]
-allowed-tools: mcp__ace-pattern-learning__ace_get_playbook
 ---
 
 # ACE Playbook
