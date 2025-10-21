@@ -2,6 +2,8 @@
  * ACE Configuration
  */
 
+import { loadConfig } from '../services/config-loader.js';
+
 export interface ACEConfig {
   // Server connection (for remote storage)
   serverUrl: string;
@@ -14,10 +16,13 @@ export interface ACEConfig {
 }
 
 export function getConfig(): ACEConfig {
+  // Load config from files and environment variables
+  const fileConfig = loadConfig();
+
   return {
-    serverUrl: process.env.ACE_SERVER_URL || 'http://localhost:9000',
-    apiToken: process.env.ACE_API_TOKEN || '',
-    projectId: process.env.ACE_PROJECT_ID || '',
+    serverUrl: fileConfig.serverUrl,
+    apiToken: fileConfig.apiToken,
+    projectId: fileConfig.projectId,
     similarityThreshold: parseFloat(process.env.ACE_SIMILARITY_THRESHOLD || '0.85'),
     confidenceThreshold: parseFloat(process.env.ACE_CONFIDENCE_THRESHOLD || '0.30')
   };
