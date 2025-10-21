@@ -5,6 +5,41 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.4] - 2025-10-21
+
+### 🐛 Critical Hotfix - ES Module Import Error
+
+**FIXED: MCP server crashing on startup due to CommonJS `require()` in ES module**
+
+### The Bug
+v3.1.3 introduced a critical bug that prevented the MCP server from starting:
+```
+ReferenceError: require is not defined in ES module scope
+```
+
+**Root Cause**: `config-loader.ts` used `require('child_process')` instead of ES module `import`
+
+### The Fix
+```typescript
+// ❌ Before (v3.1.3)
+const { execSync } = require('child_process');  // Crashes!
+
+// ✅ After (v3.1.4)
+import { execSync } from 'child_process';  // Works!
+```
+
+### Impact
+- v3.1.3: MCP server crashes immediately, not visible in `/mcp`
+- v3.1.4: MCP server starts correctly, tools available
+
+### Version Updates
+- @ce-dot-net/ace-client: 3.1.3 → 3.1.4
+- ace-orchestration plugin: 3.1.3 → 3.1.4
+
+**Users on v3.1.3**: Please update immediately to v3.1.4!
+
+---
+
 ## [3.1.3] - 2025-10-21
 
 ### 🐛 Critical Bug Fix - MCP Server Not Loading
