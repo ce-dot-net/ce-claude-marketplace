@@ -10,6 +10,7 @@
 import { readFileSync, existsSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
+import { execSync } from 'child_process';
 
 export interface AceConfig {
   serverUrl: string;
@@ -47,7 +48,6 @@ export function loadConfig(): AceConfig {
   }
 
   // Priority 3: Try project-local config file (overrides global)
-  const { execSync } = require('child_process');
   let projectRoot: string;
   try {
     projectRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
