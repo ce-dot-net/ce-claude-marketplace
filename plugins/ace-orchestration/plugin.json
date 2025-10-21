@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
-  "version": "2.5.0",
-  "description": "ACE (Agentic Context Engineering) - Python FastMCP server with TRUE LLM-based pattern discovery via MCP Sampling (no API key needed!). Based on Stanford/SambaNova/UC Berkeley research (arXiv:2510.04618v1)",
+  "version": "3.0.0",
+  "description": "ACE (Agentic Context Engineering) - Full ACE Paper Implementation with Three-Agent Architecture (Generator → Reflector → Curator). Learns from execution feedback. Based on Stanford/SambaNova/UC Berkeley research (arXiv:2510.04618v1)",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
@@ -25,12 +25,12 @@
   "agents": "./agents",
   "mcpServers": {
     "ace-pattern-learning": {
-      "command": "python",
-      "args": ["-m", "ace_client"],
+      "command": "node",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/../../mcp-clients/ce-ai-ace-client/dist/index.js"],
       "env": {
-        "ACE_SERVER_URL": "http://localhost:8000/mcp",
-        "ACE_API_TOKEN": "local-dev-token",
-        "ACE_STORAGE_PATH": "${CLAUDE_PLUGIN_ROOT}/.ace-memory/patterns.db"
+        "ACE_SERVER_URL": "http://localhost:9000",
+        "ACE_API_TOKEN": "ace_wFIuXzQvaR5IVn2SoizOf-ncOKP6bmHDmocaQ3b5aWU",
+        "ACE_PROJECT_ID": "prj_5bc0b560221052c1"
       }
     }
   }
