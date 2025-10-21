@@ -13,8 +13,8 @@
     {
       "name": "ace-orchestration",
       "source": "./plugins/ace-orchestration",
-      "description": "ACE (Agentic Context Engineering) - Full ACE Paper Implementation with Three-Agent Architecture. Learns from execution feedback based on Stanford/SambaNova/UC Berkeley research (arXiv:2510.04618v1)",
-      "version": "3.0.3",
+      "description": "Code Engine ACE - Intelligent pattern learning and code generation with Three-Agent Architecture. Learns from execution feedback to improve coding outcomes.",
+      "version": "3.1.0",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"
