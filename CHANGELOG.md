@@ -5,6 +5,45 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.5] - 2025-10-21
+
+### 🔧 Configuration Fix - Project-Local Config Priority
+
+**IMPROVED: Configuration loading to prioritize current working directory**
+
+### Changes
+
+**Config Loading Priority** (updated in `config-loader.ts`):
+1. `ACE_CONFIG_DIR` environment variable (highest)
+2. Current working directory (`process.cwd()`) - checks for `.ace/config.json` first
+3. Git repository root (via `git rev-parse --show-toplevel`)
+4. Global `~/.ace/config.json` (removed - no longer supported)
+
+### Why This Matters
+
+When Claude Code starts the MCP server from a plugin, it runs in the user's working directory. The MCP client now correctly finds the project-local `.ace/config.json` in the user's project, not in the plugin directory.
+
+### Migration
+
+**Removed global config support**. If you had `~/.ace/config.json`, move it to your project:
+```bash
+# Move to your project directory
+mv ~/.ace/config.json /path/to/your/project/.ace/config.json
+```
+
+### Testing
+```bash
+# From your project directory
+npx --yes @ce-dot-net/ace-client@3.1.5
+# Should show: "Using current working directory as project root"
+```
+
+### Version Updates
+- @ce-dot-net/ace-client: 3.1.4 → 3.1.5
+- ace-orchestration plugin: 3.1.4 → 3.1.5
+
+---
+
 ## [3.1.4] - 2025-10-21
 
 ### 🐛 Critical Hotfix - ES Module Import Error
