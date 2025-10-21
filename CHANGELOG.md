@@ -5,6 +5,93 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.3] - 2025-10-21
+
+### 🐛 Critical Bug Fix - MCP Server Not Loading
+
+**FIXED: MCP server not appearing in `/mcp` due to invalid environment variable syntax**
+
+### Fixed
+
+#### **MCP Server Configuration (CRITICAL)**
+- ❌ **REMOVED invalid `${env:VAR}` syntax** from `plugin.json`
+- ✅ MCP client now loads correctly and appears in `/mcp`
+- ✅ Configuration read from `.ace/config.json` as designed (no env vars needed)
+- **Root cause**: Plugin used `${env:ACE_SERVER_URL}` which doesn't exist in Claude Code
+  - Correct syntax is `${VAR}` or `${VAR:-default}`
+  - But we don't need env vars at all - the MCP client reads from `.ace/config.json`!
+
+**Before (Broken):**
+```json
+"mcpServers": {
+  "ace-pattern-learning": {
+    "command": "npx",
+    "args": ["--yes", "@ce-dot-net/ace-client@3.1.2"],
+    "env": {
+      "ACE_SERVER_URL": "${env:ACE_SERVER_URL}",  // ❌ Invalid syntax!
+      "ACE_API_TOKEN": "${env:ACE_API_TOKEN}",    // ❌ MCP won't start
+      "ACE_PROJECT_ID": "${env:ACE_PROJECT_ID}"   // ❌ Not in /mcp
+    }
+  }
+}
+```
+
+**After (Fixed):**
+```json
+"mcpServers": {
+  "ace-pattern-learning": {
+    "command": "npx",
+    "args": ["--yes", "@ce-dot-net/ace-client@3.1.2"]
+    // ✅ No env section needed!
+    // ✅ MCP client reads from .ace/config.json
+  }
+}
+```
+
+#### `/ace-configure` Command
+- **FIXED**: No longer relies on `ace_save_config` MCP tool
+- Now writes `.ace/config.json` directly using native Claude Code tools
+- Works reliably even before MCP server is initialized
+- Creates project-local configuration in `.ace/config.json`
+
+#### All ACE Commands - Removed Overly Restrictive `allowed-tools`
+- Removed `allowed-tools` frontmatter from all ACE commands
+- Commands now inherit available tools from conversation (default behavior)
+- Enables better error handling when MCP server isn't available
+- Claude can check configuration and guide users appropriately
+
+### Why This Matters
+
+**The Problem:**
+Users ran `/ace-configure`, created `.ace/config.json` with valid credentials, but:
+- ❌ MCP server didn't appear in `/mcp`
+- ❌ All `/ace-*` commands failed
+- ❌ Claude tried desperate workarounds (Python subprocess)
+- ❌ No useful error messages
+
+**The Root Cause:**
+Invalid `${env:VAR}` syntax in plugin.json prevented MCP server from starting.
+
+**The Solution:**
+Remove env vars entirely - the MCP client reads from `.ace/config.json`!
+
+### Benefits
+- ✅ MCP server now loads and appears in `/mcp`
+- ✅ All ACE tools become available immediately after `/ace-configure`
+- ✅ `/ace-configure` works without requiring MCP server
+- ✅ Better error messages and guidance
+- ✅ Follows Claude Code plugin best practices
+
+### Migration
+**If you're upgrading from 3.1.2 or earlier:**
+1. Update plugin to v3.1.3
+2. Restart Claude Code
+3. Run `/ace-configure` to create `.ace/config.json`
+4. Verify MCP server appears in `/mcp`
+5. All ACE commands should now work!
+
+---
+
 ## [3.1.2] - 2025-10-21
 
 ### 🏗️ Configuration Update - Project-Local Config Storage

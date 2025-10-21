@@ -1,6 +1,5 @@
 ---
 description: Import ACE playbook from exported JSON
-allowed-tools: Read, mcp__ace-pattern-learning__ace_learn
 ---
 
 # ACE Import Playbook
