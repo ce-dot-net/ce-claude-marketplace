@@ -5,6 +5,34 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.1] - 2025-10-21
+
+### 🔄 Plugin Update - npm Package Integration
+
+**Claude Code Plugin now uses published npm package!**
+
+### Changed
+
+#### Distribution Method
+- **Switched from bundled MCP server to npm download**
+- Plugin now uses: `npx --yes @ce-dot-net/ace-client@3.1.0`
+- Downloads latest MCP client from public npm registry
+- No bundled dependencies - smaller plugin size
+- Zero authentication required
+- Users can easily update: `npm install -g @ce-dot-net/ace-client@latest`
+
+### Benefits
+- ✅ Always gets latest MCP client with bug fixes
+- ✅ Smaller plugin installation size
+- ✅ Easy updates without reinstalling plugin
+- ✅ Same npm package works standalone or with plugin
+
+### Migration
+- **Automatic** - Just update the plugin and restart Claude Code
+- Plugin will download MCP client from npm on first run
+
+---
+
 ## [3.1.0] - 2025-10-21
 
 ### 🎉 Major Release - Code Engine ACE Public Launch
