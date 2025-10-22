@@ -1,13 +1,11 @@
 #!/usr/bin/env node
 /**
- * Code Engine ACE - TypeScript MCP Client
+ * ACE MCP Client v3.2.0 - Simple HTTP Interface
  *
- * Three-Agent Architecture:
- * - Generator: Main agent (Claude Code) that executes tasks
- * - Reflector: Analyzes execution outcomes and generates delta operations
- * - Curator: Applies delta operations and performs grow-and-refine
+ * Server-side intelligence: Reflector + Curator run on ACE server
+ * Client responsibility: Send traces, retrieve playbooks
  *
- * Intelligent pattern learning and code generation for AI assistants
+ * Compatible with: Claude Code, Cursor, Cline, any MCP client
  */
 
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
@@ -20,15 +18,9 @@ import {
 
 import { getConfig } from './types/config.js';
 import { ACEServerClient } from './services/server-client.js';
-import { ReflectorService } from './services/reflector.js';
-import { CurationService } from './services/curator.js';
-import { InitializationService } from './services/initialization.js';
 import {
   ExecutionTrace,
-  TrajectoryStep,
-  StructuredPlaybook,
-  BulletSection,
-  PlaybookBullet
+  TrajectoryStep
 } from './types/pattern.js';
 
 // Parse command-line arguments for --config-dir
@@ -39,23 +31,19 @@ if (configDirIndex !== -1 && args[configDirIndex + 1]) {
   console.error('ℹ️  Config directory set from command line:', args[configDirIndex + 1]);
 }
 
-// Initialize services
+// Initialize
 const config = getConfig();
 const serverClient = new ACEServerClient(config);
-const reflectorService = new ReflectorService();
-const curationService = new CurationService(serverClient, config);
-const initializationService = new InitializationService();
 
-// Create MCP server
+// Create MCP server (NO SAMPLING - works with all MCP clients!)
 const server = new Server(
   {
     name: 'ace-pattern-learning',
-    version: '1.0.0'
+    version: '3.2.0'
   },
   {
     capabilities: {
-      tools: {},
-      sampling: {}  // IMPORTANT: Enable MCP Sampling for Reflector
+      tools: {}  // Just tools, no sampling required
     }
   }
 );
@@ -64,7 +52,7 @@ const server = new Server(
 const tools: Tool[] = [
   {
     name: 'ace_save_config',
-    description: 'Save ACE configuration to ~/.ace/config.json (used by /ace-configure command)',
+    description: 'Save ACE configuration to ~/.ace/config.json',
     inputSchema: {
       type: 'object',
       properties: {
@@ -85,33 +73,8 @@ const tools: Tool[] = [
     }
   },
   {
-    name: 'ace_init',
-    description: 'Initialize playbook from existing codebase (offline learning from git history)',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        repo_path: {
-          type: 'string',
-          description: 'Path to git repository (defaults to current directory)'
-        },
-        commit_limit: {
-          type: 'number',
-          description: 'Number of commits to analyze (default: 100)'
-        },
-        days_back: {
-          type: 'number',
-          description: 'Days of history to analyze (default: 30)'
-        },
-        merge_with_existing: {
-          type: 'boolean',
-          description: 'Merge with existing playbook instead of replacing (default: true)'
-        }
-      }
-    }
-  },
-  {
     name: 'ace_learn',
-    description: 'Learn from execution feedback (core ACE methodology: Generator → Reflector → Curator)',
+    description: 'Store execution trace for server-side analysis (Reflector + Curator run automatically on server)',
     inputSchema: {
       type: 'object',
       properties: {
@@ -183,15 +146,39 @@ const tools: Tool[] = [
       },
       required: ['confirm']
     }
+  },
+  {
+    name: 'ace_init',
+    description: 'Initialize playbook from existing codebase (server-side offline learning from git history)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repo_path: {
+          type: 'string',
+          description: 'Path to git repository (defaults to current directory)'
+        },
+        commit_limit: {
+          type: 'number',
+          description: 'Number of commits to analyze (default: 100)'
+        },
+        days_back: {
+          type: 'number',
+          description: 'Days of history to analyze (default: 30)'
+        },
+        merge_with_existing: {
+          type: 'boolean',
+          description: 'Merge with existing playbook instead of replacing (default: true)'
+        }
+      }
+    }
   }
 ];
 
-// Handle tool list
-server.setRequestHandler(ListToolsRequestSchema, async () => ({
-  tools
-}));
+// Register handlers
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return { tools };
+});
 
-// Handle tool calls
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
 
@@ -204,172 +191,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           projectId: string;
         };
 
-        // Import needed modules
-        const { writeFileSync, mkdirSync, existsSync } = await import('fs');
-        const { execSync } = await import('child_process');
-        const { join } = await import('path');
+        console.error('💾 Saving configuration...');
 
-        // Find git repository root, or use current working directory
-        let projectRoot: string;
-        try {
-          projectRoot = execSync('git rev-parse --show-toplevel', { encoding: 'utf8' }).trim();
-        } catch (error) {
-          // Not in a git repo, use current working directory
-          projectRoot = process.cwd();
-        }
-
-        // Create config directory in project root
-        const configDir = join(projectRoot, '.ace');
-        if (!existsSync(configDir)) {
-          mkdirSync(configDir, { recursive: true });
-        }
-
-        // Write config file
-        const configPath = join(configDir, 'config.json');
-        const config = {
-          serverUrl,
-          apiToken,
-          projectId
-        };
-        writeFileSync(configPath, JSON.stringify(config, null, 2));
+        await serverClient.saveConfig(serverUrl, apiToken, projectId);
 
         return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                success: true,
-                message: `✅ Configuration saved to project: ${configPath}`,
-                location: 'project-local',
-                projectRoot,
-                config: {
-                  serverUrl,
-                  apiToken: apiToken.substring(0, 10) + '...',
-                  projectId
-                }
-              }, null, 2)
-            }
-          ]
+          content: [{
+            type: 'text',
+            text: JSON.stringify({
+              success: true,
+              message: 'Configuration saved to ~/.ace/config.json',
+              config: { serverUrl, projectId }
+            }, null, 2)
+          }]
         };
-      }
-
-      case 'ace_init': {
-        const { repo_path, commit_limit, days_back, merge_with_existing } = args as {
-          repo_path?: string;
-          commit_limit?: number;
-          days_back?: number;
-          merge_with_existing?: boolean;
-        };
-
-        const repoPath = repo_path || process.cwd();
-        const mergeMode = merge_with_existing !== false; // Default true
-
-        console.error('🔄 Initializing playbook from codebase...');
-        console.error(`   Mode: ${mergeMode ? 'MERGE' : 'REPLACE'}`);
-
-        // Analyze codebase to generate initial playbook
-        const initialPlaybook = await initializationService.initializeFromCodebase(
-          repoPath,
-          {
-            commitLimit: commit_limit,
-            daysBack: days_back
-          }
-        );
-
-        if (mergeMode) {
-          // Merge with existing playbook using curator
-          const currentPlaybook = await serverClient.getPlaybook();
-
-          // Flatten both playbooks
-          const currentBullets = [
-            ...currentPlaybook.strategies_and_hard_rules,
-            ...currentPlaybook.useful_code_snippets,
-            ...currentPlaybook.troubleshooting_and_pitfalls,
-            ...currentPlaybook.apis_to_use
-          ];
-
-          const newBullets = [
-            ...initialPlaybook.strategies_and_hard_rules,
-            ...initialPlaybook.useful_code_snippets,
-            ...initialPlaybook.troubleshooting_and_pitfalls,
-            ...initialPlaybook.apis_to_use
-          ];
-
-          console.error(`   Merging ${newBullets.length} new bullets with ${currentBullets.length} existing`);
-
-          // Combine and deduplicate using curator's grow-and-refine
-          const combined: StructuredPlaybook = {
-            strategies_and_hard_rules: [
-              ...currentPlaybook.strategies_and_hard_rules,
-              ...initialPlaybook.strategies_and_hard_rules
-            ],
-            useful_code_snippets: [
-              ...currentPlaybook.useful_code_snippets,
-              ...initialPlaybook.useful_code_snippets
-            ],
-            troubleshooting_and_pitfalls: [
-              ...currentPlaybook.troubleshooting_and_pitfalls,
-              ...initialPlaybook.troubleshooting_and_pitfalls
-            ],
-            apis_to_use: [
-              ...currentPlaybook.apis_to_use,
-              ...initialPlaybook.apis_to_use
-            ]
-          };
-
-          // Apply grow-and-refine to deduplicate
-          const merged = await curationService['growAndRefine'](combined);
-          await serverClient.savePlaybook(merged);
-
-          // Invalidate cache
-          serverClient.invalidateCache();
-
-          const finalCount = Object.values(merged).flat().length;
-          console.error(`✅ Merged playbook: ${finalCount} total bullets`);
-
-          return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                mode: 'MERGE',
-                bullets_added: newBullets.length,
-                bullets_existing: currentBullets.length,
-                bullets_final: finalCount,
-                by_section: {
-                  strategies: merged.strategies_and_hard_rules.length,
-                  snippets: merged.useful_code_snippets.length,
-                  troubleshooting: merged.troubleshooting_and_pitfalls.length,
-                  apis: merged.apis_to_use.length
-                }
-              }, null, 2)
-            }]
-          };
-        } else {
-          // Replace existing playbook
-          await serverClient.savePlaybook(initialPlaybook);
-
-          // Invalidate cache
-          serverClient.invalidateCache();
-
-          const totalBullets = Object.values(initialPlaybook).flat().length;
-          console.error(`✅ Playbook initialized: ${totalBullets} bullets`);
-
-          return {
-            content: [{
-              type: 'text',
-              text: JSON.stringify({
-                mode: 'REPLACE',
-                total_bullets: totalBullets,
-                by_section: {
-                  strategies: initialPlaybook.strategies_and_hard_rules.length,
-                  snippets: initialPlaybook.useful_code_snippets.length,
-                  troubleshooting: initialPlaybook.troubleshooting_and_pitfalls.length,
-                  apis: initialPlaybook.apis_to_use.length
-                }
-              }, null, 2)
-            }]
-          };
-        }
       }
 
       case 'ace_learn': {
@@ -382,6 +217,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           playbook_used?: string[];
         };
 
+        console.error('📤 Sending execution trace to server...');
+
         // Build execution trace
         const trace: ExecutionTrace = {
           task,
@@ -391,174 +228,85 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           timestamp: new Date().toISOString()
         };
 
-        // 1. Get current playbook from server
-        const currentPlaybook = await serverClient.getPlaybook();
+        // Send to server - Reflector + Curator run automatically server-side
+        try {
+          const result = await serverClient.storeExecutionTrace(trace);
 
-        // Flatten playbook for reflector
-        const allBullets: PlaybookBullet[] = [
-          ...currentPlaybook.strategies_and_hard_rules,
-          ...currentPlaybook.useful_code_snippets,
-          ...currentPlaybook.troubleshooting_and_pitfalls,
-          ...currentPlaybook.apis_to_use
-        ];
+          // Invalidate playbook cache so next request gets fresh data
+          serverClient.invalidateCache();
 
-        // 2. REFLECTOR: Analyze execution outcome
-        console.error('🔍 Reflector analyzing execution...');
-        const reflection = await reflectorService.analyzeExecution(
-          trace,
-          allBullets,
-          async (messages) => {
-            return await server.request({
-              method: 'sampling/createMessage',
-              params: {
-                messages,
-                maxTokens: 4000,
-                temperature: 0.7
-              }
-            } as any, {} as any);
-          }
-        );
+          console.error('✅ Execution trace stored. Server is analyzing...');
 
-        // 3. Optional: Iterative refinement
-        console.error('✨ Refining reflection...');
-        const refined = await reflectorService.refineReflection(
-          reflection,
-          trace,
-          async (messages) => {
-            return await server.request({
-              method: 'sampling/createMessage',
-              params: {
-                messages,
-                maxTokens: 2000,
-                temperature: 0.7
-              }
-            } as any, {} as any);
-          },
-          2  // 2 refinement iterations
-        );
-
-        // 4. CURATOR: Apply delta operations
-        console.error('📝 Curator applying delta operations...');
-        const updatedPlaybook = await curationService.applyDeltaOperations(
-          currentPlaybook,
-          refined
-        );
-
-        // 5. Save to server
-        await serverClient.savePlaybook(updatedPlaybook);
-
-        // 6. Invalidate cache (force refresh on next call)
-        serverClient.invalidateCache();
-
-        console.error('✅ Playbook updated');
-
-        return {
-          content: [{
-            type: 'text',
-            text: JSON.stringify({
-              operations_applied: refined.operations.length,
-              summary: refined.summary,
-              playbook_bullets: Object.values(updatedPlaybook).flat().length,
-              by_section: {
-                strategies: updatedPlaybook.strategies_and_hard_rules.length,
-                snippets: updatedPlaybook.useful_code_snippets.length,
-                troubleshooting: updatedPlaybook.troubleshooting_and_pitfalls.length,
-                apis: updatedPlaybook.apis_to_use.length
-              }
-            }, null, 2)
-          }]
-        };
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                success: true,
+                message: 'Execution trace stored successfully. Server-side Reflector and Curator will process asynchronously.',
+                task,
+                timestamp: trace.timestamp,
+                analysis_triggered: result.analysis_triggered || false
+              }, null, 2)
+            }]
+          };
+        } catch (error: any) {
+          console.error('❌ Error storing trace:', error);
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                success: false,
+                error: error.message || 'Failed to store execution trace'
+              }, null, 2)
+            }],
+            isError: true
+          };
+        }
       }
 
       case 'ace_get_playbook': {
         const { section, min_helpful } = args as {
-          section?: BulletSection;
+          section?: string;
           min_helpful?: number;
         };
 
-        const playbook = await serverClient.getPlaybook();
+        console.error('📖 Fetching playbook from server...');
 
-        // Filter by section if specified
-        let bullets: PlaybookBullet[];
+        let playbook = await serverClient.getPlaybook();
+
+        // Client-side filtering if requested
         if (section) {
-          bullets = playbook[section];
-        } else {
-          bullets = [
-            ...playbook.strategies_and_hard_rules,
-            ...playbook.useful_code_snippets,
-            ...playbook.troubleshooting_and_pitfalls,
-            ...playbook.apis_to_use
-          ];
+          playbook = {
+            strategies_and_hard_rules: section === 'strategies_and_hard_rules' ? playbook.strategies_and_hard_rules : [],
+            useful_code_snippets: section === 'useful_code_snippets' ? playbook.useful_code_snippets : [],
+            troubleshooting_and_pitfalls: section === 'troubleshooting_and_pitfalls' ? playbook.troubleshooting_and_pitfalls : [],
+            apis_to_use: section === 'apis_to_use' ? playbook.apis_to_use : []
+          };
         }
 
-        // Filter by helpful count
         if (min_helpful !== undefined) {
-          bullets = bullets.filter(b => b.helpful >= min_helpful);
+          for (const key of Object.keys(playbook) as Array<keyof typeof playbook>) {
+            playbook[key] = playbook[key].filter((b: any) => (b.helpful || 0) >= min_helpful);
+          }
         }
-
-        // Generate markdown playbook
-        const markdown = generatePlaybookMarkdown(playbook, section);
 
         return {
           content: [{
             type: 'text',
-            text: markdown
+            text: JSON.stringify(playbook, null, 2)
           }]
         };
       }
 
       case 'ace_status': {
-        const playbook = await serverClient.getPlaybook();
+        console.error('📊 Fetching status from server...');
 
-        const allBullets = [
-          ...playbook.strategies_and_hard_rules,
-          ...playbook.useful_code_snippets,
-          ...playbook.troubleshooting_and_pitfalls,
-          ...playbook.apis_to_use
-        ];
-
-        // Top helpful bullets
-        const topHelpful = [...allBullets]
-          .sort((a, b) => b.helpful - a.helpful)
-          .slice(0, 5)
-          .map(b => ({
-            id: b.id,
-            section: b.section,
-            content: b.content.substring(0, 100),
-            helpful: b.helpful,
-            harmful: b.harmful,
-            confidence: b.confidence
-          }));
-
-        // Top harmful bullets
-        const topHarmful = [...allBullets]
-          .sort((a, b) => b.harmful - a.harmful)
-          .slice(0, 5)
-          .map(b => ({
-            id: b.id,
-            section: b.section,
-            content: b.content.substring(0, 100),
-            helpful: b.helpful,
-            harmful: b.harmful
-          }));
+        const status = await serverClient.getStatus();
 
         return {
           content: [{
             type: 'text',
-            text: JSON.stringify({
-              total_bullets: allBullets.length,
-              by_section: {
-                strategies_and_hard_rules: playbook.strategies_and_hard_rules.length,
-                useful_code_snippets: playbook.useful_code_snippets.length,
-                troubleshooting_and_pitfalls: playbook.troubleshooting_and_pitfalls.length,
-                apis_to_use: playbook.apis_to_use.length
-              },
-              avg_confidence: allBullets.length > 0
-                ? allBullets.reduce((sum, b) => sum + b.confidence, 0) / allBullets.length
-                : 0,
-              top_helpful: topHelpful,
-              top_harmful: topHarmful
-            }, null, 2)
+            text: JSON.stringify(status, null, 2)
           }]
         };
       }
@@ -570,86 +318,95 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error('Must set confirm=true to clear playbook');
         }
 
+        console.error('🗑️  Clearing playbook...');
+
         await serverClient.clearPlaybook();
+        serverClient.invalidateCache();
 
         return {
           content: [{
             type: 'text',
-            text: '✅ ACE playbook cleared'
+            text: JSON.stringify({
+              success: true,
+              message: 'Playbook cleared successfully'
+            }, null, 2)
           }]
         };
+      }
+
+      case 'ace_init': {
+        const { repo_path, commit_limit, days_back, merge_with_existing } = args as {
+          repo_path?: string;
+          commit_limit?: number;
+          days_back?: number;
+          merge_with_existing?: boolean;
+        };
+
+        console.error('🚀 Requesting server-side initialization from git history...');
+
+        try {
+          // POST to server /init endpoint (server does the analysis)
+          const response = await serverClient.initializeFromRepo({
+            repo_path: repo_path || process.cwd(),
+            commit_limit: commit_limit || 100,
+            days_back: days_back || 30,
+            merge_with_existing: merge_with_existing !== false
+          });
+
+          serverClient.invalidateCache();
+
+          console.error('✅ Server initialization complete');
+
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify(response, null, 2)
+            }]
+          };
+        } catch (error: any) {
+          console.error('❌ Error during initialization:', error);
+          return {
+            content: [{
+              type: 'text',
+              text: JSON.stringify({
+                success: false,
+                error: error.message || 'Failed to initialize playbook'
+              }, null, 2)
+            }],
+            isError: true
+          };
+        }
       }
 
       default:
         throw new Error(`Unknown tool: ${name}`);
     }
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
+  } catch (error: any) {
+    console.error(`❌ Error in ${name}:`, error);
     return {
       content: [{
         type: 'text',
-        text: `❌ Error: ${errorMessage}`
+        text: JSON.stringify({
+          success: false,
+          error: error.message || String(error)
+        }, null, 2)
       }],
       isError: true
     };
   }
 });
 
-// Generate playbook markdown
-function generatePlaybookMarkdown(
-  playbook: StructuredPlaybook,
-  filterSection?: BulletSection
-): string {
-  let markdown = '# ACE Playbook\n\n';
-
-  const sections: BulletSection[] = filterSection
-    ? [filterSection]
-    : ['strategies_and_hard_rules', 'useful_code_snippets', 'troubleshooting_and_pitfalls', 'apis_to_use'];
-
-  for (const section of sections) {
-    const bullets = playbook[section];
-
-    if (bullets.length === 0) continue;
-
-    // Section header
-    const sectionTitle = section
-      .split('_')
-      .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-      .join(' ');
-
-    markdown += `## ${sectionTitle}\n\n`;
-
-    // Sort by helpful count
-    const sorted = [...bullets].sort((a, b) => b.helpful - a.helpful);
-
-    for (const bullet of sorted) {
-      markdown += `### [${bullet.id}] (✅ ${bullet.helpful} | ❌ ${bullet.harmful} | ${(bullet.confidence * 100).toFixed(0)}%)\n\n`;
-      markdown += `${bullet.content}\n\n`;
-
-      if (bullet.evidence.length > 0) {
-        markdown += `**Evidence**: ${bullet.evidence.slice(0, 3).join(', ')}\n\n`;
-      }
-
-      markdown += `---\n\n`;
-    }
-  }
-
-  return markdown;
-}
-
 // Start server
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-
-  // Log to stderr (stdout is for MCP protocol)
-  console.error('🚀 Code Engine ACE - MCP Client v3.1.0');
-  console.error('   Server: ', config.serverUrl);
-  console.error('   Architecture: Generator → Reflector → Curator');
-  console.error('   Thresholds: 0.85 similarity, 0.30 confidence');
+  console.error('✅ ACE MCP Client v3.2.0 started');
+  console.error('🔗 Server:', config.serverUrl);
+  console.error('📋 Project:', config.projectId);
+  console.error('🌍 Universal MCP compatibility (no sampling required)');
 }
 
 main().catch((error) => {
-  console.error('Fatal error:', error);
+  console.error('❌ Fatal error:', error);
   process.exit(1);
 });

@@ -223,6 +223,58 @@ export class ACEServerClient {
   }
 
   /**
+   * Save ACE configuration to ~/.ace/config.json
+   */
+  async saveConfig(serverUrl: string, apiToken: string, projectId: string): Promise<void> {
+    const fs = await import('fs/promises');
+    const os = await import('os');
+    const path = await import('path');
+
+    const configDir = path.join(os.homedir(), '.ace');
+    const configPath = path.join(configDir, 'config.json');
+
+    // Ensure directory exists
+    await fs.mkdir(configDir, { recursive: true });
+
+    // Save config
+    const config = { serverUrl, apiToken, projectId };
+    await fs.writeFile(configPath, JSON.stringify(config, null, 2), 'utf8');
+
+    console.error(`✅ Configuration saved to ${configPath}`);
+  }
+
+  /**
+   * Store execution trace for server-side analysis
+   * Server endpoint: POST /traces
+   *
+   * Server will automatically run Reflector + Curator
+   */
+  async storeExecutionTrace(trace: any): Promise<any> {
+    return this.request('/traces', 'POST', trace);
+  }
+
+  /**
+   * Initialize playbook from git repository (server-side)
+   * Server endpoint: POST /init
+   */
+  async initializeFromRepo(params: {
+    repo_path: string;
+    commit_limit: number;
+    days_back: number;
+    merge_with_existing: boolean;
+  }): Promise<any> {
+    return this.request('/init', 'POST', params);
+  }
+
+  /**
+   * Get playbook status/statistics
+   * Server endpoint: GET /analytics
+   */
+  async getStatus(): Promise<any> {
+    return this.getAnalytics();
+  }
+
+  /**
    * Invalidate caches (force refresh on next call)
    * Call after any mutation (save, clear, delta operations)
    */
