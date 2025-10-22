@@ -194,6 +194,26 @@ mcp__ace-pattern-learning__ace_learn
 
 But with Agent Skills, you shouldn't need to!
 
+### 📄 Plugin CLAUDE.md (Automatic)
+
+The plugin includes a `CLAUDE.md` file with instructions for optimal Agent Skill triggering:
+
+**Location**: `~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchestration/CLAUDE.md`
+
+**Discovery**: Claude Code automatically discovers CLAUDE.md files in plugin directories. The plugin's CLAUDE.md:
+- ✅ **Never modifies your existing CLAUDE.md files**
+- ✅ **Loads automatically** alongside your personal/project CLAUDE.md
+- ✅ **Provides context** for when to trigger automatic learning
+- ✅ **Updates with the plugin** when you update the plugin
+
+**Optional - Explicit Import**: If you want to ensure it's always loaded, add this line to your `./CLAUDE.md` or `~/.claude/CLAUDE.md`:
+```markdown
+# ACE Plugin Instructions
+@~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchestration/CLAUDE.md
+```
+
+**Check what's loaded**: Run `/memory` in Claude Code to see all active CLAUDE.md files.
+
 ---
 
 ## 📋 Alternative: Manual Configuration
