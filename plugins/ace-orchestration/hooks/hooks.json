@@ -5,7 +5,27 @@
         "hooks": [
           {
             "type": "prompt",
-            "prompt": "📖 **ACE Playbook Available**\n\nFor coding tasks, architecture decisions, or complex problem-solving, consider reviewing the ACE playbook first:\n\n`/ace-patterns [section]`\n\nRelevant sections: strategies, code-snippets, troubleshooting, apis\n\n*Note: ACE learning happens automatically via Agent Skills - no manual action needed!*"
+            "prompt": "📖 **ACE Playbook Available**\n\nFor coding tasks, architecture decisions, or complex problem-solving, consider reviewing the ACE playbook first:\n\n`/ace-patterns [section]`\n\nRelevant sections: strategies, code-snippets, troubleshooting, apis"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "🎓 **ACE Learning Checkpoint**\n\nIf this response involved substantial work (problem-solving, debugging, code implementation, refactoring, API integration, test failures, build errors, or lessons learned), use the ACE Learning Agent Skill to capture patterns automatically.\n\nThe Agent Skill will handle trajectory extraction and feedback capture for you."
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "prompt",
+            "prompt": "🎓 **ACE Subagent Learning**\n\nThis subagent task has completed. If it involved substantial work with valuable lessons, use the ACE Learning Agent Skill to capture insights automatically."
           }
         ]
       }
