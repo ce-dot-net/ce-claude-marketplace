@@ -2,7 +2,7 @@
   "mcpServers": {
     "ace-pattern-learning": {
       "command": "npx",
-      "args": ["--yes", "@ce-dot-net/ace-client@3.2.0"]
+      "args": ["--yes", "@ce-dot-net/ace-client@3.2.2"]
     }
   }
 }

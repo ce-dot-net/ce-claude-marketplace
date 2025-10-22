@@ -40,7 +40,7 @@ When triggered, the Agent Skill:
 1. **Extracts task information** - What was accomplished
 2. **Captures trajectory** - Key steps and decisions made
 3. **Gathers feedback** - Lessons learned, patterns discovered, gotchas
-4. **Calls `mcp__plugin_ace-orchestration_ace-pattern-learning__ace_learn`** - Triggers automatic learning
+4. **Calls `mcp__ace-pattern-learning__ace_learn`** - Triggers automatic learning
 
 ### The Automatic Learning Pipeline
 
@@ -100,7 +100,7 @@ Result: Pattern captured: "Refresh token rotation prevents token theft attacks"
 
 If you need to manually test (rare), use:
 ```
-mcp__plugin_ace-orchestration_ace-pattern-learning__ace_learn
+mcp__ace-pattern-learning__ace_learn
 ```
 
 With parameters:
