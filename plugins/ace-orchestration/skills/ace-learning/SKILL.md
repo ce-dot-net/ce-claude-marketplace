@@ -111,15 +111,15 @@ mcp__ace-pattern-learning__ace_learn
   "feedback": "Stripe webhooks require raw request body for signature verification. Standard express.json() breaks signature validation. Solution: Use express.raw({type: 'application/json'}) for webhook route specifically. API Pattern: Webhook signature verification often needs raw body access - check docs before adding body parsers."
 }
 
-### Step 4: Autonomous Reflector and Curator
+### Step 4: Server-Side Analysis (v3.2.0)
 
-After calling `ace_learn`, the MCP server will automatically:
+After calling `ace_learn`, the MCP client sends the trace to the ACE server, which automatically:
 
-1. **Reflector Agent**: Analyzes execution with LLM to extract patterns and insights
-2. **Curator Agent**: Creates incremental delta updates in bullet format
-3. **Merge Logic**: Applies updates to playbook using grow-and-refine algorithm
+1. **Reflector Agent**: Server-side analysis using Sonnet 4 for intelligent pattern extraction
+2. **Curator Agent**: Server-side delta updates using Haiku 4.5 for cost efficiency
+3. **Merge Logic**: Non-LLM algorithm applies updates to playbook using grow-and-refine
 
-**No further action required** - the Three-Agent Architecture runs autonomously via MCP Sampling.
+**No further action required** - the server handles all analysis autonomously and asynchronously.
 
 ### Step 5: Verification (Optional)
 
@@ -147,19 +147,26 @@ Check relevant sections (strategies, code-snippets, troubleshooting, apis) for n
 - **Failure Recovery**: Documented troubleshooting prevents repeated mistakes
 - **Best Practices**: Accumulates proven approaches and patterns
 
-## Architecture Alignment
+## Architecture Alignment (v3.2.0)
 
-This Skill implements the ACE research paper's fully automatic architecture:
+This Skill implements the ACE research paper's fully automatic architecture with server-side intelligence:
 
 ```
 Task Completion → Agent Skill (auto-invoked) → ace_learn called →
-Reflector (auto via MCP Sampling) → Curator (auto via MCP Sampling) →
-Delta Merge (auto) → Updated Playbook
+MCP Client (HTTP POST) → ACE Server →
+Reflector (server-side Sonnet 4) → Curator (server-side Haiku 4.5) →
+Delta Merge (server-side) → Updated Playbook
 ```
 
 The automation happens at three levels:
 1. **Skill Invocation**: Claude decides when to use this Skill based on task context
-2. **MCP Sampling**: Reflector and Curator run autonomously with their own LLM calls
+2. **Server-Side Analysis**: Reflector and Curator run autonomously on ACE server
 3. **Delta Merge**: Non-LLM algorithm applies incremental updates automatically
+
+**Benefits**:
+- ✅ Universal MCP compatibility (works with Claude Code, Cursor, Cline, any MCP client)
+- ✅ Cost optimized (Sonnet 4 for intelligence, Haiku 4.5 for efficiency, ~60% savings)
+- ✅ Transparent server logs for debugging and monitoring
+- ✅ No MCP Sampling requirement
 
 Result: Achieves research paper's +10.6% improvement on agentic tasks through fully automatic pattern learning!
