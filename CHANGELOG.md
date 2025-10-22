@@ -5,6 +5,45 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.10] - 2025-10-22
+
+### 📄 Enhancement - Added Plugin CLAUDE.md
+
+**NEW: Plugin-level CLAUDE.md for optimal Agent Skill triggering**
+
+### What's New
+
+**Plugin CLAUDE.md File**:
+- ✅ Added `plugins/ace-orchestration/CLAUDE.md` with ACE-specific instructions
+- 🎯 Provides context for when Agent Skills should trigger
+- 🔒 **Never modifies user's existing CLAUDE.md files** (separate file)
+- 🔄 Updates automatically when plugin updates
+- 📚 Automatically discovered by Claude Code
+
+### Why This Matters
+
+The plugin CLAUDE.md helps Claude better recognize when to trigger automatic learning by providing detailed context about substantial work scenarios and learning triggers.
+
+### Safety Guarantees
+
+- ✅ **Non-invasive**: Separate file in plugin directory
+- ✅ **Automatic discovery**: Claude Code finds plugin CLAUDE.md files
+- ✅ **Never modifies user files**: Your CLAUDE.md stays untouched
+- ✅ **Updates with plugin**: No manual maintenance
+
+### Files Added
+
+- `plugins/ace-orchestration/CLAUDE.md` - Plugin-level instructions for Agent Skills
+
+### Documentation Updated
+
+- `INSTALL.md` - Added section explaining plugin CLAUDE.md discovery and optional import
+
+### Version Updates
+- ace-orchestration plugin: 3.1.9 → 3.1.10
+
+---
+
 ## [3.1.9] - 2025-10-22
 
 ### 🚀 MAJOR FEATURE - Fully Automatic ACE Learning via Agent Skills
