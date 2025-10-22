@@ -5,6 +5,69 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.11] - 2025-10-22
+
+### 🔧 Fix - Restored Hooks for Agent Skill Invocation
+
+**FIXED: Agent Skills now trigger automatically via Stop/SubagentStop hooks**
+
+### The Problem
+
+After research into official Claude Code documentation, we discovered:
+- **Agent Skills trigger during user requests**, not after task completion
+- **ACE learning must happen AFTER work is done**, not during requests
+- **Agent Skills alone cannot achieve post-completion learning**
+
+### The Solution
+
+**Hooks + Agent Skills working together:**
+
+1. **Stop/SubagentStop hooks** (type: prompt) trigger after work completion
+2. **Hook prompt mentions ACE Learning Agent Skill**
+3. **Claude sees prompt and invokes the Agent Skill**
+4. **Agent Skill calls ace_learn MCP tool**
+5. **Reflector & Curator run automatically via MCP Sampling**
+
+### What Changed
+
+**Restored hooks.json with updated prompts:**
+- ✅ **Stop hook** - Prompts Agent Skill invocation after main responses
+- ✅ **SubagentStop hook** - Prompts Agent Skill invocation after subagent tasks
+- 🎯 **Prompts explicitly mention "ACE Learning Agent Skill"**
+- 📖 **Updated UserPromptSubmit** - Removed outdated note
+
+### Architecture
+
+```
+Work Completed → Stop Hook Fires → Prompt Added →
+Claude Sees Prompt → Invokes ACE Learning Agent Skill →
+Skill Calls ace_learn → Reflector (auto) → Curator (auto) → Updated Playbook
+```
+
+**This achieves the ACE research paper's fully automatic learning!**
+
+### Files Updated
+
+- `plugins/ace-orchestration/hooks/hooks.json` - Restored Stop/SubagentStop hooks
+
+### Why This Works
+
+**Hooks solve the timing problem:**
+- Agent Skills can't trigger after completion (no user request)
+- Hooks fire at the right time (after work done)
+- Hook prompts invoke the Agent Skill
+- Agent Skill has all the learning logic
+
+**Best of both worlds:**
+- ✅ Hooks for correct timing (post-completion)
+- ✅ Agent Skills for learning logic (structured, maintainable)
+- ✅ MCP Sampling for autonomous Reflector/Curator
+
+### Version Updates
+- ace-orchestration plugin: 3.1.10 → 3.1.11
+
+---
+
 ## [3.1.10] - 2025-10-22
 
 ### 📄 Enhancement - Added Plugin CLAUDE.md
