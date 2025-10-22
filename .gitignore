@@ -8,6 +8,12 @@ build/
 # Local cache (project-specific)
 .ace-cache/
 
+# ACE configuration with credentials and project settings
+.ace/
+
+# Swarm configuration (if applicable)
+.swarm/
+
 # Environment files with credentials
 .env
 .env.local
