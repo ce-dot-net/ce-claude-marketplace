@@ -51,9 +51,11 @@ Agent Skill Auto-Triggers (you invoke the skill based on description matching)
     ↓
 ace_learn Called with Trajectory & Feedback
     ↓
-Reflector Agent Analyzes (autonomous LLM call via MCP Sampling)
+MCP Client POSTs trace to ACE Server
     ↓
-Curator Agent Creates Delta Updates (autonomous LLM call)
+Server-Side Reflector Analyzes (Sonnet 4 for intelligence)
+    ↓
+Server-Side Curator Creates Delta Updates (Haiku 4.5 for efficiency)
     ↓
 Merge Algorithm Applies Updates
     ↓
@@ -107,12 +109,20 @@ With parameters:
 - `trajectory` (optional but valuable): Array of key steps
 - `output` (required): Detailed feedback, lessons learned, patterns discovered
 
-## 🎯 Architecture Alignment
+## 🎯 Architecture Alignment (v3.2.0)
 
-This implements the ACE research paper's fully automatic learning:
+This implements the ACE research paper's fully automatic learning with server-side intelligence:
 - **Generator**: Main Claude instance executing tasks
-- **Reflector**: Autonomous analysis via MCP Sampling
-- **Curator**: Autonomous delta updates via MCP Sampling
-- **Merge**: Non-LLM algorithm applying incremental updates
+- **MCP Client**: Simple HTTP interface (works with Claude Code, Cursor, Cline, any MCP client)
+- **ACE Server**: Autonomous analysis engine
+  - **Reflector**: Server-side pattern analysis using Sonnet 4
+  - **Curator**: Server-side delta updates using Haiku 4.5 (60% cost savings)
+  - **Merge**: Non-LLM algorithm applying incremental updates
+
+**Benefits**:
+- ✅ Universal MCP compatibility (no sampling required)
+- ✅ Cost optimized (Sonnet for intelligence, Haiku for efficiency)
+- ✅ Works with ALL MCP clients (Claude Code, Cursor, Cline, etc.)
+- ✅ Server-side analysis with transparent logging
 
 Result: +10.6% improvement on agentic tasks through fully automatic pattern learning!
