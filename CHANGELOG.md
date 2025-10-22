@@ -5,6 +5,107 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.1.8] - 2025-10-22
+
+### ✅ Enhancement - Added SubagentStop Hook
+
+**NEW: Support for Claude Code Task tool (subagent) completions**
+
+### What's New
+
+**hooks.json Enhancement**:
+- ✅ Added `SubagentStop` hook - Triggers learning prompts when Task tool subagents complete
+- 🎯 Better alignment with ACE paper's multi-agent architecture
+- 📊 Captures insights from delegated subagent work
+
+### Why This Matters
+
+The Claude Code Task tool spawns subagents to handle complex multi-step tasks. The `SubagentStop` hook ensures ACE can learn from:
+- Subagent problem-solving approaches
+- Patterns discovered during delegated tasks
+- Lessons from subagent successes and failures
+
+### Hook Configuration
+
+```json
+"SubagentStop": [{
+  "hooks": [{
+    "type": "prompt",
+    "prompt": "🎓 ACE Subagent Learning - Consider capturing insights via ace_learn"
+  }]
+}]
+```
+
+### Complete Hook Coverage
+
+All task completion scenarios now supported:
+- `Stop` - Main Claude response completion
+- `SubagentStop` - **NEW** Task tool subagent completion
+- `UserPromptSubmit` - Playbook review reminder
+- `PostToolUse` - Execution feedback logging
+
+## [3.1.7] - 2025-10-22
+
+### 🚨 CRITICAL BUG FIX - Invalid Hook Event
+
+**FIXED: hooks.json used non-existent "PostTaskCompletion" event**
+
+### Critical Issue
+The plugin was configured with `PostTaskCompletion` hook which **does not exist** in Claude Code CLI. This meant:
+- ❌ Hooks never fired
+- ❌ Learning prompts never appeared
+- ❌ ACE's automatic learning workflow was completely broken
+
+### Changes
+
+**hooks.json Complete Rewrite**:
+- ❌ Removed invalid `PostTaskCompletion` event
+- ✅ Added `UserPromptSubmit` - Reminds Claude to check playbook before tasks
+- ✅ Added `Stop` - Prompts learning after Claude finishes responses
+- ✅ Added `PostToolUse` with Bash matcher - Logs execution for debugging
+
+**New Architecture**:
+- **Semi-automatic learning**: Claude decides when to invoke `ace_learn`
+- **Prompt-based reminders**: Hooks add helpful prompts instead of trying to invoke MCP tools
+- **Execution logging**: Track Bash commands to `~/.ace/execution_log.jsonl`
+
+### Alignment with Research Paper
+
+**Paper (arXiv:2510.04618v1)**: Fully automatic learning after every task
+
+**Our Implementation**: Semi-automatic with intelligent prompting
+- **Why different**: Claude Code hooks can only run shell commands or add prompts, cannot automatically invoke MCP tools
+- **Trade-off**: User control + prevents learning from trivial Q&A exchanges
+- **When ace_learn IS called**: MCP server automatically runs Reflector→Curator pipeline (matches paper 100%)
+
+### Documentation Added
+- `ARCHITECTURE.md` - Comprehensive comparison of paper vs implementation
+- Documents all hook events, capabilities, and limitations
+- Explains semi-automatic learning approach
+
+### Valid Claude Code Hook Events
+- `UserPromptSubmit` - Before prompt processing
+- `PreToolUse` - Before tool execution (can block)
+- `PostToolUse` - After tool execution
+- `Stop` - After Claude finishes responding
+- `SubagentStop` - After subagent completes
+- `Notification` - On notifications
+- `SessionStart` - Session begins
+- `SessionEnd` - Session ends
+- `PreCompact` - Before context compaction
+
+### Testing
+1. Update plugin: `/plugin update ace-orchestration@ce-dot-net-marketplace`
+2. Restart Claude Code
+3. Submit any prompt → See playbook reminder from `UserPromptSubmit`
+4. Complete work → See learning checkpoint from `Stop`
+5. Run bash command → Check `~/.ace/execution_log.jsonl`
+
+### Version Updates
+- ace-orchestration plugin: 3.1.6 → 3.1.7
+
+---
+
 ## [3.1.6] - 2025-10-21
 
 ### 🔧 MCP Configuration Fix - Use .mcp.json File
