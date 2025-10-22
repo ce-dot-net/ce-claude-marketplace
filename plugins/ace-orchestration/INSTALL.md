@@ -1,7 +1,26 @@
 # ACE Plugin Installation Guide
 
-**Version**: 3.0.4
+**Version**: 3.1.9
 **Type**: Bundled MCP Server (No Authentication Required)
+
+---
+
+## ✨ What's New in v3.1.9
+
+🚀 **FULLY AUTOMATIC LEARNING** - ACE now learns automatically via Agent Skills!
+
+- **Agent Skills**: Claude automatically triggers learning after substantial work
+- **Zero Manual Intervention**: No need to remember to call `/ace-learn`
+- **100% Research Paper Alignment**: Implements ACE paper's fully automatic architecture
+- **Context-Aware**: Only triggers for meaningful work (debugging, implementation, failures)
+
+**How it works**:
+```
+Complete substantial work → Agent Skill auto-triggers → Learning happens automatically →
+Reflector & Curator run autonomously → Playbook updated with new patterns
+```
+
+See "Automatic Learning" section below for details.
 
 ---
 
@@ -82,6 +101,98 @@ When you install the plugin:
 - ✅ Configuration wizard (interactive prompts)
 
 **No external downloads, no authentication, works offline!**
+
+---
+
+## 🤖 Automatic Learning with Agent Skills
+
+**NEW in v3.1.9**: ACE learns automatically via Agent Skills - no manual intervention required!
+
+### How It Works
+
+**Agent Skills** are model-invoked capabilities that Claude automatically triggers based on task context. Unlike slash commands (which require user input), Agent Skills activate autonomously when Claude determines they're relevant.
+
+**The ACE Learning Agent Skill**:
+- **Location**: `skills/ace-learning/SKILL.md`
+- **Trigger**: Automatically activates after substantial work
+- **Mechanism**: Claude analyzes task completion against Skill description
+- **Action**: Calls `ace_learn` MCP tool to capture patterns
+
+### Automatic Trigger Conditions
+
+The Agent Skill automatically activates after:
+
+1. **Problem-Solving & Debugging**
+   - Fixed bugs or resolved errors
+   - Debugged test failures or build issues
+   - Troubleshot integration problems
+
+2. **Code Implementation**
+   - Implemented new features
+   - Refactored existing code
+   - Optimized performance
+
+3. **API & Tool Integration**
+   - Integrated external APIs
+   - Used new libraries or frameworks
+   - Configured build tools
+
+4. **Learning from Failures**
+   - Encountered and recovered from errors
+   - Discovered edge cases or gotchas
+   - Found better approaches after failures
+
+5. **Substantial Subagent Tasks**
+   - Completed complex multi-step tasks
+   - Made significant technical decisions
+
+**Skips**: Simple Q&A, basic file reads, trivial edits without problem-solving
+
+### The Automatic Learning Pipeline
+
+```
+1. You complete substantial work (e.g., fix a bug, implement a feature)
+   ↓
+2. Agent Skill auto-triggers (Claude detects substantial work pattern)
+   ↓
+3. Skill calls ace_learn with trajectory and feedback
+   ↓
+4. Reflector Agent analyzes execution (autonomous LLM call via MCP Sampling)
+   ↓
+5. Curator Agent creates delta updates (autonomous LLM call)
+   ↓
+6. Merge algorithm applies updates to playbook
+   ↓
+7. Playbook updated with new patterns automatically!
+```
+
+### Benefits
+
+- ✅ **Zero Manual Work**: Learning happens automatically
+- ✅ **Context-Aware**: Only triggers for meaningful work
+- ✅ **Trajectory Capture**: Records key steps and decisions
+- ✅ **Failure Learning**: Captures lessons from errors
+- ✅ **Research-Aligned**: Matches ACE paper's architecture 100%
+
+### Verification
+
+After completing substantial work, check if learning occurred:
+
+```
+/ace-patterns
+```
+
+You should see new patterns automatically added to relevant sections (strategies, code-snippets, troubleshooting, apis).
+
+### Manual Learning (Still Available)
+
+You can still manually trigger learning if needed:
+
+```
+mcp__ace-pattern-learning__ace_learn
+```
+
+But with Agent Skills, you shouldn't need to!
 
 ---
 
