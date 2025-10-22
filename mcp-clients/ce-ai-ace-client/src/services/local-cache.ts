@@ -93,6 +93,9 @@ export class LocalCacheService {
         updated_at TEXT NOT NULL
       );
     `);
+
+    // Enable WAL mode for better concurrent access performance
+    this.db.pragma('journal_mode = WAL');
   }
 
   /**

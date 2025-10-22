@@ -39,7 +39,7 @@ const serverClient = new ACEServerClient(config);
 const server = new Server(
   {
     name: 'ace-pattern-learning',
-    version: '3.2.0'
+    version: '3.2.3'
   },
   {
     capabilities: {
@@ -74,33 +74,51 @@ const tools: Tool[] = [
   },
   {
     name: 'ace_learn',
-    description: 'Store execution trace for server-side analysis (Reflector + Curator run automatically on server)',
+    description: `Capture patterns and lessons learned from substantial coding tasks for automatic playbook improvement. Use AFTER completing:
+
+• Problem-solving: Fixed bugs, debugged test failures, resolved build errors, troubleshot integrations
+• Implementation: Implemented features, refactored code, optimized performance, updated architectures
+• API Integration: Integrated external APIs, used new libraries/frameworks, configured build tools
+• Failures & Recovery: Encountered errors and found solutions, discovered edge cases or gotchas
+• Complex Tasks: Multi-step implementations, architectural decisions, technical problem-solving
+
+WHEN TO USE: After completing substantial work where you learned something valuable - especially when you discovered non-obvious solutions, encountered surprising behaviors, or found better approaches after initial failures.
+
+SKIP FOR: Simple Q&A, basic file reads, trivial edits without problem-solving, informational queries.
+
+EXAMPLES:
+- "Fixed intermittent async test failures by discovering missing await on database.close()"
+- "Integrated Stripe webhooks, learned they require express.raw() for signature verification"
+- "Implemented JWT auth with refresh token rotation to prevent token theft"
+- "Debugged Next.js hydration error caused by server/client timestamp mismatch"
+
+The server-side Reflector (Sonnet 4) analyzes your execution trace and extracts reusable patterns. The Curator (Haiku 4.5) creates delta updates to the playbook. This builds organizational knowledge over time.`,
     inputSchema: {
       type: 'object',
       properties: {
         task: {
           type: 'string',
-          description: 'Task that was executed'
+          description: 'Brief description (1-2 sentences) of what was accomplished. Example: "Debugged intermittent test failures in async database operations"'
         },
         trajectory: {
           type: 'array',
-          description: 'Execution trajectory (array of {step, action, args, result})'
+          description: 'Key steps and decisions made during execution. Can be an array of strings describing: problem analysis, implementation decisions, tools/APIs used, errors encountered and resolutions, alternative approaches considered. Example: ["Observed random test failures in CI", "Suspected race condition in cleanup", "Added transaction isolation", "Tests still failed", "Discovered missing await on db.close()", "Added proper async chain"]'
         },
         success: {
           type: 'boolean',
-          description: 'Whether execution succeeded'
+          description: 'Whether the task ultimately succeeded (true) or failed (false). Even failed tasks provide valuable learning.'
         },
         output: {
           type: 'string',
-          description: 'Execution output'
+          description: 'Detailed outcome and lessons learned. Include: root cause analysis, specific solutions, gotchas discovered, best practices, patterns to reuse. Example: "Root cause: Missing await on database.close() caused connection pool exhaustion. Insight: Intermittent failures in async code often indicate missing await. Always check async cleanup functions."'
         },
         error: {
           type: 'string',
-          description: 'Error message if failed (optional)'
+          description: 'Error message if the task failed (optional). Include stack traces or error details that helped diagnose the issue.'
         },
         playbook_used: {
           type: 'array',
-          description: 'Bullet IDs that were consulted (optional)',
+          description: 'IDs of playbook bullets that were consulted during this task (optional). Helps track which patterns were useful.',
           items: { type: 'string' }
         }
       },
