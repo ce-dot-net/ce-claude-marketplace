@@ -5,15 +5,31 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.2.6] - 2025-10-23
+## [3.2.7] - 2025-10-23
+
+### Fixed
+- **`/ace-claude-init` command implementation** - CRITICAL BUG FIX: Command was broken in v3.2.6
+  - **Problem**: Used `@` reference syntax which doesn't work in command expansion
+  - **Solution**: Now properly copies full plugin CLAUDE.md content inline (~289 lines)
+  - **Impact**: v3.2.6 users got broken command that didn't inject instructions
+  - Command now works as documented: copies content inline, no `@` references
+  - Non-destructive: appends to existing CLAUDE.md without overwriting user content
+  - Idempotent: detects existing content and prevents duplicates
+  - Creates CLAUDE.md if it doesn't exist
+
+## [3.2.6] - 2025-10-23 [BROKEN - DO NOT USE]
+
+**WARNING**: This version contains a broken `/ace-claude-init` command. Please use v3.2.7 instead.
 
 ### Added
-- **`/ace-claude-init` command** - NEW: Safely patches project CLAUDE.md with ACE plugin instructions reference
-  - Provides always-on context about ACE architecture and automatic learning cycle
+- **`/ace-claude-init` command** - BROKEN: Used `@` reference syntax instead of inline copy
+  - Intended to copy full ACE plugin instructions inline into project CLAUDE.md
+  - Provides always-on context about ACE architecture and automatic learning cycle (~289 lines)
   - Non-destructive: appends to existing CLAUDE.md without overwriting user content
-  - Idempotent: detects existing reference and prevents duplicates
+  - Idempotent: detects existing content and prevents duplicates
   - Creates CLAUDE.md if it doesn't exist
   - Replaces unreliable SessionStart hook approach with explicit user control
+  - **BUG**: Implementation used `@` reference syntax which doesn't work - FIXED IN v3.2.7
 - **Local file analysis in `/ace-bootstrap`** - NEW: Analyze current project files (committed or uncommitted!)
   - Three modes: `local-files`, `git-history`, or `both` (default)
   - Extracts imports/dependencies from TypeScript, JavaScript, Python, Go, Java, Ruby files
@@ -124,6 +140,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Slash commands for ACE operations (/ace-patterns, /ace-status, etc.)
 - Agent Skill for automatic learning from execution
 
+[3.2.7]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.6...v3.2.7
+[3.2.6]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.5...v3.2.6
 [3.2.5]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.4...v3.2.5
 [3.2.4]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.3...v3.2.4
 [3.2.3]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.2...v3.2.3

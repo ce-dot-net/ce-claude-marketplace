@@ -113,7 +113,7 @@ python -m uvicorn main:app --reload --port 9000
 # Add ACE instructions to your project's CLAUDE.md
 /ace-claude-init
 
-# Expected: ACE reference added to CLAUDE.md
+# Expected: Full ACE instructions copied inline to CLAUDE.md (~289 lines)
 
 # Optionally bootstrap playbook from git history
 /ace-bootstrap --commits 100 --days 30
@@ -122,8 +122,8 @@ python -m uvicorn main:app --reload --port 9000
 ```
 
 **What This Does:**
-- `/ace-claude-init` - Adds ACE plugin instructions to your project's CLAUDE.md (provides always-on context about ACE architecture)
-- `/ace-bootstrap` - Optional: Analyzes git history to populate initial playbook patterns
+- `/ace-claude-init` - Copies full ACE plugin instructions inline into your project's CLAUDE.md (~289 lines, provides always-on context about ACE architecture)
+- `/ace-bootstrap` - Optional: Analyzes git history and local files to populate initial playbook patterns
 
 **You're Done!** ACE will now automatically:
 - Retrieve learned patterns before complex tasks (implementation, debugging, refactoring)
@@ -317,7 +317,7 @@ Logs Bash command executions for debugging.
 3. **troubleshooting_and_pitfalls**: Known issues, gotchas, solutions
 4. **apis_to_use**: Recommended libraries, frameworks, integration patterns
 
-## 📊 Example Workflow (v3.2.6)
+## 📊 Example Workflow (v3.2.7)
 
 ### First-Time Setup
 ```bash
@@ -327,7 +327,7 @@ Logs Bash command executions for debugging.
 
 # 2. Initialize ACE in your project (required for full cycle)
 /ace-claude-init
-# Adds ACE instructions to project CLAUDE.md
+# Copies full ACE instructions inline to project CLAUDE.md (~289 lines)
 
 # 3. Optional: Bootstrap playbook from git history
 /ace-bootstrap --commits 100 --days 30
