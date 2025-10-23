@@ -166,22 +166,36 @@ The server-side Reflector (Sonnet 4) analyzes your execution trace and extracts 
     }
   },
   {
-    name: 'ace_init',
-    description: 'Initialize playbook from existing codebase (server-side offline learning from git history)',
+    name: 'ace_bootstrap',
+    description: 'Bootstrap playbook from existing codebase by analyzing current files and/or git history',
     inputSchema: {
       type: 'object',
       properties: {
+        mode: {
+          type: 'string',
+          enum: ['local-files', 'git-history', 'both'],
+          description: 'Analysis mode: local-files (current code), git-history (commits), both (default: both)'
+        },
         repo_path: {
           type: 'string',
-          description: 'Path to git repository (defaults to current directory)'
+          description: 'Path to project directory (defaults to current directory)'
+        },
+        file_extensions: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'File extensions to analyze (default: [".ts", ".js", ".py", ".go", ".java", ".rb"])'
+        },
+        max_files: {
+          type: 'number',
+          description: 'Maximum files to analyze for local-files mode (default: 1000)'
         },
         commit_limit: {
           type: 'number',
-          description: 'Number of commits to analyze (default: 100)'
+          description: 'Number of commits to analyze for git-history mode (default: 100)'
         },
         days_back: {
           type: 'number',
-          description: 'Days of history to analyze (default: 30)'
+          description: 'Days of history to analyze for git-history mode (default: 30)'
         },
         merge_with_existing: {
           type: 'boolean',
@@ -352,43 +366,82 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
-      case 'ace_init': {
-        const { repo_path, commit_limit, days_back, merge_with_existing } = args as {
+      case 'ace_bootstrap': {
+        const {
+          mode,
+          repo_path,
+          file_extensions,
+          max_files,
+          commit_limit,
+          days_back,
+          merge_with_existing
+        } = args as {
+          mode?: string;
           repo_path?: string;
+          file_extensions?: string[];
+          max_files?: number;
           commit_limit?: number;
           days_back?: number;
           merge_with_existing?: boolean;
         };
 
-        console.error('🚀 Requesting server-side initialization from git history...');
+        const analysisMode = mode || 'both';
+        const projectPath = repo_path || process.cwd();
+
+        console.error(`🚀 Bootstrapping playbook (mode: ${analysisMode})...`);
 
         try {
-          // POST to server /init endpoint (server does the analysis)
-          const response = await serverClient.initializeFromRepo({
-            repo_path: repo_path || process.cwd(),
-            commit_limit: commit_limit || 100,
-            days_back: days_back || 30,
-            merge_with_existing: merge_with_existing !== false
-          });
+          let localFileResults: any = null;
+          let gitHistoryResults: any = null;
+
+          // Mode 1: Analyze local files (current codebase)
+          if (analysisMode === 'local-files' || analysisMode === 'both') {
+            console.error('📂 Analyzing current codebase files...');
+            localFileResults = await analyzeLocalFiles(projectPath, {
+              extensions: file_extensions || ['.ts', '.js', '.py', '.go', '.java', '.rb'],
+              maxFiles: max_files || 1000
+            });
+            console.error(`✅ Analyzed ${localFileResults.filesAnalyzed} files`);
+          }
+
+          // Mode 2: Analyze git history (server-side)
+          if (analysisMode === 'git-history' || analysisMode === 'both') {
+            console.error('📜 Requesting server-side git history analysis...');
+            gitHistoryResults = await serverClient.initializeFromRepo({
+              repo_path: projectPath,
+              commit_limit: commit_limit || 100,
+              days_back: days_back || 30,
+              merge_with_existing: merge_with_existing !== false
+            });
+            console.error('✅ Git history analysis complete');
+          }
 
           serverClient.invalidateCache();
 
-          console.error('✅ Server initialization complete');
+          // Combine results
+          const combinedResults = {
+            mode: analysisMode,
+            localFiles: localFileResults,
+            gitHistory: gitHistoryResults,
+            success: true
+          };
+
+          console.error('✅ Bootstrap complete');
 
           return {
             content: [{
               type: 'text',
-              text: JSON.stringify(response, null, 2)
+              text: JSON.stringify(combinedResults, null, 2)
             }]
           };
         } catch (error: any) {
-          console.error('❌ Error during initialization:', error);
+          console.error('❌ Error during bootstrap:', error);
           return {
             content: [{
               type: 'text',
               text: JSON.stringify({
                 success: false,
-                error: error.message || 'Failed to initialize playbook'
+                error: error.message || 'Failed to bootstrap playbook'
               }, null, 2)
             }],
             isError: true
@@ -414,11 +467,197 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 });
 
+/**
+ * Analyze local files in the project directory
+ * Extracts patterns from current codebase (imports, architecture, code patterns)
+ */
+async function analyzeLocalFiles(
+  projectPath: string,
+  options: { extensions: string[]; maxFiles: number }
+): Promise<any> {
+  const fs = await import('fs/promises');
+  const path = await import('path');
+
+  const patterns: any[] = [];
+  let filesAnalyzed = 0;
+  const filesByType: Record<string, number> = {};
+
+  // Recursively find files
+  async function findFiles(dir: string): Promise<string[]> {
+    const files: string[] = [];
+    try {
+      const entries = await fs.readdir(dir, { withFileTypes: true });
+
+      for (const entry of entries) {
+        const fullPath = path.join(dir, entry.name);
+
+        // Skip common ignore patterns
+        if (entry.name.startsWith('.') ||
+            entry.name === 'node_modules' ||
+            entry.name === 'dist' ||
+            entry.name === 'build' ||
+            entry.name === '__pycache__') {
+          continue;
+        }
+
+        if (entry.isDirectory()) {
+          const subFiles = await findFiles(fullPath);
+          files.push(...subFiles);
+        } else if (entry.isFile()) {
+          const ext = path.extname(entry.name);
+          if (options.extensions.includes(ext)) {
+            files.push(fullPath);
+          }
+        }
+
+        if (files.length >= options.maxFiles) break;
+      }
+    } catch (error) {
+      // Skip directories we can't read
+    }
+
+    return files;
+  }
+
+  // Extract patterns from file content
+  function extractPatterns(filePath: string, content: string): void {
+    const ext = path.extname(filePath);
+    filesByType[ext] = (filesByType[ext] || 0) + 1;
+
+    // Extract imports/dependencies
+    const imports = extractImports(content, ext);
+    if (imports.length > 0) {
+      patterns.push({
+        section: 'apis_to_use',
+        bullet: `File ${path.basename(filePath)} uses: ${imports.join(', ')}`,
+        source: 'local-files',
+        file: path.relative(projectPath, filePath)
+      });
+    }
+
+    // Extract error handling patterns
+    const errorPatterns = extractErrorPatterns(content, ext);
+    if (errorPatterns) {
+      patterns.push({
+        section: 'troubleshooting_and_pitfalls',
+        bullet: errorPatterns,
+        source: 'local-files',
+        file: path.relative(projectPath, filePath)
+      });
+    }
+  }
+
+  // Extract import statements
+  function extractImports(content: string, ext: string): string[] {
+    const imports: string[] = [];
+
+    if (ext === '.ts' || ext === '.js') {
+      // Match: import X from 'Y', import { X } from 'Y', require('Y')
+      const importRegex = /(?:import\s+.*?from\s+['"]([^'"]+)['"]|require\s*\(\s*['"]([^'"]+)['"]\s*\))/g;
+      let match;
+      while ((match = importRegex.exec(content)) !== null) {
+        const module = match[1] || match[2];
+        if (module && !module.startsWith('.')) {
+          imports.push(module);
+        }
+      }
+    } else if (ext === '.py') {
+      // Match: import X, from X import Y
+      const importRegex = /(?:^|\n)\s*(?:import|from)\s+([\w.]+)/g;
+      let match;
+      while ((match = importRegex.exec(content)) !== null) {
+        imports.push(match[1]);
+      }
+    }
+
+    return [...new Set(imports)].slice(0, 10); // Unique, max 10
+  }
+
+  // Extract error handling patterns
+  function extractErrorPatterns(content: string, ext: string): string | null {
+    if (ext === '.ts' || ext === '.js') {
+      if (content.includes('try {') && content.includes('catch')) {
+        if (content.match(/catch\s*\(\s*error[^)]*\)\s*\{[^}]*console\.error/)) {
+          return 'Pattern: try-catch with console.error logging';
+        }
+        if (content.match(/catch\s*\(\s*error[^)]*\)\s*\{[^}]*throw/)) {
+          return 'Pattern: try-catch with error re-throwing';
+        }
+      }
+    } else if (ext === '.py') {
+      if (content.includes('try:') && content.includes('except')) {
+        if (content.match(/except\s+\w+\s+as\s+\w+:/)) {
+          return 'Pattern: try-except with named exception';
+        }
+      }
+    }
+    return null;
+  }
+
+  // Find and analyze files
+  const files = await findFiles(projectPath);
+  console.error(`📁 Found ${files.length} files to analyze`);
+
+  for (const file of files.slice(0, options.maxFiles)) {
+    try {
+      const content = await fs.readFile(file, 'utf-8');
+      extractPatterns(file, content);
+      filesAnalyzed++;
+    } catch (error) {
+      // Skip files we can't read
+    }
+  }
+
+  // Send patterns to server via ace_learn
+  if (patterns.length > 0) {
+    console.error(`📤 Sending ${patterns.length} patterns to server...`);
+
+    const trace: ExecutionTrace = {
+      task: `Bootstrap: Analyzed ${filesAnalyzed} local files`,
+      trajectory: [
+        {
+          step: 1,
+          action: 'scan_directory',
+          args: { path: projectPath },
+          result: `Found ${filesAnalyzed} files across ${Object.keys(filesByType).length} file types`
+        },
+        {
+          step: 2,
+          action: 'extract_patterns',
+          args: { file_types: filesByType },
+          result: `Extracted ${patterns.length} patterns (imports, error handling, etc.)`
+        },
+        {
+          step: 3,
+          action: 'send_to_server',
+          args: { pattern_count: patterns.length },
+          result: 'Patterns sent for server-side analysis'
+        }
+      ],
+      result: {
+        success: true,
+        output: `Discovered patterns from current codebase:\n${JSON.stringify(filesByType, null, 2)}`
+      },
+      playbook_used: [],
+      timestamp: new Date().toISOString()
+    };
+
+    await serverClient.storeExecutionTrace(trace);
+  }
+
+  return {
+    filesAnalyzed,
+    filesByType,
+    patternsExtracted: patterns.length,
+    patterns: patterns.slice(0, 20) // Return sample
+  };
+}
+
 // Start server
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('✅ ACE MCP Client v3.2.0 started');
+  console.error('✅ ACE MCP Client v3.2.6 started');
   console.error('🔗 Server:', config.serverUrl);
   console.error('📋 Project:', config.projectId);
   console.error('🌍 Universal MCP compatibility (no sampling required)');

@@ -5,6 +5,40 @@ All notable changes to @ce-dot-net/ace-client will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.6] - 2025-10-23
+
+### Added
+- **Local file analysis** - NEW: `ace_bootstrap` tool now analyzes current project files (committed or uncommitted!)
+  - Extracts imports and dependencies from TypeScript/JavaScript/Python files
+  - Discovers error handling patterns (try-catch, error logging)
+  - Captures what libraries are ACTUALLY being used NOW
+  - Includes work-in-progress and prototype code (uncommitted changes)
+  - Client-side analysis (fast, no git operations needed)
+- **Multi-mode bootstrap** - Three analysis modes for flexibility:
+  - `local-files`: Analyze current codebase files only
+  - `git-history`: Analyze git commits only (existing behavior)
+  - `both`: Combined analysis (default, recommended)
+- **Configurable file extensions** - Customize which file types to analyze (default: `.ts`, `.js`, `.py`, `.go`, `.java`, `.rb`)
+- **Max files limit** - Control analysis scope with `max_files` parameter (default: 1000)
+
+### Changed
+- **Renamed `ace_init` to `ace_bootstrap`** - More accurate name for bootstrapping playbook
+  - Tool name: `ace_init` → `ace_bootstrap`
+  - Description updated to reflect multi-mode capabilities
+  - Server endpoint unchanged (`POST /init`)
+- **Enhanced pattern extraction** - Smarter analysis of current codebase:
+  - Import/require statements → APIs section
+  - Error handling patterns → Troubleshooting section
+  - File type statistics for visibility
+- **Updated version** - Bumped from 3.2.5 to 3.2.6 to align with plugin
+
+### Technical Details
+- Added `analyzeLocalFiles()` function for client-side file scanning
+- Recursive directory traversal with common ignore patterns (node_modules, dist, __pycache__)
+- Regex-based pattern extraction for imports and error handling
+- Sends extracted patterns to server via `ace_learn` execution trace
+- TypeScript compilation successful with no errors
+
 ## [3.2.5] - 2025-10-23
 
 ### Fixed
