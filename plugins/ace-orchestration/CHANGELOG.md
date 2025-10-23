@@ -5,6 +5,14 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.5] - 2025-10-23
+
+### Fixed
+- **SessionStart hook structure** - Fixed nested hooks array that prevented auto-inject-instructions.sh from running
+  - Changed from incorrect nested structure `{"hooks": [{"type": "command", ...}]}` to correct flat structure `{"type": "command", ...}`
+  - This resolves the issue where plugin CLAUDE.md reference was not being injected into project CLAUDE.md files after session restart
+  - PostToolUse hook structure was already correct (uses matcher, so nesting is valid)
+
 ## [3.2.4] - 2025-10-23
 
 ### Added
@@ -62,6 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Slash commands for ACE operations (/ace-patterns, /ace-status, etc.)
 - Agent Skill for automatic learning from execution
 
+[3.2.5]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.4...v3.2.5
 [3.2.4]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.3...v3.2.4
 [3.2.3]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.2...v3.2.3
 [3.2.2]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.1...v3.2.2
