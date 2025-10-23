@@ -5,6 +5,63 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.9] - 2025-10-23
+
+### Feature - Version Detection & Auto-Update for `/ace-claude-init`
+
+**ENHANCED: /ace-claude-init now detects and offers to update outdated ACE content**
+
+### The Problem
+
+Users who installed ACE before v3.2.8 had outdated CLAUDE.md content:
+- Missing 🚨 MANDATORY: ACE Skill Usage Rules section
+- Old version documentation (e.g., v3.2.6, v3.2.7)
+- Running `/ace-claude-init` again would say "already initialized" and exit
+- Manual editing required to get latest features
+
+### What Changed
+
+**Smart Version Detection:**
+- `/ace-claude-init` now detects ACE version in project CLAUDE.md
+- Compares with current plugin version
+- Identifies outdated installations automatically
+
+**User-Friendly Update Process:**
+- Shows: "Your project has ACE v3.2.6, but plugin is v3.2.9. Would you like to update? (y/n)"
+- If yes: Replaces only ACE section (preserves other content)
+- If no: Exits without changes
+- Shows what version → what version
+
+**Non-Destructive:**
+- Finds ACE section boundaries precisely
+- Preserves all content before/after ACE section
+- Only updates ACE-related content
+- All user customizations kept intact
+
+### Benefits
+
+- ✅ Easy updates: Just run `/ace-claude-init` again
+- ✅ Safe: Asks confirmation before changes
+- ✅ Smart: Only updates ACE section
+- ✅ Clear: Shows version upgrade path
+- ✅ Users get latest features (like MANDATORY section)
+
+### Example Flow
+
+```
+User runs: /ace-claude-init
+Claude: "🔍 Detected ACE v3.2.6 in your CLAUDE.md"
+Claude: "📦 Plugin has ACE v3.2.9 available"
+Claude: "Would you like to update? (y/n)"
+User: y
+Claude: "✅ Updated! ACE v3.2.6 → v3.2.9"
+Claude: "Added: 🚨 MANDATORY section for better skill triggering"
+```
+
+### Files Updated
+
+- `plugins/ace-orchestration/commands/ace-claude-init.md` - Added version detection logic
+
 ## [3.2.8] - 2025-10-23
 
 ### Feature - Mandatory Skill Triggering with Aggressive Prompting
