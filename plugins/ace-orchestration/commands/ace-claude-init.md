@@ -21,7 +21,7 @@ Read the full ACE plugin CLAUDE.md file:
 ~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchestration/CLAUDE.md
 ```
 
-This file contains ~340 lines of ACE architecture documentation (includes v3.2.8 MANDATORY section).
+This file contains ~344 lines of ACE architecture documentation (includes v3.2.8 MANDATORY section + trajectory format fix).
 
 ### Step 2: Check for Project CLAUDE.md
 
@@ -98,7 +98,7 @@ If ACE content is NOT present:
 
 **If CLAUDE.md doesn't exist:**
 - Create it with the full ACE plugin CLAUDE.md content
-- Copy all ~340 lines of content from the plugin file (includes MANDATORY section)
+- Copy all ~344 lines of content from the plugin file (includes MANDATORY section + trajectory format fix)
 
 ### Step 5: Confirm Success
 
@@ -110,7 +110,7 @@ After adding:
 
 ## What Gets Added
 
-The full ACE plugin CLAUDE.md content (~340 lines) is copied inline, which contains:
+The full ACE plugin CLAUDE.md content (~344 lines) is copied inline, which contains:
 
 - 🚨 **MANDATORY: ACE Skill Usage Rules** (v3.2.8+) - Explicit, non-negotiable skill invocation instructions
 - 🔄 **Complete automatic learning cycle** explanation
@@ -152,7 +152,7 @@ The full ACE plugin CLAUDE.md content (~340 lines) is copied inline, which conta
 
 Once initialized, every Claude session will have:
 1. ✅ Your project-specific instructions (existing CLAUDE.md content)
-2. ✅ ACE plugin instructions (copied inline, ~340 lines with MANDATORY section)
+2. ✅ ACE plugin instructions (copied inline, ~344 lines with MANDATORY section + trajectory format fix)
 3. ✅ Skills available for automatic invocation
 4. ✅ Explicit skill invocation rules (YOU MUST use skills for qualifying tasks)
 
@@ -213,7 +213,7 @@ If the user wants to remove ACE instructions:
 
 1. Open CLAUDE.md in the project root
 2. Find the section starting with: `# ACE Orchestration Plugin - Automatic Learning Cycle`
-3. Delete all ACE content (~289 lines)
+3. Delete all ACE content (~344 lines)
 
 ACE skills will still work, but won't have the always-on architectural context.
 
