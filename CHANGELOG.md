@@ -5,6 +5,75 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.10] - 2025-10-23
+
+### Bug Fix - Trajectory Format Documentation
+
+**FIXED: ACE Learning skill documentation now shows correct trajectory format**
+
+### The Problem
+
+The ACE Learning skill (`ace-learning`) documentation showed `trajectory` parameter as a string:
+```json
+{
+  "trajectory": "1. Step one\n2. Step two\n3. Step three"
+}
+```
+
+But the ACE server actually requires an **array of objects**:
+```json
+{
+  "trajectory": [
+    {"step": "Analysis", "action": "Analyzed the problem"},
+    {"step": "Implementation", "action": "Implemented the solution"}
+  ]
+}
+```
+
+This caused **422 validation errors** when users followed the documentation examples.
+
+### What Changed
+
+**Updated Documentation Files:**
+- ✅ `plugins/ace-orchestration/skills/ace-learning/SKILL.md` - All 3 examples fixed
+- ✅ `plugins/ace-orchestration/CLAUDE.md` - Manual tool usage example fixed (line 272-283)
+- ✅ `plugins/ace-orchestration/commands/ace-claude-init.md` - Line counts updated (340 → 344)
+
+**Added Clear Warning:**
+- Line 83 in SKILL.md: **"IMPORTANT: Must be an array of objects"**
+- Line 283 in CLAUDE.md: Clear note about trajectory format requirement
+
+**Updated Version:**
+- CLAUDE.md header: v3.2.6 → v3.2.10 (for version detection)
+- Line count: 344 lines (includes trajectory fix)
+
+### Benefits
+
+- ✅ No more 422 errors when following documentation
+- ✅ Clear examples showing correct array of objects format
+- ✅ IMPORTANT warning prevents confusion
+- ✅ All examples consistent across documentation
+- ✅ Users who run `/ace-claude-init` get correct docs
+
+### Files Affected
+
+```
+plugins/ace-orchestration/
+├── CLAUDE.md (344 lines, v3.2.10)
+├── skills/ace-learning/SKILL.md (trajectory examples fixed)
+└── commands/ace-claude-init.md (line counts updated)
+```
+
+### Upgrade Notes
+
+**For existing users:**
+- Run `/ace-claude-init` in your project
+- If you have v3.2.9 or older, it will offer to update
+- Accept the update to get corrected trajectory examples
+
+**For new users:**
+- Fresh installs automatically get correct documentation
+
 ## [3.2.9] - 2025-10-23
 
 ### Feature - Version Detection & Auto-Update for `/ace-claude-init`

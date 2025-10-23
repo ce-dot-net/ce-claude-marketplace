@@ -80,7 +80,7 @@ mcp__ace-pattern-learning__ace_learn
 **Required Parameters**:
 - `task`: Brief description (1-2 sentences) of what was accomplished
 - `success`: Boolean indicating overall success
-- `trajectory`: Optional but highly valuable - structured list of key steps and decisions
+- `trajectory`: **IMPORTANT: Must be an array of objects**, each with descriptive keys (e.g., `{"step": "...", "action": "..."}`)
 - `feedback`: Detailed outcome, lessons learned, patterns, troubleshooting insights
 
 **Example 1 - Successful Implementation**:
@@ -88,7 +88,13 @@ mcp__ace-pattern-learning__ace_learn
 {
   "task": "Implemented user authentication with JWT tokens and refresh token rotation",
   "success": true,
-  "trajectory": "1. Analyzed security requirements and token expiration needs\n2. Chose JWT library (jsonwebtoken) for token generation\n3. Implemented access token (15min) + refresh token (7 days) pattern\n4. Added token rotation logic in refresh endpoint\n5. Secured endpoints with middleware",
+  "trajectory": [
+    {"step": "Analysis", "action": "Analyzed security requirements and token expiration needs"},
+    {"step": "Library Selection", "action": "Chose JWT library (jsonwebtoken) for token generation"},
+    {"step": "Token Strategy", "action": "Implemented access token (15min) + refresh token (7 days) pattern"},
+    {"step": "Rotation Logic", "action": "Added token rotation logic in refresh endpoint"},
+    {"step": "Security", "action": "Secured endpoints with authentication middleware"}
+  ],
   "feedback": "Successfully implemented secure auth flow. Key insights: (1) Refresh token rotation prevents token theft, (2) Short access token expiry balances security and UX, (3) HttpOnly cookies for refresh tokens prevent XSS attacks. Pattern: Always validate refresh token on each rotation and revoke old tokens."
 }
 ```
@@ -98,7 +104,14 @@ mcp__ace-pattern-learning__ace_learn
 {
   "task": "Debugged intermittent test failures in async database operations",
   "success": true,
-  "trajectory": "1. Observed random test failures in CI/CD pipeline\n2. Suspected race condition in database cleanup\n3. Added transaction isolation and explicit wait for cleanup\n4. Tests still failed intermittently\n5. Discovered missing await on database.close()\n6. Added proper async/await chain",
+  "trajectory": [
+    {"step": "Observation", "action": "Observed random test failures in CI/CD pipeline"},
+    {"step": "Hypothesis", "action": "Suspected race condition in database cleanup"},
+    {"step": "First Attempt", "action": "Added transaction isolation and explicit wait for cleanup"},
+    {"step": "Continued Failure", "action": "Tests still failed intermittently"},
+    {"step": "Root Cause", "action": "Discovered missing await on database.close()"},
+    {"step": "Solution", "action": "Added proper async/await chain to all cleanup operations"}
+  ],
   "feedback": "Root cause: Forgot await on database.close() causing connection pool exhaustion. Troubleshooting insight: Intermittent failures in async code often indicate missing await statements. Check all async function calls in test cleanup. Pattern: Always use await on resource cleanup (close, disconnect, etc.)"
 }
 
@@ -107,7 +120,14 @@ mcp__ace-pattern-learning__ace_learn
 {
   "task": "Integrated Stripe payment API with webhook handling",
   "success": true,
-  "trajectory": "1. Set up Stripe SDK and API keys\n2. Implemented checkout session creation\n3. Added webhook endpoint for payment events\n4. Failed webhook signature verification\n5. Discovered raw body requirement for crypto signature\n6. Configured express.raw() middleware for webhook route",
+  "trajectory": [
+    {"step": "Setup", "action": "Set up Stripe SDK and configured API keys"},
+    {"step": "Checkout", "action": "Implemented checkout session creation endpoint"},
+    {"step": "Webhook Endpoint", "action": "Added webhook endpoint for payment events"},
+    {"step": "Error Encountered", "action": "Failed webhook signature verification with 400 errors"},
+    {"step": "Discovery", "action": "Discovered raw body requirement for crypto signature validation"},
+    {"step": "Fix", "action": "Configured express.raw() middleware specifically for webhook route"}
+  ],
   "feedback": "Stripe webhooks require raw request body for signature verification. Standard express.json() breaks signature validation. Solution: Use express.raw({type: 'application/json'}) for webhook route specifically. API Pattern: Webhook signature verification often needs raw body access - check docs before adding body parsers."
 }
 

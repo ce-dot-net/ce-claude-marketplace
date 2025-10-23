@@ -57,7 +57,7 @@ Step 5: Respond to user
 
 **Non-negotiable:** These skills are NOT optional. You MUST use them proactively for every qualifying task.
 
-## 🔄 Complete Automatic Learning Cycle (v3.2.6)
+## 🔄 Complete Automatic Learning Cycle (v3.2.10)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 
@@ -272,10 +272,15 @@ mcp__ace-pattern-learning__ace_get_playbook(min_helpful=5)
 mcp__ace-pattern-learning__ace_learn(
   task="Brief description",
   success=true,
-  trajectory="Key steps taken",
+  trajectory=[
+    {"step": "Analysis", "action": "Analyzed the problem"},
+    {"step": "Implementation", "action": "Implemented the solution"}
+  ],
   output="Lessons learned"
 )
 ```
+
+**IMPORTANT**: `trajectory` must be an array of objects with descriptive keys (e.g., `{"step": "...", "action": "..."}`), not a string
 
 **Check Status**:
 ```bash
