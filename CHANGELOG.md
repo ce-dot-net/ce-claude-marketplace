@@ -5,6 +5,95 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.8] - 2025-10-23
+
+### Feature - Mandatory Skill Triggering with Aggressive Prompting
+
+**ENHANCED: Skills now use aggressive, mandatory language to ensure consistent auto-invocation**
+
+### The Enhancement
+
+Skills were previously model-invoked based on description matching, but the language was passive ("Use when...", "Automatically after..."). This led to inconsistent triggering where Claude sometimes wouldn't invoke skills even for qualifying tasks.
+
+### What Changed
+
+**More Aggressive Skill Descriptions:**
+
+1. **ACE Playbook Retrieval Skill**:
+   - Before: "Automatically retrieve ACE playbook patterns before substantial coding tasks..."
+   - After: "PROACTIVELY use this skill BEFORE implementation tasks. YOU MUST retrieve playbook patterns when user says implement, build, debug, fix..."
+   - Includes explicit list of 20+ trigger keywords
+   - Uses "DO NOT wait to be asked" language
+
+2. **ACE Learning Skill**:
+   - Before: "Learn from execution feedback and update the ACE playbook... Use automatically after..."
+   - After: "YOU MUST use this skill AFTER completing substantial work. PROACTIVELY capture learning when you implement features, fix bugs..."
+   - Uses "DO NOT skip this" language
+   - Emphasizes building organizational knowledge
+
+3. **Plugin CLAUDE.md**:
+   - Added new section: "🚨 MANDATORY: ACE Skill Usage Rules"
+   - Explicit before/after workflow with skill invocation syntax
+   - Non-negotiable language: "You MUST follow these rules"
+   - Complete example showing correct workflow
+   - Lists all trigger keywords for both skills
+
+### Why This Matters
+
+**The Problem:**
+- Skills relied on model judgment which was inconsistent
+- Passive language ("Use when...") didn't ensure invocation
+- Skills would be skipped even for qualifying tasks
+- ACE learning cycle incomplete due to missed triggers
+
+**The Solution:**
+- Aggressive, mandatory language in skill descriptions
+- Explicit trigger keyword lists (implement, build, debug, fix, etc.)
+- Plugin CLAUDE.md with non-negotiable rules
+- Clear before/after workflow example
+
+### Files Updated
+
+**Skill Descriptions (Aggressive Updates):**
+- `plugins/ace-orchestration/skills/ace-playbook-retrieval/SKILL.md` - "YOU MUST retrieve..."
+- `plugins/ace-orchestration/skills/ace-learning/SKILL.md` - "YOU MUST use... DO NOT skip"
+
+**Plugin Documentation (New Mandatory Section):**
+- `plugins/ace-orchestration/CLAUDE.md` - Added "🚨 MANDATORY: ACE Skill Usage Rules" section
+
+**Command Documentation (Minor Updates):**
+- `plugins/ace-orchestration/commands/ace-claude-init.md` - Synced with CLAUDE.md updates
+
+### Benefits
+
+- ✅ **Consistent Triggering**: Skills now invoke reliably for qualifying tasks
+- ✅ **Clear Expectations**: Explicit mandatory language removes ambiguity
+- ✅ **Complete Cycle**: Ensures both retrieval → learning cycle completes
+- ✅ **Better Learning**: More patterns captured, better organizational knowledge
+- ✅ **Keyword Matching**: Extensive trigger word lists improve detection
+- ✅ **Non-negotiable Rules**: Plugin CLAUDE.md makes requirements explicit
+
+### Architecture Alignment
+
+This change brings the implementation closer to the ACE research paper's **fully automatic learning** architecture by ensuring:
+- Playbook retrieval happens BEFORE every substantial task
+- Learning capture happens AFTER every substantial task
+- No manual intervention required
+- Complete learning cycle guaranteed
+
+### Backward Compatibility
+
+- ✅ **No Breaking Changes**: Existing functionality unchanged
+- ✅ **Progressive Enhancement**: More reliable skill triggering
+- ✅ **Same MCP Tools**: No changes to underlying tools
+- ✅ **Same Cache**: 3-tier caching works identically
+
+### Version Updates
+- ace-orchestration plugin: 3.2.7 → 3.2.8
+- MCP client: 3.2.7 → 3.2.8
+
+---
+
 ## [3.1.11] - 2025-10-22
 
 ### 🔧 Fix - Restored Hooks for Agent Skill Invocation

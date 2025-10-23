@@ -8,67 +8,65 @@ Initialize ACE plugin instructions in your project's CLAUDE.md file.
 
 ## What This Does
 
-Adds a reference to the ACE plugin's CLAUDE.md file in your project's CLAUDE.md. This ensures Claude always has access to ACE architecture instructions for the automatic learning cycle.
+Copies the full ACE plugin instructions inline into your project's CLAUDE.md. This ensures Claude always has access to ACE architecture instructions for the automatic learning cycle.
 
 ## Instructions for Claude
 
 When the user runs `/ace-claude-init`, follow these steps:
 
-### Step 1: Check for CLAUDE.md
+### Step 1: Read Plugin CLAUDE.md
 
-Check if CLAUDE.md exists in the project root:
-- If it exists, read it first
-- If it doesn't exist, you'll create it
-
-### Step 2: Check if ACE Already Added
-
-Look for the marker comment in CLAUDE.md:
-```markdown
-## ACE Plugin Instructions
-@~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchestration/CLAUDE.md
+Read the full ACE plugin CLAUDE.md file:
+```
+~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchestration/CLAUDE.md
 ```
 
-If this reference already exists:
+This file contains ~289 lines of ACE architecture documentation.
+
+### Step 2: Check for Project CLAUDE.md
+
+Check if CLAUDE.md exists in the project root:
+- If it exists, read it first to check for existing ACE content
+- If it doesn't exist, you'll create it
+
+### Step 3: Check if ACE Already Added
+
+Look for the ACE content marker in the project's CLAUDE.md:
+```markdown
+# ACE Orchestration Plugin - Automatic Learning Cycle
+```
+
+If this header already exists:
 - Tell the user ACE is already initialized
 - Show them where it's located in CLAUDE.md
 - Exit successfully (no changes needed)
 
-### Step 3: Add ACE Reference Safely
+### Step 4: Copy ACE Instructions Inline
 
-If ACE reference is NOT present:
+If ACE content is NOT present:
 
 **If CLAUDE.md exists:**
 - Append to the END of the file (preserve all existing content)
 - Add two blank lines first for spacing
-- Add the section:
-
-```markdown
-
-## ACE Plugin Instructions
-@~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchestration/CLAUDE.md
-```
+- Copy the FULL content of the plugin CLAUDE.md file inline
+- DO NOT use `@` reference syntax
+- The content should start with: `# ACE Orchestration Plugin - Automatic Learning Cycle`
 
 **If CLAUDE.md doesn't exist:**
-- Create it with a basic header plus ACE reference:
+- Create it with the full ACE plugin CLAUDE.md content
+- Copy all ~289 lines of content from the plugin file
 
-```markdown
-# Project Instructions
-
-## ACE Plugin Instructions
-@~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchestration/CLAUDE.md
-```
-
-### Step 4: Confirm Success
+### Step 5: Confirm Success
 
 After adding:
 - Read the updated CLAUDE.md to verify
-- Show the user the last ~10 lines of CLAUDE.md
-- Confirm ACE instructions are now available
+- Show the user a confirmation message
+- Confirm ACE instructions are now available inline
 - Explain what this enables (automatic learning cycle)
 
 ## What Gets Added
 
-The `@` syntax tells Claude to include the ACE plugin's CLAUDE.md file, which contains:
+The full ACE plugin CLAUDE.md content (~289 lines) is copied inline, which contains:
 
 - 🔄 **Complete automatic learning cycle** explanation
 - 🤖 **How skills work** (retrieval before tasks, learning after tasks)
@@ -84,11 +82,12 @@ The `@` syntax tells Claude to include the ACE plugin's CLAUDE.md file, which co
 - ❌ No standing context about when to use ACE features
 - ❌ Missing architecture overview
 
-**Solution:** Adding ACE CLAUDE.md reference provides:
+**Solution:** Copying ACE instructions inline into project CLAUDE.md provides:
 - ✅ Always-on context about the ACE system
 - ✅ Clear trigger words for skills (implement, debug, refactor)
 - ✅ Complete understanding of the automatic learning cycle
 - ✅ Complementary to skills (general context + specific tools)
+- ✅ Full content always available (no reference dependency)
 
 ## When to Use
 
@@ -106,7 +105,7 @@ The `@` syntax tells Claude to include the ACE plugin's CLAUDE.md file, which co
 
 Once initialized, every Claude session will have:
 1. ✅ Your project-specific instructions (existing CLAUDE.md content)
-2. ✅ ACE plugin instructions (via @ reference)
+2. ✅ ACE plugin instructions (copied inline, ~289 lines)
 3. ✅ Skills available for automatic invocation
 
 **Test it:**
@@ -162,12 +161,9 @@ Once initialized, every Claude session will have:
 
 If the user wants to remove ACE instructions:
 
-```markdown
-# Open CLAUDE.md and delete these lines:
-
-## ACE Plugin Instructions
-@~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchestration/CLAUDE.md
-```
+1. Open CLAUDE.md in the project root
+2. Find the section starting with: `# ACE Orchestration Plugin - Automatic Learning Cycle`
+3. Delete all ACE content (~289 lines)
 
 ACE skills will still work, but won't have the always-on architectural context.
 
