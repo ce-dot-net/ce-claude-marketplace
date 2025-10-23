@@ -107,6 +107,28 @@ python -m uvicorn main:app --reload --port 9000
 # Expected: Shows pattern database statistics
 ```
 
+### Step 7: Initialize ACE in Your Project (One-Time)
+
+```bash
+# Add ACE instructions to your project's CLAUDE.md
+/ace-claude-init
+
+# Expected: ACE reference added to CLAUDE.md
+
+# Optionally bootstrap playbook from git history
+/ace-bootstrap --commits 100 --days 30
+
+# Expected: Playbook populated with patterns from past commits
+```
+
+**What This Does:**
+- `/ace-claude-init` - Adds ACE plugin instructions to your project's CLAUDE.md (provides always-on context about ACE architecture)
+- `/ace-bootstrap` - Optional: Analyzes git history to populate initial playbook patterns
+
+**You're Done!** ACE will now automatically:
+- Retrieve learned patterns before complex tasks (implementation, debugging, refactoring)
+- Capture new insights after substantial work completion
+
 ## 🔧 Configuration
 
 **⚠️ Security Warning**: Never commit `plugin.json` with real credentials!
@@ -198,11 +220,17 @@ Interactive ACE server configuration
 /ace-configure
 ```
 
-### `/ace-init`
+### `/ace-claude-init`
+Initialize ACE in project CLAUDE.md (one-time setup)
+```
+/ace-claude-init
+```
+
+### `/ace-bootstrap`
 Bootstrap playbook from git history
 ```
-/ace-init
-/ace-init --commits 100 --days 30
+/ace-bootstrap
+/ace-bootstrap --commits 100 --days 30
 ```
 
 ### `/ace-clear --confirm`
@@ -289,7 +317,7 @@ Logs Bash command executions for debugging.
 3. **troubleshooting_and_pitfalls**: Known issues, gotchas, solutions
 4. **apis_to_use**: Recommended libraries, frameworks, integration patterns
 
-## 📊 Example Workflow (v3.2.4)
+## 📊 Example Workflow (v3.2.6)
 
 ### First-Time Setup
 ```bash
@@ -297,11 +325,15 @@ Logs Bash command executions for debugging.
 /ace-configure
 # Interactive prompts for server URL, API token, project ID
 
-# 2. Optional: Bootstrap from git history
-/ace-init --commits 100 --days 30
+# 2. Initialize ACE in your project (required for full cycle)
+/ace-claude-init
+# Adds ACE instructions to project CLAUDE.md
+
+# 3. Optional: Bootstrap playbook from git history
+/ace-bootstrap --commits 100 --days 30
 # Analyzes past commits to build initial playbook
 
-# 3. Check initial state
+# 4. Check initial state
 /ace-status
 # Output: Shows playbook statistics
 ```

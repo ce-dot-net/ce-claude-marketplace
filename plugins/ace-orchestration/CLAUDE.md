@@ -2,7 +2,11 @@
 
 This plugin provides fully automatic pattern learning following the ACE research paper architecture.
 
-## 🔄 Complete Automatic Learning Cycle (v3.2.4)
+## 📖 Setup Instructions
+
+**First-Time Setup:** Run `/ace-claude-init` in your project to add this file to your project's CLAUDE.md. This provides always-on context about the ACE system and ensures optimal skill triggering.
+
+## 🔄 Complete Automatic Learning Cycle (v3.2.6)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 

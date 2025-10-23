@@ -1,19 +1,19 @@
 ---
-description: Initialize ACE playbook from existing codebase (offline learning)
-argument-hint: [--commits N] [--days N] [--merge|--replace]
+description: Bootstrap ACE playbook from current code and/or git history
+argument-hint: [--mode local-files|git-history|both] [--commits N] [--days N]
 ---
 
-# ACE Init
+# ACE Bootstrap
 
-Initialize ACE playbook by analyzing your existing codebase's git history (offline learning).
+Bootstrap ACE playbook by analyzing your current codebase files and/or git commit history.
 
 ## Instructions for Claude
 
-When the user runs `/ace-init`, follow these steps:
+When the user runs `/ace-bootstrap`, follow these steps:
 
-1. **Call the ace_init MCP tool** with the following parameters:
-   - Tool name: `mcp__ace-pattern-learning__ace_init`
-   - Parameters: `commit_limit`, `days_back`, `merge_with_existing`
+1. **Call the ace_bootstrap MCP tool** with the following parameters:
+   - Tool name: `mcp__ace-pattern-learning__ace_bootstrap`
+   - Parameters: `mode`, `repo_path`, `file_extensions`, `max_files`, `commit_limit`, `days_back`, `merge_with_existing`
 
 2. **If the tool is not available:**
    - Check if ACE is configured (look for .ace/config.json or environment variables)
@@ -23,50 +23,107 @@ When the user runs `/ace-init`, follow these steps:
 ## Usage
 
 ```
-Call the mcp__ace-pattern-learning__ace_init tool to bootstrap your playbook.
+Call the mcp__ace-pattern-learning__ace_bootstrap tool to bootstrap your playbook.
 
 Parameters:
-- repo_path: Path to git repository (defaults to current directory)
-- commit_limit: Number of commits to analyze (default: 100)
-- days_back: Days of history to analyze (default: 30)
+- mode: Analysis mode (default: "both")
+  - "local-files": Analyze current codebase files (committed or uncommitted)
+  - "git-history": Analyze git commit history (server-side)
+  - "both": Analyze both current files and git history (recommended)
+
+- repo_path: Path to project directory (defaults to current directory)
+- file_extensions: Array of file extensions to analyze (default: [".ts", ".js", ".py", ".go", ".java", ".rb"])
+- max_files: Maximum files to analyze for local-files mode (default: 1000)
+- commit_limit: Number of commits to analyze for git-history mode (default: 100)
+- days_back: Days of history to analyze for git-history mode (default: 30)
 - merge_with_existing: true (merge) or false (replace) - default: true
 
-Example:
+Examples:
 {
-  "commit_limit": 100,
-  "days_back": 30,
-  "merge_with_existing": true
+  "mode": "both"  // Recommended: analyze current files + git history
+}
+
+{
+  "mode": "local-files",
+  "file_extensions": [".ts", ".tsx"],
+  "max_files": 500
+}
+
+{
+  "mode": "git-history",
+  "commit_limit": 200,
+  "days_back": 60
 }
 ```
 
 ## What Gets Analyzed
 
-ACE analyzes your git history to discover patterns:
+### Mode: local-files (Current Codebase)
 
-### 1. **Strategies** (from refactorings)
+Analyzes **current project files** (includes uncommitted/unstaged changes):
+
+**1. Imports & Dependencies → APIs Section**
+- TypeScript/JavaScript: `import X from 'Y'`, `require('Y')`
+- Python: `import X`, `from X import Y`
+- Discovers what libraries you're ACTUALLY using NOW
+- Example: "Project uses: express, jsonwebtoken, bcrypt"
+
+**2. Error Handling Patterns → Troubleshooting Section**
+- Try-catch patterns with console.error logging
+- Try-catch with error re-throwing
+- Exception handling with named exceptions (Python)
+- Example: "Pattern: try-catch with console.error logging"
+
+**3. Architecture Discovery → Strategies Section** (Future)
+- Class/function structure
+- Module organization
+- Design patterns in use
+
+**Why This Matters:**
+- ✅ **Uncommitted code** - Captures work-in-progress and prototypes
+- ✅ **Current reality** - What's actually being used, not historical experiments
+- ✅ **Fast** - Client-side analysis, no git operations needed
+
+### Mode: git-history (Historical Patterns)
+
+Analyzes **git commit history** (server-side):
+
+**1. Strategies** (from refactorings)
 - Commits with "refactor", "improve", "optimize", "clean"
 - Extracts successful architectural decisions
 - Example: "Pattern from refactoring: Split monolithic service into microservices"
 
-### 2. **Troubleshooting** (from bug fixes)
+**2. Troubleshooting** (from bug fixes)
 - Commits with "fix", "bug", "error", "crash", "issue"
 - Captures common pitfalls and solutions
 - Example: "Common issue: Null pointer errors in user service"
 
-### 3. **APIs** (from feature additions)
+**3. APIs** (from feature additions)
 - Commits touching API/service/client/interface files
 - Documents API usage patterns
 - Example: "API pattern: Implement JWT auth for user endpoints"
 
-### 4. **File Co-occurrence**
+**4. File Co-occurrence**
 - Files that frequently change together
 - Highlights coupling and dependencies
 - Example: "Files that often change together: auth.ts + user.service.ts"
 
-### 5. **Error Patterns**
+**5. Error Patterns**
 - Specific error keywords in commit messages
 - Warns about common failure modes
 - Example: "Watch out for timeout errors when calling external APIs"
+
+**Why This Matters:**
+- ✅ **Problem-solving patterns** - How bugs were fixed
+- ✅ **Evolution** - What changed and why
+- ✅ **Team knowledge** - Lessons from multiple contributors
+
+### Mode: both (Recommended)
+
+Combines **current codebase** + **git history** for comprehensive analysis:
+- Current state (what's used NOW)
+- Historical lessons (how problems were solved)
+- Most complete picture of your project
 
 ## Merge vs Replace
 
@@ -121,15 +178,15 @@ ACE analyzes your git history to discover patterns:
 - **Non-git projects**: Requires git history (no other VCS supported yet)
 - **Pre-initialized**: If playbook already has good patterns, online learning is better
 
-## After Initialization
+## After Bootstrap
 
-Once initialized, ACE continues learning through **online learning**:
+Once bootstrapped, ACE continues learning through **online learning**:
 - Execute tasks → ACE learns from outcomes (ace_learn)
 - Successful tasks → adds helpful bullets
 - Failed tasks → adds troubleshooting bullets
 - Counters update → helpful/harmful tracking
 
-**Offline initialization (ace_init)** + **Online learning (ace_learn)** = Complete ACE system
+**Bootstrap (ace_bootstrap)** + **Online learning (ace_learn)** = Complete ACE system
 
 ## Complementary Commands
 
