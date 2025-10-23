@@ -5,6 +5,29 @@ All notable changes to @ce-dot-net/ace-client will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.4] - 2025-10-23
+
+### Changed
+- **Updated .mcp.json and .mcp.template.json** - Changed from hardcoded versions to `@latest` for automatic npm package updates
+- **Improved caching documentation** - Clarified 3-tier cache architecture (RAM → SQLite → Server)
+
+### Removed
+- **Cleaned up 10 outdated documentation files** from MCP client directory
+  - API_ENDPOINT_FIXES.md
+  - COPY_PASTE_FOR_CLIENT_CLAUDE.md
+  - DISCOVERED_PATTERNS.md
+  - FRESH_START_COMPLETE.md
+  - INTEGRATION_ISSUES.md
+  - READ_ME_FIRST.md
+  - SERVER_READY_INSTRUCTIONS.md
+  - TEST_RESULTS.md
+  - VERIFICATION_COMPLETE.md
+  - WHAT_TO_TEST_NOW.md
+
+### Documentation
+- Updated inline comments for clarity on caching behavior
+- Simplified tool descriptions to focus on automatic invocation patterns
+
 ## [3.2.3] - 2025-10-23
 
 ### Changed
@@ -54,6 +77,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Local SQLite cache for playbook
 - Basic MCP tools (ace_learn, ace_get_playbook, ace_status, ace_clear, ace_init)
 
+[3.2.4]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/ace-client-v3.2.3...ace-client-v3.2.4
 [3.2.3]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/ace-client-v3.2.2...ace-client-v3.2.3
 [3.2.2]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/ace-client-v3.2.1...ace-client-v3.2.2
 [3.2.1]: https://github.com/ce-dot-net/ce-claude-marketplace/releases/tag/ace-client-v3.2.1

@@ -7,13 +7,28 @@
 Based on [Agentic Context Engineering (ACE)](https://arxiv.org/abs/2510.04618v1)
 *Stanford University, SambaNova Systems, UC Berkeley*
 
-## 🎯 Features
+## 🎯 Features (v3.2.4)
 
-- **Pattern Learning**: Automatically discovers coding patterns from your code
-- **Offline Training**: Analyzes git history to learn from past commits
-- **Playbook Generation**: Creates actionable recommendations
-- **Domain Discovery**: Bottom-up taxonomy without hardcoded categories
-- **Self-Improving**: Grows smarter as you code
+### 🤖 Automatic Learning Cycle (NEW!)
+- **ACE Playbook Retrieval Skill**: Auto-fetches learned patterns BEFORE tasks
+- **ACE Learning Skill**: Auto-captures insights AFTER task completion
+- **Model-Invoked**: Claude decides when to use skills (no manual intervention)
+- **3-Tier Caching**: RAM → SQLite → Server for fast retrieval
+- **Complete Cycle**: Retrieve → Use → Learn → Update → Repeat
+
+### 📚 Pattern Learning
+- **Pattern Discovery**: Automatically learns from execution feedback
+- **Server-Side Intelligence**: Reflector (Sonnet 4) + Curator (Haiku 4.5)
+- **Delta Updates**: Incremental playbook improvements (prevents context collapse)
+- **4 Playbook Sections**: Strategies, code snippets, troubleshooting, APIs
+- **Quality Scoring**: Helpful/harmful feedback refines patterns over time
+
+### 🚀 Key Benefits
+- **Self-Improving**: Each task makes Claude smarter
+- **Token-Efficient**: Progressive disclosure, only loads when needed
+- **Fast**: Cached playbook retrieval (milliseconds)
+- **Universal**: Works with ANY MCP client (Claude Code, Cursor, Cline, etc.)
+- **Research-Backed**: +10.6% improvement on agentic tasks (Stanford/SambaNova/UC Berkeley)
 
 ## 🚀 Installation
 
@@ -122,162 +137,256 @@ export ACE_PROJECT_ID="prj_5bc0b560221052c1"
 
 **📖 See [CONFIGURATION.md](./CONFIGURATION.md) for detailed setup instructions**
 
-## 💻 Slash Commands
+## 🤖 Agent Skills (Automatic)
+
+### ACE Playbook Retrieval (Before Tasks)
+**Model-Invoked**: Claude automatically activates before complex tasks
+
+**Triggers**: implement, build, create, fix, debug, refactor, integrate, optimize
+
+**What it does**:
+- Calls `mcp__ace-pattern-learning__ace_get_playbook`
+- Retrieves strategies, code snippets, troubleshooting tips, API recommendations
+- Uses 3-tier cache (RAM → SQLite → Server) for speed
+
+**Result**: Claude has organizational knowledge BEFORE starting!
+
+### ACE Learning from Execution (After Tasks)
+**Model-Invoked**: Claude automatically activates after substantial work
+
+**Triggers**: Successful implementations, debugging, refactoring, API integrations
+
+**What it does**:
+- Calls `mcp__ace-pattern-learning__ace_learn`
+- Captures task description, trajectory, feedback, lessons learned
+- Sends to ACE Server for Reflector (Sonnet 4) → Curator (Haiku 4.5) analysis
+
+**Result**: Playbook updated with new patterns!
+
+### The Complete Automatic Cycle
+
+```
+User Request → Retrieval Skill → Playbook Fetched → Claude Executes with Patterns →
+Learning Skill → Server Analysis → Playbook Updated → Next Request (Enhanced!) 🎯
+```
+
+**📖 Full documentation**: See [CLAUDE.md](./CLAUDE.md) for complete cycle details
+
+## 💻 Slash Commands (Manual Override)
+
+While skills handle automatic operation, manual commands are available:
+
+### `/ace-patterns [section]`
+View playbook manually
+```
+/ace-patterns                           # All sections
+/ace-patterns strategies                # Architectural patterns
+/ace-patterns code-snippets             # Reusable code
+/ace-patterns troubleshooting           # Known issues & solutions
+/ace-patterns apis                      # Recommended libraries
+```
 
 ### `/ace-status`
-View pattern database statistics
+Check playbook statistics
 ```
 /ace-status
 ```
 
-### `/ace-patterns [domain] [confidence]`
-List learned patterns with optional filtering
+### `/ace-configure`
+Interactive ACE server configuration
 ```
-/ace-patterns                  # All patterns
-/ace-patterns python           # Python patterns only
-/ace-patterns error-handling 0.7  # High confidence patterns
+/ace-configure
 ```
 
-### `/ace-train-offline`
-Train on git history
+### `/ace-init`
+Bootstrap playbook from git history
 ```
-/ace-train-offline
-```
-
-### `/ace-force-reflect [file]`
-Manually trigger pattern reflection
-```
-/ace-force-reflect              # Most recent file
-/ace-force-reflect src/app.py   # Specific file
+/ace-init
+/ace-init --commits 100 --days 30
 ```
 
 ### `/ace-clear --confirm`
-Reset pattern database
+Clear entire playbook (requires confirmation)
 ```
 /ace-clear --confirm
 ```
 
-## 🤖 Agents
-
-### Reflector
-Discovers coding patterns from raw code through analysis.
-
-**Usage**: Automatically invoked via PostToolUse hook when you edit/write code.
-
-### Domain Discoverer
-Discovers domain taxonomy from patterns through bottom-up analysis.
-
-**Usage**: Called internally during pattern curation.
-
-### Reflector Prompt
-Refines previous analysis with more specific evidence.
-
-**Usage**: Iterative improvement during reflection cycle.
-
-## 🪝 Hooks
-
-### PostToolUse Hook
-Automatically triggers pattern reflection after Edit/Write operations.
-
-**When it fires**:
-- After editing a file
-- After writing a new file
-- After making code changes
-
-**What it does**:
-1. Extracts the code from the file
-2. Calls `ace_reflect` MCP tool
-3. Discovers patterns via MCP Sampling
-4. Curates patterns into database
-5. Silent operation (no interruption)
-
-### PostTaskCompletion Hook
-Runs after task completion for additional processing.
-
-## 🔬 How It Works
-
-### ACE Research Framework
-
-**Three Roles**:
-1. **Generator** → Uses playbook to write code
-2. **Reflector** → Discovers patterns from code
-3. **Curator** → Merges patterns with confidence thresholds
-
-**Key Thresholds**:
-- **85%** similarity → Merge patterns
-- **70%** confidence → Constitution (high-confidence principles)
-- **30%** confidence → Minimum to keep (pruning threshold)
-
-### Pattern Discovery Flow
-
+### `/ace-export-patterns` / `/ace-import-patterns`
+Backup and restore playbook
 ```
-User writes code
-    ↓
-PostToolUse hook fires
-    ↓
-MCP tool: ace_reflect(code, language, file_path)
-    ↓
-Reflector discovers patterns (via MCP Sampling)
-    ↓
-Curator merges similar patterns (85% threshold)
-    ↓
-Patterns stored in ChromaDB
-    ↓
-Available via /ace-patterns command
+/ace-export-patterns
+/ace-import-patterns
 ```
 
-## 📊 Example Workflow
+## 🪝 Hooks (Minimal)
+
+### SessionStart Hook
+Injects CLAUDE.md reference to make plugin instructions available.
+
+**When it fires**: At session start or resume
+
+### PostToolUse Hook (Bash Logging)
+Logs Bash command executions for debugging.
+
+**When it fires**: After Bash tool executes
+
+**Note**: Skills handle the main automation now! Hooks are minimal and non-intrusive.
+
+## 🔬 How It Works (v3.2.4)
+
+### ACE Research Paper Architecture
+
+**Generator → Reflector → Curator → Playbook Cycle**
+
+1. **Generator**: Claude Code with Agent Skills
+2. **Playbook**: Evolving context with learned patterns (4 sections)
+3. **Reflector**: Server-side pattern analysis (Sonnet 4 for intelligence)
+4. **Curator**: Server-side delta updates (Haiku 4.5 for cost efficiency)
+5. **Merge**: Non-LLM algorithm for incremental updates
+
+### Automatic Learning Flow
+
+```
+┌─────────────────────────────────────────────┐
+│ User: "Implement JWT authentication"        │
+└─────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────┐
+│ ACE Playbook Retrieval Skill AUTO-INVOKES  │
+│ - Fetches learned patterns from cache/server│
+│ - Returns: "Refresh token rotation best"   │
+└─────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────┐
+│ Claude Implements with Learned Patterns     │
+│ - Uses strategies from playbook             │
+│ - Avoids known pitfalls                     │
+└─────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────┐
+│ ACE Learning Skill AUTO-INVOKES            │
+│ - Captures: task + trajectory + feedback   │
+│ - Sends to ACE Server                       │
+└─────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────┐
+│ Server-Side Processing                      │
+│ - Reflector analyzes execution trace       │
+│ - Curator creates delta updates            │
+│ - Merge algorithm updates playbook          │
+└─────────────────────────────────────────────┘
+                ↓
+┌─────────────────────────────────────────────┐
+│ Next Session: Enhanced Playbook Retrieved! │
+│ Knowledge compounds over time! 🎯           │
+└─────────────────────────────────────────────┘
+```
+
+### Playbook Sections (Per Research Paper Figure 3)
+
+1. **strategies_and_hard_rules**: Architectural patterns, coding principles
+2. **useful_code_snippets**: Reusable code with tested implementations
+3. **troubleshooting_and_pitfalls**: Known issues, gotchas, solutions
+4. **apis_to_use**: Recommended libraries, frameworks, integration patterns
+
+## 📊 Example Workflow (v3.2.4)
+
+### First-Time Setup
+```bash
+# 1. Configure ACE server connection
+/ace-configure
+# Interactive prompts for server URL, API token, project ID
+
+# 2. Optional: Bootstrap from git history
+/ace-init --commits 100 --days 30
+# Analyzes past commits to build initial playbook
+
+# 3. Check initial state
+/ace-status
+# Output: Shows playbook statistics
+```
+
+### Automatic Learning in Action
 
 ```bash
-# 1. Check initial state
-/ace-status
-# Output: Total patterns: 0
+# 1. User requests task
+User: "Implement JWT authentication with refresh tokens"
 
-# 2. Write some code (Edit/Write tools)
-# PostToolUse hook automatically triggers reflection
+# 2. ACE Playbook Retrieval Skill AUTO-INVOKES (no manual action!)
+# - Fetches learned patterns from previous sessions
+# - Returns: "Refresh token rotation prevents theft attacks"
 
-# 3. Check learned patterns
-/ace-patterns
-# Output: Shows discovered patterns
+# 3. Claude implements using learned pattern
+# - Short-lived access tokens (15 min)
+# - Rotating refresh tokens (7 days)
+# - HttpOnly cookies for security
 
-# 4. Train on git history
-/ace-train-offline
-# Analyzes recent commits for patterns
+# 4. ACE Learning Skill AUTO-INVOKES after completion
+# - Captures successful implementation
+# - Sends feedback to server
+# - Pattern reinforced with +1 helpful score
 
-# 5. Generate playbook
-# Ask Claude: "Generate a playbook for error handling"
-# Uses ace_get_playbook MCP tool
-
-# 6. Check final state
-/ace-status
-# Output: Total patterns: 15, High confidence: 3
+# 5. Next similar task is faster!
+User: "Add OAuth2 authentication"
+# Retrieval skill fetches: JWT patterns + auth strategies
+# Implementation uses proven patterns from the start
 ```
 
-## 🎓 Research Compliance
+### Manual Playbook Review
 
-This plugin implements the complete ACE research framework:
+```bash
+# Check what's been learned
+/ace-patterns strategies
+# Shows architectural patterns
 
-- ✅ **MCP Sampling** - Uses client's LLM (no API key needed)
-- ✅ **Grow-and-Refine** - Incremental pattern updates
-- ✅ **Confidence-Based Curation** - Evidence-driven learning
-- ✅ **Domain Discovery** - Bottom-up taxonomy (no hardcoded)
-- ✅ **Prevents Context Collapse** - Delta updates, not monolithic
-- ✅ **Embeddings** - Semantic similarity (sentence-transformers)
-- ✅ **Playbook Generation** - ACE Figure 3 format
+/ace-patterns code-snippets
+# Shows reusable code patterns
+
+/ace-patterns troubleshooting
+# Shows known issues & solutions
+
+# View statistics
+/ace-status
+# Shows: total bullets, by section, top helpful/harmful
+```
+
+## 🎓 Research Compliance (v3.2.4)
+
+This plugin implements the complete ACE research paper architecture:
+
+- ✅ **Automatic Retrieval** - Skills fetch playbook BEFORE tasks (Generator uses context)
+- ✅ **Automatic Learning** - Skills capture feedback AFTER tasks (closes the loop)
+- ✅ **Server-Side Intelligence** - Reflector (Sonnet 4) + Curator (Haiku 4.5)
+- ✅ **Delta Updates** - Incremental improvements prevent context collapse
+- ✅ **4-Section Playbook** - Matches research paper Figure 3 structure
+- ✅ **Quality Scoring** - Helpful/harmful feedback refines patterns
+- ✅ **Cost Optimized** - Sonnet for intelligence, Haiku for efficiency (60% savings)
+- ✅ **Universal MCP** - Works with ANY MCP client (no sampling required)
+- ✅ **3-Tier Cache** - Fast retrieval (RAM → SQLite → Server)
+- ✅ **Model-Invoked Skills** - Claude decides when to use (fully automatic)
+
+**Result**: Achieves **+10.6% improvement** on agentic tasks per research paper!
 
 ## 🔐 Data Privacy
 
-### Local Mode
-- All data stored locally in `.ace-memory/`
-- Pattern database: SQLite + ChromaDB
-- No data sent to external servers
-- Full control over your patterns
+### MCP Client (Local)
+- **3-Tier Cache**: RAM (session) → SQLite (`~/.ace-cache/`) → Server
+- **Config**: `~/.ace/config.json` (server URL, API token, project ID)
+- **No Code Sent**: Only execution traces (task, trajectory, feedback)
+- **Encrypted Transit**: HTTPS to ACE server
 
-### Remote Mode
-- Code analysis done via MCP Sampling (your Claude instance)
-- Patterns stored in your account on remote server
-- Encrypted in transit (HTTPS)
-- API token required for access
+### ACE Server (Your Account)
+- **Playbook Storage**: Your patterns stored in your project
+- **Server-Side Analysis**: Reflector (Sonnet 4) + Curator (Haiku 4.5)
+- **API Token Required**: Secure access to your playbook
+- **No Sharing**: Patterns remain in your project unless you export
+
+### What Gets Sent to Server
+- ✅ Task descriptions ("Implement JWT auth")
+- ✅ Execution trajectories (steps taken)
+- ✅ Feedback and lessons learned
+- ❌ Full source code files (not sent!)
+- ❌ Credentials or secrets
 
 ## 🐛 Troubleshooting
 
