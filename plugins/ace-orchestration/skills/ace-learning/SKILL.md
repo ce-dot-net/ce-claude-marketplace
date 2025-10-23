@@ -1,6 +1,6 @@
 ---
 name: ACE Learning from Execution
-description: Learn from execution feedback and update the ACE playbook with patterns, strategies, and troubleshooting insights. Use automatically after completing substantial problem-solving, debugging, code implementation, refactoring, API integration, test failures, build errors, or any task with valuable lessons learned. Skip for simple Q&A or informational responses.
+description: YOU MUST use this skill AFTER completing substantial work. PROACTIVELY capture learning when you implement features, fix bugs, debug issues, refactor code, integrate APIs, resolve errors, make architecture decisions, or discover gotchas. This skill updates the ACE playbook with patterns, strategies, and troubleshooting insights for future use. DO NOT skip this - every substantial task must be captured. Use this skill proactively to build organizational knowledge.
 ---
 
 # ACE Learning from Execution

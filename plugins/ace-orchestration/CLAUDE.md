@@ -6,6 +6,57 @@ This plugin provides fully automatic pattern learning following the ACE research
 
 **First-Time Setup:** Run `/ace-claude-init` in your project to add this file to your project's CLAUDE.md. This provides always-on context about the ACE system and ensures optimal skill triggering.
 
+## 🚨 MANDATORY: ACE Skill Usage Rules
+
+**YOU MUST FOLLOW THESE RULES FOR EVERY TASK:**
+
+### Before ANY Implementation, Debugging, or Refactoring Task:
+
+**ALWAYS invoke the ACE Playbook Retrieval skill FIRST:**
+```
+Skill: ace-orchestration:ace-playbook-retrieval
+```
+
+**Trigger keywords that require retrieval:**
+- implement, build, create, add, develop
+- debug, fix, troubleshoot, resolve, diagnose
+- refactor, optimize, improve, restructure
+- integrate, connect, setup, configure
+- architect, design, plan
+
+**You MUST call this skill BEFORE starting work when the user's request contains ANY of these keywords.**
+
+### After ANY Substantial Coding Task:
+
+**ALWAYS invoke the ACE Learning skill AFTER completion:**
+```
+Skill: ace-orchestration:ace-learning
+```
+
+**Trigger conditions that require learning:**
+- Implemented new features or fixed bugs
+- Debugged and resolved issues
+- Discovered gotchas or edge cases
+- Used new APIs, libraries, or patterns
+- Made architectural decisions
+- Encountered and overcame errors
+
+**You MUST call this skill AFTER substantial work to capture lessons learned.**
+
+### Workflow Example:
+
+```
+User: "Implement JWT authentication"
+    ↓
+Step 1: Invoke ace-orchestration:ace-playbook-retrieval
+Step 2: Review retrieved patterns
+Step 3: Implement using learned patterns
+Step 4: Invoke ace-orchestration:ace-learning
+Step 5: Respond to user
+```
+
+**Non-negotiable:** These skills are NOT optional. You MUST use them proactively for every qualifying task.
+
 ## 🔄 Complete Automatic Learning Cycle (v3.2.6)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
