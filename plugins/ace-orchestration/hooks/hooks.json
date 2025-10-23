@@ -1,11 +1,5 @@
 {
   "hooks": {
-    "SessionStart": [
-      {
-        "type": "command",
-        "command": "bash ~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchestration/scripts/auto-inject-instructions.sh"
-      }
-    ],
     "PostToolUse": [
       {
         "matcher": "Bash",

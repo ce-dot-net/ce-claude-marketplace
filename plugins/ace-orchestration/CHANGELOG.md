@@ -5,6 +5,60 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.6] - 2025-10-23
+
+### Added
+- **`/ace-claude-init` command** - NEW: Safely patches project CLAUDE.md with ACE plugin instructions reference
+  - Provides always-on context about ACE architecture and automatic learning cycle
+  - Non-destructive: appends to existing CLAUDE.md without overwriting user content
+  - Idempotent: detects existing reference and prevents duplicates
+  - Creates CLAUDE.md if it doesn't exist
+  - Replaces unreliable SessionStart hook approach with explicit user control
+- **Local file analysis in `/ace-bootstrap`** - NEW: Analyze current project files (committed or uncommitted!)
+  - Three modes: `local-files`, `git-history`, or `both` (default)
+  - Extracts imports/dependencies from TypeScript, JavaScript, Python, Go, Java, Ruby files
+  - Discovers error handling patterns (try-catch, error logging)
+  - Captures work-in-progress and prototype code (uncommitted changes)
+  - Client-side analysis (fast, no git operations needed)
+  - Configurable file extensions and max files limit
+- **Enhanced bootstrap documentation** - Complete guide for local file analysis
+  - Detailed explanation of what gets analyzed in each mode
+  - Examples for different use cases (prototyping, current state, historical patterns)
+  - Why local files matter (uncommitted code, current reality vs. historical experiments)
+
+### Changed
+- **Renamed `/ace-init` to `/ace-bootstrap`** - More accurate name for bootstrapping playbook
+  - Clearer purpose: "bootstrap" indicates initializing from existing data
+  - Distinguishes from new `/ace-claude-init` which initializes CLAUDE.md
+  - Tool name: `mcp__ace-pattern-learning__ace_init` → `mcp__ace-pattern-learning__ace_bootstrap`
+  - All documentation updated to reflect new command name
+- **Updated MCP Client to v3.2.6** - Includes local file analysis capabilities
+  - New `analyzeLocalFiles()` function for client-side file scanning
+  - Recursive directory traversal with common ignore patterns
+  - Regex-based pattern extraction for imports and error handling
+  - Sends extracted patterns to server via `ace_learn` execution trace
+- **Updated installation workflow** - Now includes `/ace-claude-init` as Step 7 (one-time setup)
+  - Provides explicit user control over CLAUDE.md patching
+  - More reliable than automatic SessionStart hook injection
+  - Follows official Claude Code plugin patterns (no CLAUDE.md auto-injection)
+
+### Removed
+- **SessionStart hook** - Removed automatic CLAUDE.md injection (replaced by `/ace-claude-init`)
+  - Unreliable: hook structure issues prevented consistent execution
+  - Not official: Plugin CLAUDE.md auto-injection not in official Anthropic spec
+  - User control: Explicit command is more transparent and reliable
+- **auto-inject-instructions.sh script** - No longer needed with new manual command approach
+
+### Fixed
+- **Reliable CLAUDE.md setup** - Users now have explicit, reliable command to initialize ACE instructions
+  - Solves SessionStart hook failures across different environments
+  - Works every time (file operation vs. hook execution)
+  - User can verify what was added
+- **Bootstrap now captures uncommitted work** - Major improvement over git-only analysis
+  - Prototypes and WIP features no longer missed
+  - Current architecture/dependencies captured accurately
+  - What's ACTUALLY being used NOW vs. historical experiments
+
 ## [3.2.5] - 2025-10-23
 
 ### Fixed
