@@ -1,10 +1,28 @@
-# ACE Orchestration Plugin - Automatic Learning
+# ACE Orchestration Plugin - Automatic Learning Cycle
 
 This plugin provides fully automatic pattern learning following the ACE research paper architecture.
 
-## 🤖 Automatic Learning via Agent Skills
+## 🔄 Complete Automatic Learning Cycle (v3.2.4)
 
-**IMPORTANT**: The `ACE Learning from Execution` Agent Skill triggers automatically after substantial work.
+ACE uses **two Agent Skills** to create a self-improving learning cycle:
+
+### 1. **ACE Playbook Retrieval** (Before Tasks)
+**Model-Invoked**: Claude decides when to activate based on task context
+
+**Triggers**: implement, build, create, fix, debug, refactor, integrate, optimize, architect
+
+**What it does**:
+- Calls: `mcp__ace-pattern-learning__ace_get_playbook`
+- Retrieves: Learned patterns from previous sessions
+- Returns: Strategies, code snippets, troubleshooting tips, API recommendations
+- Cache: 3-tier (RAM → SQLite → Server) for fast access
+
+**Result**: Claude has organizational knowledge BEFORE starting the task!
+
+### 2. **ACE Learning from Execution** (After Tasks)
+**Model-Invoked**: Claude decides when to capture learning
+
+**Triggers**: Substantial work completion with valuable lessons
 
 ### When Agent Skill Triggers
 
@@ -42,87 +60,225 @@ When triggered, the Agent Skill:
 3. **Gathers feedback** - Lessons learned, patterns discovered, gotchas
 4. **Calls `mcp__ace-pattern-learning__ace_learn`** - Triggers automatic learning
 
-### The Automatic Learning Pipeline
+**What it does**:
+- Calls: `mcp__ace-pattern-learning__ace_learn`
+- Captures: Task description, trajectory, feedback, lessons learned
+- Sends: Execution trace to ACE Server
+- Server: Reflector (Sonnet 4) → Curator (Haiku 4.5) → Merge
+
+**Result**: Playbook updated with new patterns for future use!
+
+### The Complete Automatic Cycle
 
 ```
-Substantial Work Completed
-    ↓
-Agent Skill Auto-Triggers (you invoke the skill based on description matching)
-    ↓
-ace_learn Called with Trajectory & Feedback
-    ↓
-MCP Client POSTs trace to ACE Server
-    ↓
-Server-Side Reflector Analyzes (Sonnet 4 for intelligence)
-    ↓
-Server-Side Curator Creates Delta Updates (Haiku 4.5 for efficiency)
-    ↓
-Merge Algorithm Applies Updates
-    ↓
-Playbook Updated with New Patterns!
+┌─────────────────────────────────────────────────────────┐
+│ 1. User Request: "Implement JWT authentication"        │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ 2. ACE Playbook Retrieval Skill AUTO-INVOKES          │
+│    - Claude matches: "implement" → triggers skill       │
+│    - Calls: mcp__ace_get_playbook                      │
+│    - MCP Client: RAM → SQLite → Server                 │
+│    - Returns: "Refresh token rotation prevents theft"  │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ 3. Claude Executes Task with Learned Patterns         │
+│    - Uses strategies from playbook                      │
+│    - Applies proven code snippets                       │
+│    - Avoids known pitfalls                             │
+│    - Chooses recommended APIs                          │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ 4. ACE Learning Skill AUTO-INVOKES                    │
+│    - Claude recognizes substantial work completed      │
+│    - Calls: mcp__ace_learn                             │
+│    - Sends: task + trajectory + feedback → Server      │
+│    - Server: Reflector → Curator → Delta Merge        │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ 5. Playbook Updated on Server                         │
+│    - New patterns added to relevant sections           │
+│    - Quality scores updated based on outcomes          │
+│    - Ready for next retrieval!                         │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ 6. Next Session → Enhanced Playbook Retrieved         │
+│    - Knowledge compounds over time! 🎯                 │
+└─────────────────────────────────────────────────────────┘
 ```
 
-### Example Learning Scenarios
+### Caching Architecture
 
-**Scenario 1: Debugging Async Issue**
-```
-User: Fix this intermittent test failure
-You: [Debug, discover missing await, fix it]
-Agent Skill: *triggers automatically*
-Result: Pattern captured: "Intermittent failures in async code often mean missing await"
-```
+ACE uses a 3-tier caching system for optimal performance:
 
-**Scenario 2: API Integration**
-```
-User: Integrate Stripe webhook handling
-You: [Implement, discover raw body requirement for signature verification]
-Agent Skill: *triggers automatically*
-Result: Pattern captured: "Stripe webhooks need express.raw() for signature verification"
-```
+1. **RAM Cache**: In-memory, session-scoped (fastest - instant access)
+2. **SQLite Cache**: `~/.ace-cache/{org}_{project}.db`, 5-minute TTL (fast - milliseconds)
+3. **Server Fetch**: Only when cache is stale or empty (slower - seconds)
 
-**Scenario 3: Implementation**
+**You don't manage caching** - the MCP client handles it automatically!
+
+### Manual Override Commands
+
+While skills auto-invoke, manual commands are available for explicit control:
+
+- `/ace-patterns [section]` - View playbook manually
+- `/ace-status` - Check playbook statistics
+- `/ace-configure` - Configure ACE server connection
+- `/ace-init` - Bootstrap playbook from git history
+- `/ace-clear` - Clear playbook (requires confirmation)
+- `/ace-export-patterns` - Export playbook to JSON
+- `/ace-import-patterns` - Import playbook from JSON
+
+## 🤖 How Agent Skills Work (Model-Invoked)
+
+### Example Complete Cycles
+
+**Cycle 1: Implementation with Prior Knowledge**
 ```
-User: Add JWT authentication with refresh tokens
-You: [Design and implement token rotation pattern]
-Agent Skill: *triggers automatically*
-Result: Pattern captured: "Refresh token rotation prevents token theft attacks"
-```
-
-### Important Notes
-
-- **Automatic invocation only** - Don't manually call unless testing
-- **Skips trivial work** - Simple Q&A, file reads, basic informational responses
-- **Context-aware** - Only triggers when substantial lessons can be learned
-- **Trajectory matters** - Record key steps taken, not just final outcome
-- **Capture failures too** - What didn't work is valuable learning
-
-### MCP Tool Format
-
-If you need to manually test (rare), use:
-```
-mcp__ace-pattern-learning__ace_learn
+User: "Add JWT authentication with refresh tokens"
+↓
+Playbook Retrieval: Fetches previous auth patterns
+Retrieved: "Refresh token rotation prevents theft attacks"
+↓
+Implementation: Uses learned pattern (short-lived access + rotating refresh)
+↓
+Learning: Captures successful implementation
+Result: Pattern reinforced with +1 helpful score
 ```
 
-With parameters:
-- `task` (required): Brief description of what was accomplished
-- `success` (required): true/false
-- `trajectory` (optional but valuable): Array of key steps
-- `output` (required): Detailed feedback, lessons learned, patterns discovered
+**Cycle 2: Debugging with Learned Patterns**
+```
+User: "Fix intermittent test failures"
+↓
+Playbook Retrieval: Fetches troubleshooting patterns
+Retrieved: "Intermittent async failures often mean missing await"
+↓
+Debugging: Checks for missing await first (found it!)
+↓
+Learning: Captures successful debugging approach
+Result: Pattern reinforced, new context added
+```
 
-## 🎯 Architecture Alignment (v3.2.0)
+**Cycle 3: API Integration with Gotcha Prevention**
+```
+User: "Integrate Stripe webhook handling"
+↓
+Playbook Retrieval: Fetches API integration patterns
+Retrieved: "Stripe webhooks need express.raw() for signature verification"
+↓
+Implementation: Uses correct body parser from the start (no trial-and-error!)
+↓
+Learning: Captures successful integration
+Result: Pattern confirmed, additional webhook patterns captured
+```
 
-This implements the ACE research paper's fully automatic learning with server-side intelligence:
-- **Generator**: Main Claude instance executing tasks
-- **MCP Client**: Simple HTTP interface (works with Claude Code, Cursor, Cline, any MCP client)
-- **ACE Server**: Autonomous analysis engine
-  - **Reflector**: Server-side pattern analysis using Sonnet 4
-  - **Curator**: Server-side delta updates using Haiku 4.5 (60% cost savings)
-  - **Merge**: Non-LLM algorithm applying incremental updates
+**Progressive Intelligence**: Each cycle makes future tasks faster and more accurate!
 
-**Benefits**:
-- ✅ Universal MCP compatibility (no sampling required)
-- ✅ Cost optimized (Sonnet for intelligence, Haiku for efficiency)
-- ✅ Works with ALL MCP clients (Claude Code, Cursor, Cline, etc.)
-- ✅ Server-side analysis with transparent logging
+### Key Principles
 
-Result: +10.6% improvement on agentic tasks through fully automatic pattern learning!
+**Skills are Model-Invoked**:
+- Claude decides when to activate based on description matching
+- No manual invocation needed (skills just exist and auto-trigger)
+- Triggered by specific words: implement, build, fix, debug, refactor, integrate
+
+**Automatic Invocation**:
+- **Retrieval**: Before complex tasks (implementation, debugging, architecture)
+- **Learning**: After substantial work (problem-solving, discoveries, lessons)
+- **Skips**: Trivial Q&A, simple file reads, basic informational responses
+
+**Progressive Disclosure**:
+- Skills metadata: ~100 tokens (always loaded)
+- Skills instructions: ~5k tokens (loaded when triggered)
+- Playbook content: Variable (only when retrieved)
+
+**Context-Aware**:
+- Skills only trigger when relevant to task
+- Playbook only fetched for complex work
+- Cache prevents redundant server calls
+
+### MCP Tools (For Manual Testing)
+
+While skills handle automation, you can manually call MCP tools:
+
+**Retrieve Playbook**:
+```bash
+mcp__ace-pattern-learning__ace_get_playbook
+mcp__ace-pattern-learning__ace_get_playbook(section="strategies_and_hard_rules")
+mcp__ace-pattern-learning__ace_get_playbook(min_helpful=5)
+```
+
+**Capture Learning**:
+```bash
+mcp__ace-pattern-learning__ace_learn(
+  task="Brief description",
+  success=true,
+  trajectory="Key steps taken",
+  output="Lessons learned"
+)
+```
+
+**Check Status**:
+```bash
+mcp__ace-pattern-learning__ace_status
+```
+
+## 🎯 Architecture Alignment (v3.2.4)
+
+This implements the ACE research paper's fully automatic learning with complete retrieval → learning cycle:
+
+### Research Paper Architecture
+- **Generator**: Main Claude instance (you!) executing tasks
+- **Playbook**: Evolving context with learned patterns (4 sections)
+- **Reflector**: Server-side pattern analysis using Sonnet 4
+- **Curator**: Server-side delta updates using Haiku 4.5 (60% cost savings)
+- **Merge**: Non-LLM algorithm applying incremental updates
+
+### Our Implementation
+- **Generator**: Claude Code with Agent Skills (model-invoked)
+- **Playbook Retrieval**: `ace-playbook-retrieval` skill (before tasks)
+- **Playbook Learning**: `ace-learning` skill (after tasks)
+- **MCP Client**: 3-tier cache + HTTP interface to ACE Server
+- **ACE Server**: Autonomous analysis engine (separate repo)
+
+### Playbook Sections (Per Research Paper)
+1. **strategies_and_hard_rules**: Architectural patterns, coding principles
+2. **useful_code_snippets**: Reusable code patterns with context
+3. **troubleshooting_and_pitfalls**: Known issues, gotchas, solutions
+4. **apis_to_use**: Recommended libraries, frameworks, integration patterns
+
+### Benefits
+- ✅ **Automatic**: Skills auto-invoke based on task context (no manual intervention)
+- ✅ **Universal**: Works with ALL MCP clients (Claude Code, Cursor, Cline, etc.)
+- ✅ **Fast**: 3-tier caching (RAM → SQLite → Server)
+- ✅ **Cost-Optimized**: Sonnet 4 for intelligence, Haiku 4.5 for efficiency
+- ✅ **Token-Efficient**: Progressive disclosure, only loads when needed
+- ✅ **Self-Improving**: Each task makes the system smarter
+- ✅ **Transparent**: Server-side logging for debugging
+
+**Result**: Achieves research paper's **+10.6% improvement** on agentic tasks through fully automatic pattern learning AND retrieval!
+
+## 📁 File Structure
+
+```
+plugins/ace-orchestration/
+├── skills/
+│   ├── ace-playbook-retrieval/    # NEW: Retrieval skill
+│   │   └── SKILL.md               # Before-task pattern fetching
+│   └── ace-learning/              # Learning skill
+│       └── SKILL.md               # After-task pattern capture
+├── commands/
+│   ├── ace-patterns.md            # Manual playbook view
+│   ├── ace-status.md              # Playbook statistics
+│   ├── ace-configure.md           # Server setup
+│   ├── ace-init.md                # Bootstrap from git
+│   └── ace-clear.md               # Clear playbook
+├── hooks/
+│   └── hooks.json                 # SessionStart + PostToolUse
+├── .mcp.json                      # MCP client config
+└── CLAUDE.md                      # This file!
+```
