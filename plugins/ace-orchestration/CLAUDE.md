@@ -57,7 +57,7 @@ Step 5: Respond to user
 
 **Non-negotiable:** These skills are NOT optional. You MUST use them proactively for every qualifying task.
 
-## 🔄 Complete Automatic Learning Cycle (v3.2.11)
+## 🔄 Complete Automatic Learning Cycle (v3.2.12)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 
@@ -287,7 +287,7 @@ mcp__ace-pattern-learning__ace_learn(
 mcp__ace-pattern-learning__ace_status
 ```
 
-## 🎯 Architecture Alignment (v3.2.4)
+## 🎯 Architecture Alignment (v3.2.12)
 
 This implements the ACE research paper's fully automatic learning with complete retrieval → learning cycle:
 
@@ -295,7 +295,7 @@ This implements the ACE research paper's fully automatic learning with complete 
 - **Generator**: Main Claude instance (you!) executing tasks
 - **Playbook**: Evolving context with learned patterns (4 sections)
 - **Reflector**: Server-side pattern analysis using Sonnet 4
-- **Curator**: Server-side delta updates using Haiku 4.5 (60% cost savings)
+- **Curator**: Server-side delta updates with semantic deduplication (prevents duplicate patterns)
 - **Merge**: Non-LLM algorithm applying incremental updates
 
 ### Our Implementation
