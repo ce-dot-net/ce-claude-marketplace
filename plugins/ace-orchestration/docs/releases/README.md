@@ -17,7 +17,10 @@ Latest release: Check [GitHub Releases](https://github.com/ce-dot-net/ce-claude-
 
 ## Version History Highlights
 
-### v3.2.10 (2025-10-23)
+### v3.2.10+ (2025-10-23)
+- **Documentation**: Complete paper compliance verification (95% alignment)
+- **Enhancement Roadmap**: Detailed analysis of missing 5% and implementation priorities
+- **Architecture Updates**: Comprehensive documentation of all components
 - **Bug Fix**: Trajectory format documentation (array of objects)
 - Updated examples in ace-learning skill
 - Added IMPORTANT warnings
