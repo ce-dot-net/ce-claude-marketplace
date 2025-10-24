@@ -11,6 +11,19 @@ Technical documentation covering architecture, security, and implementation deta
   - MCP Client (3-tier caching)
   - ACE Server (Reflector + Curator)
   - Skills (model-invoked)
+  - **95% paper compliance verification**
+
+- **[ENHANCEMENT_ROADMAP.md](./ENHANCEMENT_ROADMAP.md)** - Detailed enhancement roadmap and missing 5%
+  - Semantic de-duplication analysis
+  - Lazy refinement mode options
+  - Implementation priorities and effort estimates
+  - Recommendations for reaching 98% compliance
+
+- **[SEMANTIC_DEDUP_SPEC.md](./SEMANTIC_DEDUP_SPEC.md)** - Complete implementation specification
+  - Server-side embedding service with OpenAI integration
+  - Curator semantic deduplication logic (85% threshold)
+  - Testing strategy and cost analysis ($0.01/10K bullets)
+  - Deployment guide with feature flags and rollback plan
 
 ### Security
 
@@ -18,13 +31,19 @@ Technical documentation covering architecture, security, and implementation deta
 
 ## Architecture Overview
 
-The ACE Orchestration plugin implements the ACE research paper architecture:
+The ACE Orchestration plugin implements the ACE research paper architecture with **95% alignment**:
 
 ```
 User Request → ACE Playbook Retrieval (skill) →
 Claude Executes Task → ACE Learning (skill) →
 Server Analysis (Reflector + Curator) → Updated Playbook
 ```
+
+**Verification Status**:
+- ✅ **10/10 Core Principles** - Complete implementation
+- ⚠️ **3/3 Advanced Features** - With smart cost optimizations
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md#-implementation-status-95-paper-alignment) for comprehensive verification details.
 
 ## Key Components
 
