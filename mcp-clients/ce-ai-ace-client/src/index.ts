@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * ACE MCP Client v3.2.0 - Simple HTTP Interface
+ * ACE MCP Client v3.2.12 - Simple HTTP Interface
  *
  * Server-side intelligence: Reflector + Curator run on ACE server
  * Client responsibility: Send traces, retrieve playbooks
@@ -39,7 +39,7 @@ const serverClient = new ACEServerClient(config);
 const server = new Server(
   {
     name: 'ace-pattern-learning',
-    version: '3.2.3'
+    version: '3.2.12'
   },
   {
     capabilities: {
@@ -657,7 +657,7 @@ async function analyzeLocalFiles(
 async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
-  console.error('✅ ACE MCP Client v3.2.6 started');
+  console.error('✅ ACE MCP Client v3.2.12 started');
   console.error('🔗 Server:', config.serverUrl);
   console.error('📋 Project:', config.projectId);
   console.error('🌍 Universal MCP compatibility (no sampling required)');
