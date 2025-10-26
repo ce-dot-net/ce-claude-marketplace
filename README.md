@@ -5,7 +5,7 @@
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                    What is ACE?                         │
-│  Automatic Context Engineering for Self-Improving AI   │
+│   Agentic Context Engineering for Self-Improving AI    │
 └─────────────────────────────────────────────────────────┘
                           ↓
         ┌─────────────────────────────────────┐
