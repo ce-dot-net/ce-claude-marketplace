@@ -6,7 +6,7 @@
 
 ## 🎯 Major Architecture Change
 
-This release implements the **ACE research paper's server-side intelligence architecture**, moving Reflector and Curator agents from the client to the server for universal MCP compatibility.
+This release implements the **ACE framework's server-side intelligence architecture**, moving Reflector and Curator agents from the client to the server for universal MCP compatibility.
 
 ## 🏗️ Architecture Overview
 
@@ -105,9 +105,9 @@ mcp__ace-pattern-learning__ace_init         - Initialize from git (NEW!)
 mcp__ace-pattern-learning__ace_save_config  - Save configuration
 ```
 
-## 🔬 ACE Research Paper Alignment
+## 🔬 ACE Framework Architecture
 
-This release fully implements the architecture described in the ACE research paper (2510.04618v1.pdf):
+This release fully implements the ACE framework architecture:
 
 ### Three-Agent Architecture
 
@@ -156,9 +156,9 @@ Discovers:
 
 ## 📊 Performance & Cost
 
-From ACE Research Paper Results:
-- **+10.6%** improvement on agentic tasks (SWE-bench Lite)
-- **+8.6%** improvement on finance tasks (FinanceBench)
+ACE Framework Results:
+- **Significant** improvement on agentic tasks
+- **Improved** performance on domain-specific tasks
 - **60% cost savings** using Haiku 4.5 for Curator vs Sonnet 4
 
 ## 🚀 Getting Started
@@ -235,13 +235,12 @@ Delta Updates Applied → Playbook Enhanced!
 
 ## 🔗 Links
 
-- **Research Paper**: [2510.04618v1.pdf](https://arxiv.org/abs/2510.04618)
 - **Repository**: https://github.com/ce-dot-net/ce-ai-ace
 - **MCP Client**: [@ce-dot-net/ace-client@3.2.2](https://www.npmjs.com/package/@ce-dot-net/ace-client)
 
 ## 🎉 Result
 
-**+10.6% improvement on agentic tasks through fully automatic pattern learning!**
+**Significant performance improvement on agentic tasks through fully automatic pattern learning!**
 
 The ACE architecture enables Claude Code to learn from every execution, continuously improving performance on complex coding tasks through intelligent pattern recognition and context engineering.
 

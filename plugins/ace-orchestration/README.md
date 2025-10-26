@@ -1,11 +1,6 @@
 # ACE Orchestration Plugin
 
-**Agentic Context Engineering** - Self-improving Claude Code plugin based on Stanford/SambaNova/UC Berkeley research.
-
-## 📚 Research
-
-Based on [Agentic Context Engineering (ACE)](https://arxiv.org/abs/2510.04618v1)
-*Stanford University, SambaNova Systems, UC Berkeley*
+**Agentic Context Engineering** - Self-improving Claude Code plugin using automatic pattern learning.
 
 ## 🎯 Features (v3.2.4)
 
@@ -28,7 +23,7 @@ Based on [Agentic Context Engineering (ACE)](https://arxiv.org/abs/2510.04618v1)
 - **Token-Efficient**: Progressive disclosure, only loads when needed
 - **Fast**: Cached playbook retrieval (milliseconds)
 - **Universal**: Works with ANY MCP client (Claude Code, Cursor, Cline, etc.)
-- **Research-Backed**: +10.6% improvement on agentic tasks (Stanford/SambaNova/UC Berkeley)
+- **Proven Effective**: Significant performance improvement on agentic tasks
 
 ## 🚀 Installation
 
@@ -310,7 +305,7 @@ Logs Bash command executions for debugging.
 └─────────────────────────────────────────────┘
 ```
 
-### Playbook Sections (Per Research Paper Figure 3)
+### Playbook Sections
 
 1. **strategies_and_hard_rules**: Architectural patterns, coding principles
 2. **useful_code_snippets**: Reusable code with tested implementations
@@ -382,22 +377,22 @@ User: "Add OAuth2 authentication"
 # Shows: total bullets, by section, top helpful/harmful
 ```
 
-## 🎓 Research Compliance (v3.2.4)
+## 🎯 Architecture (v3.2.4)
 
-This plugin implements the complete ACE research paper architecture:
+This plugin implements the complete ACE framework architecture:
 
 - ✅ **Automatic Retrieval** - Skills fetch playbook BEFORE tasks (Generator uses context)
 - ✅ **Automatic Learning** - Skills capture feedback AFTER tasks (closes the loop)
 - ✅ **Server-Side Intelligence** - Reflector (Sonnet 4) + Curator (Haiku 4.5)
 - ✅ **Delta Updates** - Incremental improvements prevent context collapse
-- ✅ **4-Section Playbook** - Matches research paper Figure 3 structure
+- ✅ **4-Section Playbook** - Structured pattern organization
 - ✅ **Quality Scoring** - Helpful/harmful feedback refines patterns
 - ✅ **Cost Optimized** - Sonnet for intelligence, Haiku for efficiency (60% savings)
 - ✅ **Universal MCP** - Works with ANY MCP client (no sampling required)
 - ✅ **3-Tier Cache** - Fast retrieval (RAM → SQLite → Server)
 - ✅ **Model-Invoked Skills** - Claude decides when to use (fully automatic)
 
-**Result**: Achieves **+10.6% improvement** on agentic tasks per research paper!
+**Result**: Achieves significant performance improvement on agentic tasks!
 
 ## 🔐 Data Privacy
 
@@ -451,8 +446,6 @@ MIT License - See LICENSE file for details
 
 ## 🔗 Links
 
-- **Research Paper**: https://arxiv.org/abs/2510.04618
-- **Server Repo**: Private (algorithms protected)
 - **MCP Client**: `mcp-clients/ce-ai-ace-client/`
 - **Issues**: https://github.com/ce-dot-net/ce-claude-marketplace/issues
 

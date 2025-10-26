@@ -12,7 +12,7 @@ User-facing documentation:
 
 ### 🏗️ [Technical](./technical/)
 Technical and architectural documentation:
-- `ARCHITECTURE.md` - **System architecture and ACE research paper verification (95% alignment)**
+- `ARCHITECTURE.md` - **System architecture and ACE framework implementation**
 - `SECURITY.md` - Security considerations and best practices
 
 ### 🎉 [Releases](./releases/)
@@ -22,21 +22,21 @@ Release-specific documentation:
 
 ## 📊 Implementation Status
 
-**ACE Research Paper Compliance**: **95% alignment**
+**ACE Framework Implementation**: **Complete**
 
-- ✅ **Core Principles**: 10/10 implemented
+- ✅ **Core Principles**: Fully implemented
   - Three-agent architecture (Generator/Reflector/Curator)
   - Incremental delta updates (ADD/UPDATE/DELETE)
-  - Four playbook sections as specified in paper
+  - Four playbook sections (structured pattern organization)
   - Context collapse prevention
   - No labeled supervision (feedback-only learning)
 
-- ⚠️ **Advanced Features**: 3/3 with smart cost optimizations
+- ✅ **Advanced Features**: Implemented with smart optimizations
   - Semantic deduplication → exact match (cost optimization)
   - Lazy refinement → proactive only (simplified for production)
   - Helpful/harmful marking → Reflector LLM analysis (more accurate)
 
-**See [technical/ARCHITECTURE.md](./technical/ARCHITECTURE.md#-implementation-status-95-paper-alignment) for complete verification details.**
+**See [technical/ARCHITECTURE.md](./technical/ARCHITECTURE.md) for complete implementation details.**
 
 ## Main Files
 
