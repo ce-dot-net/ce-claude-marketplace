@@ -5,6 +5,89 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.13] - 2025-10-26
+
+### Enhanced Skills & Documentation - User-Focused Release
+
+**ENHANCED: Skills with explicit playbook leverage instruction, major documentation improvements**
+
+### What Changed
+
+**1. Skills Enhancement - Paper Compliance**
+- ✅ Added explicit "leverage retrieved playbook" instruction to both skills
+- ✅ ACE Playbook Retrieval: Clear directive to use patterns in implementation
+- ✅ ACE Learning: Explicit instruction to reference playbook bullets used
+- ✅ Ensures skills follow ACE paper methodology exactly
+
+**2. README Transformation - User Benefits Focus**
+- ✅ Removed all research paper references from main README
+- ✅ New user-focused structure: Benefits → How It Works → Install → Troubleshooting
+- ✅ Added visual architecture diagram with emoji icons
+- ✅ Clear installation guide with step-by-step instructions
+- ✅ Comprehensive troubleshooting section with common issues
+- ✅ Removed technical implementation details (moved to archived docs)
+
+**3. Documentation Cleanup**
+- ✅ Archived technical implementation docs to /docs/archive/
+- ✅ Kept user-facing docs in /docs/ (Quick Start, Examples, FAQ)
+- ✅ Removed research paper references from user documentation
+- ✅ Simplified plugin CLAUDE.md (removed paper section titles)
+
+**4. Serena Cleanup**
+- ✅ Removed outdated Serena memory files
+- ✅ Fresh start for documentation-focused development
+
+### Benefits
+
+**For Users:**
+- ✅ Clearer understanding of benefits without research jargon
+- ✅ Easy-to-follow installation instructions
+- ✅ Quick troubleshooting guide for common issues
+- ✅ Visual diagrams make architecture easier to understand
+
+**For Developers:**
+- ✅ Skills now explicitly leverage playbook (paper compliance)
+- ✅ Better separation of user docs vs technical docs
+- ✅ Cleaner codebase with archived implementation details
+
+**For ACE System:**
+- ✅ Improved skill effectiveness with explicit instructions
+- ✅ Better tracking of which playbook bullets are useful
+- ✅ More consistent learning cycle execution
+
+### Files Changed
+
+```
+plugins/ace-orchestration/
+├── skills/
+│   ├── ace-playbook-retrieval/SKILL.md (added leverage instruction)
+│   └── ace-learning/SKILL.md (added playbook_used parameter guidance)
+├── CLAUDE.md (version bumped to 3.2.13)
+└── README.md (user-focused rewrite)
+
+docs/
+├── Quick-Start.md (user-facing - kept)
+├── Examples.md (user-facing - kept)
+├── FAQ.md (user-facing - kept)
+└── archive/ (technical docs moved here)
+    ├── ACE-Paper-Alignment.md
+    ├── Development-Plan.md
+    ├── Implementation-Guide.md
+    └── MCP-Integration.md
+```
+
+### Upgrade Notes
+
+**No action required** - All changes are backward compatible:
+- Skills work the same way (just more explicit internally)
+- MCP client version unchanged (3.2.13 is documentation-only)
+- Existing installations continue to work without updates
+
+**For documentation updates:**
+- README now focuses on user benefits and installation
+- Technical details available in /docs/archive/ if needed
+- Run `/ace-claude-init` to get latest plugin instructions
+
 ## [3.2.10] - 2025-10-23
 
 ### Bug Fix - Trajectory Format Documentation
