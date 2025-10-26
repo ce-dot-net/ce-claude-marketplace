@@ -5,7 +5,7 @@ argument-hint: [section] [min-helpful]
 
 # ACE Playbook
 
-Display the ACE playbook (4 sections per ACE research paper Figure 3).
+Display the ACE playbook (4 structured sections).
 
 ## Usage:
 - `/ace-patterns` - Show entire playbook
@@ -14,7 +14,7 @@ Display the ACE playbook (4 sections per ACE research paper Figure 3).
 
 ## Playbook Sections
 
-The ACE paper defines 4 sections:
+The ACE framework defines 4 sections:
 - `strategies_and_hard_rules` - Core strategies and rules
 - `useful_code_snippets` - Reusable code patterns
 - `troubleshooting_and_pitfalls` - Common issues and solutions

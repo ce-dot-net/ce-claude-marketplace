@@ -4,7 +4,7 @@
 
 ## Agent Architecture (v3.0.0)
 
-ACE implements a **Generator-Reflector-Curator** architecture (Figure 4 of research paper):
+ACE implements a **Generator-Reflector-Curator** architecture:
 
 1. **Generator** - Claude Code itself (executes tasks)
 2. **Reflector** - Service in TypeScript MCP client (uses MCP Sampling)
@@ -98,13 +98,13 @@ ace_learn tool → ReflectorService (MCP Sampling) → CurationService → Serve
 
 ---
 
-## Research Paper Alignment
+## ACE Framework Alignment
 
-✅ **Generator-Reflector-Curator architecture** (Section 3, Figure 4)
-✅ **Iterative refinement** for higher quality insights (Page 5)
+✅ **Generator-Reflector-Curator architecture**
+✅ **Iterative refinement** for higher quality insights
 ✅ **No hardcoded patterns or domains** - bottom-up discovery only
 ✅ **Agent-based reflection** - no hardcoded heuristics
-✅ **Acknowledged limitations** when feedback quality is poor (Appendix B)
+✅ **Acknowledged limitations** when feedback quality is poor
 
 ---
 
