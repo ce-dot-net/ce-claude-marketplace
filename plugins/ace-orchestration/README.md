@@ -40,14 +40,11 @@ git clone https://github.com/ce-dot-net/ce-claude-marketplace.git
 cd ce-claude-marketplace
 ```
 
-### Step 2: Build MCP Client
+### Step 2: MCP Client
 
-```bash
-cd mcp-clients/ce-ai-ace-client
-npm install
-npm run build
-cd ../..
-```
+The ACE MCP Client (@ce-dot-net/ace-client) is maintained in a separate repository and published to npm. The plugin automatically uses the latest version from npm - no manual build required!
+
+**MCP Client Repository**: https://github.com/ce-dot-net/ce-ace-mcp
 
 ### Step 3: Configure Plugin
 
@@ -446,7 +443,8 @@ MIT License - See LICENSE file for details
 
 ## 🔗 Links
 
-- **MCP Client**: `mcp-clients/ce-ai-ace-client/`
+- **MCP Client Repository**: https://github.com/ce-dot-net/ce-ace-mcp
+- **npm Package**: https://www.npmjs.com/package/@ce-dot-net/ace-client
 - **Issues**: https://github.com/ce-dot-net/ce-claude-marketplace/issues
 
 ## 🚀 Coming Soon

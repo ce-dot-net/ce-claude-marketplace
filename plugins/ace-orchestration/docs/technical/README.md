@@ -54,4 +54,4 @@ See [ARCHITECTURE.md](./ARCHITECTURE.md) for comprehensive architecture details.
 - **User Guides**: [../guides/](../guides/)
 - **Releases**: [../releases/](../releases/)
 - **Main README**: [../../README.md](../../README.md)
-- **MCP Client**: [../../../../mcp-clients/ce-ai-ace-client/](../../../../mcp-clients/ce-ai-ace-client/)
+- **MCP Client**: [ce-ace-mcp repository](https://github.com/ce-dot-net/ce-ace-mcp) (separate repo)
