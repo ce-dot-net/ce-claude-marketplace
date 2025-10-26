@@ -74,4 +74,4 @@ Located in [commands/](../commands/):
 ## Related Documentation
 
 - **Marketplace Root**: [../../../docs/](../../../docs/)
-- **MCP Client**: [../../../mcp-clients/ce-ai-ace-client/](../../../mcp-clients/ce-ai-ace-client/)
+- **MCP Client**: [ce-ace-mcp repository](https://github.com/ce-dot-net/ce-ace-mcp) (separate repo)

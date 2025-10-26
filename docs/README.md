@@ -40,7 +40,7 @@ Release-specific documentation (coming soon)
 
 - **Plugin README**: [plugins/ace-orchestration/README.md](../plugins/ace-orchestration/README.md)
 - **Plugin Documentation**: [plugins/ace-orchestration/docs/](../plugins/ace-orchestration/docs/)
-- **MCP Client**: [mcp-clients/ce-ai-ace-client/README.md](../mcp-clients/ce-ai-ace-client/README.md)
+- **MCP Client**: [ce-ace-mcp repository](https://github.com/ce-dot-net/ce-ace-mcp) (separate repo)
 - **Changelog**: [CHANGELOG.md](../CHANGELOG.md)
 
 ## Getting Started
