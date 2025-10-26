@@ -1,5 +1,11 @@
 {
   "hooks": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "bash ~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchestration/hooks/ace-version-check.sh"
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Bash",
