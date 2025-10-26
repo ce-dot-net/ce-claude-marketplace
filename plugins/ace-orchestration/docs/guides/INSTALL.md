@@ -85,22 +85,22 @@ In Claude Code, run the interactive configuration wizard:
 
 ## 🎯 How It Works
 
-**Everything is bundled!** No separate installation needed.
+**Automatic npm integration!** MCP server fetched on-demand.
 
 When you install the plugin:
 
 1. **Plugin installed** → Claude Code finds it at `~/.config/claude-code/plugins/ace-orchestration`
-2. **MCP server starts** → Automatically launched from `mcp-server/dist/index.js` (bundled!)
+2. **MCP server starts** → Automatically fetched from npm (`@ce-dot-net/ace-client@latest`)
 3. **Commands available** → All `/ace-*` commands ready to use
 4. **Tools available** → MCP tools (`ace_status`, `ace_init`, etc.) ready
 
 **What's included:**
-- ✅ MCP Server (bundled in plugin)
-- ✅ All dependencies (node_modules included)
+- ✅ Plugin files (commands, skills, hooks)
+- ✅ MCP Server (automatically fetched from npm)
 - ✅ Slash commands (/ace-configure, /ace-status, etc.)
 - ✅ Configuration wizard (interactive prompts)
 
-**No external downloads, no authentication, works offline!**
+**MCP server automatically fetched from npm when plugin activates!**
 
 ---
 
