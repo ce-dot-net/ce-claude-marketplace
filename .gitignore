@@ -17,6 +17,9 @@ build/
 # Serena agent memory (internal development notes - not for publication)
 .serena/
 
+# Internal documentation (development notes, implementation steps, research)
+docs-internal/
+
 # Environment files with credentials
 .env
 .env.local
