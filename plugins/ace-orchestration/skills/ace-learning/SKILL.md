@@ -7,7 +7,7 @@ description: YOU MUST ALWAYS use this skill IMMEDIATELY AFTER you finish ANY sub
 
 ## Purpose
 
-This Skill implements the ACE (Agentic Context Engineering) research paper's fully automatic learning system. It captures execution feedback and creates incremental delta updates to the ACE playbook, enabling self-improving behavior through structured pattern learning.
+This Skill implements the ACE (Agentic Context Engineering) framework's fully automatic learning system. It captures execution feedback and creates incremental delta updates to the ACE playbook, enabling self-improving behavior through structured pattern learning.
 
 ## When to Use
 
@@ -80,7 +80,7 @@ mcp__ace-pattern-learning__ace_learn
 **Required Parameters**:
 - `task`: Brief description (1-2 sentences) of what was accomplished
 - `success`: Boolean indicating overall success
-- `trajectory`: **IMPORTANT: Must be an array of objects**, each with descriptive keys (e.g., `{"step": "...", "action": "..."}`)
+- `trajectory`: Key steps and decisions made during execution
 - `feedback`: Detailed outcome, lessons learned, patterns, troubleshooting insights
 
 **Example 1 - Successful Implementation**:
@@ -88,13 +88,7 @@ mcp__ace-pattern-learning__ace_learn
 {
   "task": "Implemented user authentication with JWT tokens and refresh token rotation",
   "success": true,
-  "trajectory": [
-    {"step": "Analysis", "action": "Analyzed security requirements and token expiration needs"},
-    {"step": "Library Selection", "action": "Chose JWT library (jsonwebtoken) for token generation"},
-    {"step": "Token Strategy", "action": "Implemented access token (15min) + refresh token (7 days) pattern"},
-    {"step": "Rotation Logic", "action": "Added token rotation logic in refresh endpoint"},
-    {"step": "Security", "action": "Secured endpoints with authentication middleware"}
-  ],
+  "trajectory": "Analyzed security requirements → Chose JWT library (jsonwebtoken) → Implemented access token (15min) + refresh token (7 days) pattern → Added token rotation logic in refresh endpoint → Secured endpoints with authentication middleware",
   "feedback": "Successfully implemented secure auth flow. Key insights: (1) Refresh token rotation prevents token theft, (2) Short access token expiry balances security and UX, (3) HttpOnly cookies for refresh tokens prevent XSS attacks. Pattern: Always validate refresh token on each rotation and revoke old tokens."
 }
 ```
@@ -104,14 +98,7 @@ mcp__ace-pattern-learning__ace_learn
 {
   "task": "Debugged intermittent test failures in async database operations",
   "success": true,
-  "trajectory": [
-    {"step": "Observation", "action": "Observed random test failures in CI/CD pipeline"},
-    {"step": "Hypothesis", "action": "Suspected race condition in database cleanup"},
-    {"step": "First Attempt", "action": "Added transaction isolation and explicit wait for cleanup"},
-    {"step": "Continued Failure", "action": "Tests still failed intermittently"},
-    {"step": "Root Cause", "action": "Discovered missing await on database.close()"},
-    {"step": "Solution", "action": "Added proper async/await chain to all cleanup operations"}
-  ],
+  "trajectory": "Observed random test failures in CI/CD pipeline → Suspected race condition in database cleanup → Added transaction isolation and explicit wait for cleanup → Tests still failed intermittently → Discovered missing await on database.close() → Added proper async/await chain to all cleanup operations",
   "feedback": "Root cause: Forgot await on database.close() causing connection pool exhaustion. Troubleshooting insight: Intermittent failures in async code often indicate missing await statements. Check all async function calls in test cleanup. Pattern: Always use await on resource cleanup (close, disconnect, etc.)"
 }
 
@@ -120,14 +107,7 @@ mcp__ace-pattern-learning__ace_learn
 {
   "task": "Integrated Stripe payment API with webhook handling",
   "success": true,
-  "trajectory": [
-    {"step": "Setup", "action": "Set up Stripe SDK and configured API keys"},
-    {"step": "Checkout", "action": "Implemented checkout session creation endpoint"},
-    {"step": "Webhook Endpoint", "action": "Added webhook endpoint for payment events"},
-    {"step": "Error Encountered", "action": "Failed webhook signature verification with 400 errors"},
-    {"step": "Discovery", "action": "Discovered raw body requirement for crypto signature validation"},
-    {"step": "Fix", "action": "Configured express.raw() middleware specifically for webhook route"}
-  ],
+  "trajectory": "Set up Stripe SDK and configured API keys → Implemented checkout session creation endpoint → Added webhook endpoint for payment events → Failed webhook signature verification with 400 errors → Discovered raw body requirement for crypto signature validation → Configured express.raw() middleware specifically for webhook route",
   "feedback": "Stripe webhooks require raw request body for signature verification. Standard express.json() breaks signature validation. Solution: Use express.raw({type: 'application/json'}) for webhook route specifically. API Pattern: Webhook signature verification often needs raw body access - check docs before adding body parsers."
 }
 
@@ -167,9 +147,9 @@ Check relevant sections (strategies, code-snippets, troubleshooting, apis) for n
 - **Failure Recovery**: Documented troubleshooting prevents repeated mistakes
 - **Best Practices**: Accumulates proven approaches and patterns
 
-## Architecture Alignment (v3.2.0)
+## ACE Framework Architecture (v3.2.0)
 
-This Skill implements the ACE research paper's fully automatic architecture with server-side intelligence:
+This Skill implements the ACE framework's fully automatic architecture with server-side intelligence:
 
 ```
 Task Completion → Agent Skill (auto-invoked) → ace_learn called →
@@ -189,4 +169,4 @@ The automation happens at three levels:
 - ✅ Transparent server logs for debugging and monitoring
 - ✅ No MCP Sampling requirement
 
-Result: Achieves research paper's +10.6% improvement on agentic tasks through fully automatic pattern learning!
+Result: Provides significant performance improvement on agentic tasks through fully automatic pattern learning!
