@@ -240,9 +240,9 @@ mcp__ace_get_playbook(min_helpful=5)
 mcp__ace_get_playbook(section="troubleshooting_and_pitfalls", min_helpful=3)
 ```
 
-## Architecture Alignment
+## ACE Framework Architecture
 
-This skill implements the ACE research paper's automatic context retrieval:
+This skill implements the ACE framework's automatic context retrieval:
 
 ```
 User Request
@@ -269,4 +269,4 @@ Claude Uses Patterns in Context
 - ✅ Progressive: Playbook grows richer over time
 - ✅ Universal: Works with any MCP-compatible client
 
-Achieves research paper's goal: **"Comprehensive, evolving contexts enable scalable, efficient, and self-improving LLM systems."**
+**Result**: Comprehensive, evolving contexts enable scalable, efficient, and self-improving LLM systems.

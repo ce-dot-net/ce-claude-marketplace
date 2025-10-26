@@ -1,6 +1,6 @@
 # ACE Orchestration Plugin - Automatic Learning Cycle
 
-This plugin provides fully automatic pattern learning following the ACE research paper architecture.
+This plugin provides fully automatic pattern learning using the ACE framework architecture.
 
 ## 📖 Setup Instructions
 
@@ -272,40 +272,35 @@ mcp__ace-pattern-learning__ace_get_playbook(min_helpful=5)
 mcp__ace-pattern-learning__ace_learn(
   task="Brief description",
   success=true,
-  trajectory=[
-    {"step": "Analysis", "action": "Analyzed the problem"},
-    {"step": "Implementation", "action": "Implemented the solution"}
-  ],
+  trajectory="Key steps taken",
   output="Lessons learned"
 )
 ```
-
-**IMPORTANT**: `trajectory` must be an array of objects with descriptive keys (e.g., `{"step": "...", "action": "..."}`), not a string
 
 **Check Status**:
 ```bash
 mcp__ace-pattern-learning__ace_status
 ```
 
-## 🎯 Architecture Alignment (v3.2.12)
+## 🎯 ACE Architecture (v3.2.12)
 
-This implements the ACE research paper's fully automatic learning with complete retrieval → learning cycle:
+The ACE framework implements fully automatic learning with complete retrieval → learning cycle:
 
-### Research Paper Architecture
+### ACE Architecture Components
 - **Generator**: Main Claude instance (you!) executing tasks
 - **Playbook**: Evolving context with learned patterns (4 sections)
 - **Reflector**: Server-side pattern analysis using Sonnet 4
-- **Curator**: Server-side delta updates with semantic deduplication (prevents duplicate patterns)
+- **Curator**: Server-side delta updates using Haiku 4.5 (60% cost savings)
 - **Merge**: Non-LLM algorithm applying incremental updates
 
-### Our Implementation
+### Implementation
 - **Generator**: Claude Code with Agent Skills (model-invoked)
 - **Playbook Retrieval**: `ace-playbook-retrieval` skill (before tasks)
 - **Playbook Learning**: `ace-learning` skill (after tasks)
 - **MCP Client**: 3-tier cache + HTTP interface to ACE Server
 - **ACE Server**: Autonomous analysis engine (separate repo)
 
-### Playbook Sections (Per Research Paper)
+### Playbook Sections
 1. **strategies_and_hard_rules**: Architectural patterns, coding principles
 2. **useful_code_snippets**: Reusable code patterns with context
 3. **troubleshooting_and_pitfalls**: Known issues, gotchas, solutions
@@ -320,7 +315,7 @@ This implements the ACE research paper's fully automatic learning with complete 
 - ✅ **Self-Improving**: Each task makes the system smarter
 - ✅ **Transparent**: Server-side logging for debugging
 
-**Result**: Achieves research paper's **+10.6% improvement** on agentic tasks through fully automatic pattern learning AND retrieval!
+**Result**: Provides significant performance improvement on agentic tasks through fully automatic pattern learning AND retrieval!
 
 ## 📁 File Structure
 
