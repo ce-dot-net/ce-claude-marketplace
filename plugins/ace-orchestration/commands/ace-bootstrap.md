@@ -1,6 +1,6 @@
 ---
-description: Bootstrap ACE playbook from current code and/or git history
-argument-hint: [--mode local-files|git-history|both] [--commits N] [--days N]
+description: Bootstrap ACE playbook from docs, git history, and/or current code
+argument-hint: [--mode hybrid|both|local-files|git-history|docs-only] [--thoroughness light|medium|deep] [--commits N] [--days N]
 ---
 
 # ACE Bootstrap
@@ -26,37 +26,133 @@ When the user runs `/ace-bootstrap`, follow these steps:
 Call the mcp__ace-pattern-learning__ace_bootstrap tool to bootstrap your playbook.
 
 Parameters:
-- mode: Analysis mode (default: "both")
-  - "local-files": Analyze current codebase files (committed or uncommitted)
-  - "git-history": Analyze git commit history (server-side)
-  - "both": Analyze both current files and git history (recommended)
+- mode: Analysis mode (default: "hybrid")
+  - "hybrid": RECOMMENDED - Intelligently scan docs → git history → local files with fallback
+  - "both": Analyze both current files and git history (no docs scan)
+  - "local-files": Analyze current codebase files only (committed or uncommitted)
+  - "git-history": Analyze git commit history only (server-side)
+  - "docs-only": Analyze existing documentation files only (*.md, *.txt)
 
 - repo_path: Path to project directory (defaults to current directory)
-- file_extensions: Array of file extensions to analyze (default: [".ts", ".js", ".py", ".go", ".java", ".rb"])
-- max_files: Maximum files to analyze for local-files mode (default: 1000)
-- commit_limit: Number of commits to analyze for git-history mode (default: 100)
-- days_back: Days of history to analyze for git-history mode (default: 30)
+- file_extensions: Array of file extensions to analyze (default: [".ts", ".js", ".py", ".go", ".java", ".rb", ".tsx", ".jsx"])
+- max_files: Maximum files to analyze for local-files mode (default: 5000 - increased for thoroughness)
+- commit_limit: Number of commits to analyze for git-history mode (default: 500 - increased for depth)
+- days_back: Days of history to analyze for git-history mode (default: 90 - increased for coverage)
 - merge_with_existing: true (merge) or false (replace) - default: true
+- thoroughness: "light" | "medium" | "deep" (default: "medium")
+  - "light": max_files=1000, commit_limit=100, days_back=30
+  - "medium": max_files=5000, commit_limit=500, days_back=90
+  - "deep": max_files=unlimited, commit_limit=1000, days_back=180
 
 Examples:
 {
-  "mode": "both"  // Recommended: analyze current files + git history
+  "mode": "hybrid",
+  "thoroughness": "deep"  // RECOMMENDED: most comprehensive analysis
+}
+
+{
+  "mode": "hybrid",
+  "thoroughness": "medium"  // Good balance of speed and coverage
 }
 
 {
   "mode": "local-files",
   "file_extensions": [".ts", ".tsx"],
-  "max_files": 500
+  "max_files": 5000,
+  "thoroughness": "medium"
 }
 
 {
   "mode": "git-history",
-  "commit_limit": 200,
-  "days_back": 60
+  "commit_limit": 1000,
+  "days_back": 180,
+  "thoroughness": "deep"
 }
 ```
 
 ## What Gets Analyzed
+
+### Mode: hybrid (RECOMMENDED - Intelligent Multi-Source Analysis)
+
+The **hybrid mode** uses intelligent fallback logic to extract maximum knowledge from available sources:
+
+**Priority Order:**
+1. **Check existing documentation** - Scans for CLAUDE.md, README.md, ARCHITECTURE.md, docs/*.md
+2. **Analyze git history** - Extracts patterns from commits (if git repository exists)
+3. **Parse local files** - Analyzes current source code files
+
+**Intelligent Fallback Logic:**
+```
+IF (docs found with substantial content):
+    → Extract architectural patterns, best practices, troubleshooting guides from docs
+    → STILL analyze git history for bug fix patterns and refactoring insights
+    → STILL scan local files for current API usage and dependencies
+
+ELSE IF (git history available):
+    → Analyze commit history for strategies, troubleshooting, API patterns
+    → Scan local files for current state and dependencies
+
+ELSE (no docs, no git):
+    → Deep analysis of local files only
+    → Extract patterns from code structure, imports, error handling
+```
+
+**Why Hybrid is Superior:**
+- ✅ **Documentation-first**: Captures explicit team knowledge and architectural decisions
+- ✅ **History-aware**: Learns from past mistakes and successful refactorings
+- ✅ **Current-state**: Reflects what's actually being used right now
+- ✅ **Comprehensive**: Combines all three sources for maximum coverage
+- ✅ **Adaptive**: Automatically falls back based on what's available
+
+**What Gets Extracted:**
+
+From **Documentation** (`*.md`, `*.txt`):
+- Architectural patterns and principles (→ strategies section)
+- Coding standards and best practices (→ strategies section)
+- Known issues and troubleshooting guides (→ troubleshooting section)
+- API integration examples (→ apis section)
+- Code snippets from docs (→ snippets section)
+
+From **Git History** (commits):
+- Refactoring patterns (commits with "refactor", "improve", "optimize")
+- Bug fix patterns (commits with "fix", "bug", "error", "crash")
+- API integration lessons (commits touching API/service/client files)
+- File co-occurrence patterns (frequently changed together)
+- Error resolution patterns (specific error keywords in messages)
+
+From **Local Files** (source code):
+- Current library usage and dependencies (import statements)
+- Error handling patterns (try-catch, exception handling)
+- Code structure and organization
+- Active API integrations
+
+**Example Output from Hybrid Mode:**
+```json
+{
+  "mode": "HYBRID",
+  "sources_analyzed": {
+    "docs": {
+      "files_found": 12,
+      "patterns_extracted": 45
+    },
+    "git_history": {
+      "commits_analyzed": 500,
+      "patterns_extracted": 187
+    },
+    "local_files": {
+      "files_scanned": 3421,
+      "patterns_extracted": 245
+    }
+  },
+  "total_patterns": 477,
+  "by_section": {
+    "strategies": 120,
+    "snippets": 89,
+    "troubleshooting": 178,
+    "apis": 90
+  }
+}
+```
 
 ### Mode: local-files (Current Codebase)
 
@@ -118,12 +214,14 @@ Analyzes **git commit history** (server-side):
 - ✅ **Evolution** - What changed and why
 - ✅ **Team knowledge** - Lessons from multiple contributors
 
-### Mode: both (Recommended)
+### Mode: both (Current + History)
 
-Combines **current codebase** + **git history** for comprehensive analysis:
+Combines **current codebase** + **git history** (without docs scanning):
 - Current state (what's used NOW)
 - Historical lessons (how problems were solved)
-- Most complete picture of your project
+- Good when documentation is missing or sparse
+
+**Note:** Consider using **hybrid mode** instead - it includes docs scanning AND both sources with intelligent fallback!
 
 ## Merge vs Replace
 
@@ -167,16 +265,40 @@ Combines **current codebase** + **git history** for comprehensive analysis:
 
 ## When to Use
 
-### ✅ Good Use Cases
-- **New project setup**: Bootstrap playbook from existing code
-- **Team onboarding**: Share historical lessons with new members
-- **Post-migration**: Capture patterns after major refactoring
-- **Periodic refresh**: Re-analyze every few months for new patterns
+### ✅ Recommended Scenarios
+
+**Use `hybrid` mode with `thoroughness: deep`:**
+- ✅ **New project onboarding**: Extract all available knowledge (docs + history + code)
+- ✅ **Team knowledge capture**: Comprehensive analysis of architectural decisions
+- ✅ **Post-migration**: Understand new codebase from all angles
+- ✅ **Large codebases**: Maximum pattern extraction (5000+ files, 500+ commits, 90+ days)
+
+**Use `hybrid` mode with `thoroughness: medium`:**
+- ✅ **Periodic refresh**: Re-analyze every few months for new patterns
+- ✅ **Medium projects**: Balanced analysis (up to 5000 files, 500 commits, 90 days)
+- ✅ **Quick comprehensive scan**: Good coverage without long processing time
+
+**Use `local-files` mode:**
+- ✅ **No git history**: Project just started or not in git repo
+- ✅ **Current state only**: Only care about what's being used right now
+- ✅ **Fast iteration**: Quick dependency and pattern scan
+
+**Use `git-history` mode:**
+- ✅ **Legacy understanding**: Learn from how bugs were fixed and refactorings done
+- ✅ **Team patterns**: Extract lessons from multiple contributors over time
+- ✅ **Architectural evolution**: Understand how system design changed
+
+**Use `docs-only` mode:**
+- ✅ **Documentation exists**: Well-documented project with CLAUDE.md, ARCHITECTURE.md, etc.
+- ✅ **Quick bootstrap**: Fast startup without code analysis
+- ✅ **Explicit knowledge**: Team has written good documentation already
 
 ### ❌ When NOT to Use
-- **Empty repository**: Need at least ~20 commits for meaningful analysis
-- **Non-git projects**: Requires git history (no other VCS supported yet)
-- **Pre-initialized**: If playbook already has good patterns, online learning is better
+
+- **Empty repository**: Need at least ~20 commits for meaningful git-history analysis
+- **No sources available**: No docs, no git, and trivial codebase (< 10 files)
+- **Pre-initialized playbook**: If playbook already has 100+ quality patterns, online learning is better
+- **Frequent re-bootstraps**: Don't run daily - use online learning (ace_learn) instead
 
 ## After Bootstrap
 
