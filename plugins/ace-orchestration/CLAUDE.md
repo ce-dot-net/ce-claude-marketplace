@@ -184,7 +184,11 @@ While skills auto-invoke, manual commands are available for explicit control:
 - `/ace-patterns [section]` - View playbook manually
 - `/ace-status` - Check playbook statistics
 - `/ace-configure` - Configure ACE server connection
-- `/ace-init` - Bootstrap playbook from git history
+- `/ace-bootstrap` - Bootstrap playbook from docs, git history, and current code
+  - **New in v3.2.15**: `hybrid` mode (default) - intelligently scans docs → git → local files
+  - **New in v3.2.15**: `thoroughness` parameter - light/medium/deep (default: medium)
+  - **New in v3.2.15**: 5x deeper defaults - 5000 files, 500 commits, 90 days
+  - Use for initial setup or periodic refresh of playbook patterns
 - `/ace-clear` - Clear playbook (requires confirmation)
 - `/ace-export-patterns` - Export playbook to JSON
 - `/ace-import-patterns` - Import playbook from JSON
