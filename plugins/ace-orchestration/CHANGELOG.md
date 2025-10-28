@@ -5,6 +5,149 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.17] - 2025-10-28
+
+### Added
+- **Bootstrap Orchestrator Skill** - New skill for intelligent bootstrap reporting
+  - Automatically calculates pattern compression percentage (e.g., 158 → 18 = 89% reduction)
+  - Shows conditional explanation when compression > 80% (references ACE Research Paper Section 3.2)
+  - Displays progress messages during 10-30 second bootstrap analysis
+  - Uses actual numbers from `ace_status` API, not hardcoded examples
+  - Explains semantic deduplication: similar patterns merged into core patterns
+  - File: `skills/bootstrap-orchestrator/SKILL.md` (143 lines, 7-step orchestration process)
+- **Data Flow Diagram in ace-bootstrap.md** - Visual ASCII diagram showing bootstrap pipeline
+  - Shows: Command → Skill → MCP Tool → ACE Server → Reflector → Results → Report
+
+### Changed
+- **ace-bootstrap command** - Now invokes bootstrap-orchestrator skill instead of calling MCP tool directly
+  - Better user experience with dynamic reporting
+  - Eliminates confusion about pattern compression (users thought it was a bug)
+  - Clear explanation that quality > quantity is intentional design
+
+### Improved
+- **User Experience** - Users now understand why 158 code blocks → 12 patterns
+  - Before: "Is this a bug?" (confusion)
+  - After: "Ah, semantic deduplication - makes sense!" (clarity)
+
+## [3.2.16] - 2025-10-27
+
+### Fixed
+- **CLAUDE.md bootstrap documentation** - Fixed incorrect bootstrap command references
+  - Updated documentation to reflect current bootstrap behavior
+  - Clarified hybrid mode as default with intelligent fallback
+
+## [3.2.15] - 2025-10-27
+
+### Added
+- **Hybrid Bootstrap Mode** - Intelligent multi-source analysis with fallback logic
+  - Priority order: docs → git history → local files
+  - Extracts patterns from documentation files (CLAUDE.md, README.md, ARCHITECTURE.md, docs/*.md)
+  - Falls back to git history and local files if docs are missing or sparse
+  - Comprehensive coverage: combines all three sources for maximum pattern extraction
+- **Thoroughness Parameter** - Control bootstrap depth with light/medium/deep settings
+  - Light: 1000 files, 100 commits, 30 days
+  - Medium: 5000 files, 500 commits, 90 days (default)
+  - Deep: unlimited files, 1000 commits, 180 days
+- **5x Deeper Defaults** - Increased default limits for more comprehensive analysis
+  - max_files: 500 → 5000 (10x increase)
+  - commit_limit: 100 → 500 (5x increase)
+  - days_back: 30 → 90 (3x increase)
+
+### Changed
+- **Enhanced bootstrap documentation** - Complete guide for all bootstrap modes
+  - Detailed explanation of hybrid mode's intelligent fallback logic
+  - Clear examples for each thoroughness level
+  - Updated usage examples with new parameters
+- **Project-scoped configuration** - Clarified that ACE config is per-project
+  - Each project needs its own `.ace/config.json`
+  - Configuration stored in project root, not globally
+
+### Fixed
+- **plugin.template.json version mismatch** - Corrected version number inconsistency
+
+### Removed
+- **Obsolete mcp-server directory** - Cleaned up old MCP server files from plugin
+
+## [3.2.14] - 2025-10-26
+
+### Added
+- **SessionStart hook for automatic version detection** - Detects plugin version on session start
+  - Logs plugin version for debugging
+  - Helps troubleshoot version-related issues
+
+### Changed
+- **Documentation cleanup** - Removed internal development references
+  - Removed research paper references from public-facing docs
+  - Cleaned up technical README to remove deleted file references
+  - Added docs-internal/ to gitignore for private development docs
+  - Removed internal docs and added .serena to gitignore
+
+## [3.2.13] - 2025-10-25
+
+### Fixed
+- **ACE acronym correction** - Changed "Automatic" to "Agentic" Context Engineering
+  - Reflects accurate naming: ACE = Agentic Context Engineering
+  - Updated all documentation to use correct terminology
+
+### Changed
+- **Major documentation cleanup** - User-focused improvements
+  - Simplified explanations for better clarity
+  - Removed overly technical implementation details
+  - Focused on user benefits and practical usage
+
+## [3.2.12] - 2025-10-25
+
+### Changed
+- **Version bump to 3.2.12** - Standard maintenance release
+  - Updated version numbers across all configuration files
+  - No functional changes
+
+## [3.2.11] - 2025-10-24
+
+### Changed
+- **Version bump to 3.2.11** - Maintenance release with documentation updates
+  - Complete ACE paper verification and implementation specs
+  - Enhanced documentation organization by domain
+  - Updated project CLAUDE.md with ACE v3.2.10 instructions
+
+### Fixed
+- **ACE Learning skill trigger sensitivity** - Made skill trigger MORE aggressively
+  - Improved detection of substantial work completion
+  - Better recognition of learning opportunities
+  - Reduced false negatives (missed learning opportunities)
+
+## [3.2.10] - 2025-10-24
+
+### Fixed
+- **Trajectory format documentation** - Fixed incorrect trajectory parameter format
+  - Corrected documentation to show trajectory must be an array of objects with descriptive keys
+  - Example: `[{"step": "Analysis", "action": "Analyzed the problem"}]` not a string
+  - Updated all documentation and examples to reflect correct format
+
+## [3.2.9] - 2025-10-24
+
+### Added
+- **Version Detection in /ace-claude-init** - Automatic version detection and update
+  - Command now detects plugin version and updates project CLAUDE.md accordingly
+  - Shows warning if project CLAUDE.md has outdated version
+  - Provides clear instructions for updating to latest version
+
+## [3.2.8] - 2025-10-24
+
+### Added
+- **Mandatory Skill Triggering with Aggressive Prompting** - Enhanced skill invocation
+  - Added prominent reminders in CLAUDE.md about when to invoke skills
+  - Clear trigger keywords for retrieval skill (implement, build, create, etc.)
+  - Clear trigger conditions for learning skill (after substantial work)
+  - Workflow examples showing exact skill invocation sequence
+  - Non-negotiable language emphasizing skills are mandatory, not optional
+
+### Changed
+- **Enhanced skill documentation** - More explicit instructions for Claude
+  - Added "YOU MUST FOLLOW THESE RULES" section at top of CLAUDE.md
+  - Workflow example showing step-by-step skill usage
+  - Emphasized proactive skill usage for every qualifying task
+
 ## [3.2.7] - 2025-10-23
 
 ### Fixed
@@ -140,6 +283,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Slash commands for ACE operations (/ace-patterns, /ace-status, etc.)
 - Agent Skill for automatic learning from execution
 
+[3.2.17]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.16...v3.2.17
+[3.2.16]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.15...v3.2.16
+[3.2.15]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.14...v3.2.15
+[3.2.14]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.13...v3.2.14
+[3.2.13]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.12...v3.2.13
+[3.2.12]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.11...v3.2.12
+[3.2.11]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.10...v3.2.11
+[3.2.10]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.9...v3.2.10
+[3.2.9]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.8...v3.2.9
+[3.2.8]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.7...v3.2.8
 [3.2.7]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.6...v3.2.7
 [3.2.6]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.5...v3.2.6
 [3.2.5]: https://github.com/ce-dot-net/ce-claude-marketplace/compare/v3.2.4...v3.2.5

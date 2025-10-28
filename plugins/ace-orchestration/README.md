@@ -2,7 +2,7 @@
 
 **Agentic Context Engineering** - Self-improving Claude Code plugin using automatic pattern learning.
 
-## 🎯 Features (v3.2.4)
+## 🎯 Features
 
 ### 🤖 Automatic Learning Cycle (NEW!)
 - **ACE Playbook Retrieval Skill**: Auto-fetches learned patterns BEFORE tasks
@@ -264,7 +264,7 @@ Logs Bash command executions for debugging.
 
 **Note**: Skills handle the main automation now! Hooks are minimal and non-intrusive.
 
-## 🔬 How It Works (v3.2.4)
+## 🔬 How It Works
 
 ### ACE Research Paper Architecture
 
@@ -321,7 +321,7 @@ Logs Bash command executions for debugging.
 3. **troubleshooting_and_pitfalls**: Known issues, gotchas, solutions
 4. **apis_to_use**: Recommended libraries, frameworks, integration patterns
 
-## 📊 Example Workflow (v3.2.7)
+## 📊 Example Workflow
 
 ### First-Time Setup
 ```bash
@@ -386,7 +386,7 @@ User: "Add OAuth2 authentication"
 # Shows: total bullets, by section, top helpful/harmful
 ```
 
-## 🎯 Architecture (v3.2.4)
+## 🎯 Architecture
 
 This plugin implements the complete ACE framework architecture:
 
