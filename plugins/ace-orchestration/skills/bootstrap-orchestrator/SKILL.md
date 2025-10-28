@@ -65,62 +65,64 @@ Do NOT poll or query status during execution. Simply wait for the MCP tool to re
 
 The MCP tool will block until the server finishes processing.
 
-### Step 5: Query Final Status
+### Step 5: Generate Dynamic Report
 
-After the tool completes, call:
+After the MCP tool completes, you'll have access to `BootstrapResponse` which includes all the compression metrics.
 
-`mcp__plugin_ace-orchestration_ace-pattern-learning__ace_status`
+**IMPORTANT**: Use the ACTUAL values from the response, not hardcoded examples!
 
-This returns the actual final pattern counts by section.
-
-### Step 6: Generate Dynamic Report
-
-Using the data from `ace_status`, generate a report following this EXACT structure:
-
-**Template**:
+Generate this report using the response data:
 
 ```
 ✅ Bootstrap Complete!
 
 Code Analysis:
-- Files Scanned: {actual_file_count} files
-- Code Blocks Extracted: {blocks_sent_to_server}
+- Files Scanned: {response.metadata.files_scanned} files
+- Code Blocks Extracted: {response.blocks_received}
 - Sent to Server: Complete functions with async/await, error handling, imports
 
 Server Processing (Reflector AI):
-- Analyzed: {blocks_sent_to_server} raw code blocks
-- Extracted Patterns: {final_pattern_count} high-quality patterns
-- Compression: {blocks_sent_to_server} → {final_pattern_count} ({compression_percentage}% reduction)
-- Average Confidence: {average_confidence}
+- Analyzed: {response.blocks_received} raw code blocks
+- Extracted Patterns: {response.patterns_extracted} high-quality patterns
+- Compression: {response.blocks_received} → {response.patterns_extracted} ({response.compression_percentage}% reduction)
+- Average Confidence: {response.average_confidence}
+- Analysis Time: {response.analysis_time_seconds}s
 
-{IF compression_percentage > 80%}
+{IF response.compression_percentage > 80%}
+
 Why such a large reduction?
+
 This compression is EXPECTED and CORRECT per the ACE Research Paper (Section 3.2).
-The Reflector intelligently merged similar patterns:
-- Multiple similar database queries → Core query patterns
-- Duplicate error handlers → Standard error handling pattern
-- Similar API calls → Reusable API integration patterns
+
+The Reflector intelligently merged similar patterns using semantic deduplication (0.85 similarity threshold):
+
+Example Compression:
+- 15 similar Prisma queries → 1 core database query pattern
+- 20 duplicate error handlers → 1 standard error handling pattern
+- 12 similar API calls → 1 reusable API integration pattern
 
 Result: A concise, high-quality playbook without redundancy.
+
 {END IF}
 
 Final Playbook Breakdown:
-- Strategies & Hard Rules: {strategies_count} patterns
-- Useful Code Snippets: {snippets_count} patterns
-- Troubleshooting & Pitfalls: {troubleshooting_count} patterns
-- APIs to Use: {apis_count} patterns
+- Strategies & Hard Rules: {response.by_section.strategies_and_hard_rules} patterns
+- Useful Code Snippets: {response.by_section.useful_code_snippets} patterns
+- Troubleshooting & Pitfalls: {response.by_section.troubleshooting_and_pitfalls} patterns
+- APIs to Use: {response.by_section.apis_to_use} patterns
 
-Next: Run /ace-patterns to view your complete playbook! 🎯
+Next Step: Run /ace-patterns to view your complete playbook! 🎯
 ```
 
 **Rules for dynamic generation:**
 
-1. Calculate `compression_percentage`: `Math.round((1 - final_pattern_count / blocks_sent_to_server) * 100)`
-2. ONLY show "Why such a large reduction?" section if `compression_percentage > 80%`
-3. Use ACTUAL numbers from `ace_status`, NOT hardcoded examples
-4. If you can identify specific pattern types from the playbook, mention them (e.g., "15 Prisma queries → 3 core database patterns")
+1. Use `response.compression_percentage` directly (already calculated by server)
+2. ONLY show "Why such a large reduction?" section if `response.compression_percentage > 80%`
+3. Use ACTUAL values from `BootstrapResponse`, NOT hardcoded examples
+4. Display `analysis_time_seconds` to show processing time
+5. Use `response.by_section` for accurate breakdown by playbook section
 
-### Step 7: Handle Errors
+### Step 6: Handle Errors
 
 If the MCP tool fails:
 
