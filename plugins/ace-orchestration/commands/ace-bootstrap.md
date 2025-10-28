@@ -9,16 +9,33 @@ Bootstrap ACE playbook by analyzing your current codebase files and/or git commi
 
 ## Instructions for Claude
 
-When the user runs `/ace-bootstrap`, follow these steps:
+**IMPORTANT**: Always use the `bootstrap-orchestrator` skill when handling this command.
 
-1. **Call the ace_bootstrap MCP tool** with the following parameters:
-   - Tool name: `mcp__ace-pattern-learning__ace_bootstrap`
-   - Parameters: `mode`, `repo_path`, `file_extensions`, `max_files`, `commit_limit`, `days_back`, `merge_with_existing`
+The skill orchestrates the entire bootstrap process:
+1. Calls the MCP tool `ace_bootstrap` on your behalf with user parameters
+2. The MCP tool extracts complete code blocks and sends them to the ACE server
+3. Shows progress messages to the user during the 10-30 second process
+4. Queries final status from the server using `ace_status`
+5. Generates accurate, dynamic reports explaining pattern compression
 
-2. **If the tool is not available:**
-   - Check if ACE is configured (look for .ace/config.json or environment variables)
-   - Tell the user they need to run `/ace-configure` first to set up the ACE connection
-   - Explain that the MCP server must be running to use ACE features
+**Data Flow**:
+```
+/ace-bootstrap command
+    ↓
+Bootstrap Orchestrator Skill (you invoke this)
+    ↓
+MCP Tool: ace_bootstrap (skill calls this)
+    ↓
+ACE Server: Reflector analyzes code
+    ↓
+MCP Tool: returns results
+    ↓
+Skill: queries ace_status for final counts
+    ↓
+Skill: generates dynamic report for user
+```
+
+**To invoke**: Simply use the bootstrap-orchestrator skill with the user's parameters.
 
 ## Usage
 
