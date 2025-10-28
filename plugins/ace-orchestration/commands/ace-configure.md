@@ -22,10 +22,11 @@ When the user runs `/ace-configure`, follow these steps:
    - Prompt: "What is your ACE project ID? (Get from your ACE server dashboard)"
    - Required - usually starts with `prj_`
 
-4. **Save Configuration:**
+4. **Save Configuration to PROJECT ROOT (NOT user home):**
+   - IMPORTANT: Save to project root, NOT `~/.ace/`!
    - Find the project root using: `git rev-parse --show-toplevel` (or use current directory if not in git)
-   - Create `.ace` directory in project root if it doesn't exist
-   - Write configuration to `.ace/config.json` with the provided values:
+   - Create `.ace` directory in project root if it doesn't exist: `mkdir -p .ace`
+   - Write configuration to **PROJECT-LEVEL** `.ace/config.json` with the provided values:
      ```json
      {
        "serverUrl": "[provided URL]",
@@ -33,8 +34,9 @@ When the user runs `/ace-configure`, follow these steps:
        "projectId": "[provided project ID]"
      }
      ```
-   - Use the Write or Bash tool to create the file
-   - Show success message with the config file path
+   - DO NOT write to `~/.ace/config.json` (that's the global fallback, not the primary location)
+   - Use the Write tool with an absolute path like: `/path/to/project/.ace/config.json`
+   - Show success message with the FULL config file path
 
 5. **Next Steps:**
    - Tell user to restart Claude Code for changes to take effect
@@ -47,6 +49,9 @@ User: /ace-configure
 
 Claude: I'll help you configure your ACE server connection.
 
+[Claude finds project root]
+📂 Project root: /Users/you/my-project
+
 What is your ACE server URL? (default: http://localhost:9000)
 User: [press Enter or type URL]
 
@@ -56,18 +61,22 @@ User: ace_your_api_token_here
 What is your ACE project ID? (Get from your ACE server dashboard)
 User: prj_your_project_id
 
-[Claude writes config file to project root]
+[Claude writes config file to PROJECT ROOT - NOT user home]
 
-✅ Configuration saved to: /Users/you/project/.ace/config.json
+✅ Configuration saved to: /Users/you/my-project/.ace/config.json
+
+⚠️  Note: Config was saved to PROJECT root, not ~/.ace/
+    This ensures your team can share the same ACE server configuration.
 
 Next steps:
 1. Restart Claude Code (Cmd+Q, then reopen)
 2. Run: /ace-status to verify connection
+3. Consider adding .ace/config.json to .gitignore if it contains sensitive tokens
 ```
 
 ## Configuration Storage
 
-Configuration is saved to **project root** (`./.ace/config.json`):
+**ACE is project-scoped:** Configuration MUST be saved to project root (`./.ace/config.json`):
 ```json
 {
   "serverUrl": "http://localhost:9000",
@@ -78,10 +87,12 @@ Configuration is saved to **project root** (`./.ace/config.json`):
 
 **Location**: `.ace/config.json` in your git repository root (or current directory if not in a git repo)
 
-**Benefits of project-local config:**
-- Each project can have its own ACE server and credentials
-- Configuration travels with the project
-- Team members can share the same ACE server
+**Why project-scoped only:**
+- ✅ Each project has its own ACE playbook (learned patterns are project-specific)
+- ✅ Each project can use different ACE servers or credentials
+- ✅ Configuration travels with the repository
+- ✅ Team members automatically share the same ACE server
+- ✅ No global state - clean separation between projects
 
 ## Alternative: Environment Variables
 
@@ -109,11 +120,15 @@ You can add to `~/.config/claude-code/settings.json`:
 
 ## Configuration Priority
 
+**IMPORTANT:** ACE is **project-scoped only**. Each project has its own ACE configuration and playbook.
+
 The MCP client checks for configuration in this order:
-1. Environment variables (highest priority)
-2. `~/.ace/config.json`
-3. Claude Code settings.json
+1. Environment variables (`ACE_SERVER_URL`, `ACE_API_TOKEN`, `ACE_PROJECT_ID`) - highest priority
+2. **Project-level config**: `<project-root>/.ace/config.json` - **REQUIRED for file-based config**
+3. Claude Code settings.json (`~/.config/claude-code/settings.json`)
 4. Default values (lowest priority)
+
+**There is NO global `~/.ace/config.json` fallback.** ACE is designed to be project-scoped - each repository has its own configuration and learned patterns.
 
 ## Getting Your Credentials
 
@@ -209,11 +224,17 @@ Your project identifier. Find it in:
 
 ### "Cannot save configuration"
 
-Check permissions for `~/.ace/` directory:
+**If saving to project root fails:**
 ```bash
-mkdir -p ~/.ace
-chmod 755 ~/.ace
+# Check write permissions
+ls -la .ace/
+
+# Create directory manually if needed
+mkdir -p .ace
+chmod 755 .ace
 ```
+
+**Note:** There is NO global `~/.ace/config.json` file in ACE's design. If you have one, it's likely a leftover from testing or incorrect configuration. ACE is project-scoped only - each project must have its own `.ace/config.json` file.
 
 ### "Connection test failed"
 

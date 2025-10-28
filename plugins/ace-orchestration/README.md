@@ -30,7 +30,7 @@
 ### Prerequisites
 
 1. **Node.js 18+** - For TypeScript MCP client
-2. **Python 3.11+** - For ACE server
+2. **Python 3.11+** - For ACE server (optional, for self-hosted)
 3. **Claude Code** - Latest version
 
 ### Step 1: Clone Repository
@@ -46,29 +46,41 @@ The ACE MCP Client (@ce-dot-net/ace-client) is maintained in a separate reposito
 
 **MCP Client Repository**: https://github.com/ce-dot-net/ce-ace-mcp
 
-### Step 3: Configure Plugin
+### Step 3: Configure Project
 
-⚠️ **Important**: You must configure your own credentials!
+**ACE is project-scoped** - each project needs its own configuration.
 
+**Option 1: Interactive Configuration (Recommended)**
 ```bash
-cd plugins/ace-orchestration
+# In Claude Code, navigate to your project and run:
+/ace-configure
 
-# Copy the template
-cp plugin.template.json plugin.json
-
-# Set up environment variables (choose one method):
-
-# Method 1: Add to shell profile (recommended)
-echo 'export ACE_SERVER_URL="http://localhost:9000"' >> ~/.zshrc
-echo 'export ACE_API_TOKEN="ace_wFIuXzQvaR5IVn2SoizOf-ncOKP6bmHDmocaQ3b5aWU"' >> ~/.zshrc
-echo 'export ACE_PROJECT_ID="prj_5bc0b560221052c1"' >> ~/.zshrc
-source ~/.zshrc
-
-# Method 2: Edit plugin.json directly (local testing only)
-# Replace ${env:*} with actual values
+# This creates: <project-root>/.ace/config.json
 ```
 
-**📖 Full configuration guide**: See [CONFIGURATION.md](./CONFIGURATION.md)
+**Option 2: Environment Variables**
+```bash
+# Add to shell profile
+echo 'export ACE_SERVER_URL="http://localhost:9000"' >> ~/.zshrc
+echo 'export ACE_API_TOKEN="ace_your_api_token_here"' >> ~/.zshrc
+echo 'export ACE_PROJECT_ID="prj_your_project_id"' >> ~/.zshrc
+source ~/.zshrc
+```
+
+**Option 3: Manual Config File**
+```bash
+# In your project root:
+mkdir -p .ace
+cat > .ace/config.json <<EOF
+{
+  "serverUrl": "http://localhost:9000",
+  "apiToken": "ace_your_api_token_here",
+  "projectId": "prj_your_project_id"
+}
+EOF
+```
+
+**📖 Full configuration guide**: See [docs/guides/CONFIGURATION.md](./docs/guides/CONFIGURATION.md)
 
 ### Step 4: Install Plugin
 

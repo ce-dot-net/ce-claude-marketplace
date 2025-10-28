@@ -84,7 +84,7 @@ Use the mcp__ace-pattern-learning__ace_status tool to verify connectivity.
    Error: Request timeout
    → Network issues or server overloaded
    → Action: Retry with exponential backoff
-   → Fallback: Check ~/.ace/config.json for correct URL
+   → Fallback: Check <project-root>/.ace/config.json for correct URL
    ```
 
 3. **Authentication Failed**
@@ -92,14 +92,14 @@ Use the mcp__ace-pattern-learning__ace_status tool to verify connectivity.
    Error: 401 Unauthorized
    → Invalid or missing API token
    → Action: Run /ace-configure to set up credentials
-   → Fallback: Check ~/.ace/config.json for valid apiToken
+   → Fallback: Check <project-root>/.ace/config.json for valid apiToken
    ```
 
 4. **Invalid Project**
    ```
    Error: 404 Project not found
    → Project ID doesn't exist
-   → Action: Verify projectId in ~/.ace/config.json
+   → Action: Verify projectId in <project-root>/.ace/config.json
    → Fallback: Create new project or use existing one
    ```
 
@@ -122,8 +122,8 @@ Use the mcp__ace-pattern-learning__ace_status tool to verify connectivity.
 7. **Missing Configuration**
    ```
    Error: Config file not found
-   → ~/.ace/config.json doesn't exist
-   → Action: Run /ace-configure to create config
+   → <project-root>/.ace/config.json doesn't exist
+   → Action: Run /ace-configure to create project config
    → Fallback: Provide default configuration template
    ```
 
@@ -168,7 +168,7 @@ Display all ACE-related MCP tools that should be available:
 ### Step 4: Show Configuration Summary
 
 Display the current ACE configuration:
-- Server URL (from `~/.ace/config.json` or environment)
+- Server URL (from `<project-root>/.ace/config.json` or environment)
 - Project ID (if configured)
 - API token status (present/missing, don't show actual token)
 - Plugin version
@@ -178,7 +178,7 @@ Display the current ACE configuration:
 
 1. **Configuration File Read Error**
    ```
-   Error: Cannot read ~/.ace/config.json
+   Error: Cannot read <project-root>/.ace/config.json
    → Permission denied or file corrupted
    → Action: Check file permissions (should be 600)
    → Fallback: Recreate config with /ace-configure
@@ -241,7 +241,7 @@ Available ACE Tools:
 Configuration:
 Learning Mode: Automatic (skill-based)
 Plugin Version: 3.1.x
-Config File: ~/.ace/config.json
+Config File: <project-root>/.ace/config.json (project-scoped)
 
 🎯 Everything looks good! ACE automatic learning is ready.
 ```

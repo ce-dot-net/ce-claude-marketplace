@@ -62,7 +62,7 @@ In Claude Code, run the interactive configuration wizard:
 - API Token (from your ACE server)
 - Project ID (from your ACE dashboard)
 
-**Saves to**: `~/.ace/config.json`
+**Saves to**: `<project-root>/.ace/config.json` (project-scoped, NOT global)
 
 ### Step 5: Test Installation
 
@@ -79,7 +79,7 @@ In Claude Code, run the interactive configuration wizard:
 - **Bundled MCP Server** - No package download required!
 - **Zero Authentication** - Works offline, no GitHub token needed
 - **Interactive Configuration** - `/ace-configure` wizard for credentials
-- **Config File Support** - Saves to `~/.ace/config.json`
+- **Project-Scoped Config** - Each project has its own `.ace/config.json`
 
 ---
 
@@ -237,11 +237,11 @@ source ~/.zshrc
 ### Option 2: Config File
 
 ```bash
-# Create config directory
-mkdir -p ~/.ace
+# In your project root directory:
+mkdir -p .ace
 
-# Create config file
-cat > ~/.ace/config.json <<EOF
+# Create project-scoped config file
+cat > .ace/config.json <<EOF
 {
   "serverUrl": "http://localhost:9000",
   "apiToken": "your-token-here",
@@ -250,10 +250,12 @@ cat > ~/.ace/config.json <<EOF
 EOF
 ```
 
-**Configuration Priority:**
+**Configuration Priority (Project-Scoped):**
 1. Environment variables (highest)
-2. `~/.ace/config.json`
+2. `<project-root>/.ace/config.json` (project-specific)
 3. Default values (lowest)
+
+**Note**: ACE is project-scoped - there is no global `~/.ace/config.json`
 
 ---
 
