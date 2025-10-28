@@ -5,6 +5,81 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.18] - 2025-10-28
+
+### 🔄 API Alignment: Bootstrap Response Structure
+
+**ENHANCED: bootstrap-orchestrator skill aligns with ACE Server v2.9.0 response structure**
+
+### What Changed
+
+**Simplified Bootstrap Flow**:
+- ✅ Removed separate `ace_status` API call (no longer needed)
+- ✅ Uses `BootstrapResponse` directly from `ace_bootstrap` MCP tool
+- ✅ Server now pre-calculates compression percentage
+- ✅ Added processing time metric (`analysis_time_seconds`)
+- ✅ Reduced step count from 7 to 6 steps
+
+### Technical Details
+
+**Before (v3.2.17)**:
+```
+1. Call ace_bootstrap
+2. Call ace_status separately
+3. Manually calculate compression: (1 - patterns/blocks) * 100
+4. Generate report
+```
+
+**After (v3.2.18)**:
+```
+1. Call ace_bootstrap
+2. Use response.compression_percentage (server-calculated)
+3. Use response.analysis_time_seconds
+4. Use response.by_section for breakdown
+5. Generate report
+```
+
+### Benefits
+
+- ✅ **Simpler**: One API call instead of two
+- ✅ **More Accurate**: Server calculates compression percentage
+- ✅ **Better UX**: Shows analysis processing time
+- ✅ **Cleaner Code**: Uses structured response fields
+
+### Server Compatibility
+
+- **Requires**: ACE Server v2.9.0+ (deployed to https://ace-api.code-engine.app)
+- **Reference**: Based on `/private/tmp/PLUGIN_MIGRATION_GUIDE.md`
+
+### Files Modified
+
+- `plugins/ace-orchestration/skills/bootstrap-orchestrator/SKILL.md`
+
+### BootstrapResponse Structure
+
+```typescript
+interface BootstrapResponse {
+  success: boolean;
+  blocks_received: number;          // e.g., 158
+  patterns_extracted: number;        // e.g., 12
+  compression_percentage: number;    // e.g., 92 (pre-calculated!)
+  by_section: {
+    strategies_and_hard_rules: number;
+    useful_code_snippets: number;
+    troubleshooting_and_pitfalls: number;
+    apis_to_use: number;
+  };
+  average_confidence: number;        // e.g., 0.85
+  analysis_time_seconds: number;     // NEW: e.g., 12.45
+}
+```
+
+### Upgrade Notes
+
+No breaking changes - existing users can upgrade seamlessly. Just pull the latest version and restart Claude Code CLI.
+
+---
+
 ## [3.2.13] - 2025-10-26
 
 ### Enhanced Skills & Documentation - User-Focused Release
