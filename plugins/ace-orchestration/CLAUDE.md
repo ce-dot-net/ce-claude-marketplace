@@ -57,7 +57,7 @@ Step 5: Respond to user
 
 **Non-negotiable:** These skills are NOT optional. You MUST use them proactively for every qualifying task.
 
-## 🔄 Complete Automatic Learning Cycle (v3.2.14)
+## 🔄 Complete Automatic Learning Cycle (v3.2.15)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 
@@ -282,7 +282,7 @@ mcp__ace-pattern-learning__ace_learn(
 mcp__ace-pattern-learning__ace_status
 ```
 
-## 🎯 ACE Architecture (v3.2.14)
+## 🎯 ACE Architecture (v3.2.15)
 
 The ACE framework implements fully automatic learning with complete retrieval → learning cycle:
 
