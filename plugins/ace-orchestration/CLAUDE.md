@@ -185,6 +185,11 @@ While skills auto-invoke, manual commands are available for explicit control:
 - `/ace-status` - Check playbook statistics
 - `/ace-configure` - Configure ACE server connection
 - `/ace-bootstrap` - Bootstrap playbook from docs, git history, and current code
+  - **New in v3.2.17**: `bootstrap-orchestrator` skill provides dynamic pattern compression reporting
+    - Automatically calculates compression percentage (e.g., 158 → 18 = 89% reduction)
+    - Explains why compression > 80% is expected (semantic deduplication per ACE Research Paper)
+    - Shows progress messages during 10-30 second analysis
+    - Uses actual numbers from server, not hardcoded examples
   - **New in v3.2.15**: `hybrid` mode (default) - intelligently scans docs → git → local files
   - **New in v3.2.15**: `thoroughness` parameter - light/medium/deep (default: medium)
   - **New in v3.2.15**: 5x deeper defaults - 5000 files, 500 commits, 90 days
