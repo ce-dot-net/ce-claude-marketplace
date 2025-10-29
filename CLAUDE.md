@@ -13,7 +13,12 @@ This plugin provides fully automatic pattern learning using the ACE framework ar
 **STOP! Before using ANY tool, execute this checklist:**
 
 ## ✅ Step 1: Scan User Request for ACE Trigger Words
-Does the request contain: **implement, build, create, add, develop, fix, debug, troubleshoot, refactor, optimize, improve, integrate, connect, setup, configure, architect, design, plan**?
+Does the request contain: **implement, build, create, add, develop, write, update, modify, change, edit, enhance, extend, revise, fix, debug, troubleshoot, resolve, diagnose, refactor, optimize, improve, restructure, integrate, connect, setup, configure, install, architect, design, plan, test, verify, validate, deploy, migrate, upgrade**?
+
+**OR does the request clearly intend to:**
+- Write/modify code or solve technical problems
+- Make architectural decisions or work with APIs/tools
+- Perform substantial technical work (not simple Q&A)
 
 ## ✅ Step 2: If Trigger Found → INVOKE RETRIEVAL SKILL FIRST
 ```
@@ -45,11 +50,16 @@ Skill: ace-orchestration:ace-playbook-retrieval
 ```
 
 **Trigger keywords that require retrieval:**
-- implement, build, create, add, develop
-- debug, fix, troubleshoot, resolve, diagnose
-- refactor, optimize, improve, restructure
-- integrate, connect, setup, configure
-- architect, design, plan
+- **Implementation**: implement, build, create, add, develop, write
+- **Modification**: update, modify, change, edit, enhance, extend, revise
+- **Debugging**: debug, fix, troubleshoot, resolve, diagnose
+- **Refactoring**: refactor, optimize, improve, restructure
+- **Integration**: integrate, connect, setup, configure, install
+- **Architecture**: architect, design, plan
+- **Testing**: test, verify, validate
+- **Operations**: deploy, migrate, upgrade
+
+**Intent-based fallback**: Even without exact keywords, invoke this skill when the request clearly intends to write/modify code, solve technical problems, make architectural decisions, or perform substantial technical work (not simple Q&A or informational queries).
 
 **You MUST call this skill BEFORE starting work when the user's request contains ANY of these keywords.**
 
@@ -84,14 +94,14 @@ Step 5: Respond to user
 
 **CRITICAL - Non-negotiable:** These skills are NOT optional and NOT NEGOTIABLE. You MUST use them proactively and automatically for EVERY qualifying task. The retrieval skill runs BEFORE, the learning skill runs AFTER - BOTH are MANDATORY.
 
-## 🔄 Complete Automatic Learning Cycle (v3.2.35)
+## 🔄 Complete Automatic Learning Cycle (v3.2.36)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 
 ### 1. **ACE Playbook Retrieval** (Before Tasks)
 **Model-Invoked**: Claude decides when to activate based on task context
 
-**Triggers**: implement, build, create, fix, debug, refactor, integrate, optimize, architect
+**Triggers**: All action keywords (implement, build, create, write, update, modify, fix, debug, troubleshoot, refactor, optimize, integrate, setup, test, deploy, architect, etc.) OR technical problem-solving intent
 
 **What it does**:
 - Calls: `mcp__ace-pattern-learning__ace_get_playbook`
@@ -275,7 +285,7 @@ Result: Pattern confirmed, additional webhook patterns captured
 **Skills are Model-Invoked**:
 - Claude decides when to activate based on description matching
 - No manual invocation needed (skills just exist and auto-trigger)
-- Triggered by specific words: implement, build, fix, debug, refactor, integrate
+- Triggered by 35+ action keywords (implement, build, create, write, update, modify, fix, debug, test, deploy, etc.) OR semantic intent
 
 **Automatic Invocation**:
 - **Retrieval**: Before complex tasks (implementation, debugging, architecture)
@@ -318,7 +328,7 @@ mcp__ace-pattern-learning__ace_learn(
 mcp__ace-pattern-learning__ace_status
 ```
 
-## 🎯 ACE Architecture (v3.2.35)
+## 🎯 ACE Architecture (v3.2.36)
 
 The ACE framework implements fully automatic learning with complete retrieval → learning cycle:
 

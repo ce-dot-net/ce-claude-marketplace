@@ -1,6 +1,6 @@
 ---
 name: ace-playbook-retrieval
-description: MANDATORY FIRST STEP when user says: implement, build, create, add, develop, fix, debug, troubleshoot, refactor, optimize, integrate, setup, configure, architect, design, or plan. Retrieves learned patterns from ACE playbook BEFORE starting work. ALWAYS invoke - DO NOT skip.
+description: MANDATORY FIRST STEP when user says: implement, build, create, add, develop, write, update, modify, change, edit, enhance, extend, revise, fix, debug, troubleshoot, resolve, diagnose, refactor, optimize, improve, restructure, integrate, connect, setup, configure, install, architect, design, plan, test, verify, validate, deploy, migrate, upgrade - OR when request clearly intends to write/modify code, solve technical problems, make architectural decisions, or perform substantial technical work. Retrieves learned patterns from ACE playbook BEFORE starting work. ALWAYS invoke - DO NOT skip.
 ---
 
 # ACE Playbook Retrieval

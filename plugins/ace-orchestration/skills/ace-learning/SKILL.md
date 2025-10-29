@@ -1,6 +1,6 @@
 ---
 name: ace-learning
-description: MANDATORY LAST STEP IMMEDIATELY AFTER: implementing, building, creating, adding, fixing, debugging, troubleshooting, refactoring, optimizing, integrating, or architecting. Captures patterns learned during execution to ACE playbook. ALWAYS invoke BEFORE responding - NOT OPTIONAL.
+description: MANDATORY LAST STEP IMMEDIATELY AFTER: implementing, building, creating, adding, developing, writing, updating, modifying, changing, editing, enhancing, extending, revising, fixing, debugging, troubleshooting, resolving, diagnosing, refactoring, optimizing, improving, restructuring, integrating, connecting, setting up, configuring, installing, architecting, designing, planning, testing, verifying, validating, deploying, migrating, upgrading - OR after completing any substantial technical work involving code modification, problem-solving, architectural decisions, or API/tool integration. Captures patterns learned during execution to ACE playbook. ALWAYS invoke BEFORE responding - NOT OPTIONAL.
 ---
 
 # ACE Learning from Execution
