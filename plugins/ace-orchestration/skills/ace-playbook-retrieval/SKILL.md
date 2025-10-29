@@ -24,6 +24,17 @@ Use **BEFORE** starting:
 - Trivial edits without technical complexity
 - Documentation updates without code changes
 
+## ⚠️ CRITICAL CHECKPOINT
+
+**Before starting ANY substantial task, ask yourself:**
+1. Is the user asking me to implement, build, create, debug, fix, refactor, or configure something?
+2. Am I about to write code, solve a technical problem, or make architectural decisions?
+3. Could learned patterns from previous work help me here?
+
+**If YES to any:** STOP - Invoke this skill NOW before starting work.
+
+**Timing Rule:** This skill should be invoked **IMMEDIATELY after understanding the task** and **BEFORE writing any code or solutions**.
+
 ## How This Skill Works
 
 ### Step 1: Call MCP Tool
