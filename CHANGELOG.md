@@ -5,6 +5,81 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.35] - 2025-10-29
+
+### 🎯 OPTIMIZATION: Skill Descriptions + Pre-Flight Checklist
+
+**Problem Identified:**
+User tested in lohnpulse project - ACE skills did NOT auto-trigger even with v3.2.34's MANDATORY language. Request contained trigger word "add" but Claude jumped straight to Task tool without invoking `ace-playbook-retrieval` skill first.
+
+**Root Cause:**
+Model-invoked skills are **probabilistic, not deterministic**. Even with "YOU MUST" language, skill descriptions compete with base model instincts. Long descriptions (273-628 chars) dilute semantic matching signal.
+
+### What Changed
+
+**1. Optimized Skill Descriptions (Shorter = Stronger Signal)**
+
+**ace-playbook-retrieval/SKILL.md:**
+- ❌ Before: 273 chars - "PROACTIVELY use this skill BEFORE implementation tasks. YOU MUST retrieve playbook patterns when user says implement, build, debug, fix, refactor, integrate, optimize, architect, create, add, develop, troubleshoot, resolve, improve, restructure, connect, setup, configure, design, or plan. This skill provides learned strategies, code snippets, troubleshooting tips, and recommended APIs. Use this skill proactively whenever you are starting substantial technical work - DO NOT wait to be asked."
+- ✅ After: 235 chars (14% shorter) - "MANDATORY FIRST STEP when user says: implement, build, create, add, develop, fix, debug, troubleshoot, refactor, optimize, integrate, setup, configure, architect, design, or plan. Retrieves learned patterns from ACE playbook BEFORE starting work. ALWAYS invoke - DO NOT skip."
+
+**ace-learning/SKILL.md:**
+- ❌ Before: 628 chars - "CRITICAL - YOU MUST ALWAYS use this skill IMMEDIATELY AFTER completing ANY substantial work. AUTOMATIC MANDATORY trigger when you have COMPLETED implementing, building, creating, adding, developing, fixing, debugging, troubleshooting, resolving, refactoring, optimizing, improving, restructuring, integrating, connecting, setting up, configuring, architecting, designing, or planning. This is NOT OPTIONAL and NOT NEGOTIABLE - you MUST capture learning AFTER EVERY qualifying task BEFORE responding to user. DO NOT SKIP THIS SKILL EVER. Use it proactively and automatically after ALL substantial work to build organizational knowledge. Always capture what you learned, gotchas discovered, and patterns found. This skill MUST run just as reliably as the retrieval skill runs before tasks."
+- ✅ After: 251 chars (60% shorter!) - "MANDATORY LAST STEP IMMEDIATELY AFTER: implementing, building, creating, adding, fixing, debugging, troubleshooting, refactoring, optimizing, integrating, or architecting. Captures patterns learned during execution to ACE playbook. ALWAYS invoke BEFORE responding - NOT OPTIONAL."
+
+**Key Improvements:**
+- ✅ Trigger words appear FIRST (better semantic matching)
+- ✅ "MANDATORY FIRST STEP" / "MANDATORY LAST STEP" (clearer timing)
+- ✅ Removed redundant phrases ("proactively", "DO NOT wait", "substantial work", etc.)
+- ✅ Focused on ACTION verbs (invoke, retrieves, captures)
+- ✅ Shorter = stronger signal for model-invoked skill system
+
+**2. Pre-Flight Checklist Added to CLAUDE.md**
+
+Added to TOP of CLAUDE.md (before line 1), creating explicit interrupt-driven workflow:
+
+```markdown
+# ⚠️ CRITICAL: ACE PRE-FLIGHT CHECK
+
+**STOP! Before using ANY tool, execute this checklist:**
+
+## ✅ Step 1: Scan User Request for ACE Trigger Words
+Does the request contain: **implement, build, create, add, develop, fix, debug, troubleshoot, refactor, optimize, improve, integrate, connect, setup, configure, architect, design, plan**?
+
+## ✅ Step 2: If Trigger Found → INVOKE RETRIEVAL SKILL FIRST
+Skill: ace-orchestration:ace-playbook-retrieval
+**DO THIS BEFORE Task, Edit, Write, Bash, or any other tool.**
+
+## ✅ Step 3: After Task Complete → INVOKE LEARNING SKILL LAST
+Skill: ace-orchestration:ace-learning
+**DO THIS IMMEDIATELY AFTER work completion, BEFORE responding to user.**
+```
+
+**Why This Helps:**
+- ✅ Visual: Warning emoji (⚠️) + "STOP!" grabs attention
+- ✅ Position: Very first section (processed before anything else)
+- ✅ Format: Explicit numbered checklist (actionable steps)
+- ✅ Timing: "BEFORE ANY TOOL USE" (interrupts normal flow)
+- ✅ Explicit precedence: "DO THIS BEFORE Task, Edit, Write, Bash..." (clarifies priority)
+
+### The Strategy
+
+**Two-Layer Defense:**
+1. **Layer 1: Optimized Skill Descriptions** → Better semantic matching for model-invoked triggering
+2. **Layer 2: Pre-Flight Checklist** → Explicit procedural interrupt in CLAUDE.md context
+
+Together these create stronger probability of ACE skill invocation while still respecting the model-invoked architecture.
+
+### Files Modified
+- `plugins/ace-orchestration/skills/ace-playbook-retrieval/SKILL.md` (description: 273 → 235 chars)
+- `plugins/ace-orchestration/skills/ace-learning/SKILL.md` (description: 628 → 251 chars)
+- `plugins/ace-orchestration/CLAUDE.md` (added pre-flight checklist at top)
+- `plugins/ace-orchestration/.claude-plugin/plugin.json` (version: 3.2.34 → 3.2.35)
+- `.claude-plugin/marketplace.json` (version: 3.2.34 → 3.2.35)
+
+### User Feedback That Led to This
+User in lohnpulse project: "can you add in admin page..." → Claude did NOT invoke ace-playbook-retrieval first, even though "add" is a trigger word in v3.2.34 description. This proves model-invoked skills need BOTH optimized descriptions AND explicit CLAUDE.md guidance.
+
 ## [3.2.34] - 2025-10-29
 
 ### 🚨 MAXIMUM ENFORCEMENT: Make AFTER skill as strong as BEFORE skill
