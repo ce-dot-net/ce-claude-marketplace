@@ -5,6 +5,30 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.24] - 2025-10-29
+
+### Fixed
+- **CRITICAL: Commit plugin.json to repository (required for strict mode)**
+  - Marketplace plugins require `.claude-plugin/plugin.json` by default (`strict: true`)
+  - Plugin.json does NOT contain credentials (those are in `.mcp.json`)
+  - Updated `.gitignore` to ignore `.mcp.json` (has credentials) but allow `plugin.json`
+  - Plugin now loads correctly when installed from marketplace
+
+### Why This Was Broken
+- Previously had `plugin.json` in `.gitignore`
+- Result: Plugin installed from marketplace had NO `plugin.json` file
+- Without `plugin.json`: Plugin doesn't load (strict mode requires it)
+- Without plugin loading: Hooks don't register, skills don't enforce
+
+### What's Fixed
+- ✅ `.claude-plugin/plugin.json` now committed to repository
+- ✅ `.gitignore` updated: blocks `.mcp.json` (credentials), allows `plugin.json` (safe)
+- ✅ Marketplace installations will have `plugin.json` present
+- ✅ Plugin loads correctly → Hooks register → Skills enforce → MCP calls work
+
+### Security Note
+**Safe to commit**: `plugin.json` references external `.mcp.json` file, doesn't contain credentials itself. Only `.mcp.json` needs to stay in `.gitignore`.
+
 ## [3.2.23] - 2025-10-29
 
 ### Fixed
