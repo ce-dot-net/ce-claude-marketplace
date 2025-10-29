@@ -115,7 +115,7 @@ User: "Implement JWT authentication"
 
 **Key Insight**: Skills invoke probabilistically based on task context. When they do invoke, the complete ACE cycle (Generator → Reflector → Curator) executes automatically.
 
-## 🔄 Complete Automatic Learning Cycle (v3.2.30)
+## 🔄 Complete Automatic Learning Cycle (v3.2.31)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 
@@ -349,7 +349,7 @@ mcp__ace-pattern-learning__ace_learn(
 mcp__ace-pattern-learning__ace_status
 ```
 
-## 🎯 ACE Architecture (v3.2.27)
+## 🎯 ACE Architecture (v3.2.31)
 
 The ACE framework implements fully automatic learning with complete retrieval → learning cycle:
 
