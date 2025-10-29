@@ -5,9 +5,108 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.30] - 2025-10-29
+
+### ✨ OPTIMIZED: Skills + CLAUDE.md Following Official Best Practices
+
+**ENHANCED: Maximum skill invocation probability + ACE research paper alignment**
+
+This release applies official Claude Code best practices from the Agent Skills documentation to maximize skill invocation reliability while staying true to the ACE research paper architecture.
+
+### What Changed
+
+**Skill Descriptions** (Official best practices applied):
+- ✅ **Specific trigger keywords**: Added concrete terms users would mention
+- ✅ **Both WHAT and WHEN**: Clear capabilities + use cases
+- ✅ **Consistent terminology**: Strategies, patterns, trajectory throughout
+- ✅ **Concise yet complete**: Under 1024 chars, all key info present
+- ✅ **Natural language matching**: Removed command-style ("YOU MUST"), added descriptive
+
+**ace-playbook-retrieval**:
+```yaml
+description: Retrieve learned strategies, code patterns, and troubleshooting
+solutions before implementation tasks. Use when starting: feature implementation,
+bug fixes, API integration, code refactoring, architecture decisions, debugging
+issues, performance optimization. Provides project-specific strategies, tested
+code snippets, known pitfalls, and recommended libraries from past work.
+```
+
+**ace-learning**:
+```yaml
+description: Capture execution patterns and lessons after completing coding tasks.
+Use after: implementing features, fixing bugs, debugging issues, integrating APIs,
+refactoring code, discovering gotchas, solving technical problems, making
+architectural decisions. Analyzes trajectory, extracts insights, updates playbook
+with strategies, code patterns, troubleshooting tips, and API recommendations.
+```
+
+**CLAUDE.md Template** (ACE research paper aligned):
+- ✅ **Research paper terminology**: Generator, Reflector, Curator explicitly mentioned
+- ✅ **Training cycle goal**: Clear explanation of feedback loop
+- ✅ **Complete flow diagram**: Shows 5-step ACE cycle (Retrieval → Execution → Feedback → Analysis → Result)
+- ✅ **Generator role emphasized**: "Highlight which patterns were useful or misleading"
+- ✅ **MCP → Server flow**: Documents complete feedback chain
+
+### Technical Rationale
+
+**From Official Agent Skills Documentation**:
+> "Description should include both what the skill does and when to use it"
+> "Be specific - include key terms users would mention"
+> "Consistent terminology helps Claude understand and follow instructions"
+
+**From ACE Research Paper**:
+> "When solving new problems, the Generator highlights which bullets were
+> useful or misleading, providing feedback that guides the Reflector"
+
+This release bridges Claude Code's model-invoked architecture with ACE's feedback-driven learning cycle.
+
+### Architecture Flow
+
+```
+User Request
+    ↓
+1. RETRIEVAL (Generator uses context)
+   - Skill description matches task keywords
+   - ace-playbook-retrieval invokes
+   - MCP retrieves patterns from server/cache
+    ↓
+2. EXECUTION (Generator produces trajectory)
+   - Implementation using retrieved patterns
+   - Mental note: Which patterns helped/didn't help
+    ↓
+3. FEEDBACK (Generator highlights patterns)
+   - ace-learning invokes (substantial work complete)
+   - Trajectory + feedback sent to MCP
+    ↓
+4. ANALYSIS (Server-side automatic)
+   - Reflector (Sonnet 4) extracts insights
+   - Curator (Haiku 4.5) creates delta updates
+   - Merge applies incremental changes
+    ↓
+5. RESULT: Playbook updated!
+   - Reinforced helpful patterns
+   - Deprecated misleading patterns
+   - Available for next task
+```
+
+### Benefits
+
+- ✅ **Higher invocation probability**: Specific keywords + natural descriptions
+- ✅ **Aligned with research paper**: Generator/Reflector/Curator terminology
+- ✅ **Official best practices**: Follows Claude docs recommendations
+- ✅ **Complete ACE cycle**: Retrieval → Learning → Server analysis documented
+- ✅ **No hooks needed**: Pure model-invoked probabilistic architecture
+- ✅ **Progressive learning**: Each task improves future performance (+10.6% on agentic tasks per paper)
+
+### Migration
+
+1. **Update marketplace**: `/marketplace update`
+2. **Update project CLAUDE.md**: `/ace-claude-init`
+3. Skills will invoke with higher probability based on optimized descriptions
+
 ## [3.2.29] - 2025-10-29
 
-### 🔧 CRITICAL FIX: Restored Model-Invoked Skills Architecture
+### 🔧 CRITICAL FIX: Removed ALL Hooks - Pure Model-Invoked
 
 **FIXED: Skills now invoke naturally based on context matching**
 
