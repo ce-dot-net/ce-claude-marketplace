@@ -5,6 +5,45 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.36] - 2025-10-29
+
+### Added
+- **Expanded Trigger Word Coverage** - Added 14 new trigger words for more reliable skill invocation
+  - **New words**: write, update, modify, change, edit, enhance, extend, revise, test, verify, validate, deploy, migrate, upgrade, install
+  - **Total coverage**: 35 trigger words (was 21) across 8 categories
+  - **Categories**: Implementation, Modification, Debugging, Refactoring, Integration, Architecture, Testing, Operations
+
+- **Intent-Based Fallback Rule** - Skills now trigger on semantic intent even without exact keywords
+  - Triggers on: code modification, technical problem-solving, architectural decisions, API/tool work
+  - Skips: simple Q&A, informational queries, basic file reading
+  - Example: "Can you help with the authentication flow?" now triggers (was missing "implement")
+
+### Changed
+- **Updated skill descriptions** - Both ace-playbook-retrieval and ace-learning now have expanded trigger lists
+  - Retrieval skill: Added all 35 trigger words + intent rule to frontmatter
+  - Learning skill: Added all 35 trigger words (gerund form) + intent rule to frontmatter
+
+- **Enhanced PRE-FLIGHT CHECK** - Step 1 now includes intent-based evaluation
+  - Checks for explicit keywords OR semantic intent to write/modify code
+  - More comprehensive than keyword-only matching
+
+- **Improved documentation** - All CLAUDE.md files updated with categorized trigger words
+  - Better organized by purpose (Implementation, Debugging, Testing, etc.)
+  - Clear examples of intent-based triggering
+  - Explains when to use fallback rule
+
+### Why This Matters
+- **Higher reliability**: Skills trigger more consistently across diverse user requests
+- **Better UX**: Users don't need to use exact "magic words" to activate ACE
+- **Semantic understanding**: Claude can evaluate intent, not just keywords
+- **Backward compatible**: All existing triggers still work exactly as before
+
+### Impact
+- Users who say "update the auth code" will now trigger retrieval (was missing before)
+- Users who say "write tests" will now trigger learning (was missing before)
+- Users who say "can you add" will now trigger reliably (was inconsistent before)
+- Reduces false negatives (missed opportunities) significantly
+
 ## [3.2.28] - 2025-10-29
 
 ### Fixed
