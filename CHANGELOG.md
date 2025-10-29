@@ -5,6 +5,91 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.32] - 2025-10-29
+
+### 🚨 CRITICAL: Restore MANDATORY Skill Enforcement
+
+**FIXED: Skills now invoke reliably with imperative CLAUDE.md instructions**
+
+This release restores the MANDATORY enforcement from v3.2.18 that was working, after v3.2.31's "Recommended" approach proved too soft to reliably trigger skills.
+
+### What Changed
+
+**CLAUDE.md Template** (Restored v3.2.18 MANDATORY section):
+- ✅ **MANDATORY protocol**: "YOU MUST FOLLOW THIS PROTOCOL FOR EVERY CODING TASK"
+- ✅ **Imperative language**: "ALWAYS invoke", "STEP 1", "STEP 2"
+- ✅ **IN THIS ORDER**: Explicit sequencing (retrieval BEFORE work, learning AFTER)
+- ✅ **Clear requirements**: Lists exact trigger keywords that REQUIRE skill invocation
+- ✅ **Critical explanation**: Why this order matters (research paper architecture requirement)
+
+### Why This Was Needed
+
+**v3.2.31 Problem:**
+- Used "Recommended ACE Workflow" with soft language
+- Claude didn't consistently invoke skills even with workflow guidance
+- Users reported: "oke it doesnt seem to start he skills"
+
+**v3.2.18 Success:**
+- Used "MANDATORY: ACE Skill Usage Rules" with imperative language
+- Skills invoked reliably with "YOU MUST" instructions
+- Worked in production environments
+
+**Technical Reality:**
+Model-invoked skills are probabilistic by design. Official Claude Code docs say skills are "model-invoked - Claude autonomously decides when to use them". However, in practice, skills need strong CLAUDE.md prompting to invoke consistently. The research paper used template injection (`{{ playbook }}`), but Claude Code doesn't support that - we must use persistent instructions instead.
+
+### The Fix
+
+Restored v3.2.18's MANDATORY section structure:
+```markdown
+## 🚨 MANDATORY: ACE Skill Usage Protocol
+
+**YOU MUST FOLLOW THIS PROTOCOL FOR EVERY CODING TASK:**
+
+### Before ANY Implementation, Debugging, or Refactoring Task:
+
+**STEP 1: ALWAYS invoke the ACE Playbook Retrieval skill FIRST:**
+```
+Skill: ace-orchestration:ace-playbook-retrieval
+```
+
+**You MUST call this skill BEFORE starting work when the user's request
+contains ANY of these keywords.**
+
+### After ANY Substantial Coding Task:
+
+**STEP 2: ALWAYS invoke the ACE Learning skill AFTER completion:**
+```
+Skill: ace-orchestration:ace-learning
+```
+
+**Critical**: These skills are NOT optional. You MUST use them proactively
+IN THIS ORDER for every qualifying task.
+```
+
+### Why This Works
+
+1. **Imperative language**: "YOU MUST", "ALWAYS", "STEP 1/2" - clear commands
+2. **Explicit ordering**: "BEFORE starting work", "AFTER completion" - temporal clarity
+3. **Listed triggers**: Concrete keywords that REQUIRE invocation
+4. **Architecture rationale**: Explains WHY order matters (Generator needs playbook BEFORE reasoning)
+5. **Non-negotiable framing**: "NOT optional", "MUST use proactively"
+
+This gives Claude persistent, unambiguous instructions that skills MUST invoke in the correct order.
+
+### Files Modified
+
+- `plugins/ace-orchestration/CLAUDE.md` - Restored MANDATORY enforcement section
+
+### Expected Impact
+
+Claude instances using this CLAUDE.md template (via `/ace-claude-init`) will now:
+- **ALWAYS** invoke ace-playbook-retrieval BEFORE implementation tasks
+- **ALWAYS** invoke ace-learning AFTER substantial work completion
+- Follow the correct order required by ACE research paper architecture
+- Build and use the playbook consistently across sessions
+
+This ensures the complete ACE training cycle operates correctly: Retrieval → Execution → Feedback → Analysis → Result.
+
 ## [3.2.31] - 2025-10-29
 
 ### ✨ ENHANCED: CLAUDE.md Workflow Guidance for Research Paper Alignment
