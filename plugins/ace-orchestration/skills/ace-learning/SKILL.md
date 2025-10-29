@@ -51,6 +51,17 @@ This Skill implements the ACE (Agentic Context Engineering) framework's fully au
 
 ## Instructions
 
+### ⚠️ CRITICAL CHECKPOINT
+
+**Before responding to the user after completing ANY work, ask yourself:**
+1. Did I just complete implementing, building, creating, fixing, debugging, refactoring, or configuring something?
+2. Did I create files, update code, release versions, or solve problems?
+3. Did I learn anything (gotchas, patterns, API behaviors, troubleshooting steps)?
+
+**If YES to any:** STOP - Invoke this skill NOW before responding to user.
+
+**Timing Rule:** This skill should be invoked **IMMEDIATELY after work completion** and **BEFORE your final response** to the user.
+
 ### Step 1: Assess Task Significance
 
 Determine if the recently completed task meets the criteria above. If it was substantial and involved lessons learned, proceed to Step 2.
