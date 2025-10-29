@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### 🔧 CRITICAL FIX: Restored Model-Invoked Skills Architecture
 
-**FIXED: Skills now invoke naturally based on context matching (reverted to v3.1.11 working approach)**
+**FIXED: Skills now invoke naturally based on context matching**
 
 ### What Broke
 
@@ -22,11 +22,12 @@ Result: Despite increasingly aggressive enforcement, skills STILL stopped auto-i
 
 ### What We Fixed
 
-**Hooks** (restored gentle approach):
-- ✅ Changed back to `type: "prompt"` for UserPromptSubmit/Stop/SubagentStop hooks (like v3.1.11 had for similar hooks)
-- ✅ Removed aggressive bash script enforcement (`ace-prompt-enforcement.sh`, `ace-skill-enforcement.sh`)
-- ✅ Restored gentle reminder prompts that suggest skills without forcing them
-- ✅ Kept version check SessionStart hook and Bash logging PostToolUse hook
+**Hooks** (removed - rely on CLAUDE.md template instead):
+- ✅ **REMOVED all ACE-related hooks** (SessionStart, UserPromptSubmit, Stop, SubagentStop)
+- ✅ Removed enforcement scripts (`ace-prompt-enforcement.sh`, `ace-skill-enforcement.sh`)
+- ✅ Only kept Bash logging PostToolUse hook for execution tracking
+- ✅ **Rely entirely on CLAUDE.md template** (copied via `/ace-claude-init`)
+- ✅ Skills invoke naturally based on description matching (model-invoked architecture)
 
 **Skill Descriptions** (restored v3.2.4 natural approach):
 - ✅ **ace-playbook-retrieval**: Reverted to v3.2.4 descriptive style (before October 23rd breaking change)
@@ -65,11 +66,11 @@ ace-learning Auto-Invokes (model decision based on task context)
 
 ### Files Changed
 
-- `hooks/hooks.json`: Restored v3.1.11 structure with `type: "prompt"`
-- `skills/ace-playbook-retrieval/SKILL.md`: Simplified description to be context-matching
-- `skills/ace-learning/SKILL.md`: Simplified description to be context-matching
-- `CLAUDE.md`: Updated template to reflect restored model-invoked approach
-- Removed: `hooks/ace-prompt-enforcement.sh`, `hooks/ace-skill-enforcement.sh` (no longer needed)
+- `hooks/hooks.json`: **Removed ALL ACE hooks** - only Bash logging remains
+- `skills/ace-playbook-retrieval/SKILL.md`: Natural description for context matching
+- `skills/ace-learning/SKILL.md`: Natural description for context matching
+- `CLAUDE.md`: Updated template - NO HOOKS, pure model-invoked approach
+- **Removed**: All ACE enforcement scripts (clean minimalist design)
 
 ### Benefits
 
