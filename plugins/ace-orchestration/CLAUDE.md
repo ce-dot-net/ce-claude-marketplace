@@ -6,14 +6,11 @@ This plugin provides fully automatic pattern learning using the ACE framework ar
 
 **First-Time Setup:** Run `/ace-claude-init` in your project to add this file to your project's CLAUDE.md. This provides always-on context about the ACE system and ensures optimal skill triggering.
 
-## 🚨 AUTOMATIC: ACE Skill Invocation
+## 🚨 IMPORTANT: ACE Skill Usage
 
-**Skills are model-invoked based on task context** - Claude autonomously decides when to use them.
+**Skills are model-invoked based on task context** - Claude autonomously decides when to use them based on natural description matching.
 
-The plugin includes **gentle reminder hooks** that suggest using ACE skills at appropriate times:
-- **UserPromptSubmit hook** - Reminds about playbook availability for coding tasks
-- **Stop hook** - Suggests learning capture after substantial work
-- **SubagentStop hook** - Prompts learning capture for subagent tasks
+**NO HOOKS NEEDED** - The skills invoke automatically when their descriptions match the task context.
 
 ### The Two Skills:
 
