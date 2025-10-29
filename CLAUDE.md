@@ -10,58 +10,59 @@ This plugin provides fully automatic pattern learning using the ACE framework ar
 
 **First-Time Setup:** Run `/ace-claude-init` in your project to add this file to your project's CLAUDE.md. This provides always-on context about the ACE system and ensures optimal skill triggering.
 
-## 🚨 MANDATORY: ACE Skill Usage Rules
+## 🚨 AUTOMATIC: ACE Skill Enforcement
 
-**YOU MUST FOLLOW THESE RULES FOR EVERY TASK:**
+**Skill invocation is ENFORCED automatically via TWO hooks: SessionStart AND UserPromptSubmit.**
 
-### Before ANY Implementation, Debugging, or Refactoring Task:
+The plugin includes enforcement hooks that ensure ACE skills are ALWAYS invoked:
+- **SessionStart hook** (`ace-skill-enforcement.sh`) - Runs once at session start
+- **UserPromptSubmit hook** (`ace-prompt-enforcement.sh`) - Runs on EVERY user prompt
 
-**ALWAYS invoke the ACE Playbook Retrieval skill FIRST:**
-```
-Skill: ace-orchestration:ace-playbook-retrieval
-```
+You don't need to remember to invoke skills - the system enforces it automatically on every prompt.
 
-**Trigger keywords that require retrieval:**
-- implement, build, create, add, develop
-- debug, fix, troubleshoot, resolve, diagnose
-- refactor, optimize, improve, restructure
-- integrate, connect, setup, configure
-- architect, design, plan
+### How Automatic Enforcement Works:
 
-**You MUST call this skill BEFORE starting work when the user's request contains ANY of these keywords.**
+1. **Session starts** → SessionStart hook runs (initial setup)
+2. **User submits EACH prompt** → UserPromptSubmit hook runs (per-prompt enforcement)
+3. **Hook output** → Added to Claude's context for THAT prompt
+4. **Claude sees** → MANDATORY protocol fresh in context
+5. **Skills auto-invoke** → Triggered based on task keywords
 
-### After ANY Substantial Coding Task:
+### The Two Skills:
 
-**ALWAYS invoke the ACE Learning skill AFTER completion:**
-```
-Skill: ace-orchestration:ace-learning
-```
+**Before tasks:** `ace-orchestration:ace-playbook-retrieval`
+- Automatically invoked when you: implement, build, create, add, develop, debug, fix, troubleshoot, resolve, refactor, optimize, improve, restructure, integrate, connect, setup, configure, architect, design, plan
+- Retrieves learned patterns from previous work
+- Provides strategies, code snippets, troubleshooting tips, API recommendations
 
-**Trigger conditions that require learning:**
-- Implemented new features or fixed bugs
-- Debugged and resolved issues
-- Discovered gotchas or edge cases
-- Used new APIs, libraries, or patterns
-- Made architectural decisions
-- Encountered and overcame errors
-
-**You MUST call this skill AFTER substantial work to capture lessons learned.**
+**After tasks:** `ace-orchestration:ace-learning`
+- Automatically invoked after: implementing features, fixing bugs, solving problems, creating files, making architectural decisions, discovering gotchas
+- Captures what you learned during execution
+- Updates the playbook for future use
 
 ### Workflow Example:
 
 ```
 User: "Implement JWT authentication"
     ↓
-Step 1: Invoke ace-orchestration:ace-playbook-retrieval
-Step 2: Review retrieved patterns
-Step 3: Implement using learned patterns
-Step 4: Invoke ace-orchestration:ace-learning
-Step 5: Respond to user
+UserPromptSubmit hook: Injects enforcement (EVERY prompt)
+    ↓
+Automatic: ace-playbook-retrieval invokes (hook enforces)
+    ↓
+Retrieved: Previous auth patterns loaded
+    ↓
+Implementation: Using learned patterns
+    ↓
+Automatic: ace-learning invokes (hook enforces)
+    ↓
+Result: New patterns captured for next time
+    ↓
+Next prompt: UserPromptSubmit enforces again (continuous cycle)
 ```
 
-**Non-negotiable:** These skills are NOT optional. You MUST use them proactively for every qualifying task.
+**Note:** The combination of SessionStart (once per session) and UserPromptSubmit (every prompt) ensures ACE enforcement NEVER stops, regardless of session length or context pressure.
 
-## 🔄 Complete Automatic Learning Cycle (v3.2.10)
+## 🔄 Complete Automatic Learning Cycle (v3.2.27)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 
@@ -188,7 +189,16 @@ While skills auto-invoke, manual commands are available for explicit control:
 - `/ace-patterns [section]` - View playbook manually
 - `/ace-status` - Check playbook statistics
 - `/ace-configure` - Configure ACE server connection
-- `/ace-init` - Bootstrap playbook from git history
+- `/ace-bootstrap` - Bootstrap playbook from docs, git history, and current code
+  - **New in v3.2.17**: `bootstrap-orchestrator` skill provides dynamic pattern compression reporting
+    - Automatically calculates compression percentage (e.g., 158 → 18 = 89% reduction)
+    - Explains why compression > 80% is expected (semantic deduplication per ACE Research Paper)
+    - Shows progress messages during 10-30 second analysis
+    - Uses actual numbers from server, not hardcoded examples
+  - **New in v3.2.15**: `hybrid` mode (default) - intelligently scans docs → git → local files
+  - **New in v3.2.15**: `thoroughness` parameter - light/medium/deep (default: medium)
+  - **New in v3.2.15**: 5x deeper defaults - 5000 files, 500 commits, 90 days
+  - Use for initial setup or periodic refresh of playbook patterns
 - `/ace-clear` - Clear playbook (requires confirmation)
 - `/ace-export-patterns` - Export playbook to JSON
 - `/ace-import-patterns` - Import playbook from JSON
@@ -276,22 +286,17 @@ mcp__ace-pattern-learning__ace_get_playbook(min_helpful=5)
 mcp__ace-pattern-learning__ace_learn(
   task="Brief description",
   success=true,
-  trajectory=[
-    {"step": "Analysis", "action": "Analyzed the problem"},
-    {"step": "Implementation", "action": "Implemented the solution"}
-  ],
+  trajectory="Key steps taken",
   output="Lessons learned"
 )
 ```
-
-**IMPORTANT**: `trajectory` must be an array of objects with descriptive keys (e.g., `{"step": "...", "action": "..."}`), not a string
 
 **Check Status**:
 ```bash
 mcp__ace-pattern-learning__ace_status
 ```
 
-## 🎯 ACE Architecture (v3.2.13)
+## 🎯 ACE Architecture (v3.2.27)
 
 The ACE framework implements fully automatic learning with complete retrieval → learning cycle:
 
