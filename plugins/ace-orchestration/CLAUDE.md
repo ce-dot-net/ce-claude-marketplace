@@ -49,7 +49,7 @@ Result: New patterns captured for next time
 
 **Note:** The SessionStart hook provides system-level enforcement, making skill invocation truly automatic and non-optional.
 
-## 🔄 Complete Automatic Learning Cycle (v3.2.22)
+## 🔄 Complete Automatic Learning Cycle (v3.2.23)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 
@@ -283,7 +283,7 @@ mcp__ace-pattern-learning__ace_learn(
 mcp__ace-pattern-learning__ace_status
 ```
 
-## 🎯 ACE Architecture (v3.2.22)
+## 🎯 ACE Architecture (v3.2.23)
 
 The ACE framework implements fully automatic learning with complete retrieval → learning cycle:
 
