@@ -5,6 +5,27 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.26] - 2025-10-29
+
+### Fixed
+- **Fix SessionStart hooks validation error**
+  - Added missing `matcher` field to SessionStart hooks
+  - Wrapped hook commands in `hooks` array
+  - SessionStart events support matchers: `startup`, `resume`, `clear`, `compact`
+  - Structure now matches official Claude Code hooks specification
+
+### Why This Was Broken
+- SessionStart hooks were missing required structure
+- Error: "Required" for `hooks` field at path `["hooks","SessionStart",0,"hooks"]`
+- SessionStart is an event that USES matchers (like PostToolUse)
+- Incorrect structure prevented hooks from loading
+
+### What's Fixed
+- ✅ SessionStart hooks now have correct structure with `matcher` and `hooks` array
+- ✅ Validation passes - no "Required" errors
+- ✅ Hooks load successfully in Claude Code
+- ✅ SessionStart enforcement now runs on startup
+
 ## [3.2.25] - 2025-10-29
 
 ### Fixed
