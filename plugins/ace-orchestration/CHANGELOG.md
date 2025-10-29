@@ -5,6 +5,41 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.23] - 2025-10-29
+
+### Fixed
+- **CRITICAL: Plugin structure corrected to match Claude Code specification**
+  - Moved `plugin.json` from plugin root to `.claude-plugin/plugin.json` (official location)
+  - Moved `plugin.template.json` to `.claude-plugin/plugin.template.json`
+  - Updated `.gitignore` to reflect new path: `plugins/*/.claude-plugin/plugin.json`
+
+### Why This Fix Is Critical
+- **Root cause**: Plugin was not loading because `plugin.json` was in wrong location
+- **Result**: Hooks weren't registered → Skills weren't enforcing → MCP not called → ACE cycle broken
+- **According to Claude Code docs**: "There is only one `plugin.json` file, located in the `.claude-plugin/` directory at the plugin root."
+- **Now**: Plugin loads correctly → Hooks register → SessionStart enforcement works → Skills invoke → MCP calls happen
+
+### What Was Broken (v3.2.0 - v3.2.22)
+- Plugin structure did not match official specification
+- Hooks defined in `hooks/hooks.json` were not being registered
+- SessionStart hook enforcement was never injecting context
+- Skills were relying solely on model-invoked description matching (unreliable)
+- Zero ACE framework interaction in actual sessions
+
+### What's Fixed (v3.2.23+)
+- Plugin structure now matches official Claude Code specification
+- Hooks will be properly registered when plugin loads
+- SessionStart enforcement will inject MANDATORY protocol into context
+- Skills will be consistently invoked based on trigger keywords
+- Complete ACE cycle: retrieval → execution → learning
+
+### Migration for Users
+If you installed v3.2.0-v3.2.22, the plugin needs to reload with correct structure:
+```bash
+# Claude Code will automatically use the new structure
+# Just update the plugin in the marketplace
+```
+
 ## [3.2.22] - 2025-10-29
 
 ### Changed

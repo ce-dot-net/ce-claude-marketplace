@@ -32,23 +32,23 @@ echo ""
 
 # Check 2: plugin.json exists
 echo "2️⃣  Checking plugin.json..."
-if [ -f "$PLUGIN_DIR/plugin.json" ]; then
+if [ -f "$PLUGIN_DIR/.claude-plugin/plugin.json" ]; then
     echo "  ✅ plugin.json exists"
 
     # Check if it has mcpServers
-    if grep -q "mcpServers" "$PLUGIN_DIR/plugin.json"; then
+    if grep -q "mcpServers" "$PLUGIN_DIR/.claude-plugin/plugin.json"; then
         echo "  ✅ mcpServers configuration found"
 
         # Show the command
         echo ""
         echo "  MCP Server Configuration:"
-        cat "$PLUGIN_DIR/plugin.json" | grep -A 10 '"mcpServers"' | head -15
+        cat "$PLUGIN_DIR/.claude-plugin/plugin.json" | grep -A 10 '"mcpServers"' | head -15
     else
         echo "  ⚠️  No mcpServers configuration in plugin.json"
     fi
 else
     echo "  ❌ plugin.json does NOT exist"
-    echo "     Create from template: cp $PLUGIN_DIR/plugin.template.json $PLUGIN_DIR/plugin.json"
+    echo "     Create from template: cp $PLUGIN_DIR/.claude-plugin/plugin.template.json $PLUGIN_DIR/.claude-plugin/plugin.json"
     exit 1
 fi
 echo ""

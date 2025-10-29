@@ -128,13 +128,13 @@ function checkEnvironment() {
 function checkConfiguration() {
   console.log('📋 Configuration Files:');
 
-  const pluginJsonPath = join(pluginDir, 'plugin.json');
+  const pluginJsonPath = join(pluginDir, '.claude-plugin', 'plugin.json');
 
   if (existsSync(pluginJsonPath)) {
     console.log('  ✅ plugin.json exists');
   } else {
     console.log('  ⚠️  plugin.json not found');
-    console.log('     Run: cp plugin.template.json plugin.json');
+    console.log('     Run: cp .claude-plugin/plugin.template.json .claude-plugin/plugin.json');
   }
 
   console.log('');

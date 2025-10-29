@@ -30,7 +30,7 @@ docs-internal/
 
 # Plugin configuration with real credentials
 # Use plugin.template.json instead
-plugins/*/plugin.json
+plugins/*/.claude-plugin/plugin.json
 
 # Logs
 *.log

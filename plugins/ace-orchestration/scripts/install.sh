@@ -139,14 +139,14 @@ echo "======================"
 echo ""
 
 # Check if plugin.json exists (user should copy from template)
-if [ -f "$PLUGIN_DIR/plugin.json" ]; then
+if [ -f "$PLUGIN_DIR/.claude-plugin/plugin.json" ]; then
     echo "✅ plugin.json exists"
 else
     echo "⚠️  plugin.json not found"
     echo ""
     echo "Copy from template:"
     echo "  cd $PLUGIN_DIR"
-    echo "  cp plugin.template.json plugin.json"
+    echo "  cp .claude-plugin/plugin.template.json .claude-plugin/plugin.json"
 fi
 
 echo ""
@@ -154,7 +154,7 @@ echo "✅ Installation Complete!"
 echo ""
 echo "Next steps:"
 echo "  1. Set environment variables (if not already set)"
-echo "  2. Copy plugin.template.json to plugin.json"
+echo "  2. Copy .claude-plugin/plugin.template.json to .claude-plugin/plugin.json"
 echo "  3. Restart Claude Code"
 echo "  4. Test with: /ace-status"
 echo ""
