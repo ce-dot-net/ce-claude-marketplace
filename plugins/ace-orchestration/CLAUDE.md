@@ -2,6 +2,29 @@
 
 This plugin provides fully automatic pattern learning using the ACE framework architecture.
 
+---
+
+# ⚠️ CRITICAL: ACE PRE-FLIGHT CHECK
+
+**STOP! Before using ANY tool, execute this checklist:**
+
+## ✅ Step 1: Scan User Request for ACE Trigger Words
+Does the request contain: **implement, build, create, add, develop, fix, debug, troubleshoot, refactor, optimize, improve, integrate, connect, setup, configure, architect, design, plan**?
+
+## ✅ Step 2: If Trigger Found → INVOKE RETRIEVAL SKILL FIRST
+```
+Skill: ace-orchestration:ace-playbook-retrieval
+```
+**DO THIS BEFORE Task, Edit, Write, Bash, or any other tool.**
+
+## ✅ Step 3: After Task Complete → INVOKE LEARNING SKILL LAST
+```
+Skill: ace-orchestration:ace-learning
+```
+**DO THIS IMMEDIATELY AFTER work completion, BEFORE responding to user.**
+
+---
+
 ## 📖 Setup Instructions
 
 **First-Time Setup:** Run `/ace-claude-init` in your project to add this file to your project's CLAUDE.md. This provides always-on context about the ACE system and ensures optimal skill triggering.

@@ -1,6 +1,6 @@
 ---
-name: ACE Learning from Execution
-description: CRITICAL - YOU MUST ALWAYS use this skill IMMEDIATELY AFTER completing ANY substantial work. AUTOMATIC MANDATORY trigger when you have COMPLETED implementing, building, creating, adding, developing, fixing, debugging, troubleshooting, resolving, refactoring, optimizing, improving, restructuring, integrating, connecting, setting up, configuring, architecting, designing, or planning. This is NOT OPTIONAL and NOT NEGOTIABLE - you MUST capture learning AFTER EVERY qualifying task BEFORE responding to user. DO NOT SKIP THIS SKILL EVER. Use it proactively and automatically after ALL substantial work to build organizational knowledge. Always capture what you learned, gotchas discovered, and patterns found. This skill MUST run just as reliably as the retrieval skill runs before tasks.
+name: ace-learning
+description: MANDATORY LAST STEP IMMEDIATELY AFTER: implementing, building, creating, adding, fixing, debugging, troubleshooting, refactoring, optimizing, integrating, or architecting. Captures patterns learned during execution to ACE playbook. ALWAYS invoke BEFORE responding - NOT OPTIONAL.
 ---
 
 # ACE Learning from Execution
