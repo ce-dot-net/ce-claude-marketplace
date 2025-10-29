@@ -5,6 +5,35 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.27] - 2025-10-29
+
+### Added
+- **CRITICAL: UserPromptSubmit hook for per-prompt enforcement**
+  - Adds ACE protocol enforcement on EVERY single user prompt
+  - Ensures skills are triggered even in long-running sessions
+  - Prevents context collapse and protocol forgetting
+  - Aligns with ACE Research Paper's online adaptation model
+
+### Why This Is Critical
+- SessionStart hook runs ONCE at session start
+- In long conversations, context can be compacted/forgotten
+- Model-invoked skills alone are unreliable (keyword-dependent)
+- UserPromptSubmit ensures FRESH enforcement on EVERY prompt
+- Implements true "online" adaptation per ACE paper (test-time memory adaptation)
+
+### What's Improved
+- ✅ ACE protocol injected on EVERY prompt (not just session start)
+- ✅ Works throughout entire session, regardless of length
+- ✅ No reliance on context persistence or model decision-making
+- ✅ Guarantees playbook retrieval before tasks and learning after tasks
+- ✅ Aligns with ACE paper: "online settings (e.g., test-time memory adaptation)"
+
+### Files Added
+- `hooks/ace-prompt-enforcement.sh` - Per-prompt enforcement script
+
+### Files Updated
+- `hooks/hooks.json` - Added UserPromptSubmit hook
+
 ## [3.2.26] - 2025-10-29
 
 ### Fixed
