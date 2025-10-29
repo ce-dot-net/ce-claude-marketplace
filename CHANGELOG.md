@@ -5,6 +5,60 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.31] - 2025-10-29
+
+### ✨ ENHANCED: CLAUDE.md Workflow Guidance for Research Paper Alignment
+
+**CRITICAL: Added recommended workflow to ensure playbook retrieval BEFORE tasks**
+
+This release adds workflow guidance to CLAUDE.md template to align with the ACE research paper requirement that playbook context be available to the Generator BEFORE starting tasks.
+
+### What Changed
+
+**CLAUDE.md Template** (New "Recommended ACE Workflow" section):
+- ✅ **Step-by-step workflow**: Clear guidance on when to invoke skills
+- ✅ **Research paper alignment**: "The playbook should be available to the Generator BEFORE starting tasks"
+- ✅ **Concrete trigger phrases**: Examples like "Implement [feature]", "Fix [bug]", "Debug [issue]"
+- ✅ **Completion indicators**: Clear signals for when to capture learning
+- ✅ **Why it matters**: Explains the complete ACE training cycle from research paper
+- ✅ **Natural framing**: "Recommended" not "MANDATORY" (respects official Claude Code guidance)
+
+### Technical Rationale
+
+**Research Paper Finding:**
+The ACE paper shows playbook content injected directly into Generator prompt via `{{ playbook }}` template variable. This ensures patterns are ALWAYS available before reasoning begins.
+
+**Official Claude Code Guidance:**
+- Skills are model-invoked (probabilistic, not deterministic)
+- CLAUDE.md should contain "project conventions" and "common workflows" (official docs)
+- Skill descriptions should use natural, third-person language (not "YOU MUST")
+
+**Hybrid Solution:**
+- Keep natural skill descriptions (v3.2.30) - respects official best practices
+- Add workflow guidance to CLAUDE.md - leverages project instructions for consistency
+- Frame as "recommended workflow" not enforcement - aligns with CLAUDE.md purpose
+- Includes trigger phrases and examples - helps Claude recognize when to invoke skills
+
+### Why This Works
+
+1. **Respects Official Docs**: Uses CLAUDE.md for its intended purpose (project workflows)
+2. **Maintains Natural Skills**: Skill descriptions remain descriptive, not prescriptive
+3. **Research Paper Alignment**: Ensures playbook context available BEFORE tasks
+4. **Clear Guidance**: Concrete examples help Claude recognize appropriate timing
+
+### Files Modified
+
+- `plugins/ace-orchestration/CLAUDE.md` - Added "🎯 Recommended ACE Workflow" section
+
+### Expected Impact
+
+Claude instances using this CLAUDE.md template (via `/ace-claude-init`) will have clear workflow guidance showing:
+- When to retrieve playbook patterns (before implementation tasks)
+- When to capture learning (after substantial work)
+- Why this pattern matters (complete ACE training cycle)
+
+This increases the probability of correct skill invocation timing while respecting model-invoked architecture.
+
 ## [3.2.30] - 2025-10-29
 
 ### ✨ OPTIMIZED: Skills + CLAUDE.md Following Official Best Practices

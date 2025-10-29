@@ -14,7 +14,7 @@ This plugin implements the ACE research paper architecture: comprehensive, evolv
 
 ## 🔄 ACE Skills Usage
 
-**Model-Invoked Architecture**: Skills activate automatically when their descriptions match your task context. No hooks or enforcement needed.
+**Model-Invoked Architecture**: Skills activate automatically when their descriptions match your task context.
 
 ### The Two Skills (ACE Architecture):
 
@@ -29,6 +29,59 @@ This plugin implements the ACE research paper architecture: comprehensive, evolv
 - **What**: Captures execution trajectory and lessons learned
 - **Why**: Generator highlights useful/misleading patterns → Reflector → Curator → Updated playbook (research paper cycle)
 - **Triggers**: implemented features, fixed bugs, integrated APIs, refactored code, discovered gotchas
+
+## 🎯 Recommended ACE Workflow
+
+**Per ACE Research Paper Architecture**: The playbook should be available to the Generator BEFORE starting tasks. To align with this pattern:
+
+### Before Starting Implementation Tasks:
+
+When you're about to: implement, build, create, fix, debug, refactor, integrate, optimize, architect, or make technical decisions:
+
+**Step 1: Retrieve Playbook Patterns**
+```
+Skill: ace-orchestration:ace-playbook-retrieval
+```
+
+This loads learned strategies, code snippets, troubleshooting tips, and API recommendations into your working context, allowing you to leverage organizational knowledge from the start.
+
+**Common trigger phrases:**
+- "Implement [feature]"
+- "Fix [bug]"
+- "Debug [issue]"
+- "Refactor [code]"
+- "Integrate [API/service]"
+- "Optimize [performance]"
+- "Add [functionality]"
+
+### After Completing Substantial Work:
+
+When you've completed: implementation, debugging, refactoring, API integration, or discovered important lessons:
+
+**Step 2: Capture Learning**
+```
+Skill: ace-orchestration:ace-learning
+```
+
+This sends your execution trajectory and feedback to the ACE server, where the Reflector and Curator update the playbook for future tasks.
+
+**Completion indicators:**
+- Created/modified files successfully
+- Resolved bugs or errors
+- Integrated external services
+- Discovered gotchas or best practices
+- Made architectural decisions
+
+### Why This Workflow Matters:
+
+Following this pattern creates the complete ACE training cycle from the research paper:
+1. **Retrieval** → Generator has playbook context BEFORE reasoning
+2. **Execution** → Generator produces trajectory using learned patterns
+3. **Feedback** → Generator highlights useful/misleading patterns
+4. **Analysis** → Server-side Reflector and Curator update playbook
+5. **Result** → Next task benefits from enhanced playbook
+
+This ensures "comprehensive, evolving contexts" that improve over time.
 
 ### How It Works (ACE Research Paper Flow):
 
