@@ -1,6 +1,6 @@
 ---
 name: ACE Learning from Execution
-description: Capture execution patterns and lessons after completing coding tasks. Use after: implementing features, fixing bugs, debugging issues, integrating APIs, refactoring code, discovering gotchas, solving technical problems, making architectural decisions. Analyzes trajectory, extracts insights, updates playbook with strategies, code patterns, troubleshooting tips, and API recommendations for future tasks.
+description: YOU MUST ALWAYS use this skill IMMEDIATELY AFTER you finish ANY substantial work. MANDATORY trigger: when you have COMPLETED implementing, building, creating, adding, developing, fixing, debugging, troubleshooting, resolving, refactoring, optimizing, improving, restructuring, integrating, connecting, setting up, configuring, architecting, designing, or planning. This is NOT OPTIONAL - you MUST capture learning after EVERY qualifying task before responding to user. DO NOT SKIP THIS SKILL. Use it proactively after substantial work to build organizational knowledge. Capture what you learned, gotchas discovered, and patterns found.
 ---
 
 # ACE Learning from Execution
@@ -50,17 +50,6 @@ This Skill implements the ACE (Agentic Context Engineering) framework's fully au
 - Conversations without code execution
 
 ## Instructions
-
-### ⚠️ CRITICAL CHECKPOINT
-
-**Before responding to the user after completing ANY work, ask yourself:**
-1. Did I just complete implementing, building, creating, fixing, debugging, refactoring, or configuring something?
-2. Did I create files, update code, release versions, or solve problems?
-3. Did I learn anything (gotchas, patterns, API behaviors, troubleshooting steps)?
-
-**If YES to any:** STOP - Invoke this skill NOW before responding to user.
-
-**Timing Rule:** This skill should be invoked **IMMEDIATELY after work completion** and **BEFORE your final response** to the user.
 
 ### Step 1: Assess Task Significance
 

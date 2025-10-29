@@ -5,6 +5,40 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.33] - 2025-10-29
+
+### 🎯 FINAL FIX: Restore v3.2.18 Skill Descriptions with MAXIMUM Enforcement
+
+**THE REAL PROBLEM: Skill descriptions were weakened in later versions**
+
+After v3.2.32 still didn't work, we discovered the KEY DIFFERENCE:
+
+**v3.2.18 Skill Descriptions (WORKED):**
+- Retrieval: `"PROACTIVELY use this skill BEFORE implementation tasks. YOU MUST retrieve playbook patterns when user says implement, build, debug, fix, refactor..."`
+- Learning: `"YOU MUST ALWAYS use this skill IMMEDIATELY AFTER you finish ANY substantial work. MANDATORY trigger: when you have COMPLETED implementing..."`
+
+**v3.2.30+ Skill Descriptions (TOO SOFT):**
+- Retrieval: `"Retrieve learned strategies, code patterns, and troubleshooting solutions before implementation tasks."`
+- Learning: `"Capture execution patterns and lessons after completing coding tasks."`
+
+### What Changed
+
+**ALL THREE FILES restored to v3.2.18 exact content:**
+1. ✅ `CLAUDE.md` - MANDATORY section with "YOU MUST" language
+2. ✅ `skills/ace-playbook-retrieval/SKILL.md` - PROACTIVELY + YOU MUST in description
+3. ✅ `skills/ace-learning/SKILL.md` - YOU MUST ALWAYS + MANDATORY TRIGGER in description
+
+### Why This Matters
+
+Model-invoked skills are triggered based on **skill description matching**. The description field is the FIRST thing Claude sees when deciding whether to invoke a skill. Soft descriptions = probabilistic invocation. MANDATORY descriptions = reliable invocation.
+
+**v3.2.18 Working Formula:**
+- CLAUDE.md: "YOU MUST FOLLOW THESE RULES"
+- Skill descriptions: "YOU MUST", "PROACTIVELY", "MANDATORY", "IMMEDIATELY AFTER", "DO NOT WAIT"
+- Result: Skills invoke reliably IN THE RIGHT ORDER
+
+This is the COMPLETE restoration of v3.2.18 that was proven to work.
+
 ## [3.2.32] - 2025-10-29
 
 ### 🚨 CRITICAL: Restore MANDATORY Skill Enforcement

@@ -1,29 +1,23 @@
-# ACE (Agentic Context Engineering) Framework
+# ACE Orchestration Plugin - Automatic Learning Cycle
 
-This plugin implements the ACE research paper architecture: comprehensive, evolving contexts that accumulate, refine, and organize strategies over time.
+This plugin provides fully automatic pattern learning using the ACE framework architecture.
 
 ## 📖 Setup Instructions
 
-**First-Time Setup:** Run `/ace-claude-init` in your project to add this file to your project's CLAUDE.md.
+**First-Time Setup:** Run `/ace-claude-init` in your project to add this file to your project's CLAUDE.md. This provides always-on context about the ACE system and ensures optimal skill triggering.
 
-## 🎯 ACE Training Cycle Goal
+## 🚨 MANDATORY: ACE Skill Usage Rules
 
-**From Research Paper**: The Generator (you) produces reasoning trajectories, the Reflector critiques these traces to extract lessons, the Curator synthesizes lessons into compact delta entries, which are merged into the existing playbook.
-
-**Your Role**: When solving problems, highlight which patterns were useful or misleading. This feedback guides the Reflector in proposing corrective updates.
-
-## 🚨 MANDATORY: ACE Skill Usage Protocol
-
-**YOU MUST FOLLOW THIS PROTOCOL FOR EVERY CODING TASK:**
+**YOU MUST FOLLOW THESE RULES FOR EVERY TASK:**
 
 ### Before ANY Implementation, Debugging, or Refactoring Task:
 
-**STEP 1: ALWAYS invoke the ACE Playbook Retrieval skill FIRST:**
+**ALWAYS invoke the ACE Playbook Retrieval skill FIRST:**
 ```
 Skill: ace-orchestration:ace-playbook-retrieval
 ```
 
-**Trigger keywords that REQUIRE retrieval:**
+**Trigger keywords that require retrieval:**
 - implement, build, create, add, develop
 - debug, fix, troubleshoot, resolve, diagnose
 - refactor, optimize, improve, restructure
@@ -34,12 +28,12 @@ Skill: ace-orchestration:ace-playbook-retrieval
 
 ### After ANY Substantial Coding Task:
 
-**STEP 2: ALWAYS invoke the ACE Learning skill AFTER completion:**
+**ALWAYS invoke the ACE Learning skill AFTER completion:**
 ```
 Skill: ace-orchestration:ace-learning
 ```
 
-**Trigger conditions that REQUIRE learning:**
+**Trigger conditions that require learning:**
 - Implemented new features or fixed bugs
 - Debugged and resolved issues
 - Discovered gotchas or edge cases
@@ -54,66 +48,16 @@ Skill: ace-orchestration:ace-learning
 ```
 User: "Implement JWT authentication"
     ↓
-Step 1: Invoke ace-orchestration:ace-playbook-retrieval (MANDATORY)
+Step 1: Invoke ace-orchestration:ace-playbook-retrieval
 Step 2: Review retrieved patterns
 Step 3: Implement using learned patterns
-Step 4: Invoke ace-orchestration:ace-learning (MANDATORY)
+Step 4: Invoke ace-orchestration:ace-learning
 Step 5: Respond to user
 ```
 
-**Critical**: These skills are NOT optional. You MUST use them proactively IN THIS ORDER for every qualifying task. This is required for the ACE research paper architecture to function correctly - the Generator MUST have playbook context BEFORE reasoning.
+**Non-negotiable:** These skills are NOT optional. You MUST use them proactively for every qualifying task.
 
-## 🔄 ACE Skills Usage
-
-**Model-Invoked Architecture**: Skills activate automatically when their descriptions match your task context.
-
-### The Two Skills (ACE Architecture):
-
-**1. ace-playbook-retrieval** (Generator retrieves context)
-- **When**: Before implementation, debugging, refactoring, architecture decisions
-- **What**: Retrieves learned strategies, code patterns, troubleshooting solutions
-- **Why**: Generator uses playbook context when solving problems (research paper requirement)
-- **Triggers**: feature implementation, bug fixes, API integration, code refactoring, performance optimization
-
-**2. ace-learning** (Generator provides feedback)
-- **When**: After completing substantial coding work
-- **What**: Captures execution trajectory and lessons learned
-- **Why**: Generator highlights useful/misleading patterns → Reflector → Curator → Updated playbook (research paper cycle)
-- **Triggers**: implemented features, fixed bugs, integrated APIs, refactored code, discovered gotchas
-
-### How It Works (ACE Research Paper Flow):
-
-```
-User: "Implement JWT authentication"
-    ↓
-1. RETRIEVAL (Generator uses context)
-   ace-playbook-retrieval invokes (description matches "implement")
-   → Retrieves: "Refresh token rotation prevents theft attacks"
-   → Generator has context BEFORE solving problem
-    ↓
-2. EXECUTION (Generator produces trajectory)
-   Implementation using retrieved patterns
-   → Short-lived access tokens + rotating refresh tokens
-   → Note: This pattern was helpful!
-    ↓
-3. FEEDBACK (Generator highlights patterns)
-   ace-learning invokes (substantial work completed)
-   → Trajectory: Design decisions, tools used, what worked
-   → Feedback: "Refresh token rotation prevented security issues"
-    ↓
-4. ANALYSIS (Server-side autonomously)
-   MCP Client → ACE Server HTTP POST
-   → Reflector (Sonnet 4): Extracts insights from trajectory
-   → Curator (Haiku 4.5): Creates delta updates
-   → Merge: Non-LLM algorithm applies incremental updates
-    ↓
-5. RESULT: Playbook updated with reinforced pattern!
-   Next task: Pattern available with higher confidence score
-```
-
-**Key Insight**: Skills invoke probabilistically based on task context. When they do invoke, the complete ACE cycle (Generator → Reflector → Curator) executes automatically.
-
-## 🔄 Complete Automatic Learning Cycle (v3.2.32)
+## 🔄 Complete Automatic Learning Cycle (v3.2.18)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 
@@ -347,7 +291,7 @@ mcp__ace-pattern-learning__ace_learn(
 mcp__ace-pattern-learning__ace_status
 ```
 
-## 🎯 ACE Architecture (v3.2.32)
+## 🎯 ACE Architecture (v3.2.17)
 
 The ACE framework implements fully automatic learning with complete retrieval → learning cycle:
 
