@@ -14,7 +14,7 @@
       "name": "ace-orchestration",
       "source": "./plugins/ace-orchestration",
       "description": "Code Engine ACE - Intelligent pattern learning and code generation with Three-Agent Architecture. Learns from execution feedback to improve coding outcomes.",
-      "version": "3.2.20",
+      "version": "3.2.21",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"

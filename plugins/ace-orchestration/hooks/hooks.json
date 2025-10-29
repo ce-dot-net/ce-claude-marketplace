@@ -3,7 +3,11 @@
     "SessionStart": [
       {
         "type": "command",
-        "command": "bash ~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchestration/hooks/ace-version-check.sh"
+        "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/ace-skill-enforcement.sh"
+      },
+      {
+        "type": "command",
+        "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/ace-version-check.sh"
       }
     ],
     "PostToolUse": [
