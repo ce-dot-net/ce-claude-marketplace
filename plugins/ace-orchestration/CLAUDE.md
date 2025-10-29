@@ -33,6 +33,15 @@ Skill: ace-orchestration:ace-playbook-retrieval
 Skill: ace-orchestration:ace-learning
 ```
 
+### ⚠️ CRITICAL CHECKPOINT REMINDER
+
+**Before responding to the user with your final message, ask yourself:**
+1. Did I just complete implementing, building, creating, fixing, debugging, refactoring, or configuring?
+2. Did I create files, update code, push commits, release versions, or solve problems?
+3. Did I learn anything (gotchas, patterns, API behaviors, troubleshooting steps)?
+
+**If YES to any:** STOP and invoke `ace-orchestration:ace-learning` NOW before responding.
+
 **Trigger conditions that require learning:**
 - Implemented new features or fixed bugs
 - Debugged and resolved issues
@@ -40,6 +49,8 @@ Skill: ace-orchestration:ace-learning
 - Used new APIs, libraries, or patterns
 - Made architectural decisions
 - Encountered and overcame errors
+- Created documentation or releases
+- Updated configurations or architectures
 
 **You MUST call this skill AFTER substantial work to capture lessons learned.**
 
