@@ -5,6 +5,39 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.19] - 2025-10-29
+
+### Fixed
+- **Critical**: Added explicit checkpoint reminders to ace-learning skill to ensure auto-invocation after every substantial task
+- Added "⚠️ CRITICAL CHECKPOINT" section to `skills/ace-learning/SKILL.md` with 3 checkpoint questions
+- Added matching checkpoint reminder to `CLAUDE.md` template that gets distributed via `/ace-claude-init`
+- Ensures complete learning cycle (retrieval → execution → learning) runs consistently
+
+### Why This Matters
+- Previous behavior would sometimes skip learning skill invocation, breaking the ACE learning cycle
+- This fix ensures every substantial task completion triggers pattern capture
+- Critical for maintaining the self-improving behavior of the ACE framework
+- Learning skill should invoke IMMEDIATELY after work completion, BEFORE responding to user
+
+### Changed
+- Updated `CLAUDE.md` versions to v3.2.19 (lines 71, 305) to reflect current release
+
+## [3.2.18] - 2025-10-28
+
+### Changed
+- **Bootstrap Orchestrator Skill** - Updated to use BootstrapResponse directly from ACE Server v2.9.0
+  - Eliminated redundant `ace_status` API call (reduced from 7 to 6 steps)
+  - Uses server-calculated `compression_percentage` and `analysis_time_seconds`
+  - Simplified API flow: `ace_bootstrap` now returns complete BootstrapResponse
+- **API Evolution** - Aligned with ACE Server v2.9.0's new `/bootstrap` endpoint structure
+  - Server now calculates compression metrics (was client-side calculation)
+  - Added `analysis_time_seconds` to show processing duration
+  - More accurate and consistent compression reporting
+
+### Improved
+- **Performance** - One fewer API call during bootstrap process
+- **Accuracy** - Server-side compression calculation eliminates client-side formula drift
+
 ## [3.2.17] - 2025-10-28
 
 ### Added
