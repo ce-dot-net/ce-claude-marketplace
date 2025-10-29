@@ -2,7 +2,7 @@
 # ACE Version Check - Runs on SessionStart
 # Compares project CLAUDE.md ACE version with plugin version
 
-PLUGIN_CLAUDE="$HOME/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchestration/CLAUDE.md"
+PLUGIN_CLAUDE="${CLAUDE_PLUGIN_ROOT}/CLAUDE.md"
 PROJECT_CLAUDE="./CLAUDE.md"
 VERSION_CACHE="$HOME/.ace/version_check_cache"
 

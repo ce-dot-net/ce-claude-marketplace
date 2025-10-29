@@ -5,6 +5,41 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.21] - 2025-10-29
+
+### Fixed
+- **CRITICAL**: Skills now ACTUALLY auto-invoke using SessionStart hook enforcement
+  - Added `hooks/ace-skill-enforcement.sh` - Injects MANDATORY skill protocol into every session's context
+  - SessionStart hook output gets added to Claude's context BEFORE any user messages
+  - This is STRONGER than CLAUDE.md checkpoints (which can be ignored)
+  - This is STRONGER than skill descriptions (which are behavioral suggestions)
+  - NOW: Context includes system-level MANDATORY instructions that cannot be bypassed
+
+### Why Previous Fixes Failed
+- v3.2.19: Added checkpoints to CLAUDE.md - behavioral reminders, can be ignored
+- v3.2.20: Added checkpoints to both skills - still behavioral, not enforced
+- **Root Cause**: Model-invoked skills with behavioral reminders are NOT reliable
+- **Real Solution**: SessionStart hook injects MANDATORY protocol into system context
+
+### Added
+- `hooks/ace-skill-enforcement.sh` - Session start enforcement script
+  - Outputs MANDATORY skill invocation protocol
+  - Gets added to Claude's context at session start (per hooks docs)
+  - Lists all trigger keywords explicitly
+  - Explains consequences of skipping skills
+
+### Changed
+- Updated `hooks/hooks.json` - Added skill enforcement hook as first SessionStart hook
+- Updated `hooks/ace-version-check.sh` - Use `${CLAUDE_PLUGIN_ROOT}` instead of hardcoded path
+- SessionStart hooks now run in order: enforcement → version check
+
+### How It Works Now
+1. Session starts
+2. SessionStart hook runs ace-skill-enforcement.sh
+3. Hook output gets injected into Claude's context (per Claude Code hooks spec)
+4. Claude sees MANDATORY protocol before processing any user messages
+5. Skills MUST be invoked - no longer optional
+
 ## [3.2.20] - 2025-10-29
 
 ### Fixed
