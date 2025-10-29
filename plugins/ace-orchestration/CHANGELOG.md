@@ -5,6 +5,27 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.20] - 2025-10-29
+
+### Fixed
+- **CRITICAL**: Restored balance between BEFORE and AFTER skill checkpoints
+  - v3.2.19 added checkpoint only for ace-learning (AFTER), creating imbalance
+  - ace-playbook-retrieval (BEFORE) was inadvertently de-emphasized
+  - Result: Retrieval skill stopped auto-invoking at task start
+- Added matching "⚠️ CRITICAL CHECKPOINT" to ace-playbook-retrieval skill
+- Added "⚠️ CRITICAL CHECKPOINT - BEFORE STARTING WORK" section to CLAUDE.md
+- Renamed existing checkpoint to "⚠️ CRITICAL CHECKPOINT - AFTER COMPLETING WORK" for clarity
+
+### Why This Matters
+- **Complete learning cycle requires BOTH skills**: retrieval (before) → execution → learning (after)
+- v3.2.19 broke the cycle by over-emphasizing the AFTER skill
+- Users reported: "the initial getting pattern skill is not running anymore"
+- This fix restores equal emphasis on both timing checkpoints
+
+### Changed
+- Updated `CLAUDE.md` with balanced checkpoints (lines 29-38: BEFORE, lines 47-65: AFTER)
+- Updated `skills/ace-playbook-retrieval/SKILL.md` with checkpoint section (lines 27-36)
+
 ## [3.2.19] - 2025-10-29
 
 ### Fixed

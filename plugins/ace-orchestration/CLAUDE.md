@@ -26,6 +26,17 @@ Skill: ace-orchestration:ace-playbook-retrieval
 
 **You MUST call this skill BEFORE starting work when the user's request contains ANY of these keywords.**
 
+### ⚠️ CRITICAL CHECKPOINT - BEFORE STARTING WORK
+
+**Before starting ANY substantial task, ask yourself:**
+1. Is the user asking me to implement, build, create, debug, fix, refactor, or configure something?
+2. Am I about to write code, solve a technical problem, or make architectural decisions?
+3. Could learned patterns from previous work help me here?
+
+**If YES to any:** STOP and invoke `ace-orchestration:ace-playbook-retrieval` NOW before starting.
+
+**Timing Rule:** This skill should be invoked **IMMEDIATELY after understanding the task** and **BEFORE writing any code or solutions**.
+
 ### After ANY Substantial Coding Task:
 
 **ALWAYS invoke the ACE Learning skill AFTER completion:**
@@ -33,7 +44,7 @@ Skill: ace-orchestration:ace-playbook-retrieval
 Skill: ace-orchestration:ace-learning
 ```
 
-### ⚠️ CRITICAL CHECKPOINT REMINDER
+### ⚠️ CRITICAL CHECKPOINT - AFTER COMPLETING WORK
 
 **Before responding to the user with your final message, ask yourself:**
 1. Did I just complete implementing, building, creating, fixing, debugging, refactoring, or configuring?
@@ -68,7 +79,7 @@ Step 5: Respond to user
 
 **Non-negotiable:** These skills are NOT optional. You MUST use them proactively for every qualifying task.
 
-## 🔄 Complete Automatic Learning Cycle (v3.2.19)
+## 🔄 Complete Automatic Learning Cycle (v3.2.20)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 
@@ -302,7 +313,7 @@ mcp__ace-pattern-learning__ace_learn(
 mcp__ace-pattern-learning__ace_status
 ```
 
-## 🎯 ACE Architecture (v3.2.19)
+## 🎯 ACE Architecture (v3.2.20)
 
 The ACE framework implements fully automatic learning with complete retrieval → learning cycle:
 

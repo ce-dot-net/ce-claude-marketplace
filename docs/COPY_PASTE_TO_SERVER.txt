@@ -1,0 +1,445 @@
+I need you to diagnose a critical issue with the ACE bootstrap pattern extraction. Here's the complete problem description and diagnostic instructions:
+
+# 🚨 CRITICAL ISSUE: Bootstrap Pattern Loss
+
+## Problem Statement
+
+Bootstrap extracted and sent **158 domain-specific patterns** from the Recrible codebase to the ACE server, but the playbook only shows **14 generic meta-patterns** about the bootstrap process itself (not about the actual code).
+
+## Evidence from Client Side (MCP Client v3.2.14 - Confirmed Working)
+
+The MCP client successfully:
+- Analyzed 108 git commits → extracted 70 patterns
+- Scanned 92 local files (TypeScript, TSX, JavaScript) → extracted 88 patterns
+- Total: **158 patterns sent to server** via HTTP POST to `/api/playbook/bootstrap`
+
+### Expected Patterns (158 total):
+- **27 strategies**: Stripe billing flows, Auth.js v5 multi-tenant architecture, Firebase security rules, German VAT compliance
+- **49 code snippets**: Concrete implementations of Stripe webhooks, Auth.js adapters, Firebase queries, Next.js 15 patterns
+- **17 troubleshooting**: Known issues with Stripe signature verification, Auth.js session handling, Firebase permissions
+- **65 APIs**: Stripe API usage, Auth.js v5 configuration, Firebase Admin SDK patterns
+
+### Actual Patterns in Playbook (14 total):
+- **5 strategies**: "When bootstrapping ACE playbooks...", "Bootstrap pattern extraction should..."
+- **3 snippets**: Generic bootstrap code snippets (not domain-specific)
+- **3 troubleshooting**: Meta-patterns about bootstrap troubleshooting
+- **3 APIs**: Generic guidance about API extraction
+
+**❌ These are meta-patterns ABOUT the bootstrap process, not patterns FROM the codebase code!**
+
+## Research Paper Architecture Validation
+
+From ACE research paper (2510.04618v1.pdf), the three-agent architecture should be:
+
+```
+Patterns → Reflector (LLM ✅) → Insights → Curator (NO LLM ❌) → Delta → Playbook
+```
+
+### Key Research Paper Quotes:
+
+1. **Reflector Role**:
+   > "distills **concrete insights** from successes and errors"
+
+   **Meaning**: Should extract SPECIFIC code patterns (API usage, error handling, configuration), NOT abstract meta-patterns about the extraction process
+
+2. **Curator Role**:
+   > "synthesizes lessons into compact delta entries, which are merged **deterministically** into existing context by **lightweight, non-LLM logic**"
+
+   **Critical Requirements**:
+   - ⚠️ **Curator MUST NOT use LLM** - should use deterministic algorithm only
+   - Must preserve all Reflector insights (no compression)
+   - Use simple duplicate detection and merge
+
+3. **Anti-Pattern Warning**:
+   > Paper warns against "context collapse" and "brevity bias"
+
+   **Current Issue**: 158 specific patterns → 14 generic meta-patterns = context collapse!
+
+## Your Diagnostic Tasks
+
+### Task 1: Check Domain Discovery
+
+**Find**: The domain discovery service (likely `services/domain_discovery.py` or similar)
+
+**Add this logging**:
+```python
+domains = await domain_discovery(patterns)
+logger.info(f"🌍 Domain Discovery INPUT: {len(patterns)} patterns")
+logger.info(f"🌍 Domain Discovery OUTPUT: {domains}")
+```
+
+**Expected Output**:
+```python
+domains = ["stripe-billing", "auth-js-v5-authentication", "firebase-multi-tenant", "nextjs-15-app-router", "german-vat-compliance"]
+```
+
+**Wrong Output** (if this is what you're seeing):
+```python
+domains = ["ace-bootstrap", "pattern-extraction-methodology", "playbook-initialization"]
+```
+
+**Question**: Is domain discovery analyzing the CODE domains or the PROCESS domains?
+
+---
+
+### Task 2: Check Reflector Implementation
+
+**Find**: The Reflector service (likely `services/reflector.py` or similar)
+
+**Add this logging**:
+```python
+async def extract_insights(patterns: List[Pattern], domains: List[str]):
+    logger.info(f"🔍 Reflector INPUT: {len(patterns)} patterns")
+    logger.info(f"🔍 Domains provided: {domains}")
+
+    # Your existing Reflector logic here
+    insights = await your_reflector_logic(patterns, domains)
+
+    logger.info(f"🔍 Reflector OUTPUT: {len(insights)} insights")
+    logger.info(f"🔍 Sample insights (first 3):")
+    for insight in insights[:3]:
+        logger.info(f"   - Section: {insight['section']}")
+        logger.info(f"   - Insight: {insight['insight'][:100]}...")
+        logger.info(f"   - Domain: {insight.get('domain', 'N/A')}")
+
+    return insights
+```
+
+**Expected Result**: ~158 concrete insights like:
+```python
+{
+    "section": "apis_to_use",
+    "insight": "Stripe webhook signature verification",
+    "details": "Use express.raw() middleware to preserve raw body for signature verification with stripe.webhooks.constructEvent()",
+    "code": "app.post('/api/webhooks/stripe', express.raw({type: 'application/json'}), handler)",
+    "domain": "stripe-billing"
+}
+```
+
+**Wrong Result** (what's likely happening):
+```python
+{
+    "section": "strategies_and_hard_rules",
+    "insight": "Bootstrap pattern extraction methodology",
+    "details": "When bootstrapping ACE playbooks from existing codebases, consider both git history and local files",
+    "code": null,
+    "domain": "ace-bootstrap"
+}
+```
+
+**Check the Reflector Prompt**: Is it asking the LLM to analyze:
+- ✅ The CODE patterns (Stripe, Auth.js, Firebase implementations)
+- ❌ The EXTRACTION PROCESS (how bootstrap works)
+
+**If the prompt is wrong, fix it like this**:
+```python
+prompt = f"""
+You are analyzing {len(patterns)} code patterns extracted from a production codebase.
+
+Identified domains: {domains}
+
+YOUR TASK: Extract CONCRETE, DOMAIN-SPECIFIC insights about the ACTUAL CODE, such as:
+- API usage patterns (e.g., "Stripe webhook signature verification requires express.raw() middleware")
+- Implementation details (e.g., "Auth.js v5 JWT adapter configuration for multi-tenant")
+- Error handling patterns (e.g., "Firebase permission denied errors require security rule scoping")
+- Configuration requirements (e.g., "Stripe webhook secret must be in environment variables")
+
+DO NOT create meta-patterns about:
+❌ The bootstrap process itself
+❌ Pattern extraction methodology
+❌ ACE playbook initialization
+❌ How patterns should be organized
+
+FOCUS ON: What the CODE does, how it's implemented, what APIs it uses, what problems it solves
+
+Patterns to analyze:
+{json.dumps(patterns, indent=2)}
+"""
+```
+
+---
+
+### Task 3: Check Curator Implementation ⚠️ CRITICAL
+
+**Find**: The Curator service (likely `services/curator.py` or similar)
+
+**⚠️ MOST IMPORTANT CHECK: Is the Curator using an LLM?**
+
+Search the Curator code for:
+- `anthropic.messages.create`
+- `openai.ChatCompletion.create`
+- Any LLM API calls
+- Any "summarize" or "compress" logic
+
+**If you find LLM usage in Curator → THIS IS THE BUG!**
+
+The research paper explicitly states Curator should use **"lightweight, non-LLM logic"** for deterministic merging.
+
+**Add this logging**:
+```python
+def curator_merge(existing_playbook: dict, reflector_insights: List[dict]) -> dict:
+    logger.info(f"📝 Curator INPUT: {len(reflector_insights)} insights from Reflector")
+    logger.info(f"📝 Existing playbook size: {sum(len(section) for section in existing_playbook.values())} patterns")
+
+    # ⚠️ CHECK: Is there an LLM call here? There SHOULDN'T be!
+
+    # Your existing merge logic
+    result = your_merge_logic(existing_playbook, reflector_insights)
+
+    total_patterns = sum(len(section) for section in result.values())
+    added_patterns = total_patterns - sum(len(section) for section in existing_playbook.values())
+    logger.info(f"📝 Curator OUTPUT: {total_patterns} total patterns ({added_patterns} added)")
+
+    return result
+```
+
+**Expected Curator Implementation** (deterministic, no LLM):
+```python
+def curator_merge(existing_playbook: dict, reflector_insights: List[dict]) -> dict:
+    """
+    Deterministic merge algorithm - NO LLM!
+    Preserves ALL insights from Reflector
+    """
+    logger.info(f"📝 Curator merging {len(reflector_insights)} insights")
+
+    for insight in reflector_insights:
+        section = insight['section']
+
+        # Simple duplicate detection (no LLM - use string similarity)
+        is_duplicate = any(
+            is_similar_text(bullet['bullet'], insight['details'])
+            for bullet in existing_playbook.get(section, [])
+        )
+
+        if not is_duplicate:
+            existing_playbook[section].append({
+                'bullet': insight['details'],
+                'code': insight.get('code'),
+                'domain': insight.get('domain'),
+                'helpful_count': 0,
+                'harmful_count': 0,
+                'created_at': datetime.now().isoformat()
+            })
+
+    return existing_playbook
+
+def is_similar_text(text1: str, text2: str, threshold: float = 0.85) -> bool:
+    """Deterministic similarity - NO LLM"""
+    from difflib import SequenceMatcher
+    return SequenceMatcher(None, text1.lower(), text2.lower()).ratio() >= threshold
+```
+
+**Wrong Curator Implementation** (if using LLM):
+```python
+def curator_merge(existing_playbook, reflector_insights):
+    # ❌ ANTI-PATTERN: Using LLM to compress/summarize insights
+    prompt = f"Synthesize these {len(reflector_insights)} insights into key patterns"
+    compressed = llm_call(prompt)  # This causes 158 patterns → 14 meta-patterns!
+    return compressed
+```
+
+---
+
+### Task 4: Check Bootstrap Endpoint
+
+**Find**: The bootstrap endpoint (likely `routes/playbook.py` - `/api/playbook/bootstrap`)
+
+**Add comprehensive logging**:
+```python
+@router.post("/api/playbook/bootstrap")
+async def bootstrap(request: BootstrapRequest):
+    patterns = request.patterns
+    logger.info(f"📥 BOOTSTRAP START: Received {len(patterns)} patterns from client")
+
+    # Get existing playbook size
+    existing_size = sum(len(section) for section in existing_playbook.values())
+    logger.info(f"📚 Existing playbook: {existing_size} patterns")
+
+    # Step 1: Domain discovery
+    domains = await domain_discovery(patterns)
+    logger.info(f"🌍 STEP 1 - Domain Discovery: {domains}")
+
+    # Step 2: Reflector
+    insights = await reflector.extract_insights(patterns, domains)
+    logger.info(f"🔍 STEP 2 - Reflector: Produced {len(insights)} insights")
+
+    # Step 3: Curator
+    updated_playbook = curator.merge(existing_playbook, insights)
+    new_size = sum(len(section) for section in updated_playbook.values())
+    added = new_size - existing_size
+    logger.info(f"📝 STEP 3 - Curator: Playbook now has {new_size} patterns ({added} added)")
+
+    logger.info(f"✅ BOOTSTRAP END: Success")
+    return updated_playbook
+```
+
+**Expected Output**:
+```
+📥 BOOTSTRAP START: Received 158 patterns from client
+📚 Existing playbook: 0 patterns
+🌍 STEP 1 - Domain Discovery: ['stripe-billing', 'auth-js-v5', 'firebase-multi-tenant', ...]
+🔍 STEP 2 - Reflector: Produced 158 insights
+📝 STEP 3 - Curator: Playbook now has 158 patterns (158 added)
+✅ BOOTSTRAP END: Success
+```
+
+**Wrong Output** (what's likely happening):
+```
+📥 BOOTSTRAP START: Received 158 patterns from client
+📚 Existing playbook: 0 patterns
+🌍 STEP 1 - Domain Discovery: ['ace-bootstrap', 'pattern-extraction']
+🔍 STEP 2 - Reflector: Produced 14 insights  ← ❌ LOST 144 PATTERNS HERE!
+📝 STEP 3 - Curator: Playbook now has 14 patterns (14 added)
+✅ BOOTSTRAP END: Success
+```
+
+---
+
+## Expected vs Actual Flow
+
+### ✅ Expected Flow (Research Paper Architecture):
+```
+158 Patterns from Client
+    ↓
+Domain Discovery (LLM ✅)
+    → ["stripe-billing", "auth-js-v5", "firebase-multi-tenant", "nextjs-15", "german-vat"]
+    ↓
+Reflector (LLM ✅)
+    → 158 concrete insights about Stripe APIs, Auth.js flows, Firebase security, etc.
+    ↓
+Curator (NO LLM ❌)
+    → Deterministic merge: Add all 158 insights to playbook (no compression!)
+    ↓
+Playbook: 158 new domain-specific patterns ✅
+```
+
+### ❌ Actual Flow (What's Happening):
+```
+158 Patterns from Client
+    ↓
+Domain Discovery (LLM)
+    → ❌ ["ace-bootstrap", "pattern-extraction"] (analyzing PROCESS not CODE)
+    ↓
+Reflector (LLM)
+    → ❌ 14 meta-patterns about bootstrap methodology (analyzing PROCESS not CODE)
+    ↓
+Curator (LLM? ⚠️)
+    → ❌ Compresses to 14 generic patterns (if using LLM for compression)
+    ↓
+Playbook: 14 useless meta-patterns ❌
+```
+
+---
+
+## Your Action Plan
+
+### Step 1: Add All Logging (10 minutes)
+Add the logging code I provided above to:
+- Domain discovery service
+- Reflector service
+- Curator service
+- Bootstrap endpoint
+
+### Step 2: Trigger Bootstrap Again (5 minutes)
+```bash
+# From the client side, run:
+/ace-bootstrap --mode both --commits 100 --days 30
+```
+
+### Step 3: Analyze Logs (5 minutes)
+Review the logs to identify WHERE the patterns are being lost:
+
+**Pattern Loss Location**:
+- [ ] Domain discovery creates wrong domains → Fix domain discovery prompt
+- [ ] Reflector produces <158 insights → Fix Reflector prompt to focus on code patterns
+- [ ] Curator compresses insights → Remove LLM from Curator, use deterministic merge
+
+### Step 4: Fix the Issue (20 minutes)
+
+**If Domain Discovery is wrong**:
+- Fix prompt to identify code domains not process domains
+- Focus on technical domains: API integrations, frameworks, architecture patterns
+
+**If Reflector is wrong**:
+- Fix prompt to analyze CODE patterns not EXTRACTION PROCESS
+- Ensure it extracts concrete, domain-specific insights
+- Should produce ~158 insights from 158 input patterns (1:1 ratio)
+
+**If Curator is wrong**:
+- **Remove ALL LLM calls from Curator** (research paper requirement!)
+- Implement deterministic merge with simple duplicate detection
+- Preserve ALL insights from Reflector (no compression!)
+
+### Step 5: Validate Fix (5 minutes)
+Re-run bootstrap and verify:
+```
+✅ Domain discovery: Code domains identified (stripe, auth, firebase)
+✅ Reflector: ~158 concrete insights produced
+✅ Curator: ~158 patterns added to playbook (deterministic merge)
+✅ Final playbook: Contains specific API usage, error handling, configs
+```
+
+---
+
+## Success Criteria
+
+After the fix, you should see:
+
+```
+📥 Bootstrap received: 158 patterns
+🌍 Domains: ['stripe-billing', 'auth-js-v5', 'firebase-multi-tenant', 'nextjs-15', 'german-vat']
+🔍 Reflector produced: 158 insights (domain-specific, concrete)
+📝 Curator merging: 158 insights (deterministic, no LLM)
+✅ Final playbook: 158 new patterns added
+
+Playbook breakdown:
+- strategies_and_hard_rules: 27 patterns
+  Example: "Stripe webhook signature verification requires express.raw() middleware"
+
+- useful_code_snippets: 49 patterns
+  Example: "app.post('/api/webhooks/stripe', express.raw({type: 'application/json'}), handler)"
+
+- troubleshooting_and_pitfalls: 17 patterns
+  Example: "Stripe signature verification fails if bodyParser processes request first"
+
+- apis_to_use: 65 patterns
+  Example: "stripe.webhooks.constructEvent(body, signature, webhookSecret) for webhook validation"
+```
+
+---
+
+## Files to Check
+
+Based on typical ACE server structure, check these files:
+
+```
+server/
+├── services/
+│   ├── reflector.py              ← Check prompt and output
+│   ├── curator.py                ← ⚠️ Check for LLM usage (MUST remove!)
+│   └── domain_discovery.py       ← Check domain identification
+├── routes/
+│   └── playbook.py               ← Check /api/playbook/bootstrap endpoint
+└── utils/
+    └── merge.py                  ← Check merge algorithm (must be deterministic)
+```
+
+---
+
+## Key Takeaways
+
+1. **Curator MUST NOT use LLM** (research paper requirement - "lightweight, non-LLM logic")
+2. **Reflector must analyze CODE not PROCESS** (extract concrete insights from actual code patterns)
+3. **No compression allowed** (158 patterns in → ~158 patterns out)
+4. **Domain discovery must identify code domains** (stripe, auth, firebase) not meta-domains (bootstrap, extraction)
+
+**Current Status**:
+- ✅ MCP Client v3.2.14: Working correctly, sent 158 patterns
+- ❌ ACE Server: Investigation needed, producing 14 meta-patterns instead of 158 code patterns
+
+Please investigate with the logging I provided and report back:
+1. How many insights does Reflector produce? (should be ~158)
+2. Is Curator using an LLM? (it shouldn't!)
+3. What domains does domain discovery identify? (should be code domains)
+
+This will help us pinpoint exactly where the patterns are being lost or transformed into meta-patterns.
