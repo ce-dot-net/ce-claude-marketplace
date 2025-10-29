@@ -8,16 +8,21 @@ This plugin provides fully automatic pattern learning using the ACE framework ar
 
 ## 🚨 AUTOMATIC: ACE Skill Enforcement
 
-**Skill invocation is ENFORCED automatically via SessionStart hook.**
+**Skill invocation is ENFORCED automatically via TWO hooks: SessionStart AND UserPromptSubmit.**
 
-The plugin includes `hooks/ace-skill-enforcement.sh` which injects MANDATORY skill invocation instructions into your context at the start of every session. You don't need to remember to invoke skills - the system will remind you automatically.
+The plugin includes enforcement hooks that ensure ACE skills are ALWAYS invoked:
+- **SessionStart hook** (`ace-skill-enforcement.sh`) - Runs once at session start
+- **UserPromptSubmit hook** (`ace-prompt-enforcement.sh`) - Runs on EVERY user prompt
+
+You don't need to remember to invoke skills - the system enforces it automatically on every prompt.
 
 ### How Automatic Enforcement Works:
 
-1. **Session starts** → SessionStart hook runs
-2. **Hook output** → Added to Claude's context (system-level instruction)
-3. **User task** → Claude sees MANDATORY protocol + user request
-4. **Skills auto-invoke** → Triggered based on task keywords
+1. **Session starts** → SessionStart hook runs (initial setup)
+2. **User submits EACH prompt** → UserPromptSubmit hook runs (per-prompt enforcement)
+3. **Hook output** → Added to Claude's context for THAT prompt
+4. **Claude sees** → MANDATORY protocol fresh in context
+5. **Skills auto-invoke** → Triggered based on task keywords
 
 ### The Two Skills:
 
@@ -36,6 +41,8 @@ The plugin includes `hooks/ace-skill-enforcement.sh` which injects MANDATORY ski
 ```
 User: "Implement JWT authentication"
     ↓
+UserPromptSubmit hook: Injects enforcement (EVERY prompt)
+    ↓
 Automatic: ace-playbook-retrieval invokes (hook enforces)
     ↓
 Retrieved: Previous auth patterns loaded
@@ -45,9 +52,11 @@ Implementation: Using learned patterns
 Automatic: ace-learning invokes (hook enforces)
     ↓
 Result: New patterns captured for next time
+    ↓
+Next prompt: UserPromptSubmit enforces again (continuous cycle)
 ```
 
-**Note:** The SessionStart hook provides system-level enforcement, making skill invocation truly automatic and non-optional.
+**Note:** The combination of SessionStart (once per session) and UserPromptSubmit (every prompt) ensures ACE enforcement NEVER stops, regardless of session length or context pressure.
 
 ## 🔄 Complete Automatic Learning Cycle (v3.2.27)
 
