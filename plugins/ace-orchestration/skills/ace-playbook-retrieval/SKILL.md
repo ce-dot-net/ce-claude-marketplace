@@ -1,6 +1,6 @@
 ---
 name: ace-playbook-retrieval
-description: PROACTIVELY use this skill BEFORE implementation tasks. YOU MUST retrieve playbook patterns when user says implement, build, debug, fix, refactor, integrate, optimize, architect, create, add, develop, troubleshoot, resolve, improve, restructure, connect, setup, configure, design, or plan. This skill provides learned strategies, code snippets, troubleshooting tips, and recommended APIs. Use this skill proactively whenever you are starting substantial technical work - DO NOT wait to be asked.
+description: Retrieves learned patterns from the ACE playbook before starting implementation, debugging, refactoring, or architecture tasks. Use when implementing features, fixing bugs, integrating APIs, optimizing code, or making technical decisions. Provides strategies, code snippets, troubleshooting tips, and API recommendations from previous work.
 ---
 
 # ACE Playbook Retrieval

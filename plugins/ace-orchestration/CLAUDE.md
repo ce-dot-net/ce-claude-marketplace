@@ -6,59 +6,50 @@ This plugin provides fully automatic pattern learning using the ACE framework ar
 
 **First-Time Setup:** Run `/ace-claude-init` in your project to add this file to your project's CLAUDE.md. This provides always-on context about the ACE system and ensures optimal skill triggering.
 
-## 🚨 AUTOMATIC: ACE Skill Enforcement
+## 🚨 AUTOMATIC: ACE Skill Invocation
 
-**Skill invocation is ENFORCED automatically via TWO hooks: SessionStart AND UserPromptSubmit.**
+**Skills are model-invoked based on task context** - Claude autonomously decides when to use them.
 
-The plugin includes enforcement hooks that ensure ACE skills are ALWAYS invoked:
-- **SessionStart hook** (`ace-skill-enforcement.sh`) - Runs once at session start
-- **UserPromptSubmit hook** (`ace-prompt-enforcement.sh`) - Runs on EVERY user prompt
-
-You don't need to remember to invoke skills - the system enforces it automatically on every prompt.
-
-### How Automatic Enforcement Works:
-
-1. **Session starts** → SessionStart hook runs (initial setup)
-2. **User submits EACH prompt** → UserPromptSubmit hook runs (per-prompt enforcement)
-3. **Hook output** → Added to Claude's context for THAT prompt
-4. **Claude sees** → MANDATORY protocol fresh in context
-5. **Skills auto-invoke** → Triggered based on task keywords
+The plugin includes **gentle reminder hooks** that suggest using ACE skills at appropriate times:
+- **UserPromptSubmit hook** - Reminds about playbook availability for coding tasks
+- **Stop hook** - Suggests learning capture after substantial work
+- **SubagentStop hook** - Prompts learning capture for subagent tasks
 
 ### The Two Skills:
 
 **Before tasks:** `ace-orchestration:ace-playbook-retrieval`
-- Automatically invoked when you: implement, build, create, add, develop, debug, fix, troubleshoot, resolve, refactor, optimize, improve, restructure, integrate, connect, setup, configure, architect, design, plan
-- Retrieves learned patterns from previous work
-- Provides strategies, code snippets, troubleshooting tips, API recommendations
+- Invoked when: implementing features, fixing bugs, integrating APIs, optimizing code, making technical decisions
+- Retrieves: Learned patterns from previous work
+- Provides: Strategies, code snippets, troubleshooting tips, API recommendations
 
 **After tasks:** `ace-orchestration:ace-learning`
-- Automatically invoked after: implementing features, fixing bugs, solving problems, creating files, making architectural decisions, discovering gotchas
-- Captures what you learned during execution
-- Updates the playbook for future use
+- Invoked after: implementing features, fixing bugs, solving problems, discovering gotchas
+- Captures: What you learned during execution
+- Updates: The playbook for future use
 
-### Workflow Example:
+### How It Works:
 
 ```
 User: "Implement JWT authentication"
     ↓
-UserPromptSubmit hook: Injects enforcement (EVERY prompt)
+Skill Description Matching: Claude recognizes "implement" keyword
     ↓
-Automatic: ace-playbook-retrieval invokes (hook enforces)
+ace-playbook-retrieval Auto-Invokes (model decision)
     ↓
 Retrieved: Previous auth patterns loaded
     ↓
 Implementation: Using learned patterns
     ↓
-Automatic: ace-learning invokes (hook enforces)
+Stop Hook: Suggests learning capture
+    ↓
+ace-learning Auto-Invokes (model decision)
     ↓
 Result: New patterns captured for next time
-    ↓
-Next prompt: UserPromptSubmit enforces again (continuous cycle)
 ```
 
-**Note:** The combination of SessionStart (once per session) and UserPromptSubmit (every prompt) ensures ACE enforcement NEVER stops, regardless of session length or context pressure.
+**Note:** Hooks provide gentle context and reminders. Claude autonomously decides when to invoke skills based on task context and skill descriptions.
 
-## 🔄 Complete Automatic Learning Cycle (v3.2.27)
+## 🔄 Complete Automatic Learning Cycle (v3.2.29)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 

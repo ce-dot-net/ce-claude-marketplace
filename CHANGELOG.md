@@ -5,6 +5,84 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.29] - 2025-10-29
+
+### 🔧 CRITICAL FIX: Restored Model-Invoked Skills Architecture
+
+**FIXED: Skills now invoke naturally based on context matching (reverted to v3.1.11 working approach)**
+
+### What Broke
+
+On October 23rd (commit 2891651, v3.2.8), we introduced "Mandatory Skill Triggering with Aggressive Prompting":
+1. **Made skill descriptions prescriptive** ("YOU MUST", "MANDATORY") instead of descriptive
+2. **Later added bash script enforcement hooks** (v3.2.21+) to try to force invocation
+3. **Added UserPromptSubmit enforcement** (v3.2.27) to make it even more aggressive
+
+Result: Despite increasingly aggressive enforcement, skills STILL stopped auto-invoking consistently because descriptions became commands rather than natural context matchers.
+
+### What We Fixed
+
+**Hooks** (restored gentle approach):
+- ✅ Changed back to `type: "prompt"` for UserPromptSubmit/Stop/SubagentStop hooks (like v3.1.11 had for similar hooks)
+- ✅ Removed aggressive bash script enforcement (`ace-prompt-enforcement.sh`, `ace-skill-enforcement.sh`)
+- ✅ Restored gentle reminder prompts that suggest skills without forcing them
+- ✅ Kept version check SessionStart hook and Bash logging PostToolUse hook
+
+**Skill Descriptions** (restored v3.2.4 natural approach):
+- ✅ **ace-playbook-retrieval**: Reverted to v3.2.4 descriptive style (before October 23rd breaking change)
+  - v3.2.4 (worked): "Automatically retrieve ACE playbook patterns before substantial coding tasks..."
+  - v3.2.8-3.2.28 (broken): "YOU MUST retrieve playbook patterns when user says..."
+  - v3.2.29 (fixed): "Retrieves learned patterns from the ACE playbook before starting implementation..."
+- ✅ **ace-learning**: Simplified to describe WHAT it does and WHEN to use it
+  - v3.2.4 (worked): Natural description of what it does
+  - v3.2.8-3.2.28 (broken): "MANDATORY trigger: when you have COMPLETED implementing..."
+  - v3.2.29 (fixed): "Captures patterns and lessons learned after completing substantial coding tasks..."
+
+### Technical Rationale
+
+From official Claude Code documentation:
+> **"Claude discovers Skills from the description field"**
+> **"The description should include: What the Skill does and When Claude should use it (specific trigger terms)"**
+> **"Vague descriptions prevent discovery. Specific ones work better"**
+
+Key insight: Skills are **model-invoked** - Claude decides when to use them based on **context matching**, not commands.
+
+### Architecture
+
+```
+User: "Implement JWT authentication"
+    ↓
+Skill Description Matching: Claude recognizes "implement" keyword in context
+    ↓
+ace-playbook-retrieval Auto-Invokes (model decision based on natural description)
+    ↓
+Task Execution: Uses retrieved patterns
+    ↓
+Stop Hook: Gentle reminder about learning capture
+    ↓
+ace-learning Auto-Invokes (model decision based on task context)
+```
+
+### Files Changed
+
+- `hooks/hooks.json`: Restored v3.1.11 structure with `type: "prompt"`
+- `skills/ace-playbook-retrieval/SKILL.md`: Simplified description to be context-matching
+- `skills/ace-learning/SKILL.md`: Simplified description to be context-matching
+- `CLAUDE.md`: Updated template to reflect restored model-invoked approach
+- Removed: `hooks/ace-prompt-enforcement.sh`, `hooks/ace-skill-enforcement.sh` (no longer needed)
+
+### Benefits
+
+- ✅ **Natural invocation**: Skills trigger based on task context, not forced commands
+- ✅ **Aligned with Claude Code architecture**: Model-invoked by design
+- ✅ **Cleaner codebase**: Removed unnecessary enforcement scripts
+- ✅ **Better UX**: Gentle reminders instead of aggressive "YOU MUST" commands
+- ✅ **Proven approach**: Restored v3.1.11 working implementation
+
+### Migration
+
+**For existing users**: Run `/ace-claude-init` to update your project's CLAUDE.md with the new template.
+
 ## [3.2.18] - 2025-10-28
 
 ### 🔄 API Alignment: Bootstrap Response Structure
