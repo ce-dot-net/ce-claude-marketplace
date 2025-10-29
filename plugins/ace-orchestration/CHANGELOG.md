@@ -5,6 +5,29 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.25] - 2025-10-29
+
+### Fixed
+- **Remove unnecessary manifest fields that break plugin validation**
+  - Removed `commands`, `agents`, `skills` fields from plugin.json
+  - These directories are auto-discovered by Claude Code (default locations)
+  - Validation error: "agents: Invalid input: must end with .md"
+  - Only specify custom paths (hooks, mcpServers) in manifest
+  - Plugin now loads without validation errors
+
+### Why This Was Broken
+- Plugin.json was explicitly specifying default directories
+- Claude Code auto-discovers `commands/`, `agents/`, `skills/` directories
+- Explicit paths in manifest are for **additional** locations beyond defaults
+- `agents` field triggered validation requiring `.md` files
+- We only had `agents/README.md` (not an agent definition)
+
+### What's Fixed
+- ✅ Plugin.json now only specifies custom paths (hooks, mcpServers)
+- ✅ Default directories auto-discovered without explicit declaration
+- ✅ Validation passes - no "must end with .md" error
+- ✅ Plugin loads successfully in Claude Code
+
 ## [3.2.24] - 2025-10-29
 
 ### Fixed
