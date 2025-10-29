@@ -80,7 +80,7 @@ Step 5: Respond to user
 
 **CRITICAL - Non-negotiable:** These skills are NOT optional and NOT negotiable. You MUST use them proactively and automatically for EVERY qualifying task. The retrieval skill runs BEFORE, the learning skill runs AFTER - BOTH are MANDATORY.
 
-## 🔄 Complete Automatic Learning Cycle (v3.2.34)
+## 🔄 Complete Automatic Learning Cycle (v3.2.35)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 
@@ -314,7 +314,7 @@ mcp__ace-pattern-learning__ace_learn(
 mcp__ace-pattern-learning__ace_status
 ```
 
-## 🎯 ACE Architecture (v3.2.34)
+## 🎯 ACE Architecture (v3.2.35)
 
 The ACE framework implements fully automatic learning with complete retrieval → learning cycle:
 
