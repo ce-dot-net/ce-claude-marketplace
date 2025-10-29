@@ -1,52 +1,68 @@
-# ACE Orchestration Plugin - Automatic Learning Cycle
+# ACE (Agentic Context Engineering) Framework
 
-This plugin provides fully automatic pattern learning using the ACE framework architecture.
+This plugin implements the ACE research paper architecture: comprehensive, evolving contexts that accumulate, refine, and organize strategies over time.
 
 ## 📖 Setup Instructions
 
-**First-Time Setup:** Run `/ace-claude-init` in your project to add this file to your project's CLAUDE.md. This provides always-on context about the ACE system and ensures optimal skill triggering.
+**First-Time Setup:** Run `/ace-claude-init` in your project to add this file to your project's CLAUDE.md.
 
-## 🚨 IMPORTANT: ACE Skill Usage
+## 🎯 ACE Training Cycle Goal
 
-**Skills are model-invoked based on task context** - Claude autonomously decides when to use them based on natural description matching.
+**From Research Paper**: The Generator (you) produces reasoning trajectories, the Reflector critiques these traces to extract lessons, the Curator synthesizes lessons into compact delta entries, which are merged into the existing playbook.
 
-**NO HOOKS NEEDED** - The skills invoke automatically when their descriptions match the task context.
+**Your Role**: When solving problems, highlight which patterns were useful or misleading. This feedback guides the Reflector in proposing corrective updates.
 
-### The Two Skills:
+## 🔄 ACE Skills Usage
 
-**Before tasks:** `ace-orchestration:ace-playbook-retrieval`
-- Invoked when: implementing features, fixing bugs, integrating APIs, optimizing code, making technical decisions
-- Retrieves: Learned patterns from previous work
-- Provides: Strategies, code snippets, troubleshooting tips, API recommendations
+**Model-Invoked Architecture**: Skills activate automatically when their descriptions match your task context. No hooks or enforcement needed.
 
-**After tasks:** `ace-orchestration:ace-learning`
-- Invoked after: implementing features, fixing bugs, solving problems, discovering gotchas
-- Captures: What you learned during execution
-- Updates: The playbook for future use
+### The Two Skills (ACE Architecture):
 
-### How It Works:
+**1. ace-playbook-retrieval** (Generator retrieves context)
+- **When**: Before implementation, debugging, refactoring, architecture decisions
+- **What**: Retrieves learned strategies, code patterns, troubleshooting solutions
+- **Why**: Generator uses playbook context when solving problems (research paper requirement)
+- **Triggers**: feature implementation, bug fixes, API integration, code refactoring, performance optimization
+
+**2. ace-learning** (Generator provides feedback)
+- **When**: After completing substantial coding work
+- **What**: Captures execution trajectory and lessons learned
+- **Why**: Generator highlights useful/misleading patterns → Reflector → Curator → Updated playbook (research paper cycle)
+- **Triggers**: implemented features, fixed bugs, integrated APIs, refactored code, discovered gotchas
+
+### How It Works (ACE Research Paper Flow):
 
 ```
 User: "Implement JWT authentication"
     ↓
-Skill Description Matching: Claude recognizes "implement" keyword
+1. RETRIEVAL (Generator uses context)
+   ace-playbook-retrieval invokes (description matches "implement")
+   → Retrieves: "Refresh token rotation prevents theft attacks"
+   → Generator has context BEFORE solving problem
     ↓
-ace-playbook-retrieval Auto-Invokes (model decision)
+2. EXECUTION (Generator produces trajectory)
+   Implementation using retrieved patterns
+   → Short-lived access tokens + rotating refresh tokens
+   → Note: This pattern was helpful!
     ↓
-Retrieved: Previous auth patterns loaded
+3. FEEDBACK (Generator highlights patterns)
+   ace-learning invokes (substantial work completed)
+   → Trajectory: Design decisions, tools used, what worked
+   → Feedback: "Refresh token rotation prevented security issues"
     ↓
-Implementation: Using learned patterns
+4. ANALYSIS (Server-side autonomously)
+   MCP Client → ACE Server HTTP POST
+   → Reflector (Sonnet 4): Extracts insights from trajectory
+   → Curator (Haiku 4.5): Creates delta updates
+   → Merge: Non-LLM algorithm applies incremental updates
     ↓
-Stop Hook: Suggests learning capture
-    ↓
-ace-learning Auto-Invokes (model decision)
-    ↓
-Result: New patterns captured for next time
+5. RESULT: Playbook updated with reinforced pattern!
+   Next task: Pattern available with higher confidence score
 ```
 
-**Note:** Hooks provide gentle context and reminders. Claude autonomously decides when to invoke skills based on task context and skill descriptions.
+**Key Insight**: Skills invoke probabilistically based on task context. When they do invoke, the complete ACE cycle (Generator → Reflector → Curator) executes automatically.
 
-## 🔄 Complete Automatic Learning Cycle (v3.2.29)
+## 🔄 Complete Automatic Learning Cycle (v3.2.30)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 

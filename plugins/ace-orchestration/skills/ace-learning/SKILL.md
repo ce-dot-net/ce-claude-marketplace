@@ -1,6 +1,6 @@
 ---
 name: ACE Learning from Execution
-description: Captures patterns and lessons learned after completing substantial coding tasks. Use after implementing features, fixing bugs, debugging issues, integrating APIs, refactoring code, or discovering gotchas. Automatically analyzes execution trajectory and updates the ACE playbook with new insights for future work.
+description: Capture execution patterns and lessons after completing coding tasks. Use after: implementing features, fixing bugs, debugging issues, integrating APIs, refactoring code, discovering gotchas, solving technical problems, making architectural decisions. Analyzes trajectory, extracts insights, updates playbook with strategies, code patterns, troubleshooting tips, and API recommendations for future tasks.
 ---
 
 # ACE Learning from Execution
