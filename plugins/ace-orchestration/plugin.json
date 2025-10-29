@@ -1,6 +1,6 @@
 {
   "name": "ace-orchestration",
-  "version": "3.2.21",
+  "version": "3.2.22",
   "description": "Code Engine ACE - Intelligent pattern learning and code generation with Three-Agent Architecture (Generator → Reflector → Curator). Learns from execution feedback to improve coding outcomes. Downloads latest MCP client from npm with interactive configuration.",
   "author": {
     "name": "ACE Team",

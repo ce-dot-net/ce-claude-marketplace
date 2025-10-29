@@ -6,80 +6,50 @@ This plugin provides fully automatic pattern learning using the ACE framework ar
 
 **First-Time Setup:** Run `/ace-claude-init` in your project to add this file to your project's CLAUDE.md. This provides always-on context about the ACE system and ensures optimal skill triggering.
 
-## 🚨 MANDATORY: ACE Skill Usage Rules
+## 🚨 AUTOMATIC: ACE Skill Enforcement
 
-**YOU MUST FOLLOW THESE RULES FOR EVERY TASK:**
+**Skill invocation is ENFORCED automatically via SessionStart hook.**
 
-### Before ANY Implementation, Debugging, or Refactoring Task:
+The plugin includes `hooks/ace-skill-enforcement.sh` which injects MANDATORY skill invocation instructions into your context at the start of every session. You don't need to remember to invoke skills - the system will remind you automatically.
 
-**ALWAYS invoke the ACE Playbook Retrieval skill FIRST:**
-```
-Skill: ace-orchestration:ace-playbook-retrieval
-```
+### How Automatic Enforcement Works:
 
-**Trigger keywords that require retrieval:**
-- implement, build, create, add, develop
-- debug, fix, troubleshoot, resolve, diagnose
-- refactor, optimize, improve, restructure
-- integrate, connect, setup, configure
-- architect, design, plan
+1. **Session starts** → SessionStart hook runs
+2. **Hook output** → Added to Claude's context (system-level instruction)
+3. **User task** → Claude sees MANDATORY protocol + user request
+4. **Skills auto-invoke** → Triggered based on task keywords
 
-**You MUST call this skill BEFORE starting work when the user's request contains ANY of these keywords.**
+### The Two Skills:
 
-### ⚠️ CRITICAL CHECKPOINT - BEFORE STARTING WORK
+**Before tasks:** `ace-orchestration:ace-playbook-retrieval`
+- Automatically invoked when you: implement, build, create, add, develop, debug, fix, troubleshoot, resolve, refactor, optimize, improve, restructure, integrate, connect, setup, configure, architect, design, plan
+- Retrieves learned patterns from previous work
+- Provides strategies, code snippets, troubleshooting tips, API recommendations
 
-**Before starting ANY substantial task, ask yourself:**
-1. Is the user asking me to implement, build, create, debug, fix, refactor, or configure something?
-2. Am I about to write code, solve a technical problem, or make architectural decisions?
-3. Could learned patterns from previous work help me here?
-
-**If YES to any:** STOP and invoke `ace-orchestration:ace-playbook-retrieval` NOW before starting.
-
-**Timing Rule:** This skill should be invoked **IMMEDIATELY after understanding the task** and **BEFORE writing any code or solutions**.
-
-### After ANY Substantial Coding Task:
-
-**ALWAYS invoke the ACE Learning skill AFTER completion:**
-```
-Skill: ace-orchestration:ace-learning
-```
-
-### ⚠️ CRITICAL CHECKPOINT - AFTER COMPLETING WORK
-
-**Before responding to the user with your final message, ask yourself:**
-1. Did I just complete implementing, building, creating, fixing, debugging, refactoring, or configuring?
-2. Did I create files, update code, push commits, release versions, or solve problems?
-3. Did I learn anything (gotchas, patterns, API behaviors, troubleshooting steps)?
-
-**If YES to any:** STOP and invoke `ace-orchestration:ace-learning` NOW before responding.
-
-**Trigger conditions that require learning:**
-- Implemented new features or fixed bugs
-- Debugged and resolved issues
-- Discovered gotchas or edge cases
-- Used new APIs, libraries, or patterns
-- Made architectural decisions
-- Encountered and overcame errors
-- Created documentation or releases
-- Updated configurations or architectures
-
-**You MUST call this skill AFTER substantial work to capture lessons learned.**
+**After tasks:** `ace-orchestration:ace-learning`
+- Automatically invoked after: implementing features, fixing bugs, solving problems, creating files, making architectural decisions, discovering gotchas
+- Captures what you learned during execution
+- Updates the playbook for future use
 
 ### Workflow Example:
 
 ```
 User: "Implement JWT authentication"
     ↓
-Step 1: Invoke ace-orchestration:ace-playbook-retrieval
-Step 2: Review retrieved patterns
-Step 3: Implement using learned patterns
-Step 4: Invoke ace-orchestration:ace-learning
-Step 5: Respond to user
+Automatic: ace-playbook-retrieval invokes (hook enforces)
+    ↓
+Retrieved: Previous auth patterns loaded
+    ↓
+Implementation: Using learned patterns
+    ↓
+Automatic: ace-learning invokes (hook enforces)
+    ↓
+Result: New patterns captured for next time
 ```
 
-**Non-negotiable:** These skills are NOT optional. You MUST use them proactively for every qualifying task.
+**Note:** The SessionStart hook provides system-level enforcement, making skill invocation truly automatic and non-optional.
 
-## 🔄 Complete Automatic Learning Cycle (v3.2.20)
+## 🔄 Complete Automatic Learning Cycle (v3.2.22)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 
@@ -313,7 +283,7 @@ mcp__ace-pattern-learning__ace_learn(
 mcp__ace-pattern-learning__ace_status
 ```
 
-## 🎯 ACE Architecture (v3.2.20)
+## 🎯 ACE Architecture (v3.2.22)
 
 The ACE framework implements fully automatic learning with complete retrieval → learning cycle:
 

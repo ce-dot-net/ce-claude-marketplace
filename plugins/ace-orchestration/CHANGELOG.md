@@ -5,6 +5,37 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.22] - 2025-10-29
+
+### Changed
+- **CLAUDE.md template simplified** - Removed redundant checkpoint sections
+  - Deleted "⚠️ CRITICAL CHECKPOINT - BEFORE STARTING WORK" section (~10 lines)
+  - Deleted "⚠️ CRITICAL CHECKPOINT - AFTER COMPLETING WORK" section (~20 lines)
+  - Replaced with "🚨 AUTOMATIC: ACE Skill Enforcement" section
+  - Explains that SessionStart hook now provides enforcement
+  - Reduced token usage while maintaining documentation value
+
+### Why This Change
+- v3.2.21 introduced SessionStart hook for system-level enforcement
+- CLAUDE.md checkpoints are now redundant (hook enforces automatically)
+- Simpler CLAUDE.md = less tokens = more room for actual context
+- Hook enforcement is STRONGER than CLAUDE.md reminders
+
+### What Was Removed
+- Manual checkpoint questions (replaced by automatic hook enforcement)
+- "YOU MUST" behavioral reminders (now system-enforced)
+- Redundant trigger keyword lists (already in hook)
+
+### What Was Added
+- Clear explanation that enforcement is now automatic
+- Documentation of how the SessionStart hook works
+- Note that skills are truly non-optional (system-level)
+
+### Migration
+- Users running `/ace-claude-init` will get the simplified v3.2.22 template
+- Existing projects with v3.2.20/v3.2.21 CLAUDE.md will continue to work
+- Recommended: Run `/ace-claude-init` to update to cleaner template
+
 ## [3.2.21] - 2025-10-29
 
 ### Fixed
