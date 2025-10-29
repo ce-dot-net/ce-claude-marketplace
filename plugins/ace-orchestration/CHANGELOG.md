@@ -5,6 +5,27 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.28] - 2025-10-29
+
+### Fixed
+- **Update CLAUDE.md template to document UserPromptSubmit hook**
+  - Added documentation for per-prompt enforcement (UserPromptSubmit)
+  - Updated workflow examples to show both SessionStart and UserPromptSubmit
+  - Clarified that enforcement happens on EVERY prompt, not just session start
+  - Template now accurately reflects v3.2.27 hook architecture
+
+### Why This Was Missing
+- v3.2.27 added UserPromptSubmit hook but didn't update CLAUDE.md template
+- Users running `/ace-claude-init` would get outdated documentation
+- Template only mentioned SessionStart hook (once per session)
+- Missing information about per-prompt enforcement guarantee
+
+### What's Fixed
+- ✅ CLAUDE.md now documents both SessionStart and UserPromptSubmit hooks
+- ✅ Workflow examples show per-prompt enforcement cycle
+- ✅ Note explains continuous enforcement throughout session
+- ✅ `/ace-claude-init` now copies correct documentation to projects
+
 ## [3.2.27] - 2025-10-29
 
 ### Added
