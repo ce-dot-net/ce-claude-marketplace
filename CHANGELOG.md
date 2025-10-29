@@ -5,6 +5,61 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.34] - 2025-10-29
+
+### 🚨 MAXIMUM ENFORCEMENT: Make AFTER skill as strong as BEFORE skill
+
+**Perfect Symmetry: Both skills now have MAXIMUM enforcement language**
+
+User feedback: "i mean after a task is done the AFTER one IT should run always after that right ? as the before one is doing :)"
+
+**EXACTLY RIGHT!** The learning skill MUST be just as enforced as the retrieval skill.
+
+### What Changed
+
+**ace-learning/SKILL.md description (MAXIMUM ENFORCEMENT):**
+- ✅ Added "CRITICAL" prefix
+- ✅ "AUTOMATIC MANDATORY trigger" (not just "MANDATORY")
+- ✅ "NOT OPTIONAL and NOT NEGOTIABLE" (double negative)
+- ✅ "DO NOT SKIP THIS SKILL EVER" (absolute prohibition)
+- ✅ "proactively and automatically" (reinforces both aspects)
+- ✅ "after ALL substantial work" (comprehensive coverage)
+- ✅ "Always capture" (unconditional requirement)
+- ✅ "This skill MUST run just as reliably as the retrieval skill runs before tasks" (direct symmetry statement!)
+
+**CLAUDE.md AFTER section (MAXIMUM ENFORCEMENT):**
+- ✅ "CRITICAL: ALWAYS invoke"
+- ✅ "IMMEDIATELY AFTER completion"
+- ✅ "AUTOMATIC MANDATORY trigger conditions"
+- ✅ "BEFORE responding to user"
+- ✅ "NOT OPTIONAL and NOT NEGOTIABLE"
+- ✅ "DO NOT SKIP THIS SKILL EVER"
+- ✅ "must run just as reliably as the retrieval skill runs before tasks"
+
+**CLAUDE.md Non-negotiable line:**
+- ✅ "CRITICAL - Non-negotiable"
+- ✅ "NOT optional and NOT negotiable"
+- ✅ "proactively and automatically"
+- ✅ "EVERY qualifying task"
+- ✅ "The retrieval skill runs BEFORE, the learning skill runs AFTER - BOTH are MANDATORY"
+
+### The Perfect Formula
+
+**BEFORE (Retrieval):**
+- "PROACTIVELY use this skill BEFORE implementation tasks"
+- "YOU MUST retrieve playbook patterns"
+- "DO NOT wait to be asked"
+
+**AFTER (Learning):**
+- "CRITICAL - YOU MUST ALWAYS use this skill IMMEDIATELY AFTER"
+- "AUTOMATIC MANDATORY trigger"
+- "NOT OPTIONAL and NOT NEGOTIABLE"
+- "DO NOT SKIP THIS SKILL EVER"
+- "BEFORE responding to user"
+- "must run just as reliably as the retrieval skill"
+
+**Result:** Perfect symmetry! Both skills have MAXIMUM enforcement. The AFTER skill is now just as strong as the BEFORE skill.
+
 ## [3.2.33] - 2025-10-29
 
 ### 🎯 FINAL FIX: Restore v3.2.18 Skill Descriptions with MAXIMUM Enforcement

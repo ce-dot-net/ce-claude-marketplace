@@ -28,12 +28,12 @@ Skill: ace-orchestration:ace-playbook-retrieval
 
 ### After ANY Substantial Coding Task:
 
-**ALWAYS invoke the ACE Learning skill AFTER completion:**
+**CRITICAL: ALWAYS invoke the ACE Learning skill IMMEDIATELY AFTER completion:**
 ```
 Skill: ace-orchestration:ace-learning
 ```
 
-**Trigger conditions that require learning:**
+**AUTOMATIC MANDATORY trigger conditions:**
 - Implemented new features or fixed bugs
 - Debugged and resolved issues
 - Discovered gotchas or edge cases
@@ -41,7 +41,7 @@ Skill: ace-orchestration:ace-learning
 - Made architectural decisions
 - Encountered and overcame errors
 
-**You MUST call this skill AFTER substantial work to capture lessons learned.**
+**You MUST call this skill IMMEDIATELY AFTER substantial work BEFORE responding to user. This is NOT OPTIONAL and NOT NEGOTIABLE. DO NOT SKIP THIS SKILL EVER. It must run just as reliably as the retrieval skill runs before tasks.**
 
 ### Workflow Example:
 
@@ -55,9 +55,9 @@ Step 4: Invoke ace-orchestration:ace-learning
 Step 5: Respond to user
 ```
 
-**Non-negotiable:** These skills are NOT optional. You MUST use them proactively for every qualifying task.
+**CRITICAL - Non-negotiable:** These skills are NOT optional and NOT negotiable. You MUST use them proactively and automatically for EVERY qualifying task. The retrieval skill runs BEFORE, the learning skill runs AFTER - BOTH are MANDATORY.
 
-## 🔄 Complete Automatic Learning Cycle (v3.2.18)
+## 🔄 Complete Automatic Learning Cycle (v3.2.34)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 
@@ -291,7 +291,7 @@ mcp__ace-pattern-learning__ace_learn(
 mcp__ace-pattern-learning__ace_status
 ```
 
-## 🎯 ACE Architecture (v3.2.17)
+## 🎯 ACE Architecture (v3.2.34)
 
 The ACE framework implements fully automatic learning with complete retrieval → learning cycle:
 
