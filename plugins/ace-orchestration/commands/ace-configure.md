@@ -10,19 +10,60 @@ Interactive configuration wizard for ACE server connection.
 
 When the user runs `/ace-configure`, follow these steps:
 
-1. **Ask for Server URL:**
-   - Prompt: "What is your ACE server URL? (default: http://localhost:9000)"
-   - If blank, use: `http://localhost:9000`
+1. **Use AskUserQuestion Tool for Interactive Configuration:**
 
-2. **Ask for API Token:**
-   - Prompt: "What is your ACE API token? (Get from your ACE server logs or dashboard)"
-   - Required - must start with `ace_`
+   IMPORTANT: ALWAYS use the AskUserQuestion tool to create an interactive UI. DO NOT use plain text prompts.
 
-3. **Ask for Project ID:**
-   - Prompt: "What is your ACE project ID? (Get from your ACE server dashboard)"
-   - Required - usually starts with `prj_`
+   ```javascript
+   AskUserQuestion({
+     questions: [
+       {
+         question: "What is your ACE server URL?",
+         header: "Server URL",
+         multiSelect: false,
+         options: [
+           {
+             label: "http://localhost:9000",
+             description: "Local development server (default)"
+           },
+           {
+             label: "Custom URL",
+             description: "Enter your own server URL"
+           }
+         ]
+       },
+       {
+         question: "What is your ACE API token? (Get from server logs)",
+         header: "API Token",
+         multiSelect: false,
+         options: [
+           {
+             label: "Enter token",
+             description: "Paste your ACE API token (starts with ace_)"
+           }
+         ]
+       },
+       {
+         question: "What is your ACE project ID? (Get from dashboard)",
+         header: "Project ID",
+         multiSelect: false,
+         options: [
+           {
+             label: "Enter project ID",
+             description: "Your project identifier (usually starts with prj_)"
+           }
+         ]
+       }
+     ]
+   })
+   ```
 
-4. **Save Configuration to PROJECT ROOT (NOT user home):**
+   - If user selects "Custom URL" or "Other", prompt them to enter the custom value
+   - API Token must start with `ace_`
+   - Project ID usually starts with `prj_`
+   - If user selects "Other" for any field, ask them to provide the value
+
+2. **Save Configuration to PROJECT ROOT (NOT user home):**
    - IMPORTANT: Save to project root, NOT `~/.ace/`!
    - Find the project root using: `git rev-parse --show-toplevel` (or use current directory if not in git)
    - Create `.ace` directory in project root if it doesn't exist: `mkdir -p .ace`
@@ -38,7 +79,7 @@ When the user runs `/ace-configure`, follow these steps:
    - Use the Write tool with an absolute path like: `/path/to/project/.ace/config.json`
    - Show success message with the FULL config file path
 
-5. **Next Steps:**
+3. **Next Steps:**
    - Configuration saved! No restart needed.
    - Suggest running `/ace-orchestration:ace-claude-init` to add ACE instructions to project CLAUDE.md
    - Suggest running `/ace-orchestration:ace-status` to verify connection
