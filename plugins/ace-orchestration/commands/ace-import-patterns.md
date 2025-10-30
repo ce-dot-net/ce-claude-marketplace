@@ -58,7 +58,24 @@ Example for a single bullet:
 - **Restore Backup**: Recover after clearing playbook
 - **Knowledge Base**: Import curated pattern libraries
 
+## Next Steps
+
+**After importing:**
+
+1. **Verify import success:**
+   - Run `/ace-orchestration:ace-status` to see updated bullet counts
+   - Should show merged patterns from import
+
+2. **Review imported patterns:**
+   - Run `/ace-orchestration:ace-patterns` to view merged playbook
+   - Check for duplicates (curator should deduplicate automatically)
+
+3. **Continue learning:**
+   - ACE will continue learning from your work
+   - Imported patterns augment future learning
+
 ## See Also
 
-- `/ace-export-patterns` - Export playbook to JSON
-- `/ace-status` - Check playbook after import
+- `/ace-orchestration:ace-export-patterns` - Export playbook for backup
+- `/ace-orchestration:ace-status` - Check playbook after import
+- `/ace-orchestration:ace-patterns` - View imported patterns

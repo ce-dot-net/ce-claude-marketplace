@@ -1,5 +1,27 @@
 {
+  "description": "ACE Plugin Hooks - Automatic .gitignore management, version checking, auto-update, and execution logging",
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ensure-gitignore.sh",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/check-ace-version.sh",
+            "timeout": 3
+          },
+          {
+            "type": "command",
+            "command": "[ -f ~/.ace/auto-update-enabled ] && ${CLAUDE_PLUGIN_ROOT}/scripts/ace-claude-init.sh --auto-update || true",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "PostToolUse": [
       {
         "matcher": "Bash",

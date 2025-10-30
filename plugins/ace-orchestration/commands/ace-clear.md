@@ -58,13 +58,13 @@ ACE will start learning from scratch:
 
 **Before clearing, export your playbook**:
 ```
-/ace-export-patterns
+/ace-orchestration:ace-export-patterns
 ```
 
 This saves a JSON backup you can re-import later.
 
 ## See Also
 
-- `/ace-export-patterns` - Backup before clearing
-- `/ace-import-patterns` - Restore from backup
-- `/ace-status` - Verify playbook is cleared
+- `/ace-orchestration:ace-export-patterns` - Backup before clearing
+- `/ace-orchestration:ace-import-patterns` - Restore from backup
+- `/ace-orchestration:ace-status` - Verify playbook is cleared

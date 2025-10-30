@@ -8,9 +8,9 @@ argument-hint: [section] [min-helpful]
 Display the ACE playbook (4 structured sections).
 
 ## Usage:
-- `/ace-patterns` - Show entire playbook
-- `/ace-patterns strategies` - Show strategies_and_hard_rules section only
-- `/ace-patterns troubleshooting 5` - Show troubleshooting bullets with ≥5 helpful count
+- `/ace-orchestration:ace-patterns` - Show entire playbook
+- `/ace-orchestration:ace-patterns strategies` - Show strategies_and_hard_rules section only
+- `/ace-orchestration:ace-patterns troubleshooting 5` - Show troubleshooting bullets with ≥5 helpful count
 
 ## Playbook Sections
 
@@ -52,3 +52,21 @@ ACE learns from **execution feedback**:
 **API usage** → adds to `apis_to_use`
 
 Bullets accumulate helpful/harmful counts over time as they prove useful or misleading.
+
+## Next Steps
+
+**After viewing patterns:**
+
+- **See full statistics:** Run `/ace-orchestration:ace-status` for counts and top helpful/harmful
+- **Filter patterns:** Use section parameter (e.g., `/ace-orchestration:ace-patterns strategies`)
+- **Filter by quality:** Use min-helpful parameter (e.g., `/ace-orchestration:ace-patterns troubleshooting 5`)
+- **Export patterns:** Run `/ace-orchestration:ace-export-patterns` for backup or sharing
+- **Bootstrap more patterns:** Run `/ace-orchestration:ace-bootstrap` to analyze git/docs/code
+- **Clear bad patterns:** Run `/ace-orchestration:ace-clear --confirm` to reset playbook
+
+## See Also
+
+- `/ace-orchestration:ace-status` - View playbook statistics
+- `/ace-orchestration:ace-bootstrap` - Add patterns from git/docs/code
+- `/ace-orchestration:ace-export-patterns` - Backup playbook to JSON
+- `/ace-orchestration:ace-clear` - Clear playbook (reset)

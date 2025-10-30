@@ -5,7 +5,7 @@
 
 ---
 
-## ✨ What's New in v3.1.9
+## ✨ What's New in v3.2.36
 
 🚀 **FULLY AUTOMATIC LEARNING** - ACE now learns automatically via Agent Skills!
 
@@ -106,7 +106,7 @@ When you install the plugin:
 
 ## 🤖 Automatic Learning with Agent Skills
 
-**NEW in v3.1.9**: ACE learns automatically via Agent Skills - no manual intervention required!
+**NEW in v3.2.36**: ACE skills now trigger on 35+ action keywords with intent-based fallback - no more missed triggers!
 
 ### How It Works
 
@@ -435,10 +435,12 @@ rm ce-claude-marketplace/.npmrc
 
 After installation:
 
-1. **Initialize patterns**: Run `/ace-init` to discover patterns from your codebase
-2. **View status**: Run `/ace-status` to see pattern statistics
-3. **Use patterns**: ACE automatically learns from your coding sessions
-4. **Monitor evolution**: Check pattern growth over time
+1. **Configure server**: Run `/ace-orchestration:ace-configure` to set up ACE server connection
+2. **Initialize ACE**: Run `/ace-orchestration:ace-claude-init` to add ACE instructions to CLAUDE.md
+3. **Bootstrap patterns**: Run `/ace-orchestration:ace-bootstrap` to discover patterns from your codebase
+4. **View status**: Run `/ace-orchestration:ace-status` to see pattern statistics
+5. **Use patterns**: ACE automatically learns from your coding sessions
+6. **Monitor evolution**: Check pattern growth over time
 
 ---
 
