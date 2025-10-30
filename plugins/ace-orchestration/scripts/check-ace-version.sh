@@ -15,8 +15,18 @@ if [ -z "$PROJECT_ROOT" ] || [ ! -d "$PROJECT_ROOT" ]; then
     exit 0
 fi
 
+# Fallback to detect plugin root if CLAUDE_PLUGIN_ROOT not set
+if [ -z "$CLAUDE_PLUGIN_ROOT" ]; then
+    # Script is at: plugins/ace-orchestration/scripts/check-ace-version.sh
+    # Plugin root is: plugins/ace-orchestration/
+    SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+else
+    PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+fi
+
 # Get plugin version from plugin.json
-PLUGIN_JSON="${CLAUDE_PLUGIN_ROOT}/.claude-plugin/plugin.json"
+PLUGIN_JSON="${PLUGIN_ROOT}/.claude-plugin/plugin.json"
 if [ ! -f "$PLUGIN_JSON" ]; then
     exit 0  # Can't determine plugin version, exit silently
 fi
