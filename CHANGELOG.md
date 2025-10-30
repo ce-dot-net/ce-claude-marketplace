@@ -5,6 +5,26 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.39] - 2025-10-30
+
+### 🔧 TOOLING: Release Manager Agent Path Fix
+
+**Problem:**
+Release-manager agent referenced incorrect paths for plugin.json files, causing version checks to fail and files to be missed during releases. This caused v3.2.38 to initially miss updating the plugin.json files.
+
+**Solution:**
+Updated release-manager agent at `~/.claude/agents/release-manager.md` to use correct paths:
+- ✅ `plugins/ace-orchestration/.claude-plugin/plugin.json` (was: `plugins/ace-orchestration/plugin.json`)
+- ✅ `plugins/ace-orchestration/.claude-plugin/plugin.template.json` (was: `plugins/ace-orchestration/plugin.template.json`)
+
+**Impact:**
+- Future releases will correctly verify and update all plugin.json files
+- Prevents version mismatch bugs
+- Ensures complete release checklist execution
+
+### Files Changed
+- `~/.claude/agents/release-manager.md` - Updated file paths in all sections (checklist, verification commands, commit strategy, file list)
+
 ## [3.2.38] - 2025-10-30
 
 ### 🐛 BUG FIX: CLAUDE_PLUGIN_ROOT Environment Variable Fallback
