@@ -22,13 +22,10 @@
 **Step 1**: Add to your shell profile (`~/.zshrc` or `~/.bashrc`):
 
 ```bash
-# ACE Plugin Configuration (using official production server)
+# ACE Plugin Configuration
 export ACE_SERVER_URL="https://ace-api.code-engine.app"
 export ACE_API_TOKEN="ace_your_api_token_here"
 export ACE_PROJECT_ID="prj_your_project_id"
-
-# For self-hosted/local development, use:
-# export ACE_SERVER_URL="http://localhost:9000"
 ```
 
 **Step 2**: Reload your shell:
@@ -81,8 +78,6 @@ Edit `plugin.json` and replace the environment variable references:
 }
 ```
 
-**Note**: For self-hosted/local development, use `"ACE_SERVER_URL": "http://localhost:9000"`
-
 **⚠️ Warning**: This method is **only for local testing**. Never commit this file!
 
 ---
@@ -93,15 +88,11 @@ Edit `plugin.json` and replace the environment variable references:
 
 **Purpose**: ACE server endpoint
 
-**Formats**:
-- **Production (recommended)**: `https://ace-api.code-engine.app`
-- Local development: `http://localhost:9000`
-- Custom: `https://ace.your-domain.com`
+**Default**: `https://ace-api.code-engine.app`
 
 **How to get**:
-- For official production: Use `https://ace-api.code-engine.app`
-- For local: Start your ACE server on port 9000
-- For custom: Get from your ACE server administrator
+- Use the official Code Engine ACE server: `https://ace-api.code-engine.app`
+- For enterprise/custom installations: Get URL from your administrator
 
 **Test it**:
 ```bash
