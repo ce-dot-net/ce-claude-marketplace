@@ -91,7 +91,7 @@
 
 ```bash
 # Add to ~/.zshrc or ~/.bashrc
-export ACE_SERVER_URL="http://localhost:9000"
+export ACE_SERVER_URL="https://ace-api.code-engine.app"
 export ACE_API_TOKEN="ace_your_token_here"
 export ACE_PROJECT_ID="prj_your_project_id"
 ```
@@ -207,7 +207,7 @@ git log -p | grep -i "ace_"
 grep -r "ace_[a-zA-Z0-9_-]" . --exclude-dir=node_modules
 
 # Scan for hardcoded URLs
-grep -r "http://localhost:9000" . --exclude="*.md"
+grep -r "https://ace-api.code-engine.app" . --exclude="*.md"
 ```
 
 ### Remove Committed Credentials
@@ -233,7 +233,7 @@ git push origin --force --tags
 
 ### Level 1: Local Development (Current)
 ```bash
-ACE_SERVER_URL="http://localhost:9000"
+ACE_SERVER_URL="https://ace-api.code-engine.app"
 ACE_API_TOKEN="ace_dev_token_12345"
 ```
 

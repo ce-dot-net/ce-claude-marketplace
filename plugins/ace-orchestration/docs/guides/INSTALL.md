@@ -58,7 +58,7 @@ In Claude Code, run the interactive configuration wizard:
 ```
 
 **Prompts for**:
-- ACE Server URL (default: http://localhost:9000)
+- ACE Server URL (default: https://ace-api.code-engine.app)
 - API Token (from your ACE server)
 - Project ID (from your ACE dashboard)
 
@@ -224,7 +224,7 @@ If you prefer to configure manually instead of using `/ace-configure`:
 
 ```bash
 # Add to ~/.zshrc or ~/.bashrc
-export ACE_SERVER_URL="http://localhost:9000"
+export ACE_SERVER_URL="https://ace-api.code-engine.app"
 export ACE_API_TOKEN="your-token-here"
 export ACE_PROJECT_ID="your-project-id"
 
@@ -243,7 +243,7 @@ mkdir -p .ace
 # Create project-scoped config file
 cat > .ace/config.json <<EOF
 {
-  "serverUrl": "http://localhost:9000",
+  "serverUrl": "https://ace-api.code-engine.app",
   "apiToken": "your-token-here",
   "projectId": "your-project-id"
 }
@@ -304,7 +304,7 @@ cat .npmrc
 env | grep ACE_
 
 # Should show:
-# ACE_SERVER_URL=http://localhost:9000
+# ACE_SERVER_URL=https://ace-api.code-engine.app
 # ACE_API_TOKEN=ace_...
 # ACE_PROJECT_ID=prj_...
 ```
