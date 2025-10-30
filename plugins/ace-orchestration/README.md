@@ -60,24 +60,30 @@ The ACE MCP Client (@ce-dot-net/ace-client) is maintained in a separate reposito
 
 **Option 2: Environment Variables**
 ```bash
-# Add to shell profile
-echo 'export ACE_SERVER_URL="http://localhost:9000"' >> ~/.zshrc
+# Add to shell profile (using official production server)
+echo 'export ACE_SERVER_URL="https://ace-api.code-engine.app"' >> ~/.zshrc
 echo 'export ACE_API_TOKEN="ace_your_api_token_here"' >> ~/.zshrc
 echo 'export ACE_PROJECT_ID="prj_your_project_id"' >> ~/.zshrc
 source ~/.zshrc
+
+# For self-hosted/local development, use:
+# export ACE_SERVER_URL="http://localhost:9000"
 ```
 
 **Option 3: Manual Config File**
 ```bash
-# In your project root:
+# In your project root (using official production server):
 mkdir -p .ace
 cat > .ace/config.json <<EOF
 {
-  "serverUrl": "http://localhost:9000",
+  "serverUrl": "https://ace-api.code-engine.app",
   "apiToken": "ace_your_api_token_here",
   "projectId": "prj_your_project_id"
 }
 EOF
+
+# For self-hosted/local development, use:
+# "serverUrl": "http://localhost:9000"
 ```
 
 **📖 Full configuration guide**: See [docs/guides/CONFIGURATION.md](./docs/guides/CONFIGURATION.md)
@@ -140,10 +146,13 @@ python -m uvicorn main:app --reload --port 9000
 ### Quick Start (Environment Variables)
 
 ```bash
-# Add to ~/.zshrc or ~/.bashrc
-export ACE_SERVER_URL="http://localhost:9000"
-export ACE_API_TOKEN="ace_wFIuXzQvaR5IVn2SoizOf-ncOKP6bmHDmocaQ3b5aWU"
-export ACE_PROJECT_ID="prj_5bc0b560221052c1"
+# Add to ~/.zshrc or ~/.bashrc (using official production server)
+export ACE_SERVER_URL="https://ace-api.code-engine.app"
+export ACE_API_TOKEN="ace_your_api_token_here"
+export ACE_PROJECT_ID="prj_your_project_id"
+
+# For self-hosted/local development, use:
+# export ACE_SERVER_URL="http://localhost:9000"
 ```
 
 ### Configuration Files
@@ -157,9 +166,9 @@ export ACE_PROJECT_ID="prj_5bc0b560221052c1"
 
 | Variable | Required | Example |
 |----------|----------|---------|
-| `ACE_SERVER_URL` | Yes | `http://localhost:9000` |
-| `ACE_API_TOKEN` | Yes | `ace_wFIuXzQ...` |
-| `ACE_PROJECT_ID` | Yes | `prj_5bc0b56...` |
+| `ACE_SERVER_URL` | Yes | `https://ace-api.code-engine.app` |
+| `ACE_API_TOKEN` | Yes | `ace_your_api_token...` |
+| `ACE_PROJECT_ID` | Yes | `prj_your_project...` |
 
 **📖 See [CONFIGURATION.md](./CONFIGURATION.md) for detailed setup instructions**
 

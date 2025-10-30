@@ -204,7 +204,7 @@ Display the current ACE configuration:
    ```
    Error: Invalid serverUrl format
    → URL doesn't match expected pattern
-   → Action: Suggest correct format (e.g., http://localhost:9000)
+   → Action: Suggest correct format (e.g., https://ace-api.code-engine.app)
    → Fallback: Provide default URL options
    ```
 
@@ -219,7 +219,7 @@ Description: Learn from execution feedback and update ACE playbook
 
 MCP Server Connection:
 Status: ✅ CONNECTED
-Server: http://localhost:9000 (or configured URL)
+Server: https://ace-api.code-engine.app (or configured URL)
 Project ID: prj_xxxxx
 
 Playbook Statistics:

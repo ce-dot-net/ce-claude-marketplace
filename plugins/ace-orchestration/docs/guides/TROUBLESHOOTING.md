@@ -88,7 +88,7 @@ npx --package=@ce-dot-net/ace-client@3.0.3 ace-client
 **Should show:**
 ```
 💾 Local cache: ...
-🔗 ACE Server: http://localhost:9000
+🔗 ACE Server: https://ace-api.code-engine.app
 🚀 ACE Client MCP started (v3.0.3 - Full ACE Paper Implementation)
 ```
 
@@ -109,14 +109,14 @@ echo "ACE_PROJECT_ID: $ACE_PROJECT_ID"
 
 **Should show:**
 ```
-ACE_SERVER_URL: http://localhost:9000
+ACE_SERVER_URL: https://ace-api.code-engine.app
 ACE_API_TOKEN: ace_wFIuXz...
 ACE_PROJECT_ID: prj_5bc0b560221052c1
 ```
 
 **Fix if missing:**
 ```bash
-export ACE_SERVER_URL="http://localhost:9000"
+export ACE_SERVER_URL="https://ace-api.code-engine.app"
 export ACE_API_TOKEN="ace_wFIuXzQvaR5IVn2SoizOf-ncOKP6bmHDmocaQ3b5aWU"
 export ACE_PROJECT_ID="prj_5bc0b560221052c1"
 
@@ -158,7 +158,7 @@ ace-pattern-learning: connected
 
 **If shows "failed" or "connecting":**
 - Check environment variables are set
-- Check ACE server is running at http://localhost:9000
+- Check ACE server is running at https://ace-api.code-engine.app
 - Check Claude Code logs (see below)
 
 ---
@@ -176,14 +176,14 @@ ace-pattern-learning: connected
 ```bash
 # 1. Check if variables are in Claude Code's environment
 # Add to ~/.zshrc or ~/.bashrc:
-export ACE_SERVER_URL="http://localhost:9000"
+export ACE_SERVER_URL="https://ace-api.code-engine.app"
 export ACE_API_TOKEN="your-token"
 export ACE_PROJECT_ID="your-project-id"
 
 # 2. Restart terminal AND Claude Code
 
 # 3. Test ACE server manually:
-curl http://localhost:9000/api/health
+curl https://ace-api.code-engine.app/api/health
 ```
 
 ---

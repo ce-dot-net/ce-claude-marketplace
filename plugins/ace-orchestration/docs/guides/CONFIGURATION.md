@@ -22,10 +22,13 @@
 **Step 1**: Add to your shell profile (`~/.zshrc` or `~/.bashrc`):
 
 ```bash
-# ACE Plugin Configuration
-export ACE_SERVER_URL="http://localhost:9000"
-export ACE_API_TOKEN="ace_wFIuXzQvaR5IVn2SoizOf-ncOKP6bmHDmocaQ3b5aWU"
-export ACE_PROJECT_ID="prj_5bc0b560221052c1"
+# ACE Plugin Configuration (using official production server)
+export ACE_SERVER_URL="https://ace-api.code-engine.app"
+export ACE_API_TOKEN="ace_your_api_token_here"
+export ACE_PROJECT_ID="prj_your_project_id"
+
+# For self-hosted/local development, use:
+# export ACE_SERVER_URL="http://localhost:9000"
 ```
 
 **Step 2**: Reload your shell:
@@ -69,14 +72,16 @@ Edit `plugin.json` and replace the environment variable references:
   "mcpServers": {
     "ace-pattern-learning": {
       "env": {
-        "ACE_SERVER_URL": "http://localhost:9000",
-        "ACE_API_TOKEN": "ace_wFIuXzQvaR5IVn2SoizOf-ncOKP6bmHDmocaQ3b5aWU",
-        "ACE_PROJECT_ID": "prj_5bc0b560221052c1"
+        "ACE_SERVER_URL": "https://ace-api.code-engine.app",
+        "ACE_API_TOKEN": "ace_your_api_token_here",
+        "ACE_PROJECT_ID": "prj_your_project_id"
       }
     }
   }
 }
 ```
+
+**Note**: For self-hosted/local development, use `"ACE_SERVER_URL": "http://localhost:9000"`
 
 **⚠️ Warning**: This method is **only for local testing**. Never commit this file!
 
@@ -89,12 +94,14 @@ Edit `plugin.json` and replace the environment variable references:
 **Purpose**: ACE server endpoint
 
 **Formats**:
+- **Production (recommended)**: `https://ace-api.code-engine.app`
 - Local development: `http://localhost:9000`
-- Production: `https://ace.your-domain.com`
+- Custom: `https://ace.your-domain.com`
 
 **How to get**:
+- For official production: Use `https://ace-api.code-engine.app`
 - For local: Start your ACE server on port 9000
-- For production: Get from your ACE server administrator
+- For custom: Get from your ACE server administrator
 
 **Test it**:
 ```bash
@@ -164,9 +171,9 @@ echo "prj_$(uuidgen | tr '[:upper:]' '[:lower:]' | head -c 16)"
 env | grep ACE_
 
 # Expected output:
-# ACE_SERVER_URL=http://localhost:9000
-# ACE_API_TOKEN=ace_wFIuXzQvaR5IVn2SoizOf-ncOKP6bmHDmocaQ3b5aWU
-# ACE_PROJECT_ID=prj_5bc0b560221052c1
+# ACE_SERVER_URL=https://ace-api.code-engine.app
+# ACE_API_TOKEN=ace_your_api_token_here
+# ACE_PROJECT_ID=prj_your_project_id
 ```
 
 ### Test Server Connection
@@ -341,9 +348,9 @@ ace_use_project() {
 
 | Variable | Required | Format | Example |
 |----------|----------|--------|---------|
-| `ACE_SERVER_URL` | Yes | URL | `http://localhost:9000` |
-| `ACE_API_TOKEN` | Yes | `ace_...` | `ace_wFIuXzQ...` |
-| `ACE_PROJECT_ID` | Yes | `prj_...` | `prj_5bc0b56...` |
+| `ACE_SERVER_URL` | Yes | URL | `https://ace-api.code-engine.app` |
+| `ACE_API_TOKEN` | Yes | `ace_...` | `ace_your_api_token...` |
+| `ACE_PROJECT_ID` | Yes | `prj_...` | `prj_your_project...` |
 | `ACE_CACHE_TTL_MINUTES` | No | Number | `5` |
 
 ### Commands
