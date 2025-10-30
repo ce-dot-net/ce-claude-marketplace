@@ -24,15 +24,11 @@ When the user runs `/ace-configure`, follow these steps:
          options: [
            {
              label: "https://ace-api.code-engine.app",
-             description: "Official Code Engine ACE server (recommended)"
-           },
-           {
-             label: "http://localhost:9000",
-             description: "Local development server"
+             description: "Official Code Engine ACE server"
            },
            {
              label: "Custom URL",
-             description: "Enter your own server URL"
+             description: "Enter your own server URL (for enterprise/custom installations)"
            }
          ]
        },

@@ -60,19 +60,16 @@ The ACE MCP Client (@ce-dot-net/ace-client) is maintained in a separate reposito
 
 **Option 2: Environment Variables**
 ```bash
-# Add to shell profile (using official production server)
+# Add to shell profile
 echo 'export ACE_SERVER_URL="https://ace-api.code-engine.app"' >> ~/.zshrc
 echo 'export ACE_API_TOKEN="ace_your_api_token_here"' >> ~/.zshrc
 echo 'export ACE_PROJECT_ID="prj_your_project_id"' >> ~/.zshrc
 source ~/.zshrc
-
-# For self-hosted/local development, use:
-# export ACE_SERVER_URL="http://localhost:9000"
 ```
 
 **Option 3: Manual Config File**
 ```bash
-# In your project root (using official production server):
+# In your project root:
 mkdir -p .ace
 cat > .ace/config.json <<EOF
 {
@@ -81,9 +78,6 @@ cat > .ace/config.json <<EOF
   "projectId": "prj_your_project_id"
 }
 EOF
-
-# For self-hosted/local development, use:
-# "serverUrl": "http://localhost:9000"
 ```
 
 **📖 Full configuration guide**: See [docs/guides/CONFIGURATION.md](./docs/guides/CONFIGURATION.md)
@@ -98,15 +92,7 @@ ln -s "$(pwd)/plugins/ace-orchestration" ~/.config/claude-code/plugins/ace-orche
 # Plugins → Install from Filesystem → Select plugins/ace-orchestration
 ```
 
-### Step 5: Start ACE Server
-
-```bash
-# In a separate terminal
-cd ~/repos/github_com/ce-dot-net/ce-ai-ace/server
-python -m uvicorn main:app --reload --port 9000
-```
-
-### Step 6: Verify Installation
+### Step 5: Verify Installation
 
 ```bash
 # Restart Claude Code
@@ -117,7 +103,7 @@ python -m uvicorn main:app --reload --port 9000
 # Expected: Shows pattern database statistics
 ```
 
-### Step 7: Initialize ACE in Your Project (One-Time)
+### Step 6: Initialize ACE in Your Project (One-Time)
 
 ```bash
 # Add ACE instructions to your project's CLAUDE.md
@@ -146,13 +132,10 @@ python -m uvicorn main:app --reload --port 9000
 ### Quick Start (Environment Variables)
 
 ```bash
-# Add to ~/.zshrc or ~/.bashrc (using official production server)
+# Add to ~/.zshrc or ~/.bashrc
 export ACE_SERVER_URL="https://ace-api.code-engine.app"
 export ACE_API_TOKEN="ace_your_api_token_here"
 export ACE_PROJECT_ID="prj_your_project_id"
-
-# For self-hosted/local development, use:
-# export ACE_SERVER_URL="http://localhost:9000"
 ```
 
 ### Configuration Files
