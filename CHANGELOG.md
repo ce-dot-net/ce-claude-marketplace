@@ -5,12 +5,12 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.2.37] - 2025-10-30
+## [3.2.38] - 2025-10-30
 
 ### 🐛 BUG FIX: CLAUDE_PLUGIN_ROOT Environment Variable Fallback
 
 **Problem:**
-Scripts `ace-claude-init.sh` and `check-ace-version.sh` failed when called directly (not from hooks) because `CLAUDE_PLUGIN_ROOT` environment variable was not set by Claude Code, causing "ERROR: Cannot find plugin.json".
+Scripts `ace-claude-init.sh` and `check-ace-version.sh` failed when called directly from commands (e.g., `/ace-orchestration:ace-claude-init`) because `CLAUDE_PLUGIN_ROOT` environment variable was not set by Claude Code, causing "ERROR: Cannot find plugin.json".
 
 **Solution:**
 Added fallback logic to both scripts to detect plugin root from script location when environment variable is not set:
@@ -31,6 +31,14 @@ fi
 ### Files Changed
 - `plugins/ace-orchestration/scripts/ace-claude-init.sh` - Added CLAUDE_PLUGIN_ROOT fallback
 - `plugins/ace-orchestration/scripts/check-ace-version.sh` - Added CLAUDE_PLUGIN_ROOT fallback
+
+**This is a critical patch release for v3.2.37. All users should update to v3.2.38.**
+
+## [3.2.37] - 2025-10-30
+
+### 📝 Documentation Release
+
+This version was released for documentation updates but contained a critical bug that prevented scripts from working when called directly from commands. See v3.2.38 for the bug fix.
 
 ## [3.2.35] - 2025-10-29
 
