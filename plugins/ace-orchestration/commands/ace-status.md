@@ -69,7 +69,24 @@ ACE v3.0 stores playbooks in:
 - **Project-specific**: Isolated by project ID
 - **Multi-tenant**: Your org's patterns are private
 
+## Next Steps
+
+**After checking status:**
+
+- **If playbook is empty (0 bullets):**
+  - Run `/ace-orchestration:ace-bootstrap` to populate initial patterns from git/docs/code
+  - Or start coding - ACE will learn automatically!
+
+- **If not configured yet:**
+  - Run `/ace-orchestration:ace-configure` to set up ACE server connection
+
+- **If ACE not initialized in project:**
+  - Run `/ace-orchestration:ace-claude-init` to add ACE instructions to CLAUDE.md
+
 ## See Also
 
-- `/ace-patterns` - View the full playbook
-- `/ace-clear` - Clear the playbook
+- `/ace-orchestration:ace-configure` - Configure ACE server connection
+- `/ace-orchestration:ace-claude-init` - Initialize ACE in project
+- `/ace-orchestration:ace-bootstrap` - Bootstrap playbook from git/docs/code
+- `/ace-orchestration:ace-patterns` - View learned patterns
+- `/ace-orchestration:ace-clear` - Clear playbook and start fresh

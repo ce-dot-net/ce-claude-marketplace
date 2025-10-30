@@ -76,7 +76,7 @@ Use the mcp__ace-pattern-learning__ace_status tool to verify connectivity.
    Error: ECONNREFUSED
    → MCP server not running
    → Action: Check server is running at configured URL
-   → Fallback: Suggest running /ace-configure
+   → Fallback: Suggest running /ace-orchestration:ace-configure
    ```
 
 2. **Timeout**
@@ -91,7 +91,7 @@ Use the mcp__ace-pattern-learning__ace_status tool to verify connectivity.
    ```
    Error: 401 Unauthorized
    → Invalid or missing API token
-   → Action: Run /ace-configure to set up credentials
+   → Action: Run /ace-orchestration:ace-configure to set up credentials
    → Fallback: Check <project-root>/.ace/config.json for valid apiToken
    ```
 
@@ -123,7 +123,7 @@ Use the mcp__ace-pattern-learning__ace_status tool to verify connectivity.
    ```
    Error: Config file not found
    → <project-root>/.ace/config.json doesn't exist
-   → Action: Run /ace-configure to create project config
+   → Action: Run /ace-orchestration:ace-configure to create project config
    → Fallback: Provide default configuration template
    ```
 
@@ -181,7 +181,7 @@ Display the current ACE configuration:
    Error: Cannot read <project-root>/.ace/config.json
    → Permission denied or file corrupted
    → Action: Check file permissions (should be 600)
-   → Fallback: Recreate config with /ace-configure
+   → Fallback: Recreate config with /ace-orchestration:ace-configure
    ```
 
 2. **Invalid JSON in Config**
@@ -197,7 +197,7 @@ Display the current ACE configuration:
    Warning: Configuration incomplete
    → serverUrl, apiToken, or projectId missing
    → Action: List missing fields
-   → Fallback: Run /ace-configure to complete setup
+   → Fallback: Run /ace-orchestration:ace-configure to complete setup
    ```
 
 4. **Invalid URL Format**
@@ -271,7 +271,7 @@ Troubleshooting Steps:
 ### Issue: MCP Server Not Responding
 **Symptom**: ace_status tool returns connection error
 **Solution**:
-1. Run `/ace-configure` to set up connection
+1. Run `/ace-orchestration:ace-configure` to set up connection
 2. Verify server URL is correct
 3. Check server is running
 4. Verify network connectivity
@@ -293,9 +293,9 @@ Troubleshooting Steps:
 
 ## See Also
 
-- `/ace-status` - View playbook statistics
-- `/ace-patterns` - View learned patterns
-- `/ace-configure` - Configure MCP server connection
+- `/ace-orchestration:ace-status` - View playbook statistics
+- `/ace-orchestration:ace-patterns` - View learned patterns
+- `/ace-orchestration:ace-configure` - Configure MCP server connection
 - `/ace-init` - Initialize playbook from git history
 
 ## Technical Details

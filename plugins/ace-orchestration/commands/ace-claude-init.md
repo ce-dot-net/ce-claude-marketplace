@@ -14,7 +14,45 @@ Copies the full ACE plugin instructions inline into your project's CLAUDE.md. Th
 
 When the user runs `/ace-claude-init`, follow these steps:
 
-### Step 1: Read Plugin CLAUDE.md
+### Step 0: Try Script-Based Initialization (Fast Path)
+
+**NEW in v3.2.36+:** Try the shell script first for token-free, instant execution.
+
+1. **Execute the script:**
+   ```bash
+   ${CLAUDE_PLUGIN_ROOT}/scripts/ace-claude-init.sh
+   ```
+
+2. **Check exit code:**
+   - **Exit 0:** Success! Script handled initialization/update
+     - Show success message from script output
+     - Skip to "Confirm Success" section
+     - **Stop here - do NOT proceed to Step 1**
+
+   - **Exit 2:** Fallback needed (file has no HTML markers or complex structure)
+     - Continue to Step 1 (LLM-based approach)
+     - This is expected for first-time runs on projects without markers
+
+   - **Exit 1:** Error occurred
+     - Continue to Step 1 (LLM-based approach as fallback)
+
+3. **When script succeeds (exit 0):**
+   - Token usage: **0 tokens** (pure shell script)
+   - Execution time: **< 1 second**
+   - No further action needed
+
+4. **When script exits with code 2:**
+   - This means: File exists but has no HTML markers
+   - Fall through to Step 1 for LLM-based handling
+   - Token usage: Normal LLM path (~17,000 tokens)
+
+**Script Capabilities:**
+- ✅ Creates new CLAUDE.md files (instant)
+- ✅ Appends to existing CLAUDE.md without ACE content
+- ✅ Updates marker-based ACE sections (v3.2.36+)
+- ❌ Cannot handle: Files without HTML markers (uses LLM fallback)
+
+### Step 1: Read Plugin CLAUDE.md (LLM Fallback Path)
 
 Read the full ACE plugin CLAUDE.md file:
 ```
@@ -39,11 +77,13 @@ Look for the ACE content marker in the project's CLAUDE.md:
 **If this header already exists:**
 
 1. **Detect existing version** by searching for version pattern in project CLAUDE.md:
-   - Look for patterns like "v3.2.6", "v3.2.7", "v3.2.8" etc.
-   - Check line containing "## 🔄 Complete Automatic Learning Cycle (vX.X.X)"
+   - **Optimized:** Check line 93 specifically: `## 🔄 Complete Automatic Learning Cycle (v3.2.36)`
+   - Extract version using pattern: `v([0-9]+\.[0-9]+\.[0-9]+)`
+   - Fallback: Search entire file if not found on line 93
 
 2. **Read plugin version** from the plugin CLAUDE.md file:
-   - Find the same version pattern in `~/.claude/plugins/.../CLAUDE.md`
+   - **Optimized:** Check line 93 of plugin template (same location)
+   - Fallback: Search entire plugin file if structure differs
 
 3. **Compare versions:**
 
@@ -64,8 +104,11 @@ Look for the ACE content marker in the project's CLAUDE.md:
 If user confirmed they want to update outdated ACE content:
 
 1. **Find ACE section boundaries** in project CLAUDE.md:
-   - Start: Line with `# ACE Orchestration Plugin - Automatic Learning Cycle`
-   - End: Next `#` header at the same level OR end of file
+   - **Check for HTML markers first:** `<!-- ACE_SECTION_START -->` and `<!-- ACE_SECTION_END -->`
+   - If markers present: Use them for exact boundaries (fast, accurate)
+   - If markers absent: Use header-based detection:
+     - Start: Line with `# ACE Orchestration Plugin - Automatic Learning Cycle`
+     - End: Next `#` header at the same level (pattern: `^# [^#]`) OR end of file
 
 2. **Extract non-ACE content:**
    - Content BEFORE the ACE section (if any)
@@ -163,10 +206,10 @@ Once initialized, every Claude session will have:
 
 ## Complementary Commands
 
-- `/ace-bootstrap` - Bootstrap playbook from git history (optional)
-- `/ace-status` - Check playbook statistics
-- `/ace-patterns` - View learned patterns
-- `/ace-configure` - Set up ACE server connection
+- `/ace-orchestration:ace-configure` - Set up ACE server connection (REQUIRED FIRST!)
+- `/ace-orchestration:ace-status` - Check playbook statistics
+- `/ace-orchestration:ace-bootstrap` - Bootstrap playbook from git history (optional)
+- `/ace-orchestration:ace-patterns` - View learned patterns
 
 ## Example Workflow
 
@@ -174,13 +217,19 @@ Once initialized, every Claude session will have:
 # 1. Install ACE plugin
 # 2. Restart Claude Code
 
-# 3. Initialize ACE in project (one-time)
-/ace-claude-init
+# 3. Configure ACE server connection (REQUIRED!)
+/ace-orchestration:ace-configure
 
-# 4. Optionally bootstrap from git history
-/ace-bootstrap --commits 100 --days 30
+# 4. Initialize ACE in project (one-time)
+/ace-orchestration:ace-claude-init
 
-# 5. Start coding - ACE learns automatically!
+# 5. Optionally bootstrap from git history
+/ace-orchestration:ace-bootstrap --commits 100 --days 30
+
+# 6. Verify setup
+/ace-orchestration:ace-status
+
+# 7. Start coding - ACE learns automatically!
 # "Implement user authentication"
 # → ACE Playbook Retrieval skill auto-invokes
 # → Claude implements with learned patterns

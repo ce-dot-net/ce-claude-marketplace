@@ -317,6 +317,31 @@ Combines **current codebase** + **git history** (without docs scanning):
 - **Pre-initialized playbook**: If playbook already has 100+ quality patterns, online learning is better
 - **Frequent re-bootstraps**: Don't run daily - use online learning (ace_learn) instead
 
+## Integration with ACE Agent Skills (v3.2.36)
+
+**NEW in v3.2.36**: ACE skills now trigger on 35+ action keywords with intent-based fallback!
+
+After bootstrapping your initial playbook, ACE's Agent Skills will automatically use these patterns during your work. The skills trigger on:
+
+**8 Trigger Categories (35+ keywords):**
+- **Implementation**: implement, build, create, add, develop, write
+- **Modification**: update, modify, change, edit, enhance, extend, revise
+- **Debugging**: debug, fix, troubleshoot, resolve, diagnose
+- **Refactoring**: refactor, optimize, improve, restructure
+- **Integration**: integrate, connect, setup, configure, install
+- **Architecture**: architect, design, plan
+- **Testing**: test, verify, validate
+- **Operations**: deploy, migrate, upgrade
+
+**Intent-based fallback**: Even without exact keywords, skills trigger when requests clearly intend to write/modify code, solve technical problems, make architectural decisions, or perform substantial technical work.
+
+**How it works:**
+1. **Playbook Retrieval Skill**: Before tasks (auto-invokes when trigger keywords detected)
+2. **Playbook Learning Skill**: After tasks (auto-invokes after substantial work)
+3. **Bootstrap command**: Provides initial patterns for skills to retrieve
+
+**Result**: Bootstrap gives you a strong foundation, then skills automatically retrieve and expand patterns as you work!
+
 ## After Bootstrap
 
 Once bootstrapped, ACE continues learning through **online learning**:
@@ -327,11 +352,31 @@ Once bootstrapped, ACE continues learning through **online learning**:
 
 **Bootstrap (ace_bootstrap)** + **Online learning (ace_learn)** = Complete ACE system
 
+## Next Steps
+
+**After bootstrap completes:**
+
+1. **Verify patterns loaded:**
+   - Run `/ace-orchestration:ace-status` to see playbook statistics
+   - Should show bullets distributed across 4 sections
+
+2. **Review learned patterns:**
+   - Run `/ace-orchestration:ace-patterns` to view what was discovered
+   - Check strategies, snippets, troubleshooting, and API patterns
+
+3. **Start coding:**
+   - ACE will now retrieve these patterns before tasks
+   - Automatic learning will add new patterns as you work
+
+4. **Optional - Export backup:**
+   - Run `/ace-orchestration:ace-export-patterns` to save initial playbook state
+   - Useful for team sharing or restoration
+
 ## Complementary Commands
 
-- `/ace-patterns` - View the initialized playbook
-- `/ace-status` - Check statistics after initialization
-- `/ace-export-patterns` - Backup before re-initialization
+- `/ace-orchestration:ace-patterns` - View the initialized playbook
+- `/ace-orchestration:ace-status` - Check statistics after initialization
+- `/ace-orchestration:ace-export-patterns` - Backup before re-initialization
 
 ## Git History Requirements
 

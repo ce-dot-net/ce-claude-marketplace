@@ -54,6 +54,25 @@ The exported file will contain:
 - **Cross-Project**: Transfer knowledge to new projects
 - **Analysis**: Export for external analysis tools
 
+## Next Steps
+
+**After exporting:**
+
+- **Backup complete!** Your playbook is saved to JSON
+- **Share with team:** Send file to colleagues for import
+- **Restore later:** Use `/ace-orchestration:ace-import-patterns` to restore from backup
+
 ## Import
 
-See `/ace-import-patterns` to re-import exported playbooks.
+To re-import exported playbooks:
+```
+/ace-orchestration:ace-import-patterns
+```
+
+See `/ace-orchestration:ace-import-patterns` command for full import instructions.
+
+## See Also
+
+- `/ace-orchestration:ace-import-patterns` - Import playbook from JSON
+- `/ace-orchestration:ace-status` - Check current playbook statistics
+- `/ace-orchestration:ace-patterns` - View current playbook

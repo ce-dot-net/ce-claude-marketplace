@@ -39,8 +39,10 @@ When the user runs `/ace-configure`, follow these steps:
    - Show success message with the FULL config file path
 
 5. **Next Steps:**
-   - Tell user to restart Claude Code for changes to take effect
-   - Suggest running `/ace-status` to verify connection
+   - Configuration saved! No restart needed.
+   - Suggest running `/ace-orchestration:ace-claude-init` to add ACE instructions to project CLAUDE.md
+   - Suggest running `/ace-orchestration:ace-status` to verify connection
+   - Optionally suggest `/ace-orchestration:ace-bootstrap` to populate initial playbook patterns
 
 ## Example Interaction
 
@@ -68,10 +70,13 @@ User: prj_your_project_id
 ⚠️  Note: Config was saved to PROJECT root, not ~/.ace/
     This ensures your team can share the same ACE server configuration.
 
+✅ .gitignore automatically updated: .ace/ and .ace-cache/ added automatically
+    (The ACE plugin manages this via SessionStart hook)
+
 Next steps:
 1. Restart Claude Code (Cmd+Q, then reopen)
-2. Run: /ace-status to verify connection
-3. Consider adding .ace/config.json to .gitignore if it contains sensitive tokens
+2. Run: /ace-orchestration:ace-status to verify connection
+3. .gitignore is managed automatically - no manual action needed!
 ```
 
 ## Configuration Storage
@@ -168,7 +173,7 @@ Your project identifier in ACE. Check:
 
 ## See Also
 
-- `/ace-status` - Check current ACE connection status
+- `/ace-orchestration:ace-status` - Check current ACE connection status
 - `/ace-init` - Initialize pattern discovery
 - Plugin installation guide: `INSTALL.md`
 
@@ -181,7 +186,7 @@ This command runs an interactive wizard that prompts for your ACE server details
 After saving, test your connection:
 
 ```bash
-/ace-status
+/ace-orchestration:ace-status
 ```
 
 This will show if ACE server is reachable and authenticated.
@@ -250,6 +255,6 @@ chmod 755 .ace
 
 ## See Also
 
-- `/ace-status` - Test your current configuration
+- `/ace-orchestration:ace-status` - Test your current configuration
 - `/ace-init` - Initialize pattern discovery
 - Installation guide: `plugins/ace-orchestration/INSTALL.md`
