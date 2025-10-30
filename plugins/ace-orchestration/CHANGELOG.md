@@ -5,6 +5,42 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.2.40] - 2025-10-30
+
+### ✨ FEATURES: Interactive UI + Production Server
+
+**Interactive Configuration UI**
+- ace-configure command now ALWAYS uses AskUserQuestion tool for interactive UI
+- Consistent visual interface with selectable options (no more console fallback)
+- Streamlined server selection: Official production server as default
+- Custom URL option for enterprise installations
+
+**Production Server Integration**
+- Official ACE server: https://ace-api.code-engine.app
+- Updated ALL documentation to use production server
+- Removed localhost references from consumer-facing docs
+- Simplified installation process (no need to run own server)
+
+**Documentation Improvements**
+- README.md: Removed "Start ACE Server" step, production-first approach
+- INSTALL.md: Production server in all examples
+- CONFIGURATION.md: Simplified to production server defaults
+- TROUBLESHOOTING.md: Production URLs in troubleshooting steps
+- SECURITY.md: Production server in security examples
+- ace-configure.md: Interactive UI with production server first
+- ace-test.md: Example outputs show production server
+
+### Files Changed
+- `plugins/ace-orchestration/README.md` - Removed localhost, production-first
+- `plugins/ace-orchestration/commands/ace-configure.md` - Interactive UI always
+- `plugins/ace-orchestration/docs/guides/INSTALL.md` - Production server
+- `plugins/ace-orchestration/docs/guides/CONFIGURATION.md` - Production defaults
+- `plugins/ace-orchestration/docs/guides/TROUBLESHOOTING.md` - Production URLs
+- `plugins/ace-orchestration/docs/technical/SECURITY.md` - Production examples
+- `plugins/ace-orchestration/commands/ace-test.md` - Production in examples
+
+**This is a consumer-focused release - users now get a clean, simple experience with the official Code Engine ACE production server.**
+
 ## [3.2.37] - 2025-10-30
 
 ### Added

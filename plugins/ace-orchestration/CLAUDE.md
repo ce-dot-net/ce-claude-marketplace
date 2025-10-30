@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v3.2.39 -->
+<!-- ACE_SECTION_START v3.2.40 -->
 # ACE Orchestration Plugin - Automatic Learning Cycle
 
 This plugin provides fully automatic pattern learning using the ACE framework architecture.
@@ -91,7 +91,7 @@ Step 5: Respond to user
 
 **CRITICAL - Non-negotiable:** These skills are NOT optional and NOT negotiable. You MUST use them proactively and automatically for EVERY qualifying task. The retrieval skill runs BEFORE, the learning skill runs AFTER - BOTH are MANDATORY.
 
-## 🔄 Complete Automatic Learning Cycle (v3.2.39)
+## 🔄 Complete Automatic Learning Cycle (v3.2.40)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 
@@ -325,7 +325,7 @@ mcp__ace-pattern-learning__ace_learn(
 mcp__ace-pattern-learning__ace_status
 ```
 
-## 🎯 ACE Architecture (v3.2.39)
+## 🎯 ACE Architecture (v3.2.40)
 
 The ACE framework implements fully automatic learning with complete retrieval → learning cycle:
 
@@ -380,4 +380,4 @@ plugins/ace-orchestration/
 ├── .mcp.json                      # MCP client config
 └── CLAUDE.md                      # This file!
 ```
-<!-- ACE_SECTION_END v3.2.39 -->
+<!-- ACE_SECTION_END v3.2.40 -->
