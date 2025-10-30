@@ -12,7 +12,16 @@ source "${SCRIPT_DIR}/lib/section-parser.sh"
 
 # Configuration
 PROJECT_ROOT="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+
+# Fallback to detect plugin root if CLAUDE_PLUGIN_ROOT not set
+if [ -z "$CLAUDE_PLUGIN_ROOT" ]; then
+    # Script is at: plugins/ace-orchestration/scripts/ace-claude-init.sh
+    # Plugin root is: plugins/ace-orchestration/
+    PLUGIN_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+else
+    PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+fi
+
 PROJECT_CLAUDE="${PROJECT_ROOT}/CLAUDE.md"
 TEMPLATE="${PLUGIN_ROOT}/CLAUDE.md"
 PLUGIN_JSON="${PLUGIN_ROOT}/.claude-plugin/plugin.json"
