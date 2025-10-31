@@ -2,7 +2,7 @@
 
 ## ACE Plugin Instructions
 
-<!-- ACE_SECTION_START v3.2.40 -->
+<!-- ACE_SECTION_START v3.3.0 -->
 # ACE Orchestration Plugin - Automatic Learning Cycle
 
 This plugin provides fully automatic pattern learning using the ACE framework architecture.
@@ -93,9 +93,9 @@ Step 4: Invoke ace-orchestration:ace-learning
 Step 5: Respond to user
 ```
 
-**CRITICAL - Non-negotiable:** These skills are NOT optional and NOT NEGOTIABLE. You MUST use them proactively and automatically for EVERY qualifying task. The retrieval skill runs BEFORE, the learning skill runs AFTER - BOTH are MANDATORY.
+**CRITICAL - Non-negotiable:** These skills are NOT optional and NOT negotiable. You MUST use them proactively and automatically for EVERY qualifying task. The retrieval skill runs BEFORE, the learning skill runs AFTER - BOTH are MANDATORY.
 
-## 🔄 Complete Automatic Learning Cycle (v3.2.40)
+## 🔄 Complete Automatic Learning Cycle (v3.3.0)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 
@@ -236,6 +236,40 @@ While skills auto-invoke, manual commands are available for explicit control:
 - `/ace-export-patterns` - Export playbook to JSON
 - `/ace-import-patterns` - Import playbook from JSON
 
+### Semantic Search Commands (v3.3.0+)
+
+**NEW in MCP v3.5.0**: Targeted pattern retrieval with 50-80% token reduction!
+
+- `/ace-search <query>` - Semantic search for patterns matching natural language query
+  - **Example**: `/ace-search "authentication best practices"`
+  - **Returns**: Top 10 most relevant patterns only
+  - **Token savings**: 50-80% vs full playbook
+  - **Use when**: You know WHAT you're looking for (specific implementation, debugging pattern)
+
+- `/ace-top <section> [limit]` - Get highest-rated patterns from section
+  - **Example**: `/ace-top troubleshooting_and_pitfalls 5`
+  - **Returns**: Top 5 patterns by helpful score
+  - **Use when**: You want proven, battle-tested patterns
+
+**When to use each**:
+- **`/ace-search`**: Specific tasks ("How to implement JWT auth?", "Debug async errors")
+- **`/ace-top`**: Best practices ("Show me top debugging patterns")
+- **`/ace-patterns`**: Comprehensive view (multi-domain tasks, architectural decisions)
+
+**MCP Tools** (for programmatic use):
+```bash
+mcp__plugin_ace-orchestration_ace-pattern-learning__ace_search(
+  query="authentication patterns",
+  top_k=10
+)
+
+mcp__plugin_ace-orchestration_ace-pattern-learning__ace_top_patterns(
+  section="strategies_and_hard_rules",
+  limit=10,
+  min_helpful=5
+)
+```
+
 ## 🤖 How Agent Skills Work (Model-Invoked)
 
 ### Example Complete Cycles
@@ -329,7 +363,7 @@ mcp__ace-pattern-learning__ace_learn(
 mcp__ace-pattern-learning__ace_status
 ```
 
-## 🎯 ACE Architecture (v3.2.40)
+## 🎯 ACE Architecture (v3.3.0)
 
 The ACE framework implements fully automatic learning with complete retrieval → learning cycle:
 
@@ -384,4 +418,4 @@ plugins/ace-orchestration/
 ├── .mcp.json                      # MCP client config
 └── CLAUDE.md                      # This file!
 ```
-<!-- ACE_SECTION_END v3.2.40 -->
+<!-- ACE_SECTION_END v3.3.0 -->

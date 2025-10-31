@@ -26,21 +26,47 @@ Use **BEFORE** starting:
 
 ## How This Skill Works
 
-### Step 1: Call MCP Tool
+### Step 1: Choose Retrieval Strategy
 
+**Decision Logic** - Choose based on task specificity:
+
+**Use `ace_search`** (PREFERRED for specific queries):
 ```bash
-mcp__ace-pattern-learning__ace_get_playbook
+mcp__ace-pattern-learning__ace_search(
+  query="JWT authentication with refresh tokens",
+  threshold=0.7
+)
 ```
+**When to use**:
+- ✅ User request mentions specific technology/pattern (e.g., "JWT auth", "Stripe webhooks", "async debugging")
+- ✅ Narrow domain focus (authentication, error handling, API integration)
+- ✅ You can formulate the query as a natural language question
+- ✅ Want 50-80% token reduction
 
-**Parameters** (all optional):
-- `section`: Filter by specific playbook section
-  - `strategies_and_hard_rules`: Architectural patterns and coding principles
-  - `useful_code_snippets`: Reusable code patterns with tested implementations
-  - `troubleshooting_and_pitfalls`: Known issues, gotchas, and solutions
-  - `apis_to_use`: Recommended libraries, frameworks, and integration patterns
-- `min_helpful`: Minimum helpful count (filter by quality score)
+**Use `ace_get_playbook`** (for comprehensive needs):
+```bash
+mcp__ace-pattern-learning__ace_get_playbook()
+# or with section filter:
+mcp__ace-pattern-learning__ace_get_playbook(section="strategies_and_hard_rules")
+```
+**When to use**:
+- ✅ Complex multi-domain task (touches auth + database + API)
+- ✅ Architectural decisions requiring broad context
+- ✅ Refactoring affecting multiple areas
+- ✅ No clear narrow query to formulate
 
-**No section parameter** = Returns all sections (recommended for complex tasks)
+**Use `ace_batch_get`** (for follow-up retrieval):
+```bash
+mcp__ace-pattern-learning__ace_batch_get(
+  pattern_ids=["ctx-001", "ctx-002", "ctx-003"]
+)
+```
+**When to use**:
+- ✅ You have pattern IDs from previous search results
+- ✅ Need to fetch full details of specific patterns
+- ✅ Following up on references from other patterns
+
+**Default Strategy**: **Try `ace_search` first** for specific requests, fall back to `ace_get_playbook` only if query is too broad.
 
 ### Step 2: MCP Client Handles Caching Automatically
 
@@ -103,56 +129,67 @@ Execute the user's request informed by organizational knowledge!
 
 ## Examples
 
-### Example 1: Implementation Task
+### Example 1: Specific Implementation (Use ace_search)
 
 ```
 User: "Implement JWT authentication with refresh tokens"
 ↓
 Skill Auto-Invokes (matches "implement")
 ↓
-Calls: mcp__ace_get_playbook(section="strategies_and_hard_rules")
+Decision: Narrow domain (JWT auth) → Use ace_search
 ↓
-Retrieves: "Refresh token rotation prevents theft attacks - rotate on each use"
+Calls: mcp__ace_search(query="JWT authentication refresh tokens", threshold=0.7)
 ↓
-Implements auth with learned pattern: short-lived access tokens + rotating refresh tokens
+Retrieves (Top 3 patterns):
+  1. "Refresh token rotation prevents theft attacks - rotate on each use"
+  2. "Short-lived access tokens (15min) balance security and UX"
+  3. "HttpOnly cookies for refresh tokens prevent XSS attacks"
+↓
+Implements auth with learned patterns (80% token reduction vs full playbook!)
 ```
 
-### Example 2: Debugging Task
+### Example 2: Specific Debugging (Use ace_search)
 
 ```
 User: "Fix intermittent test failures in async operations"
 ↓
 Skill Auto-Invokes (matches "fix")
 ↓
-Calls: mcp__ace_get_playbook(section="troubleshooting_and_pitfalls")
+Decision: Specific issue (async test failures) → Use ace_search
+↓
+Calls: mcp__ace_search(query="async test failures intermittent", threshold=0.6)
 ↓
 Retrieves: "Intermittent async failures often indicate missing await statements"
 ↓
 First checks for missing await in cleanup code (root cause found!)
 ```
 
-### Example 3: API Integration Task
+### Example 3: Specific API Integration (Use ace_search)
 
 ```
 User: "Integrate Stripe payment webhooks"
 ↓
 Skill Auto-Invokes (matches "integrate")
 ↓
-Calls: mcp__ace_get_playbook(section="apis_to_use")
+Decision: Specific API (Stripe webhooks) → Use ace_search
+↓
+Calls: mcp__ace_search(query="Stripe webhook integration", threshold=0.7)
 ↓
 Retrieves: "Stripe webhooks require express.raw() for signature verification"
 ↓
 Implements webhook handler with correct body parser configuration
 ```
 
-### Example 4: Refactoring Task
+### Example 4: Complex Multi-Domain Task (Use ace_get_playbook)
 
 ```
 User: "Refactor database queries to use connection pooling"
 ↓
 Skill Auto-Invokes (matches "refactor")
 ↓
-Calls: mcp__ace_get_playbook()  # All sections
+Decision: Broad refactoring touching multiple areas → Use ace_get_playbook
+↓
+Calls: mcp__ace_get_playbook()  # All sections - need comprehensive context
 ↓
 Retrieves patterns from past database work:
   - strategies: "Connection pool size = 2-3x concurrent queries"
@@ -160,6 +197,22 @@ Retrieves patterns from past database work:
   - troubleshooting: "Pool exhaustion causes intermittent timeouts"
 ↓
 Refactors with proper pool sizing and error handling
+```
+
+### Example 5: Follow-Up Retrieval (Use ace_batch_get)
+
+```
+User: "Show me more details about those authentication patterns"
+↓
+Previous search returned IDs: ["ctx-001", "ctx-002", "ctx-003"]
+↓
+Decision: Have specific IDs from previous search → Use ace_batch_get
+↓
+Calls: mcp__ace_batch_get(pattern_ids=["ctx-001", "ctx-002", "ctx-003"])
+↓
+Retrieves: Full pattern details with evidence, observations, timestamps
+↓
+Displays comprehensive pattern information (10x faster than sequential fetches)
 ```
 
 ## Integration with ACE Learning
@@ -210,34 +263,60 @@ This skill completes the ACE automatic learning cycle:
 
 ## Advanced Usage
 
-### Filter by Section for Focused Retrieval
+### Semantic Search with Thresholds
 
 ```bash
-# For architectural decisions
-mcp__ace_get_playbook(section="strategies_and_hard_rules")
+# Strict matching (fewer, more precise results)
+mcp__ace_search(query="JWT authentication", threshold=0.85)
 
-# For code implementation
-mcp__ace_get_playbook(section="useful_code_snippets")
+# Balanced (recommended default)
+mcp__ace_search(query="JWT authentication", threshold=0.7)
 
-# For debugging
-mcp__ace_get_playbook(section="troubleshooting_and_pitfalls")
-
-# For choosing libraries
-mcp__ace_get_playbook(section="apis_to_use")
+# Broader matching (more results, less precision)
+mcp__ace_search(query="JWT authentication", threshold=0.5)
 ```
 
-### Filter by Quality
+### Search Within Specific Section
+
+```bash
+# Search only in troubleshooting patterns
+mcp__ace_search(
+  query="async test failures",
+  section="troubleshooting_and_pitfalls",
+  threshold=0.7
+)
+
+# Search only API-related patterns
+mcp__ace_search(
+  query="Stripe integration",
+  section="apis_to_use",
+  threshold=0.7
+)
+```
+
+### Two-Stage Retrieval (Search → Batch Fetch)
+
+```bash
+# Stage 1: Find relevant pattern IDs
+results = mcp__ace_search(query="authentication patterns", threshold=0.7)
+pattern_ids = [p.id for p in results.patterns]  # Extract IDs
+
+# Stage 2: Fetch full details in bulk
+full_patterns = mcp__ace_batch_get(pattern_ids=pattern_ids)
+# 10x-50x faster than fetching individually!
+```
+
+### Full Playbook with Filters
 
 ```bash
 # Only highly-rated patterns (helpful >= 5)
 mcp__ace_get_playbook(min_helpful=5)
-```
 
-### Combine Filters
-
-```bash
 # High-quality troubleshooting patterns
 mcp__ace_get_playbook(section="troubleshooting_and_pitfalls", min_helpful=3)
+
+# All architectural strategies
+mcp__ace_get_playbook(section="strategies_and_hard_rules")
 ```
 
 ## ACE Framework Architecture

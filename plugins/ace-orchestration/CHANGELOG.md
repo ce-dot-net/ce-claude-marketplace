@@ -24,28 +24,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Perfect for "best practices" queries
 - Example: `/ace-top troubleshooting_and_pitfalls 5` returns top 5 debugging patterns
 
-**Delta Operations**
-- NEW incremental playbook updates (ACE Paper Section 3.3 compliance)
-- Add, update, or delete individual bullets without full playbook refresh
-- Implements grow-and-refine methodology from research paper
-- Automatic deduplication and embedding updates
+**Runtime Configuration Management**
+- NEW `/ace-config [action] [params]` command - Dynamic server configuration
+- View and update server settings without code changes
+- Adjust search thresholds, enable token budget, configure deduplication
+- Changes persist across sessions, cached for 5 minutes on client
+- Example: `/ace-config search-threshold 0.8` for stricter matching
 
-**Cache Management**
-- NEW cache control for debugging and forced refreshes
-- Clear RAM and SQLite caches on demand
-- Useful for testing and cache troubleshooting
+**Manual Pattern Management**
+- NEW `/ace-delta [operation] [pattern]` command - Direct playbook manipulation
+- Add, update, or remove patterns manually (bypasses automatic learning)
+- Implements ACE Paper Section 3.3 delta operations
+- Use sparingly for manual curation (prefer automatic learning via skills)
+- Example: `/ace-delta add "pattern text" section`
+
+**Batch Retrieval**
+- NEW bulk pattern fetching - 10x-50x faster than sequential
+- Fetch multiple patterns by ID in single request
+- Max 50 patterns per batch
+- Perfect for follow-up queries after semantic search
+- Example: Retrieve 50 patterns in ~200ms vs ~10 seconds sequentially
 
 ### Added
 
 **New Slash Commands:**
 - `commands/ace-search.md` - Semantic search command with examples
 - `commands/ace-top.md` - Top patterns command with usage guide
+- `commands/ace-config.md` - Runtime configuration management
+- `commands/ace-delta.md` - Manual pattern operations (ADD/UPDATE/REMOVE)
 
 **Updated Skills:**
-- `skills/ace-playbook-retrieval/SKILL.md` - Added retrieval strategy section
-  - Decision matrix for choosing retrieval method
-  - Semantic search vs full playbook vs top patterns guidance
-  - Updated examples showing token reduction
+- `skills/ace-playbook-retrieval/SKILL.md` - **MAJOR UPDATE: Intelligent tool selection**
+  - Decision logic for choosing between `ace_search`, `ace_get_playbook`, and `ace_batch_get`
+  - **Default strategy: Try ace_search FIRST** for specific queries (80% token savings!)
+  - Fall back to full playbook only for broad/complex tasks
+  - 5 updated examples showing real-world tool selection
+  - Advanced usage patterns: semantic search with thresholds, two-stage retrieval
 
 **Updated Templates:**
 - `CLAUDE.md` - Added semantic search commands section (v3.3.0+)
@@ -53,10 +67,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - MCP tool usage examples
   - When to use each retrieval method
 
-**MCP Tools (Requires MCP v3.5.0+):**
+**MCP Tools (Requires MCP v3.6.0+):**
 - `mcp__ace_search` - Semantic pattern search
 - `mcp__ace_top_patterns` - Quality-first retrieval
-- `mcp__ace_delta` - Incremental playbook updates
+- `mcp__ace_batch_get` - Bulk pattern retrieval by IDs
+- `mcp__ace_get_config` - Fetch server configuration
+- `mcp__ace_set_config` - Update server configuration
+- `mcp__ace_delta` - Incremental playbook updates (ADD/UPDATE/REMOVE)
 - `mcp__ace_cache_clear` - Cache management
 
 ### Changed
@@ -67,18 +84,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - More efficient for single-domain tasks
 
 **Version Updates:**
-- Plugin version: 3.0.0 → 3.3.0
-- MCP client dependency: Requires @ce-dot-net/ace-client@3.5.0 or higher
+- Plugin version: 3.2.40 → 3.3.0
+- MCP client dependency: Requires @ce-dot-net/ace-client@3.6.0 or higher
+- CLAUDE.md ACE section markers: v3.2.40 → v3.3.0
 
 ### Dependencies
 
 **Required:**
-- ACE MCP Client v3.5.0+ (published 2025-10-31)
+- ACE MCP Client v3.6.0+ (published 2025-10-31)
 - ACE Server v3.1.0+ (already deployed at https://ace-api.code-engine.app)
 
 **Server Endpoints Used:**
 - `POST /patterns/search` - Semantic search with embeddings
 - `GET /patterns/top` - Top patterns by helpful score
+- `POST /patterns/batch` - Bulk pattern retrieval
+- `GET /api/v1/config` - Server configuration retrieval
+- `PUT /api/v1/config` - Server configuration updates
 - `POST /delta` - Delta operations for incremental updates
 
 ### Migration Guide
@@ -113,13 +134,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `plugin.PRODUCTION.json` - Version bump to 3.3.0
 - `plugin.local.json` - Version bump to 3.3.0
-- `CLAUDE.md` - Added semantic search commands section
-- `skills/ace-playbook-retrieval/SKILL.md` - Added retrieval strategy
+- `CLAUDE.md` - Slimmed down to essential instructions, added v3.3.0 marker, semantic search section
+- `skills/ace-playbook-retrieval/SKILL.md` - **MAJOR UPDATE: Intelligent tool selection with decision logic**
 - `commands/ace-search.md` - NEW semantic search command
 - `commands/ace-top.md` - NEW top patterns command
+- `commands/ace-config.md` - NEW runtime configuration command
+- `commands/ace-delta.md` - NEW manual pattern management command
 - `CHANGELOG.md` - This file
 
-**This is a performance-focused release - users get massive token savings with semantic search while maintaining full backward compatibility.**
+**This is a performance and intelligence-focused release:**
+- **Skills now intelligently choose tools** (ace_search preferred for specific queries)
+- **Massive token savings** (50-80% reduction with semantic search)
+- **Full backward compatibility** (all existing commands still work)
+- **Enhanced control** (runtime config, manual pattern management)
 
 ## [3.2.40] - 2025-10-30
 

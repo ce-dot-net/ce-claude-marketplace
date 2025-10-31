@@ -218,6 +218,19 @@ While skills auto-invoke, manual commands are available for explicit control:
 - `/ace-patterns [section]` - View playbook manually
 - `/ace-status` - Check playbook statistics
 - `/ace-configure` - Configure ACE server connection
+- **`/ace-config [action] [params]`** - **NEW in v3.3.0**: Manage server configuration at runtime
+  - `/ace-config show` - View current configuration (thresholds, token budget, feature flags)
+  - `/ace-config token-budget 50000` - Enable automatic pruning at 50k tokens
+  - `/ace-config search-threshold 0.8` - Adjust semantic search sensitivity
+  - `/ace-config dedup-threshold 0.9` - Configure duplicate detection
+  - Changes persist across sessions, cached for 5 minutes on client
+  - Use for dynamic threshold adjustment without code changes
+- **`/ace-delta [operation] [pattern]`** - **NEW in v3.3.0**: Manual pattern management (advanced)
+  - `/ace-delta add "pattern" section` - Manually add pattern
+  - `/ace-delta update pattern-id helpful=5` - Update pattern scores
+  - `/ace-delta remove pattern-id` - Remove pattern
+  - Note: Prefer automatic learning (via ACE Learning skill) over manual delta operations
+  - Use sparingly for manual curation only
 - `/ace-bootstrap` - Bootstrap playbook from docs, git history, and current code
   - **New in v3.2.17**: `bootstrap-orchestrator` skill provides dynamic pattern compression reporting
     - Automatically calculates compression percentage (e.g., 158 → 18 = 89% reduction)
@@ -234,37 +247,13 @@ While skills auto-invoke, manual commands are available for explicit control:
 
 ### Semantic Search Commands (v3.3.0+)
 
-**NEW in MCP v3.5.0**: Targeted pattern retrieval with 50-80% token reduction!
+- `/ace-search <query>` - Semantic search for patterns (targeted retrieval)
+- `/ace-top <section> [limit]` - Get highest-rated patterns by helpful score
+- `/ace-patterns [section]` - View full playbook (comprehensive)
 
-- `/ace-search <query>` - Semantic search for patterns matching natural language query
-  - **Example**: `/ace-search "authentication best practices"`
-  - **Returns**: Top 10 most relevant patterns only
-  - **Token savings**: 50-80% vs full playbook
-  - **Use when**: You know WHAT you're looking for (specific implementation, debugging pattern)
+**When to use**: `/ace-search` for specific queries, `/ace-top` for best practices, `/ace-patterns` for multi-domain tasks.
 
-- `/ace-top <section> [limit]` - Get highest-rated patterns from section
-  - **Example**: `/ace-top troubleshooting_and_pitfalls 5`
-  - **Returns**: Top 5 patterns by helpful score
-  - **Use when**: You want proven, battle-tested patterns
-
-**When to use each**:
-- **`/ace-search`**: Specific tasks ("How to implement JWT auth?", "Debug async errors")
-- **`/ace-top`**: Best practices ("Show me top debugging patterns")
-- **`/ace-patterns`**: Comprehensive view (multi-domain tasks, architectural decisions)
-
-**MCP Tools** (for programmatic use):
-```bash
-mcp__plugin_ace-orchestration_ace-pattern-learning__ace_search(
-  query="authentication patterns",
-  top_k=10
-)
-
-mcp__plugin_ace-orchestration_ace-pattern-learning__ace_top_patterns(
-  section="strategies_and_hard_rules",
-  limit=10,
-  min_helpful=5
-)
-```
+**For detailed examples and usage**, see command documentation.
 
 ## 🤖 How Agent Skills Work (Model-Invoked)
 
@@ -333,31 +322,23 @@ Result: Pattern confirmed, additional webhook patterns captured
 - Playbook only fetched for complex work
 - Cache prevents redundant server calls
 
-### MCP Tools (For Manual Testing)
+### MCP Tools Available
 
-While skills handle automation, you can manually call MCP tools:
+Skills automatically call these MCP tools:
 
-**Retrieve Playbook**:
-```bash
-mcp__ace-pattern-learning__ace_get_playbook
-mcp__ace-pattern-learning__ace_get_playbook(section="strategies_and_hard_rules")
-mcp__ace-pattern-learning__ace_get_playbook(min_helpful=5)
-```
+- `ace_get_playbook` - Retrieve full playbook or by section
+- `ace_search` - Semantic search with natural language queries
+- `ace_batch_get` - Bulk pattern retrieval by IDs
+- `ace_top_patterns` - Highest-rated patterns by helpful score
+- `ace_get_config` / `ace_set_config` - Server configuration management
+- `ace_delta` - Manual pattern operations (ADD/UPDATE/REMOVE)
+- `ace_learn` - Capture learning (called by ace-learning skill)
+- `ace_status` - Playbook statistics
+- `ace_bootstrap` - Bootstrap from codebase
+- `ace_clear` - Clear playbook
+- `ace_cache_clear` - Clear local caches
 
-**Capture Learning**:
-```bash
-mcp__ace-pattern-learning__ace_learn(
-  task="Brief description",
-  success=true,
-  trajectory="Key steps taken",
-  output="Lessons learned"
-)
-```
-
-**Check Status**:
-```bash
-mcp__ace-pattern-learning__ace_status
-```
+**For detailed usage and examples**, see command documentation (`/ace-*` commands) or README.md.
 
 ## 🎯 ACE Architecture (v3.3.0)
 
@@ -399,16 +380,22 @@ The ACE framework implements fully automatic learning with complete retrieval �
 ```
 plugins/ace-orchestration/
 ├── skills/
-│   ├── ace-playbook-retrieval/    # NEW: Retrieval skill
+│   ├── ace-playbook-retrieval/    # Retrieval skill (before tasks)
 │   │   └── SKILL.md               # Before-task pattern fetching
-│   └── ace-learning/              # Learning skill
+│   └── ace-learning/              # Learning skill (after tasks)
 │       └── SKILL.md               # After-task pattern capture
 ├── commands/
 │   ├── ace-patterns.md            # Manual playbook view
 │   ├── ace-status.md              # Playbook statistics
-│   ├── ace-configure.md           # Server setup
-│   ├── ace-init.md                # Bootstrap from git
-│   └── ace-clear.md               # Clear playbook
+│   ├── ace-configure.md           # Server connection setup
+│   ├── ace-config.md              # NEW v3.3.0: Runtime configuration
+│   ├── ace-search.md              # NEW v3.3.0: Semantic search
+│   ├── ace-top.md                 # NEW v3.3.0: Top patterns
+│   ├── ace-delta.md               # NEW v3.3.0: Manual pattern management
+│   ├── ace-bootstrap.md           # Bootstrap from docs/git/code
+│   ├── ace-clear.md               # Clear playbook
+│   ├── ace-export-patterns.md     # Export to JSON
+│   └── ace-import-patterns.md     # Import from JSON
 ├── hooks/
 │   └── hooks.json                 # SessionStart + PostToolUse
 ├── .mcp.json                      # MCP client config
