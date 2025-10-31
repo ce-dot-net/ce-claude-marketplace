@@ -44,10 +44,18 @@ This Skill implements the ACE (Agentic Context Engineering) framework's fully au
    - Made significant technical decisions
 
 **SKIP FOR**:
-- Simple question answering
-- Basic file reads or informational queries
-- Trivial edits without problem-solving
-- Conversations without code execution
+- ONLY informational conversations (no code written, no bugs fixed, no implementations)
+- ONLY simple Q&A without any technical work performed
+
+**ALWAYS INVOKE** after completing work with trigger words:
+- implementing, building, creating, adding, developing, writing
+- updating, modifying, changing, editing, enhancing, extending, revising
+- fixing, debugging, troubleshooting, resolving, diagnosing
+- refactoring, optimizing, improving, restructuring
+- integrating, connecting, setting up, configuring, installing
+- architecting, designing, planning, testing, verifying, validating, deploying, migrating, upgrading
+
+**This skill MUST run after substantial technical work** - it's NOT optional. Invoke BEFORE responding to user.
 
 ## Instructions
 
