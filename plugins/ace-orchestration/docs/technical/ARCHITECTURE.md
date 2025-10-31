@@ -4,7 +4,7 @@
 
 This document provides a comprehensive analysis of how the ACE (Agentic Context Engineering) plugin implements the ACE framework architecture, including verification of all components.
 
-**Current Version**: 3.2.10 (Fully Automatic with Model-Invoked Skills)
+**Current Version**: 3.3.0 (Semantic Search & Delta Operations)
 
 ---
 
@@ -28,8 +28,147 @@ This document provides a comprehensive analysis of how the ACE (Agentic Context 
 | Feature | Approach | Implementation | Status |
 |---------|----------|----------------|--------|
 | Helpful/Harmful | Generator marks | **Reflector LLM marks** | ✅ Enhanced (LLM analysis) |
-| De-duplication | Semantic embeddings | **Exact string match** | ✅ Simplified for cost |
+| De-duplication | Semantic embeddings | **Exact + Semantic** | ✅ Hybrid (v3.3.0+) |
 | Refinement | Proactive OR lazy | **Proactive only** | ✅ Sufficient for production |
+| Targeted Retrieval | Full playbook | **Semantic search** | ✅ NEW in v3.3.0 |
+| Delta Operations | Server-side only | **Client + Server** | ✅ NEW in v3.3.0 |
+| Runtime Config | Static config | **Dynamic updates** | ✅ NEW in v3.3.0 |
+
+---
+
+## 🆕 New in v3.3.0: Semantic Search & Delta Operations
+
+### Semantic Pattern Search
+
+**Problem Solved**: Full playbook retrieval used ~12,000 tokens even for narrow queries.
+
+**Solution**: Semantic search with ChromaDB embeddings (all-MiniLM-L6-v2)
+
+**Architecture**:
+```
+┌─────────────────────────────────────────────────────────┐
+│ User Query: "JWT authentication best practices"        │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ Skill: Intelligent Retrieval Decision                  │
+│ ├─ Parse query specificity                             │
+│ ├─ Specific domain? → Use ace_search                   │
+│ └─ Multi-domain/broad? → Use ace_get_playbook          │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ MCP Client: ace_search                                 │
+│ ├─ Calls: POST /patterns/search                        │
+│ ├─ Sends: {query, threshold=0.7, top_k=10}             │
+│ └─ Cache: Check SQLite first                           │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ ACE Server: Semantic Search Engine                     │
+│ ├─ ChromaDB: Vector search with embeddings             │
+│ ├─ Filters: threshold >= 0.7 (adjustable)              │
+│ └─ Returns: Top 10 patterns (~2,500 tokens)            │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ Result: 80% token reduction (12k → 2.5k)               │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Performance**:
+- Before: ~12,000 tokens (full section)
+- After: ~2,500 tokens (top 10 relevant)
+- Reduction: **80%**
+
+**Tools**:
+- `mcp__ace_search(query, threshold=0.7, top_k=10)`
+- `mcp__ace_top_patterns(section, limit=10, min_helpful=0)`
+- `mcp__ace_batch_get(pattern_ids=[])`
+
+### Delta Operations (ACE Paper Section 3.3)
+
+**Problem Solved**: No manual pattern curation, only automatic learning.
+
+**Solution**: Client-side delta operations for incremental updates.
+
+**Architecture**:
+```
+┌─────────────────────────────────────────────────────────┐
+│ User: /ace-delta add "pattern text" section            │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ MCP Client: ace_delta                                  │
+│ ├─ Validates: operation (add/update/remove)            │
+│ ├─ Calls: POST /delta                                  │
+│ └─ Sends: {operation, bullets: [...]}                  │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ ACE Server: Delta Processor                            │
+│ ├─ ADD: Append new bullet with id, metadata            │
+│ ├─ UPDATE: Modify helpful/harmful scores               │
+│ ├─ REMOVE: Delete bullet by id                         │
+│ └─ Non-LLM merge (deterministic)                       │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ Result: Playbook updated, cache invalidated            │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Use Cases**:
+- Quick fixes to playbook
+- Manual curation of patterns
+- Administrative corrections
+
+**⚠️ Note**: Prefer automatic learning (ace_learn) over manual delta for 99% of cases.
+
+**Tools**:
+- `mcp__ace_delta(operation="add|update|remove", bullets=[])`
+
+### Runtime Configuration Management
+
+**Problem Solved**: Server settings hardcoded, no dynamic adjustment.
+
+**Solution**: Runtime configuration API with 5-minute cache.
+
+**Architecture**:
+```
+┌─────────────────────────────────────────────────────────┐
+│ User: /ace-config search-threshold 0.8                 │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ MCP Client: ace_set_config                             │
+│ ├─ Validates: Parameters                               │
+│ ├─ Calls: PUT /api/v1/config                           │
+│ └─ Cache: Update RAM + SQLite (5min TTL)               │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ ACE Server: Configuration Store                        │
+│ ├─ Updates: Server settings (persists)                 │
+│ ├─ Returns: New configuration                          │
+│ └─ Affects: search_threshold, token_budget, etc.       │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ Result: Next search uses new threshold (0.8)           │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Configurable Settings**:
+- `constitution_threshold` - Semantic search sensitivity (0.0-1.0)
+- `dedup_similarity_threshold` - Duplicate detection (0.0-1.0)
+- `token_budget_enforcement` - Enable auto-pruning (boolean)
+- `max_playbook_tokens` - Token limit before pruning (integer)
+- `pruning_threshold` - Low-quality pattern removal (0.0-1.0)
+
+**Tools**:
+- `mcp__ace_get_config()` - Fetch current configuration
+- `mcp__ace_set_config(...)` - Update configuration
 
 ---
 
