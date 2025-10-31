@@ -4,24 +4,32 @@
 
 ## 🎯 Features
 
-### 🤖 Automatic Learning Cycle (NEW!)
+### 🤖 Automatic Learning Cycle
 - **ACE Playbook Retrieval Skill**: Auto-fetches learned patterns BEFORE tasks
 - **ACE Learning Skill**: Auto-captures insights AFTER task completion
 - **Model-Invoked**: Claude decides when to use skills (no manual intervention)
 - **3-Tier Caching**: RAM → SQLite → Server for fast retrieval
 - **Complete Cycle**: Retrieve → Use → Learn → Update → Repeat
 
+### 🔍 Semantic Search & Targeted Retrieval (NEW in v3.3.0!)
+- **50-80% Token Reduction**: Semantic search returns only relevant patterns
+- **Intelligent Tool Selection**: Skills automatically choose optimal retrieval method
+- **Natural Language Queries**: `/ace-search "JWT authentication"` finds matching patterns
+- **Quality Filtering**: `/ace-top` retrieves highest-rated patterns by helpful score
+- **Batch Retrieval**: 10x-50x faster bulk pattern fetching
+
 ### 📚 Pattern Learning
 - **Pattern Discovery**: Automatically learns from execution feedback
 - **Server-Side Intelligence**: Reflector (Sonnet 4) + Curator (Haiku 4.5)
-- **Delta Updates**: Incremental playbook improvements (prevents context collapse)
+- **Delta Operations**: Manual pattern management (add/update/remove)
+- **Runtime Configuration**: Adjust server settings without code changes
 - **4 Playbook Sections**: Strategies, code snippets, troubleshooting, APIs
 - **Quality Scoring**: Helpful/harmful feedback refines patterns over time
 
 ### 🚀 Key Benefits
 - **Self-Improving**: Each task makes Claude smarter
-- **Token-Efficient**: Progressive disclosure, only loads when needed
-- **Fast**: Cached playbook retrieval (milliseconds)
+- **Token-Efficient**: 50-80% reduction with semantic search
+- **Fast**: Cached playbook retrieval (milliseconds) + batch operations
 - **Universal**: Works with ANY MCP client (Claude Code, Cursor, Cline, etc.)
 - **Proven Effective**: Significant performance improvement on agentic tasks
 
@@ -190,12 +198,30 @@ Learning Skill → Server Analysis → Playbook Updated → Next Request (Enhanc
 
 **📖 Full documentation**: See [CLAUDE.md](./CLAUDE.md) for complete cycle details
 
-## 💻 Slash Commands (Manual Override)
+## 💻 Slash Commands
 
 While skills handle automatic operation, manual commands are available:
 
-### `/ace-patterns [section]`
-View playbook manually
+### 🔍 Retrieval Commands (NEW in v3.3.0)
+
+#### `/ace-search <query>`
+Semantic search for patterns (50-80% token reduction)
+```
+/ace-search "JWT authentication"        # Find auth patterns
+/ace-search "async debugging"           # Find async troubleshooting
+/ace-search "database optimization"     # Find DB performance patterns
+```
+
+#### `/ace-top <section> [limit]`
+Get highest-rated patterns by helpful score
+```
+/ace-top strategies_and_hard_rules 10   # Top 10 architectural patterns
+/ace-top troubleshooting_and_pitfalls 5 # Top 5 debugging patterns
+/ace-top apis_to_use                    # All top-rated APIs
+```
+
+#### `/ace-patterns [section]`
+View full playbook (comprehensive)
 ```
 /ace-patterns                           # All sections
 /ace-patterns strategies                # Architectural patterns
@@ -204,38 +230,61 @@ View playbook manually
 /ace-patterns apis                      # Recommended libraries
 ```
 
-### `/ace-status`
+**When to use**: `/ace-search` for specific queries, `/ace-top` for best practices, `/ace-patterns` for multi-domain tasks.
+
+### ⚙️ Configuration Commands (NEW in v3.3.0)
+
+#### `/ace-config [action] [params]`
+Runtime server configuration
+```
+/ace-config show                        # View current configuration
+/ace-config token-budget 50000          # Enable token budget
+/ace-config search-threshold 0.8        # Adjust semantic search sensitivity
+```
+
+#### `/ace-configure`
+Interactive ACE server connection setup
+```
+/ace-configure
+```
+
+### 📝 Management Commands
+
+#### `/ace-delta [operation] [pattern]` (NEW in v3.3.0)
+Manual pattern operations (advanced)
+```
+/ace-delta add "pattern text" section   # Add pattern manually
+/ace-delta update pattern-id helpful=5  # Update pattern score
+/ace-delta remove pattern-id            # Remove pattern
+```
+
+#### `/ace-status`
 Check playbook statistics
 ```
 /ace-status
 ```
 
-### `/ace-configure`
-Interactive ACE server configuration
-```
-/ace-configure
-```
-
-### `/ace-claude-init`
+#### `/ace-claude-init`
 Initialize ACE in project CLAUDE.md (one-time setup)
 ```
 /ace-claude-init
 ```
 
-### `/ace-bootstrap`
-Bootstrap playbook from git history
+#### `/ace-bootstrap`
+Bootstrap playbook from docs, git history, and current code
 ```
-/ace-bootstrap
-/ace-bootstrap --commits 100 --days 30
+/ace-bootstrap                          # Hybrid mode (docs → git → files)
+/ace-bootstrap --mode git-history       # Git history only
+/ace-bootstrap --thoroughness deep      # Deep analysis
 ```
 
-### `/ace-clear --confirm`
+#### `/ace-clear --confirm`
 Clear entire playbook (requires confirmation)
 ```
 /ace-clear --confirm
 ```
 
-### `/ace-export-patterns` / `/ace-import-patterns`
+#### `/ace-export-patterns` / `/ace-import-patterns`
 Backup and restore playbook
 ```
 /ace-export-patterns
