@@ -28,6 +28,9 @@ mcp__plugin_ace-orchestration_ace-pattern-learning__ace_search(
 - **section** (optional): Filter to specific playbook section
   - Values: `strategies_and_hard_rules`, `useful_code_snippets`, `troubleshooting_and_pitfalls`, `apis_to_use`
 - **top_k** (optional): Maximum patterns to return (default: 10)
+- **threshold** (optional): Similarity threshold for matching (default: 0.7)
+  - Range: 0.0 - 1.0 (higher = stricter matching)
+  - Use 0.3-0.5 for broader matches, 0.8+ for very precise matches
 
 ### Example Usage
 
