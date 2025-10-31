@@ -5,6 +5,44 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.1] - 2025-10-31
+
+### Fixed
+
+**ACE Skill Auto-Triggering Reliability**
+- Tightened skill SKIP conditions to remove ambiguity
+  - Now only skips for trivial Q&A, simple file reads, basic informational responses
+  - Removed vague condition "When request is about project structure/documentation browsing"
+  - Added explicit examples of when NOT to skip (debugging, optimization, analysis)
+- Enhanced skill trigger reliability for edge cases
+  - Skills now properly trigger for debugging tasks without implementation keywords
+  - Skills now properly trigger for optimization/analysis tasks
+  - Skills now properly trigger for complex multi-file investigations
+
+**Hook Enhancements**
+- Added UserPromptSubmit hook for ACE trigger word reminder
+  - Reminds Claude to check for ACE trigger words before executing ANY tool
+  - Prevents accidental skipping of skill invocation
+  - Appears before every tool execution, not just session start
+- Enhanced SessionStart hook with ACE system reminder
+  - Reinforces automatic skill invocation rules at session start
+  - Provides clear examples of mandatory trigger conditions
+
+### Changed
+
+**Skills Documentation**
+- Updated `skills/ace-playbook-retrieval/SKILL.md` with tightened SKIP conditions
+- Updated `skills/ace-learning/SKILL.md` with tightened SKIP conditions
+- Improved clarity on when skills MUST trigger vs when to skip
+
+**Hooks Configuration**
+- Updated `hooks/hooks.json` to add UserPromptSubmit hook
+- Enhanced hook messages for better skill invocation reliability
+
+**Version Updates**
+- Plugin version: 3.3.0 → 3.3.1
+- CLAUDE.md ACE section markers: v3.3.0 → v3.3.1
+
 ## [3.3.0] - 2025-10-31
 
 ### 🔍 MAJOR FEATURES: Semantic Search & Delta Operations (50-80% Token Reduction)
