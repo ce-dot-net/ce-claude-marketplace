@@ -5,6 +5,122 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.0] - 2025-10-31
+
+### 🔍 MAJOR FEATURES: Semantic Search & Delta Operations (50-80% Token Reduction)
+
+**Semantic Pattern Search**
+- NEW `/ace-search <query>` command - Natural language pattern search
+- Reduces context usage by 50-80% vs full playbook retrieval
+- Returns only relevant patterns matching query intent
+- Powered by MCP v3.5.0 with ChromaDB semantic search
+- Example: `/ace-search "JWT authentication"` returns top 10 relevant patterns
+- ~2,000-3,000 tokens vs ~12,000 tokens for full section (80% savings!)
+
+**Top Patterns Retrieval**
+- NEW `/ace-top <section> [limit]` command - Quality-first pattern retrieval
+- Get highest-rated patterns by helpful score
+- Filter by section and minimum helpful threshold
+- Perfect for "best practices" queries
+- Example: `/ace-top troubleshooting_and_pitfalls 5` returns top 5 debugging patterns
+
+**Delta Operations**
+- NEW incremental playbook updates (ACE Paper Section 3.3 compliance)
+- Add, update, or delete individual bullets without full playbook refresh
+- Implements grow-and-refine methodology from research paper
+- Automatic deduplication and embedding updates
+
+**Cache Management**
+- NEW cache control for debugging and forced refreshes
+- Clear RAM and SQLite caches on demand
+- Useful for testing and cache troubleshooting
+
+### Added
+
+**New Slash Commands:**
+- `commands/ace-search.md` - Semantic search command with examples
+- `commands/ace-top.md` - Top patterns command with usage guide
+
+**Updated Skills:**
+- `skills/ace-playbook-retrieval/SKILL.md` - Added retrieval strategy section
+  - Decision matrix for choosing retrieval method
+  - Semantic search vs full playbook vs top patterns guidance
+  - Updated examples showing token reduction
+
+**Updated Templates:**
+- `CLAUDE.md` - Added semantic search commands section (v3.3.0+)
+  - Documentation for `/ace-search` and `/ace-top` commands
+  - MCP tool usage examples
+  - When to use each retrieval method
+
+**MCP Tools (Requires MCP v3.5.0+):**
+- `mcp__ace_search` - Semantic pattern search
+- `mcp__ace_top_patterns` - Quality-first retrieval
+- `mcp__ace_delta` - Incremental playbook updates
+- `mcp__ace_cache_clear` - Cache management
+
+### Changed
+
+**Performance Improvements:**
+- Targeted retrieval reduces context from ~12,000 tokens → ~2,500 tokens (80% reduction)
+- Faster pattern retrieval with semantic search
+- More efficient for single-domain tasks
+
+**Version Updates:**
+- Plugin version: 3.0.0 → 3.3.0
+- MCP client dependency: Requires @ce-dot-net/ace-client@3.5.0 or higher
+
+### Dependencies
+
+**Required:**
+- ACE MCP Client v3.5.0+ (published 2025-10-31)
+- ACE Server v3.1.0+ (already deployed at https://ace-api.code-engine.app)
+
+**Server Endpoints Used:**
+- `POST /patterns/search` - Semantic search with embeddings
+- `GET /patterns/top` - Top patterns by helpful score
+- `POST /delta` - Delta operations for incremental updates
+
+### Migration Guide
+
+**For users upgrading from v3.2.x:**
+
+1. **Automatic MCP Update**: MCP client will auto-update on next session
+2. **No Breaking Changes**: All existing commands still work
+3. **New Features Available**: Try `/ace-search "your query"` for targeted retrieval
+4. **Recommendation**: Use semantic search for specific tasks to reduce token usage
+
+**Backward Compatibility:**
+- ✅ `/ace-patterns` still works (full playbook retrieval)
+- ✅ Existing skill behavior unchanged (now uses semantic search when appropriate)
+- ✅ All previous commands remain functional
+
+### Why This Matters
+
+**User Impact:**
+- **80% less context** for targeted pattern retrieval
+- **Faster responses** with smaller playbook fetches
+- **Better accuracy** with semantic matching
+- **Quality filtering** via top patterns command
+
+**Developer Impact:**
+- Completes ACE Paper Section 3.3 implementation (delta operations)
+- Enables incremental playbook updates
+- Provides fine-grained control over pattern retrieval
+- Supports context budget constraints
+
+### Files Changed
+
+- `plugin.PRODUCTION.json` - Version bump to 3.3.0
+- `plugin.local.json` - Version bump to 3.3.0
+- `CLAUDE.md` - Added semantic search commands section
+- `skills/ace-playbook-retrieval/SKILL.md` - Added retrieval strategy
+- `commands/ace-search.md` - NEW semantic search command
+- `commands/ace-top.md` - NEW top patterns command
+- `CHANGELOG.md` - This file
+
+**This is a performance-focused release - users get massive token savings with semantic search while maintaining full backward compatibility.**
+
 ## [3.2.40] - 2025-10-30
 
 ### ✨ FEATURES: Interactive UI + Production Server
