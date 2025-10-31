@@ -19,10 +19,18 @@ Use **BEFORE** starting:
 - **Problem-Solving**: Complex technical challenges requiring domain expertise
 
 **SKIP FOR**:
-- Simple Q&A or informational queries
-- Basic file reads without problem-solving
-- Trivial edits without technical complexity
-- Documentation updates without code changes
+- ONLY informational Q&A (user asks "what is X?", "explain Y", "how does Z work?")
+- ONLY file reads explicitly for information gathering (user says "just read, don't change")
+
+**NEVER SKIP** when user message contains trigger words:
+- implement, build, create, add, develop, write
+- update, modify, change, edit, enhance, extend, revise
+- fix, debug, troubleshoot, resolve, diagnose
+- refactor, optimize, improve, restructure
+- integrate, connect, setup, configure, install
+- architect, design, plan, test, verify, validate, deploy, migrate, upgrade
+
+**Trigger words override all other considerations** - if present, invoke this skill FIRST.
 
 ## How This Skill Works
 
