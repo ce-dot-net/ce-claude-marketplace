@@ -4,7 +4,7 @@
 
 This document provides a comprehensive analysis of how the ACE (Agentic Context Engineering) plugin implements the ACE framework architecture, including verification of all components.
 
-**Current Version**: 3.3.0 (Semantic Search & Delta Operations)
+**Current Version**: 3.3.2 (Dual-Config Architecture, Version Checking, Auto-Migration)
 
 ---
 
@@ -33,6 +33,138 @@ This document provides a comprehensive analysis of how the ACE (Agentic Context 
 | Targeted Retrieval | Full playbook | **Semantic search** | ✅ NEW in v3.3.0 |
 | Delta Operations | Server-side only | **Client + Server** | ✅ NEW in v3.3.0 |
 | Runtime Config | Static config | **Dynamic updates** | ✅ NEW in v3.3.0 |
+
+---
+
+## 🆕 New in v3.3.2: Dual-Config Architecture & Diagnostics
+
+### Dual-Configuration Architecture
+
+**Problem Solved**: Storing serverUrl and apiToken in every project wastes space and creates update burden when credentials rotate.
+
+**Solution**: Separate global org-level settings from project-specific MCP configuration.
+
+**Architecture**:
+```
+┌─────────────────────────────────────────────────────────┐
+│ Global Config: ~/.ace/config.json                      │
+│ ├─ serverUrl: "https://ace-api.code-engine.app"        │
+│ ├─ apiToken: "ace_xxxxx" (NEVER committed to git)      │
+│ ├─ cacheTtlMinutes: 120 (2 hours)                      │
+│ └─ autoUpdateEnabled: true                             │
+└─────────────────────────────────────────────────────────┘
+                    +
+┌─────────────────────────────────────────────────────────┐
+│ Project Config: .claude/settings.local.json            │
+│ {                                                       │
+│   "mcpServers": {                                       │
+│     "ace-pattern-learning": {                          │
+│       "command": "npx",                                 │
+│       "args": [                                         │
+│         "--yes",                                        │
+│         "@ce-dot-net/ace-client@3.7.0",                │
+│         "--project-id",                                 │
+│         "prj_xxxxx"                                     │
+│       ]                                                 │
+│     }                                                   │
+│   }                                                     │
+│ }                                                       │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ MCP Client v3.7.0: Config Discovery                    │
+│ 1. Read ~/.ace/config.json for global settings         │
+│ 2. Parse --project-id from command args                │
+│ 3. Combine both into full client context               │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Benefits**:
+- No credential duplication across projects
+- Easy org-wide credential rotation (one file)
+- Aligns with Claude Code standards (`.claude/` directory)
+- Clear separation: org settings vs. project config
+
+**Migration**: Automatic migration from v3.3.1 single-config on first run of v3.7.0 MCP client.
+
+### Version Checking (MCP Client v3.7.0)
+
+**Problem Solved**: Users don't know when updates are available for plugin or CLAUDE.md template.
+
+**Solution**: Automatic version checking via GitHub API on session start.
+
+**Architecture**:
+```
+┌─────────────────────────────────────────────────────────┐
+│ Session Start: MCP Client Initializes                  │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ Check Local Versions                                    │
+│ ├─ Plugin: Read plugin.json → v3.3.2                   │
+│ └─ CLAUDE.md: Extract version marker → v3.3.2          │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ Check GitHub for Latest Versions (parallel)            │
+│ ├─ GET /repos/.../releases/latest → v3.3.2            │
+│ └─ GET .../CLAUDE.md (raw) → extract version          │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ Semantic Version Comparison                             │
+│ - Uses semver lib: major.minor.patch comparison        │
+│ - Ignores pre-release tags                             │
+│ - Cache: 60 minutes (avoid rate limiting)              │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ Log Warning if Updates Available                       │
+│ "Plugin update available: v3.3.1 → v3.3.2"            │
+│ "CLAUDE.md template update available"                  │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Cache Strategy**: 60-minute cache for GitHub API calls to avoid rate limiting.
+
+### ACE Doctor Diagnostic Command
+
+**Problem Solved**: Difficult to troubleshoot ACE installation issues without comprehensive diagnostics.
+
+**Solution**: New `/ace-orchestration:ace-doctor` command that checks all system components.
+
+**9 Diagnostic Checks** (all run in parallel):
+1. Plugin Installation (directory structure)
+2. Global Configuration (`~/.ace/config.json`)
+3. Project Configuration (`.claude/settings.local.json`)
+4. MCP Client Connectivity
+5. ACE Server Connectivity (HTTP status codes)
+6. Skills Loaded (ace-playbook-retrieval, ace-learning)
+7. CLAUDE.md Status (exists, has ACE section, version)
+8. Cache Status (age, staleness)
+9. Version Status (updates available)
+
+**Output Format**:
+```
+🩺 ACE Doctor - Health Diagnostic Report
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[1] Plugin Installation................... ✅ PASS
+[2] Global Configuration................. ✅ PASS
+[3] Project Configuration................ ✅ PASS
+[4] MCP Client Connectivity.............. ✅ PASS
+[5] ACE Server Connectivity.............. ✅ PASS (HTTP 200)
+[6] Skills Loaded........................ ✅ PASS (2/2)
+[7] CLAUDE.md Status..................... ✅ PASS
+[8] Cache Status......................... ✅ PASS
+[9] Version Status....................... ✅ PASS
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Overall Health: 🟢 HEALTHY
+```
+
+**Performance**: Runs all checks in parallel (< 5 seconds total).
 
 ---
 
@@ -285,8 +417,8 @@ integrate APIs, resolve errors, make architecture decisions, or discover gotchas
 
 export class LocalCacheService {
   constructor(config: CacheConfig) {
-    // TTL: 5 minutes (configurable)
-    this.ttlMs = (ttlMinutes || 5) * 60 * 1000;
+    // TTL: 120 minutes (2 hours, configurable via ~/.ace/config.json)
+    this.ttlMs = (ttlMinutes || 120) * 60 * 1000;
 
     // SQLite cache: ~/.ace-cache/{org}_{project}.db
     this.db = new Database(dbPath);
@@ -304,7 +436,7 @@ export class LocalCacheService {
 **Caching Architecture**:
 
 1. **RAM Cache**: In-memory, session-scoped (fastest - instant)
-2. **SQLite Cache**: `~/.ace-cache/{org}_{project}.db`, 5-min TTL (milliseconds)
+2. **SQLite Cache**: `~/.ace-cache/{org}_{project}.db`, 120-min TTL (milliseconds)
 3. **Server Fetch**: Only when cache stale (seconds)
 
 **Implementation**: ✅ **3-tier caching for optimal performance**
@@ -641,23 +773,38 @@ plugins/ace-orchestration/
 ├── commands/
 │   ├── ace-patterns.md            # View playbook
 │   ├── ace-status.md              # Statistics
-│   ├── ace-configure.md           # Server setup
-│   ├── ace-bootstrap.md           # Git history bootstrap
-│   └── ace-clear.md               # Clear playbook
-├── .mcp.json                      # MCP client config
-└── CLAUDE.md                      # Instructions
+│   ├── ace-configure.md           # Dual-config setup (v3.3.2)
+│   ├── ace-doctor.md              # Health diagnostics (NEW v3.3.2)
+│   ├── ace-config.md              # Runtime configuration (v3.3.0)
+│   ├── ace-search.md              # Semantic search (v3.3.0)
+│   ├── ace-top.md                 # Top patterns (v3.3.0)
+│   ├── ace-delta.md               # Manual pattern ops (v3.3.0)
+│   ├── ace-bootstrap.md           # Git/docs/code bootstrap
+│   ├── ace-clear.md               # Clear playbook
+│   ├── ace-export-patterns.md     # Export to JSON
+│   └── ace-import-patterns.md     # Import from JSON
+└── CLAUDE.md                      # Instructions (v3.3.2)
 
-mcp-clients/ce-ai-ace-client/
+Configuration Files (v3.3.2 Dual-Config):
+~/.ace/config.json                 # Global: serverUrl, apiToken, cacheTtl
+.claude/settings.local.json        # Project: MCP server + projectId
+
+Cache Files:
+~/.ace-cache/{org}_{project}.db    # SQLite cache (120-min TTL)
+
+MCP Client (v3.7.0):
+@ce-dot-net/ace-client/
 ├── src/
 │   ├── index.ts                   # MCP server entry
 │   ├── services/
-│   │   ├── local-cache.ts         # SQLite cache
+│   │   ├── local-cache.ts         # SQLite cache (3-tier)
 │   │   ├── server-client.ts       # HTTP to ACE server
-│   │   └── config-loader.ts       # Config management
+│   │   ├── config-loader.ts       # Dual-config discovery
+│   │   └── version-checker.ts     # GitHub API version checks (NEW)
 │   └── types/
 │       ├── pattern.ts             # PlaybookBullet, DeltaOperation
 │       └── config.ts              # CacheConfig
-└── package.json                   # v3.2.10
+└── package.json                   # v3.7.0
 ```
 
 **Verification**: ✅ **Logical separation of concerns**
@@ -681,6 +828,10 @@ mcp-clients/ce-ai-ace-client/
 13. ✅ Multi-epoch adaptation support
 14. ✅ Batch delta merging
 15. ✅ Cost optimization (smart model selection)
+16. ✅ Dual-config architecture (org vs. project settings) - v3.3.2
+17. ✅ Version checking (plugin + CLAUDE.md) - v3.3.2
+18. ✅ Auto-migration (v3.3.1 → v3.3.2) - v3.3.2
+19. ✅ Comprehensive diagnostics (ace-doctor) - v3.3.2
 
 ---
 

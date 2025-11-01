@@ -5,6 +5,139 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.2] - 2025-11-01
+
+### 🔧 BREAKING CHANGES: Dual-Config Architecture
+
+**Configuration Restructure** - Requires user action for upgrade from v3.3.1
+
+This release introduces a breaking change to simplify credential management and align with Claude Code standards. The single-file configuration approach has been replaced with a dual-config architecture that separates organization-level credentials from project-specific settings.
+
+**What Changed:**
+- **Old** (v3.3.1): `<project-root>/.ace/config.json` contained all settings (duplicated per project)
+- **New** (v3.3.2):
+  - `~/.ace/config.json` - Global org credentials (serverUrl, apiToken, cacheTtl)
+  - `.claude/settings.local.json` - Project MCP server definition (projectId only)
+
+**Migration Path:**
+- ✅ **Automatic**: MCP client v3.7.0 auto-migrates on first run
+- ⚠️ **Manual**: Run `/ace-orchestration:ace-configure` if auto-migration fails
+- 📋 **Backup**: Old config backed up as `.ace/config.json.v3.3.1.backup`
+
+**Benefits:**
+- No credential duplication across projects
+- Easy org-wide credential rotation (update one file)
+- Aligns with Claude Code `.claude/` directory standards
+- Clear separation: org settings vs. project config
+
+### Added
+
+**New Diagnostic Command:**
+- `commands/ace-doctor.md` - Comprehensive health diagnostic tool
+  - Checks 9 system components in parallel (< 5 seconds)
+  - Validates plugin installation, configs, MCP connectivity, ACE server
+  - Verifies skills loaded, CLAUDE.md status, cache health, versions
+  - Provides actionable fix suggestions with specific commands
+  - Color-coded output: ✅ PASS, ⚠️ WARN, ❌ FAIL
+
+**Version Checking (MCP Client v3.7.0):**
+- Automatic plugin version checking via GitHub API
+- CLAUDE.md template version checking
+- Semantic version comparison (major.minor.patch)
+- Warns when updates available with upgrade instructions
+- 60-minute cache to avoid GitHub rate limiting
+
+**Auto-Migration (MCP Client v3.7.0):**
+- Detects v3.3.1 single-config setup
+- Automatically migrates to dual-config on first run
+- Creates `~/.ace/config.json` with org credentials (chmod 600)
+- Creates `.claude/settings.local.json` with MCP server definition
+- Backs up old config as `.v3.3.1.backup`
+
+### Changed
+
+**Updated Commands:**
+- `commands/ace-configure.md` - **MAJOR REWRITE** for dual-config architecture
+  - Added `--global` and `--project` flags for explicit config scope
+  - Interactive forms show existing values (no destructive overwrites)
+  - Merges with existing configs (preserves other MCP servers)
+  - Creates `.claude/` directory if missing
+  - Sets secure permissions (chmod 600) on global config
+  - Updated all examples to v3.7.0 MCP client
+
+- `commands/ace-test.md` - Updated error messages for dual-config
+  - Changed all config path references: `.ace/config.json` → `~/.ace/config.json`
+  - Updated projectId references to `.claude/settings.local.json`
+  - Fixed 7 config path references in error handling
+
+**Updated Documentation:**
+- `README.md` - Updated Step 3 configuration with dual-config examples
+  - Changed all `@latest` references to `@3.7.0` (fixes npx caching)
+  - Updated cache TTL: 360 minutes → 120 minutes (2 hours)
+  - Added `/ace-orchestration:ace-doctor` references
+  - Updated troubleshooting with new config paths
+
+- `docs/guides/INSTALL.md` - Complete rewrite for new setup process
+  - Added "What's New in v3.3.2" section
+  - Dual-config manual creation examples
+  - Updated MCP client version references to v3.7.0
+  - Updated cache TTL defaults to 120 minutes
+  - Added ace-doctor diagnostic command info
+
+- `docs/technical/ARCHITECTURE.md` - Added v3.3.2 architecture diagrams
+  - New section: "Dual-Config Architecture & Diagnostics"
+  - Visual diagrams for dual-config flow
+  - Version checking architecture flow
+  - ACE Doctor diagnostic checks diagram
+  - Updated file structure with v3.7.0 references
+  - Added 4 new implementation checkpoints (16 → 19 total)
+
+- `CLAUDE.md` - Version bump and file structure update
+  - ACE_SECTION markers: v3.3.1 → v3.3.2
+  - Added `ace-doctor.md` to file structure
+  - Removed `.mcp.json` reference (no longer used)
+  - Updated closing tag to v3.3.2
+
+### Removed
+
+**Deprecated Files:**
+- `.mcp.json` from plugin directory - Replaced by `.claude/settings.local.json`
+- `<project-root>/.ace/config.json` - Replaced by dual-config approach
+
+### Fixed
+
+**Configuration Issues:**
+- Fixed npx caching issue by pinning MCP client version to `@3.7.0` instead of `@latest`
+- Fixed cache TTL inconsistencies (now consistently 120 minutes / 2 hours)
+- Fixed project config location to align with Claude Code standards
+
+**Documentation Consistency:**
+- All references to MCP client version now use v3.7.0
+- All cache TTL references now use 120 minutes
+- All config path references updated for dual-config architecture
+
+### Requires
+
+**MCP Client:**
+- **@ce-dot-net/ace-client@3.7.0** (Released 2025-11-01)
+  - Implements dual-config discovery
+  - Adds version checking via GitHub API
+  - Adds auto-migration from v3.3.1
+  - Adds semantic version comparison
+  - See `/tmp/MCP_CLIENT_V3.7.0_CLARIFICATION.md` for implementation details
+
+**Breaking Change Migration:**
+- Users must update MCP client to v3.7.0
+- Automatic migration on first run OR run `/ace-orchestration:ace-configure`
+- Restart Claude Code after migration to apply new config
+
+### Security
+
+**Improved Security:**
+- Global config (`~/.ace/config.json`) now has chmod 600 (user-only read/write)
+- API tokens no longer duplicated in every project
+- Project config (`.claude/settings.local.json`) contains no secrets (safe to commit)
+
 ## [3.3.1] - 2025-10-31
 
 ### Fixed

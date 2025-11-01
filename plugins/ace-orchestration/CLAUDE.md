@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v3.3.1 -->
+<!-- ACE_SECTION_START v3.3.2 -->
 # ACE Orchestration Plugin - Automatic Learning Cycle
 
 This plugin provides fully automatic pattern learning using the ACE framework architecture.
@@ -392,13 +392,13 @@ plugins/ace-orchestration/
 │   ├── ace-search.md              # NEW v3.3.0: Semantic search
 │   ├── ace-top.md                 # NEW v3.3.0: Top patterns
 │   ├── ace-delta.md               # NEW v3.3.0: Manual pattern management
+│   ├── ace-doctor.md              # NEW v3.3.2: Health diagnostic
 │   ├── ace-bootstrap.md           # Bootstrap from docs/git/code
 │   ├── ace-clear.md               # Clear playbook
 │   ├── ace-export-patterns.md     # Export to JSON
 │   └── ace-import-patterns.md     # Import from JSON
 ├── hooks/
-│   └── hooks.json                 # SessionStart + PostToolUse
-├── .mcp.json                      # MCP client config
+│   └── hooks.json                 # SessionStart + UserPromptSubmit
 └── CLAUDE.md                      # This file!
 ```
-<!-- ACE_SECTION_END v3.3.1 -->
+<!-- ACE_SECTION_END v3.3.2 -->

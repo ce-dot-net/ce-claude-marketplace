@@ -54,16 +54,42 @@ The ACE MCP Client (@ce-dot-net/ace-client) is maintained in a separate reposito
 
 **MCP Client Repository**: https://github.com/ce-dot-net/ce-ace-mcp
 
-### Step 3: Configure Project
+### Step 3: Configure ACE
 
-**ACE is project-scoped** - each project needs its own configuration.
+**ACE uses dual-configuration**: Global org settings + per-project settings.
 
 **Option 1: Interactive Configuration (Recommended)**
 ```bash
-# In Claude Code, navigate to your project and run:
-/ace-configure
+# In Claude Code, run:
+/ace-orchestration:ace-configure
 
-# This creates: <project-root>/.ace/config.json
+# This creates:
+# - ~/.ace/config.json (global: serverUrl, apiToken, cache settings)
+# - .claude/settings.local.json (project: MCP server with projectId)
+```
+
+**What Gets Created**:
+
+**Global Config** (`~/.ace/config.json`):
+```json
+{
+  "serverUrl": "https://ace-api.code-engine.app",
+  "apiToken": "ace_your_api_token_here",
+  "cacheTtlMinutes": 120,
+  "autoUpdateEnabled": true
+}
+```
+
+**Project Config** (`.claude/settings.local.json`):
+```json
+{
+  "mcpServers": {
+    "ace-pattern-learning": {
+      "command": "npx",
+      "args": ["--yes", "@ce-dot-net/ace-client@3.7.0", "--project-id", "prj_your_project_id"]
+    }
+  }
+}
 ```
 
 **Option 2: Environment Variables**
@@ -73,19 +99,6 @@ echo 'export ACE_SERVER_URL="https://ace-api.code-engine.app"' >> ~/.zshrc
 echo 'export ACE_API_TOKEN="ace_your_api_token_here"' >> ~/.zshrc
 echo 'export ACE_PROJECT_ID="prj_your_project_id"' >> ~/.zshrc
 source ~/.zshrc
-```
-
-**Option 3: Manual Config File**
-```bash
-# In your project root:
-mkdir -p .ace
-cat > .ace/config.json <<EOF
-{
-  "serverUrl": "https://ace-api.code-engine.app",
-  "apiToken": "ace_your_api_token_here",
-  "projectId": "prj_your_project_id"
-}
-EOF
 ```
 
 **📖 Full configuration guide**: See [docs/guides/CONFIGURATION.md](./docs/guides/CONFIGURATION.md)
@@ -106,7 +119,7 @@ ln -s "$(pwd)/plugins/ace-orchestration" ~/.config/claude-code/plugins/ace-orche
 # Restart Claude Code
 
 # In Claude Code:
-/ace-status
+/ace-orchestration:ace-status
 
 # Expected: Shows pattern database statistics
 ```
@@ -115,19 +128,19 @@ ln -s "$(pwd)/plugins/ace-orchestration" ~/.config/claude-code/plugins/ace-orche
 
 ```bash
 # Add ACE instructions to your project's CLAUDE.md
-/ace-claude-init
+/ace-orchestration:ace-claude-init
 
 # Expected: Full ACE instructions copied inline to CLAUDE.md (~289 lines)
 
 # Optionally bootstrap playbook from git history
-/ace-bootstrap --commits 100 --days 30
+/ace-orchestration:ace-bootstrap --commits 100 --days 30
 
 # Expected: Playbook populated with patterns from past commits
 ```
 
 **What This Does:**
-- `/ace-claude-init` - Copies full ACE plugin instructions inline into your project's CLAUDE.md (~289 lines, provides always-on context about ACE architecture)
-- `/ace-bootstrap` - Optional: Analyzes git history and local files to populate initial playbook patterns
+- `/ace-orchestration:ace-claude-init` - Copies full ACE plugin instructions inline into your project's CLAUDE.md (~289 lines, provides always-on context about ACE architecture)
+- `/ace-orchestration:ace-bootstrap` - Optional: Analyzes git history and local files to populate initial playbook patterns
 
 **You're Done!** ACE will now automatically:
 - Retrieve learned patterns before complex tasks (implementation, debugging, refactoring)
@@ -204,106 +217,169 @@ While skills handle automatic operation, manual commands are available:
 
 ### 🔍 Retrieval Commands (NEW in v3.3.0)
 
-#### `/ace-search <query>`
+#### `/ace-orchestration:ace-search <query>`
 Semantic search for patterns (50-80% token reduction)
 ```
-/ace-search "JWT authentication"        # Find auth patterns
-/ace-search "async debugging"           # Find async troubleshooting
-/ace-search "database optimization"     # Find DB performance patterns
+/ace-orchestration:ace-search "JWT authentication"        # Find auth patterns
+/ace-orchestration:ace-search "async debugging"           # Find async troubleshooting
+/ace-orchestration:ace-search "database optimization"     # Find DB performance patterns
 ```
 
-#### `/ace-top <section> [limit]`
+#### `/ace-orchestration:ace-top <section> [limit]`
 Get highest-rated patterns by helpful score
 ```
-/ace-top strategies_and_hard_rules 10   # Top 10 architectural patterns
-/ace-top troubleshooting_and_pitfalls 5 # Top 5 debugging patterns
-/ace-top apis_to_use                    # All top-rated APIs
+/ace-orchestration:ace-top strategies_and_hard_rules 10   # Top 10 architectural patterns
+/ace-orchestration:ace-top troubleshooting_and_pitfalls 5 # Top 5 debugging patterns
+/ace-orchestration:ace-top apis_to_use                    # All top-rated APIs
 ```
 
-#### `/ace-patterns [section]`
+#### `/ace-orchestration:ace-patterns [section]`
 View full playbook (comprehensive)
 ```
-/ace-patterns                           # All sections
-/ace-patterns strategies                # Architectural patterns
-/ace-patterns code-snippets             # Reusable code
-/ace-patterns troubleshooting           # Known issues & solutions
-/ace-patterns apis                      # Recommended libraries
+/ace-orchestration:ace-patterns                           # All sections
+/ace-orchestration:ace-patterns strategies                # Architectural patterns
+/ace-orchestration:ace-patterns code-snippets             # Reusable code
+/ace-orchestration:ace-patterns troubleshooting           # Known issues & solutions
+/ace-orchestration:ace-patterns apis                      # Recommended libraries
 ```
 
-**When to use**: `/ace-search` for specific queries, `/ace-top` for best practices, `/ace-patterns` for multi-domain tasks.
+**When to use**: `/ace-orchestration:ace-search` for specific queries, `/ace-orchestration:ace-top` for best practices, `/ace-orchestration:ace-patterns` for multi-domain tasks.
 
 ### ⚙️ Configuration Commands (NEW in v3.3.0)
 
-#### `/ace-config [action] [params]`
+#### `/ace-orchestration:ace-config [action] [params]`
 Runtime server configuration
 ```
-/ace-config show                        # View current configuration
-/ace-config token-budget 50000          # Enable token budget
-/ace-config search-threshold 0.8        # Adjust semantic search sensitivity
+/ace-orchestration:ace-config show                        # View current configuration
+/ace-orchestration:ace-config token-budget 50000          # Enable token budget
+/ace-orchestration:ace-config search-threshold 0.8        # Adjust semantic search sensitivity
 ```
 
-#### `/ace-configure`
+#### `/ace-orchestration:ace-configure`
 Interactive ACE server connection setup
 ```
-/ace-configure
+/ace-orchestration:ace-configure
 ```
 
 ### 📝 Management Commands
 
-#### `/ace-delta [operation] [pattern]` (NEW in v3.3.0)
+#### `/ace-orchestration:ace-delta [operation] [pattern]` (NEW in v3.3.0)
 Manual pattern operations (advanced)
 ```
-/ace-delta add "pattern text" section   # Add pattern manually
-/ace-delta update pattern-id helpful=5  # Update pattern score
-/ace-delta remove pattern-id            # Remove pattern
+/ace-orchestration:ace-delta add "pattern text" section   # Add pattern manually
+/ace-orchestration:ace-delta update pattern-id helpful=5  # Update pattern score
+/ace-orchestration:ace-delta remove pattern-id            # Remove pattern
 ```
 
-#### `/ace-status`
+#### `/ace-orchestration:ace-status`
 Check playbook statistics
 ```
-/ace-status
+/ace-orchestration:ace-status
 ```
 
-#### `/ace-claude-init`
+#### `/ace-orchestration:ace-claude-init`
 Initialize ACE in project CLAUDE.md (one-time setup)
 ```
-/ace-claude-init
+/ace-orchestration:ace-claude-init                       # Initial setup
+/ace-orchestration:ace-claude-init --update              # Update existing ACE section
 ```
 
-#### `/ace-bootstrap`
+#### `/ace-orchestration:ace-enable-auto-update`
+Toggle automatic CLAUDE.md updates on plugin version changes
+```
+/ace-orchestration:ace-enable-auto-update                # Check status and toggle
+```
+
+**What it does:**
+- Enables/disables automatic ACE instruction updates in your project's CLAUDE.md
+- When enabled: ACE silently updates your CLAUDE.md on session start when plugin version changes
+- When disabled: You'll be notified but must run `/ace-orchestration:ace-claude-init --update` manually
+- Creates backups before updates (CLAUDE.md.backup-YYYYMMDD-HHMMSS)
+- Zero-token cost when enabled (script-based updates)
+
+#### `/ace-orchestration:ace-test`
+Verify ACE plugin is working correctly
+```
+/ace-orchestration:ace-test
+```
+
+**What it does:**
+- Checks if ACE skills are loaded (ace-playbook-retrieval, ace-learning)
+- Verifies MCP server connection
+- Shows playbook statistics
+- Lists available ACE tools
+- Displays current configuration
+
+#### `/ace-orchestration:ace-bootstrap`
 Bootstrap playbook from docs, git history, and current code
 ```
-/ace-bootstrap                          # Hybrid mode (docs → git → files)
-/ace-bootstrap --mode git-history       # Git history only
-/ace-bootstrap --thoroughness deep      # Deep analysis
+/ace-orchestration:ace-bootstrap                          # Hybrid mode (docs → git → files)
+/ace-orchestration:ace-bootstrap --mode git-history       # Git history only
+/ace-orchestration:ace-bootstrap --thoroughness deep      # Deep analysis
 ```
 
-#### `/ace-clear --confirm`
+#### `/ace-orchestration:ace-clear --confirm`
 Clear entire playbook (requires confirmation)
 ```
-/ace-clear --confirm
+/ace-orchestration:ace-clear --confirm
 ```
 
-#### `/ace-export-patterns` / `/ace-import-patterns`
+#### `/ace-orchestration:ace-export-patterns` / `/ace-orchestration:ace-import-patterns`
 Backup and restore playbook
 ```
-/ace-export-patterns
-/ace-import-patterns
+/ace-orchestration:ace-export-patterns
+/ace-orchestration:ace-import-patterns
 ```
 
-## 🪝 Hooks (Minimal)
+## 🪝 Hooks (ACE Enforcement & Automation)
 
-### SessionStart Hook
-Injects CLAUDE.md reference to make plugin instructions available.
+### UserPromptSubmit Hook (NEW in v3.3.1)
+**Critical for ACE auto-triggering reliability!**
+
+Injects ACE trigger reminder before EVERY user prompt.
+
+**When it fires**: Before Claude processes each user message
+
+**What it does**:
+```
+⚠️ ACE TRIGGER CHECK: If this message contains trigger words
+(implement|build|create|update|modify|fix|debug|refactor|optimize|integrate|
+configure|setup|deploy|test|verify|validate|add|develop|write|change|edit|
+enhance|extend|revise|troubleshoot|resolve|diagnose|improve|restructure|
+connect|install|architect|design|plan|migrate|upgrade), invoke
+ace-playbook-retrieval skill BEFORE other tools, then ace-learning skill
+AFTER completing work.
+```
+
+**Why this matters**: Ensures Claude sees ACE trigger instructions BEFORE responding, making skill activation more reliable.
+
+### SessionStart Hook (Enhanced in v3.3.1)
+Announces ACE system activation and loads plugin instructions.
 
 **When it fires**: At session start or resume
 
-### PostToolUse Hook (Bash Logging)
+**What it does**:
+```
+🚨 ACE SYSTEM ACTIVE: Skills ace-playbook-retrieval (BEFORE work) and
+ace-learning (AFTER work) auto-trigger on keywords: implement, build,
+create, update, modify, fix, debug, refactor, optimize, integrate,
+configure, setup, deploy, test, verify.
+```
+
+**Additional functionality**:
+- Injects CLAUDE.md reference to make plugin instructions available
+- Checks for ACE version updates
+- Runs auto-update if enabled (via `/ace-orchestration:ace-enable-auto-update`)
+- Ensures `.gitignore` includes ACE config files
+
+### PostToolUse Hook
 Logs Bash command executions for debugging.
 
 **When it fires**: After Bash tool executes
 
-**Note**: Skills handle the main automation now! Hooks are minimal and non-intrusive.
+**What it does**: Captures command history for troubleshooting and learning
+
+**Note**: Hooks are now **enforcement mechanisms** for reliable ACE skill triggering, not just helpers!
 
 ## 🔬 How It Works
 
@@ -367,19 +443,19 @@ Logs Bash command executions for debugging.
 ### First-Time Setup
 ```bash
 # 1. Configure ACE server connection
-/ace-configure
+/ace-orchestration:ace-configure
 # Interactive prompts for server URL, API token, project ID
 
 # 2. Initialize ACE in your project (required for full cycle)
-/ace-claude-init
+/ace-orchestration:ace-claude-init
 # Copies full ACE instructions inline to project CLAUDE.md (~289 lines)
 
 # 3. Optional: Bootstrap playbook from git history
-/ace-bootstrap --commits 100 --days 30
+/ace-orchestration:ace-bootstrap --commits 100 --days 30
 # Analyzes past commits to build initial playbook
 
 # 4. Check initial state
-/ace-status
+/ace-orchestration:ace-status
 # Output: Shows playbook statistics
 ```
 
@@ -413,17 +489,17 @@ User: "Add OAuth2 authentication"
 
 ```bash
 # Check what's been learned
-/ace-patterns strategies
+/ace-orchestration:ace-patterns strategies
 # Shows architectural patterns
 
-/ace-patterns code-snippets
+/ace-orchestration:ace-patterns code-snippets
 # Shows reusable code patterns
 
-/ace-patterns troubleshooting
+/ace-orchestration:ace-patterns troubleshooting
 # Shows known issues & solutions
 
 # View statistics
-/ace-status
+/ace-orchestration:ace-status
 # Shows: total bullets, by section, top helpful/harmful
 ```
 
@@ -448,7 +524,8 @@ This plugin implements the complete ACE framework architecture:
 
 ### MCP Client (Local)
 - **3-Tier Cache**: RAM (session) → SQLite (`~/.ace-cache/`) → Server
-- **Config**: `~/.ace/config.json` (server URL, API token, project ID)
+- **Global Config**: `~/.ace/config.json` (server URL, API token, cache settings)
+- **Project Config**: `.claude/settings.local.json` (MCP server + project ID)
 - **No Code Sent**: Only execution traces (task, trajectory, feedback)
 - **Encrypted Transit**: HTTPS to ACE server
 
@@ -468,27 +545,176 @@ This plugin implements the complete ACE framework architecture:
 ## 🐛 Troubleshooting
 
 ### Plugin won't start
-```bash
-# Check MCP server is installed
-which python3
-pip show fastmcp
 
-# For LOCAL mode, check server location
-ls -la ../../../ce-mcp-ace/ce-ai-ace-server
+**Check plugin installation:**
+```bash
+# Verify plugin directory exists
+ls -la ~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchestration/
+
+# Expected: Plugin directory should contain:
+# - skills/ (ace-playbook-retrieval, ace-learning)
+# - commands/ (slash commands)
+# - hooks/ (session hooks)
+# - plugin.json (plugin metadata)
 ```
 
-### MCP tools not appearing
+**Check configuration:**
 ```bash
-# Restart Claude Code
-# Check plugin is enabled in settings
-# Check MCP logs for errors
+# Global config (org-level settings)
+cat ~/.ace/config.json
+
+# Project config (MCP server + projectId)
+cat .claude/settings.local.json
 ```
+
+### MCP client not working
+
+**The ACE MCP client is npm-based** - no Python/pip required!
+
+```bash
+# MCP client is auto-installed from npm when Claude Code starts
+# It uses @ce-dot-net/ace-client package (v3.7.0)
+
+# Check project MCP configuration
+cat .claude/settings.local.json
+
+# Expected output shows:
+# {
+#   "mcpServers": {
+#     "ace-pattern-learning": {
+#       "command": "npx",
+#       "args": ["--yes", "@ce-dot-net/ace-client@3.7.0", "--project-id", "prj_xxxxx"]
+#     }
+#   }
+# }
+```
+
+**If MCP tools not appearing:**
+```bash
+# 1. Restart Claude Code (required after plugin installation)
+# 2. Check plugin is enabled in Claude Code settings
+# 3. Verify global config exists:
+cat ~/.ace/config.json
+
+# 4. Verify project config exists:
+cat .claude/settings.local.json
+
+# 5. Run diagnostic command:
+/ace-orchestration:ace-doctor
+```
+
+### Connection errors
+
+**Error: "ECONNREFUSED" or "Connection refused"**
+
+```bash
+# Check global ACE configuration
+cat ~/.ace/config.json
+
+# Should contain:
+# {
+#   "serverUrl": "https://ace-api.code-engine.app",
+#   "apiToken": "ace_your_token_here",
+#   "cacheTtlMinutes": 120,
+#   "autoUpdateEnabled": true
+# }
+
+# If missing or invalid, reconfigure:
+/ace-orchestration:ace-configure --global
+```
+
+**Error: "401 Unauthorized"**
+
+```bash
+# Invalid or missing API token in global config
+# Reconfigure with correct credentials:
+/ace-orchestration:ace-configure --global
+```
+
+**Error: "404 Project not found"**
+
+```bash
+# Invalid project ID in .claude/settings.local.json
+# Check project config:
+cat .claude/settings.local.json
+
+# Update projectId:
+/ace-orchestration:ace-configure --project
+```
+
+### Skills not triggering
+
+**ACE skills not auto-invoking when they should?**
+
+1. **Verify skills are loaded:**
+   ```
+   /ace-orchestration:ace-test
+   ```
+   Should show ace-playbook-retrieval and ace-learning as LOADED
+
+2. **Check CLAUDE.md has ACE instructions:**
+   ```bash
+   grep "ACE_SECTION_START" CLAUDE.md
+   ```
+   If missing, run:
+   ```
+   /ace-orchestration:ace-claude-init
+   ```
+
+3. **Ensure trigger words are present:**
+   - Skills trigger on: implement, build, create, update, modify, fix, debug, refactor, etc.
+   - Use explicit trigger words in your requests
+   - Check hooks are working (UserPromptSubmit should inject reminders)
 
 ### Pattern database errors
+
+**Clear and reset playbook:**
 ```bash
-# Clear and reset
-/ace-clear --confirm
+/ace-orchestration:ace-clear --confirm
 ```
+
+**Export backup before clearing:**
+```bash
+/ace-orchestration:ace-export-patterns
+# Then clear if needed
+/ace-orchestration:ace-clear --confirm
+```
+
+### Auto-update not working
+
+**ACE CLAUDE.md not updating automatically?**
+
+```bash
+# Check if auto-update is enabled
+ls -la ~/.ace/auto-update-enabled
+
+# If missing, enable it:
+/ace-orchestration:ace-enable-auto-update
+
+# Check update history
+cat ~/.ace/update-history.log
+```
+
+### Getting help
+
+**Still having issues?**
+
+1. Run diagnostic command:
+   ```
+   /ace-orchestration:ace-doctor
+   ```
+
+2. Check Claude Code logs for errors
+
+3. Report issues: https://github.com/ce-dot-net/ce-claude-marketplace/issues
+
+Include:
+- Output from `/ace-orchestration:ace-doctor`
+- Error messages from Claude Code
+- Your `~/.ace/config.json` (redact apiToken!)
+- Your `.claude/settings.local.json`
+- Plugin version from `plugin.json`
+- MCP client version: `npx @ce-dot-net/ace-client --version`
 
 ## 📝 License
 

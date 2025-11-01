@@ -49,37 +49,54 @@ ln -s "$(pwd)" ~/.config/claude-code/plugins/ace-orchestration
 
 Restart Claude Code to load the plugin.
 
-### Step 4: Configure ACE Credentials
+### Step 4: Configure ACE (Dual-Config Architecture)
 
 In Claude Code, run the interactive configuration wizard:
 
 ```
-/ace-configure
+/ace-orchestration:ace-configure
 ```
 
-**Prompts for**:
-- ACE Server URL (default: https://ace-api.code-engine.app)
-- API Token (from your ACE server)
-- Project ID (from your ACE dashboard)
+**Creates TWO configuration files**:
 
-**Saves to**: `<project-root>/.ace/config.json` (project-scoped, NOT global)
+1. **Global Config** (`~/.ace/config.json`):
+   - Server URL (default: https://ace-api.code-engine.app)
+   - API Token (from your ACE server)
+   - Cache TTL (default: 120 minutes)
+   - Auto-update settings
+
+2. **Project Config** (`.claude/settings.local.json`):
+   - MCP server definition
+   - Project ID (from your ACE dashboard)
+
+**Why two files?**
+- Global config: Org-level settings shared across all projects
+- Project config: Claude Code standard, project-specific MCP setup
 
 ### Step 5: Test Installation
 
 ```
-/ace-status
+/ace-orchestration:ace-status
 ```
 
 **Expected**: Shows ACE system status and connection info
 
+**Or run comprehensive diagnostic**:
+```
+/ace-orchestration:ace-doctor
+```
+
+**Expected**: Full health check of entire ACE system
+
 ---
 
-## ✨ What's New in v3.0.4
+## ✨ What's New in v3.3.2
 
-- **Bundled MCP Server** - No package download required!
-- **Zero Authentication** - Works offline, no GitHub token needed
-- **Interactive Configuration** - `/ace-configure` wizard for credentials
-- **Project-Scoped Config** - Each project has its own `.ace/config.json`
+- **Dual-Config Architecture** - Global org settings (`~/.ace/config.json`) + project MCP config (`.claude/settings.local.json`)
+- **ace-doctor Diagnostic** - Comprehensive health check for entire ACE system
+- **Version Checking** - Auto-detects plugin & CLAUDE.md updates
+- **Auto-Migration** - Seamless upgrade from v3.3.1 config structure
+- **MCP Client v3.7.0** - Version checking, config migration, improved caching
 
 ---
 
@@ -237,25 +254,38 @@ source ~/.zshrc
 ### Option 2: Config File
 
 ```bash
-# In your project root directory:
-mkdir -p .ace
-
-# Create project-scoped config file
-cat > .ace/config.json <<EOF
+# 1. Create global org-level config
+mkdir -p ~/.ace
+cat > ~/.ace/config.json <<EOF
 {
   "serverUrl": "https://ace-api.code-engine.app",
   "apiToken": "your-token-here",
-  "projectId": "your-project-id"
+  "cacheTtlMinutes": 120,
+  "autoUpdateEnabled": true
+}
+EOF
+
+# 2. Create project MCP config
+mkdir -p .claude
+cat > .claude/settings.local.json <<EOF
+{
+  "mcpServers": {
+    "ace-pattern-learning": {
+      "command": "npx",
+      "args": ["--yes", "@ce-dot-net/ace-client@3.7.0", "--project-id", "your-project-id"]
+    }
+  }
 }
 EOF
 ```
 
-**Configuration Priority (Project-Scoped):**
+**Configuration Priority:**
 1. Environment variables (highest)
-2. `<project-root>/.ace/config.json` (project-specific)
-3. Default values (lowest)
+2. Command-line arguments (`--server-url`, `--api-token`, `--project-id`)
+3. Global config (`~/.ace/config.json`)
+4. Default values (lowest)
 
-**Note**: ACE is project-scoped - there is no global `~/.ace/config.json`
+**Architecture**: Dual-config system separates org settings (global) from project setup (local)
 
 ---
 

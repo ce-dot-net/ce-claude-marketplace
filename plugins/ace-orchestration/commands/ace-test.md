@@ -84,7 +84,7 @@ Use the mcp__ace-pattern-learning__ace_status tool to verify connectivity.
    Error: Request timeout
    → Network issues or server overloaded
    → Action: Retry with exponential backoff
-   → Fallback: Check <project-root>/.ace/config.json for correct URL
+   → Fallback: Check ~/.ace/config.json for correct serverUrl
    ```
 
 3. **Authentication Failed**
@@ -92,14 +92,14 @@ Use the mcp__ace-pattern-learning__ace_status tool to verify connectivity.
    Error: 401 Unauthorized
    → Invalid or missing API token
    → Action: Run /ace-orchestration:ace-configure to set up credentials
-   → Fallback: Check <project-root>/.ace/config.json for valid apiToken
+   → Fallback: Check ~/.ace/config.json for valid apiToken
    ```
 
 4. **Invalid Project**
    ```
    Error: 404 Project not found
    → Project ID doesn't exist
-   → Action: Verify projectId in <project-root>/.ace/config.json
+   → Action: Verify projectId in .claude/settings.local.json
    → Fallback: Create new project or use existing one
    ```
 
@@ -122,8 +122,8 @@ Use the mcp__ace-pattern-learning__ace_status tool to verify connectivity.
 7. **Missing Configuration**
    ```
    Error: Config file not found
-   → <project-root>/.ace/config.json doesn't exist
-   → Action: Run /ace-orchestration:ace-configure to create project config
+   → ~/.ace/config.json or .claude/settings.local.json missing
+   → Action: Run /ace-orchestration:ace-configure to create config files
    → Fallback: Provide default configuration template
    ```
 
@@ -145,7 +145,7 @@ Display all ACE-related MCP tools that should be available:
    ```
    Error: Tool mcp__ace-pattern-learning__ace_* not available
    → MCP server not registered or not running
-   → Action: Check .mcp.json in plugin directory
+   → Action: Check .claude/settings.local.json for MCP server definition
    → Fallback: Restart Claude Code to reload MCP servers
    ```
 
@@ -162,14 +162,14 @@ Display all ACE-related MCP tools that should be available:
    Warning: Some ACE tools missing
    → Incomplete MCP server setup
    → Action: List available vs expected tools
-   → Fallback: Reinstall plugin or check .mcp.json
+   → Fallback: Reinstall plugin or check .claude/settings.local.json
    ```
 
 ### Step 4: Show Configuration Summary
 
 Display the current ACE configuration:
-- Server URL (from `<project-root>/.ace/config.json` or environment)
-- Project ID (if configured)
+- Server URL (from `~/.ace/config.json` or environment)
+- Project ID (from `.claude/settings.local.json`)
 - API token status (present/missing, don't show actual token)
 - Plugin version
 - Learning mode (automatic/manual)
@@ -178,9 +178,9 @@ Display the current ACE configuration:
 
 1. **Configuration File Read Error**
    ```
-   Error: Cannot read <project-root>/.ace/config.json
+   Error: Cannot read ~/.ace/config.json or .claude/settings.local.json
    → Permission denied or file corrupted
-   → Action: Check file permissions (should be 600)
+   → Action: Check file permissions (global config should be 600)
    → Fallback: Recreate config with /ace-orchestration:ace-configure
    ```
 
@@ -240,8 +240,10 @@ Available ACE Tools:
 
 Configuration:
 Learning Mode: Automatic (skill-based)
-Plugin Version: 3.1.x
-Config File: <project-root>/.ace/config.json (project-scoped)
+Plugin Version: 3.3.2
+Config Files:
+  - Global: ~/.ace/config.json (serverUrl, apiToken, cacheTtl)
+  - Project: .claude/settings.local.json (projectId, MCP server)
 
 🎯 Everything looks good! ACE automatic learning is ready.
 ```
