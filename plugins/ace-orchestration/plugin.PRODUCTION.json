@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
-  "version": "3.3.1",
-  "description": "ACE (Agentic Context Engineering) - Full ACE Paper Implementation with Semantic Search & Delta Operations. Three-Agent Architecture (Generator → Reflector → Curator). Learns from execution feedback. Based on Stanford/SambaNova/UC Berkeley research (arXiv:2510.04618v1)",
+  "version": "3.3.2",
+  "description": "ACE (Agentic Context Engineering) - Full ACE Paper Implementation with Dual-Config Architecture. Three-Agent Architecture (Generator → Reflector → Curator). Learns from execution feedback. Based on Stanford/SambaNova/UC Berkeley research (arXiv:2510.04618v1)",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

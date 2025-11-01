@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
-  "version": "3.3.1",
-  "description": "Code Engine ACE - Intelligent pattern learning and code generation with Three-Agent Architecture (Generator → Reflector → Curator). Learns from execution feedback to improve coding outcomes. Downloads latest MCP client from npm with interactive configuration.",
+  "version": "3.3.2",
+  "description": "Code Engine ACE - Intelligent pattern learning and code generation with Three-Agent Architecture (Generator → Reflector → Curator). Learns from execution feedback to improve coding outcomes. Dual-config architecture with automatic migration. Requires MCP client v3.7.0+.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
@@ -20,6 +20,5 @@
     "ai-assistant",
     "autonomous"
   ],
-  "hooks": "./hooks/hooks.json",
-  "mcpServers": "./.mcp.json"
+  "hooks": "./hooks/hooks.json"
 }

@@ -35,20 +35,18 @@ echo "2️⃣  Checking plugin.json..."
 if [ -f "$PLUGIN_DIR/.claude-plugin/plugin.json" ]; then
     echo "  ✅ plugin.json exists"
 
-    # Check if it has mcpServers
-    if grep -q "mcpServers" "$PLUGIN_DIR/.claude-plugin/plugin.json"; then
-        echo "  ✅ mcpServers configuration found"
+    PLUGIN_VERSION=$(grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' "$PLUGIN_DIR/.claude-plugin/plugin.json" | cut -d'"' -f4)
+    echo "  📦 Plugin version: $PLUGIN_VERSION"
 
-        # Show the command
-        echo ""
-        echo "  MCP Server Configuration:"
-        cat "$PLUGIN_DIR/.claude-plugin/plugin.json" | grep -A 10 '"mcpServers"' | head -15
+    # v3.3.2+: mcpServers moved to .claude/settings.local.json
+    if grep -q "mcpServers" "$PLUGIN_DIR/.claude-plugin/plugin.json"; then
+        echo "  ⚠️  Old config format detected (v3.3.1 or earlier)"
+        echo "     Run /ace-configure to migrate to dual-config"
     else
-        echo "  ⚠️  No mcpServers configuration in plugin.json"
+        echo "  ✅ Using v3.3.2+ dual-config architecture"
     fi
 else
     echo "  ❌ plugin.json does NOT exist"
-    echo "     Create from template: cp $PLUGIN_DIR/.claude-plugin/plugin.template.json $PLUGIN_DIR/.claude-plugin/plugin.json"
     exit 1
 fi
 echo ""
@@ -83,39 +81,83 @@ if [ -f ~/.npmrc ]; then
 fi
 echo ""
 
-# Check 4: Environment variables
-echo "4️⃣  Checking environment variables..."
-if [ -n "$ACE_SERVER_URL" ]; then
-    echo "  ✅ ACE_SERVER_URL: $ACE_SERVER_URL"
+# Check 4: Dual-Config Architecture (v3.3.2+)
+echo "4️⃣  Checking dual-config architecture..."
+
+# Check global config
+if [ -f ~/.ace/config.json ]; then
+    echo "  ✅ Global config exists: ~/.ace/config.json"
+
+    if command -v jq &> /dev/null; then
+        SERVER_URL=$(jq -r '.serverUrl // "not set"' ~/.ace/config.json)
+        API_TOKEN=$(jq -r '.apiToken // "not set"' ~/.ace/config.json)
+        CACHE_TTL=$(jq -r '.cacheTtlMinutes // "not set"' ~/.ace/config.json)
+
+        echo "     Server URL: $SERVER_URL"
+        echo "     API Token: ${API_TOKEN:0:12}..."
+        echo "     Cache TTL: $CACHE_TTL minutes"
+    else
+        echo "     (Install jq to see config details)"
+    fi
 else
-    echo "  ⚠️  ACE_SERVER_URL not set"
+    echo "  ❌ Global config missing: ~/.ace/config.json"
+    echo "     Run: /ace-configure --global"
+fi
+
+# Check project config
+PROJECT_ROOT=$(pwd)
+if [ -f "$PROJECT_ROOT/.claude/settings.local.json" ]; then
+    echo "  ✅ Project config exists: .claude/settings.local.json"
+
+    if command -v jq &> /dev/null; then
+        if jq -e '.mcpServers."ace-pattern-learning"' "$PROJECT_ROOT/.claude/settings.local.json" &> /dev/null; then
+            echo "  ✅ MCP server configured"
+            PROJECT_ID=$(jq -r '.mcpServers."ace-pattern-learning".args[] | select(startswith("prj_"))' "$PROJECT_ROOT/.claude/settings.local.json" 2>/dev/null || echo "not found")
+            echo "     Project ID: $PROJECT_ID"
+        else
+            echo "  ⚠️  MCP server not configured in settings.local.json"
+        fi
+    fi
+else
+    echo "  ⚠️  Project config missing: .claude/settings.local.json"
+    echo "     Run: /ace-configure --project"
+fi
+
+# Environment variables (fallback/override)
+echo ""
+echo "  Environment Variables (fallback/override):"
+if [ -n "$ACE_SERVER_URL" ]; then
+    echo "  ✅ ACE_SERVER_URL: $ACE_SERVER_URL (overrides global config)"
+else
+    echo "  ℹ️  ACE_SERVER_URL not set (using ~/.ace/config.json)"
 fi
 
 if [ -n "$ACE_API_TOKEN" ]; then
-    echo "  ✅ ACE_API_TOKEN: ${ACE_API_TOKEN:0:10}..."
+    echo "  ✅ ACE_API_TOKEN: ${ACE_API_TOKEN:0:10}... (overrides global config)"
 else
-    echo "  ⚠️  ACE_API_TOKEN not set"
+    echo "  ℹ️  ACE_API_TOKEN not set (using ~/.ace/config.json)"
 fi
 
 if [ -n "$ACE_PROJECT_ID" ]; then
-    echo "  ✅ ACE_PROJECT_ID: $ACE_PROJECT_ID"
+    echo "  ✅ ACE_PROJECT_ID: $ACE_PROJECT_ID (overrides .claude/settings.local.json)"
 else
-    echo "  ⚠️  ACE_PROJECT_ID not set"
+    echo "  ℹ️  ACE_PROJECT_ID not set (using .claude/settings.local.json)"
 fi
 echo ""
 
 # Check 5: Test package download
-echo "5️⃣  Testing package download..."
-echo "  Attempting to download @ce-dot-net/ace-client..."
+echo "5️⃣  Testing MCP client package..."
+echo "  Attempting to download @ce-dot-net/ace-client@3.7.0..."
 
 # Change to marketplace root for .npmrc
 cd "$MARKETPLACE_ROOT"
 
-if npx --package=@ce-dot-net/ace-client@3.0.3 ace-client --help 2>&1 | head -5; then
-    echo "  ✅ Package can be downloaded and executed"
+if npx --yes @ce-dot-net/ace-client@3.7.0 --help 2>&1 | head -5; then
+    echo "  ✅ MCP client v3.7.0 can be downloaded and executed"
 else
-    echo "  ❌ Failed to download/execute package"
+    echo "  ❌ Failed to download/execute MCP client"
     echo "     Check .npmrc configuration and GitHub token"
+    echo "     Required for v3.3.2+ dual-config architecture"
 fi
 echo ""
 
@@ -138,13 +180,21 @@ echo "================================"
 echo "📊 Diagnostic Summary"
 echo "================================"
 echo ""
+echo "ACE Plugin v3.3.2 - Dual-Config Architecture"
+echo ""
+echo "Required Configuration:"
+echo "  1. Global:  ~/.ace/config.json (org credentials)"
+echo "  2. Project: .claude/settings.local.json (MCP server + project ID)"
+echo "  3. MCP Client: @ce-dot-net/ace-client@3.7.0"
+echo ""
 echo "Next steps:"
 echo "1. Fix any ❌ items above"
-echo "2. Restart Claude Code completely"
-echo "3. Run: /mcp"
-echo "4. Look for 'ace-pattern-learning' server"
+echo "2. Run /ace-configure to set up dual-config (if missing)"
+echo "3. Restart Claude Code completely"
+echo "4. Run /ace-status to verify connection"
 echo ""
-echo "If MCP server still doesn't appear:"
+echo "If issues persist:"
 echo "- Check Claude Code logs: ~/.config/claude-code/logs/"
+echo "- Run: /ace-doctor (enhanced diagnostics)"
 echo "- Try: claude --debug"
 echo ""
