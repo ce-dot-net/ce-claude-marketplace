@@ -75,7 +75,7 @@ This release brings **50-80% token reduction** through semantic pattern search a
 
 ### 3. Runtime Configuration Management
 
-**Command**: `/ace-config [action] [params]`
+**Command**: `/ace-tune [action] [params]`
 
 **What it does**:
 - View and update server configuration dynamically
@@ -84,10 +84,10 @@ This release brings **50-80% token reduction** through semantic pattern search a
 
 **Examples**:
 ```bash
-/ace-config show                        # View current settings
-/ace-config token-budget 50000          # Enable auto-pruning at 50k tokens
-/ace-config search-threshold 0.8        # Stricter semantic matching
-/ace-config dedup-threshold 0.9         # Configure duplicate detection
+/ace-tune show                        # View current settings
+/ace-tune token-budget 50000          # Enable auto-pruning at 50k tokens
+/ace-tune search-threshold 0.8        # Stricter semantic matching
+/ace-tune dedup-threshold 0.9         # Configure duplicate detection
 ```
 
 **Use cases**:
@@ -191,7 +191,7 @@ All 5 examples in the skill now demonstrate intelligent tool selection:
 ### Slash Commands
 - `commands/ace-search.md` - Semantic search command with examples
 - `commands/ace-top.md` - Top patterns command with usage guide
-- `commands/ace-config.md` - Runtime configuration management
+- `commands/ace-tune.md` - Runtime configuration management
 - `commands/ace-delta.md` - Manual pattern operations (ADD/UPDATE/REMOVE)
 
 ### Updated Skills
@@ -275,7 +275,7 @@ ace_batch_get(pattern_ids)  # ~200ms total
 **Step 2**: New Features Available
 - Try `/ace-search "your query"` for targeted retrieval
 - Use `/ace-top` for best practices
-- Explore `/ace-config` for runtime configuration
+- Explore `/ace-tune` for runtime configuration
 
 **Step 3**: Recommendation
 - Use semantic search for specific tasks to reduce token usage
@@ -367,7 +367,7 @@ ACE uses a 3-tier caching system:
 **Commands**:
 - `commands/ace-search.md` - NEW semantic search command
 - `commands/ace-top.md` - NEW top patterns command
-- `commands/ace-config.md` - NEW runtime configuration command
+- `commands/ace-tune.md` - NEW runtime configuration command
 - `commands/ace-delta.md` - NEW manual pattern management command
 
 **Total**: 13 files changed, 9 new/updated files

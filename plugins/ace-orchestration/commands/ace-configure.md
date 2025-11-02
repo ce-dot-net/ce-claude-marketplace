@@ -9,6 +9,12 @@ Interactive configuration wizard for ACE server connection with support for glob
 
 ## Instructions for Claude
 
+**IMPORTANT**: When executing bash/jq code from this file:
+- Use the `Bash` tool to run commands (do NOT copy-paste into eval or subshells)
+- For reading JSON values, use `Read` tool + manual parsing OR use `jq` via `Bash` tool
+- Keep jq expressions simple (avoid complex nested parentheses)
+- Use `AskUserQuestion` tool for interactive prompts (do NOT use bash `read` command)
+
 When the user runs `/ace-orchestration:ace-configure`, follow these steps:
 
 ### Step 1: Detect Configuration Scope

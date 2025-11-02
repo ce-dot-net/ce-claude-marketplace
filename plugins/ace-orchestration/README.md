@@ -247,12 +247,12 @@ View full playbook (comprehensive)
 
 ### ⚙️ Configuration Commands (NEW in v3.3.0)
 
-#### `/ace-orchestration:ace-config [action] [params]`
+#### `/ace-orchestration:ace-tune [action] [params]`
 Runtime server configuration
 ```
-/ace-orchestration:ace-config show                        # View current configuration
-/ace-orchestration:ace-config token-budget 50000          # Enable token budget
-/ace-orchestration:ace-config search-threshold 0.8        # Adjust semantic search sensitivity
+/ace-orchestration:ace-tune show                        # View current configuration
+/ace-orchestration:ace-tune token-budget 50000          # Enable token budget
+/ace-orchestration:ace-tune search-threshold 0.8        # Adjust semantic search sensitivity
 ```
 
 #### `/ace-orchestration:ace-configure`

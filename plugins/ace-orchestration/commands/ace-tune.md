@@ -19,12 +19,12 @@ Allows you to **fetch and update ACE server configuration** in real-time:
 
 ## Instructions for Claude
 
-When the user runs `/ace-config [action] [params]`, call the appropriate MCP tool:
+When the user runs `/ace-tune [action] [params]`, call the appropriate MCP tool:
 
 ### 1. View Current Configuration
 
 ```bash
-/ace-config show
+/ace-tune show
 → mcp__plugin_ace-orchestration_ace-pattern-learning__ace_get_config()
 ```
 
@@ -39,7 +39,7 @@ Returns all current server settings including:
 ### 2. Enable Token Budget
 
 ```bash
-/ace-config token-budget 50000
+/ace-tune token-budget 50000
 → mcp__plugin_ace-orchestration_ace-pattern-learning__ace_set_config(
   token_budget_enforcement=true,
   max_playbook_tokens=50000
@@ -56,7 +56,7 @@ Returns all current server settings including:
 ### 3. Adjust Search Threshold
 
 ```bash
-/ace-config search-threshold 0.8
+/ace-tune search-threshold 0.8
 → mcp__plugin_ace-orchestration_ace-pattern-learning__ace_set_config(
   constitution_threshold=0.8
 )
@@ -70,7 +70,7 @@ Returns all current server settings including:
 ### 4. Adjust Deduplication Threshold
 
 ```bash
-/ace-config dedup-threshold 0.9
+/ace-tune dedup-threshold 0.9
 → mcp__plugin_ace-orchestration_ace-pattern-learning__ace_set_config(
   dedup_similarity_threshold=0.9
 )
@@ -85,7 +85,7 @@ Returns all current server settings including:
 ### 5. Adjust Pruning Threshold
 
 ```bash
-/ace-config pruning-threshold 0.4
+/ace-tune pruning-threshold 0.4
 → mcp__plugin_ace-orchestration_ace-pattern-learning__ace_set_config(
   pruning_threshold=0.4
 )
@@ -117,35 +117,35 @@ Returns all current server settings including:
 ### Optimize for Precision (Strict Search)
 
 ```bash
-/ace-config search-threshold 0.85
+/ace-tune search-threshold 0.85
 ```
 **Use when**: You want only highly relevant results, willing to miss some edge cases.
 
 ### Optimize for Recall (Broad Search)
 
 ```bash
-/ace-config search-threshold 0.4
+/ace-tune search-threshold 0.4
 ```
 **Use when**: You want comprehensive results, okay with some less-relevant matches.
 
 ### Enable Automatic Playbook Management
 
 ```bash
-/ace-config token-budget 50000
+/ace-tune token-budget 50000
 ```
 **Use when**: Your playbook is growing large (10k+ patterns) and you want automatic quality-based pruning.
 
 ### Aggressive Deduplication
 
 ```bash
-/ace-config dedup-threshold 0.75
+/ace-tune dedup-threshold 0.75
 ```
 **Use when**: You're getting too many similar patterns and want more aggressive merging.
 
 ### Conservative Pruning
 
 ```bash
-/ace-config pruning-threshold 0.2
+/ace-tune pruning-threshold 0.2
 ```
 **Use when**: Token budget is enabled but you want to keep more patterns (only remove clearly harmful ones).
 
@@ -153,19 +153,19 @@ Returns all current server settings including:
 
 ```bash
 # 1. Check current settings
-/ace-config show
+/ace-tune show
 → Returns: constitution_threshold=0.7, token_budget_enforcement=false
 
 # 2. Enable token budget for large playbook
-/ace-config token-budget 50000
+/ace-tune token-budget 50000
 → Success: Token budget enabled at 50,000 tokens
 
 # 3. Adjust search for broader matches
-/ace-config search-threshold 0.5
+/ace-tune search-threshold 0.5
 → Success: Search threshold lowered to 0.5
 
 # 4. Verify changes
-/ace-config show
+/ace-tune show
 → Returns: constitution_threshold=0.5, max_playbook_tokens=50000, token_budget_enforcement=true
 ```
 
