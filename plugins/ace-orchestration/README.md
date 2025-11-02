@@ -64,13 +64,13 @@ The ACE MCP Client (@ce-dot-net/ace-client) is maintained in a separate reposito
 /ace-orchestration:ace-configure
 
 # This creates:
-# - ~/.ace/config.json (global: serverUrl, apiToken, cache settings)
-# - .claude/settings.local.json (project: MCP server with projectId)
+# - ~/.config/ace/config.json (global: serverUrl, apiToken, cache settings)
+# - .claude/settings.json (project: MCP server with projectId)
 ```
 
 **What Gets Created**:
 
-**Global Config** (`~/.ace/config.json`):
+**Global Config** (`~/.config/ace/config.json`):
 ```json
 {
   "serverUrl": "https://ace-api.code-engine.app",
@@ -80,13 +80,13 @@ The ACE MCP Client (@ce-dot-net/ace-client) is maintained in a separate reposito
 }
 ```
 
-**Project Config** (`.claude/settings.local.json`):
+**Project Config** (`.claude/settings.json`):
 ```json
 {
   "mcpServers": {
     "ace-pattern-learning": {
       "command": "npx",
-      "args": ["--yes", "@ce-dot-net/ace-client@3.7.0", "--project-id", "prj_your_project_id"]
+      "args": ["--yes", "@ce-dot-net/ace-client@3.7.1", "--project-id", "prj_your_project_id"]
     }
   }
 }
@@ -524,8 +524,8 @@ This plugin implements the complete ACE framework architecture:
 
 ### MCP Client (Local)
 - **3-Tier Cache**: RAM (session) → SQLite (`~/.ace-cache/`) → Server
-- **Global Config**: `~/.ace/config.json` (server URL, API token, cache settings)
-- **Project Config**: `.claude/settings.local.json` (MCP server + project ID)
+- **Global Config**: `~/.config/ace/config.json` (server URL, API token, cache settings)
+- **Project Config**: `.claude/settings.json` (MCP server + project ID)
 - **No Code Sent**: Only execution traces (task, trajectory, feedback)
 - **Encrypted Transit**: HTTPS to ACE server
 
@@ -561,10 +561,10 @@ ls -la ~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchest
 **Check configuration:**
 ```bash
 # Global config (org-level settings)
-cat ~/.ace/config.json
+cat ~/.config/ace/config.json
 
 # Project config (MCP server + projectId)
-cat .claude/settings.local.json
+cat .claude/settings.json
 ```
 
 ### MCP client not working
@@ -573,17 +573,17 @@ cat .claude/settings.local.json
 
 ```bash
 # MCP client is auto-installed from npm when Claude Code starts
-# It uses @ce-dot-net/ace-client package (v3.7.0)
+# It uses @ce-dot-net/ace-client package (v3.7.1)
 
 # Check project MCP configuration
-cat .claude/settings.local.json
+cat .claude/settings.json
 
 # Expected output shows:
 # {
 #   "mcpServers": {
 #     "ace-pattern-learning": {
 #       "command": "npx",
-#       "args": ["--yes", "@ce-dot-net/ace-client@3.7.0", "--project-id", "prj_xxxxx"]
+#       "args": ["--yes", "@ce-dot-net/ace-client@3.7.1", "--project-id", "prj_xxxxx"]
 #     }
 #   }
 # }
@@ -594,10 +594,10 @@ cat .claude/settings.local.json
 # 1. Restart Claude Code (required after plugin installation)
 # 2. Check plugin is enabled in Claude Code settings
 # 3. Verify global config exists:
-cat ~/.ace/config.json
+cat ~/.config/ace/config.json
 
 # 4. Verify project config exists:
-cat .claude/settings.local.json
+cat .claude/settings.json
 
 # 5. Run diagnostic command:
 /ace-orchestration:ace-doctor
@@ -609,7 +609,7 @@ cat .claude/settings.local.json
 
 ```bash
 # Check global ACE configuration
-cat ~/.ace/config.json
+cat ~/.config/ace/config.json
 
 # Should contain:
 # {
@@ -634,9 +634,9 @@ cat ~/.ace/config.json
 **Error: "404 Project not found"**
 
 ```bash
-# Invalid project ID in .claude/settings.local.json
+# Invalid project ID in .claude/settings.json
 # Check project config:
-cat .claude/settings.local.json
+cat .claude/settings.json
 
 # Update projectId:
 /ace-orchestration:ace-configure --project
@@ -711,8 +711,8 @@ cat ~/.ace/update-history.log
 Include:
 - Output from `/ace-orchestration:ace-doctor`
 - Error messages from Claude Code
-- Your `~/.ace/config.json` (redact apiToken!)
-- Your `.claude/settings.local.json`
+- Your `~/.config/ace/config.json` (redact apiToken!)
+- Your `.claude/settings.json`
 - Plugin version from `plugin.json`
 - MCP client version: `npx @ce-dot-net/ace-client --version`
 

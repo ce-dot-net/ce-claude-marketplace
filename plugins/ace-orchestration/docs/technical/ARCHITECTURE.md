@@ -47,7 +47,7 @@ This document provides a comprehensive analysis of how the ACE (Agentic Context 
 **Architecture**:
 ```
 ┌─────────────────────────────────────────────────────────┐
-│ Global Config: ~/.ace/config.json                      │
+│ Global Config: ~/.config/ace/config.json                      │
 │ ├─ serverUrl: "https://ace-api.code-engine.app"        │
 │ ├─ apiToken: "ace_xxxxx" (NEVER committed to git)      │
 │ ├─ cacheTtlMinutes: 120 (2 hours)                      │
@@ -55,14 +55,14 @@ This document provides a comprehensive analysis of how the ACE (Agentic Context 
 └─────────────────────────────────────────────────────────┘
                     +
 ┌─────────────────────────────────────────────────────────┐
-│ Project Config: .claude/settings.local.json            │
+│ Project Config: .claude/settings.json            │
 │ {                                                       │
 │   "mcpServers": {                                       │
 │     "ace-pattern-learning": {                          │
 │       "command": "npx",                                 │
 │       "args": [                                         │
 │         "--yes",                                        │
-│         "@ce-dot-net/ace-client@3.7.0",                │
+│         "@ce-dot-net/ace-client@3.7.1",                │
 │         "--project-id",                                 │
 │         "prj_xxxxx"                                     │
 │       ]                                                 │
@@ -73,7 +73,7 @@ This document provides a comprehensive analysis of how the ACE (Agentic Context 
                     ↓
 ┌─────────────────────────────────────────────────────────┐
 │ MCP Client v3.7.0: Config Discovery                    │
-│ 1. Read ~/.ace/config.json for global settings         │
+│ 1. Read ~/.config/ace/config.json for global settings         │
 │ 2. Parse --project-id from command args                │
 │ 3. Combine both into full client context               │
 └─────────────────────────────────────────────────────────┘
@@ -135,8 +135,8 @@ This document provides a comprehensive analysis of how the ACE (Agentic Context 
 
 **9 Diagnostic Checks** (all run in parallel):
 1. Plugin Installation (directory structure)
-2. Global Configuration (`~/.ace/config.json`)
-3. Project Configuration (`.claude/settings.local.json`)
+2. Global Configuration (`~/.config/ace/config.json`)
+3. Project Configuration (`.claude/settings.json`)
 4. MCP Client Connectivity
 5. ACE Server Connectivity (HTTP status codes)
 6. Skills Loaded (ace-playbook-retrieval, ace-learning)
@@ -417,7 +417,7 @@ integrate APIs, resolve errors, make architecture decisions, or discover gotchas
 
 export class LocalCacheService {
   constructor(config: CacheConfig) {
-    // TTL: 120 minutes (2 hours, configurable via ~/.ace/config.json)
+    // TTL: 120 minutes (2 hours, configurable via ~/.config/ace/config.json)
     this.ttlMs = (ttlMinutes || 120) * 60 * 1000;
 
     // SQLite cache: ~/.ace-cache/{org}_{project}.db
@@ -786,8 +786,8 @@ plugins/ace-orchestration/
 └── CLAUDE.md                      # Instructions (v3.3.2)
 
 Configuration Files (v3.3.2 Dual-Config):
-~/.ace/config.json                 # Global: serverUrl, apiToken, cacheTtl
-.claude/settings.local.json        # Project: MCP server + projectId
+~/.config/ace/config.json                 # Global: serverUrl, apiToken, cacheTtl
+.claude/settings.json        # Project: MCP server + projectId
 
 Cache Files:
 ~/.ace-cache/{org}_{project}.db    # SQLite cache (120-min TTL)

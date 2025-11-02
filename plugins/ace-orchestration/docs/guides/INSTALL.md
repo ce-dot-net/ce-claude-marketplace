@@ -59,13 +59,13 @@ In Claude Code, run the interactive configuration wizard:
 
 **Creates TWO configuration files**:
 
-1. **Global Config** (`~/.ace/config.json`):
+1. **Global Config** (`~/.config/ace/config.json`):
    - Server URL (default: https://ace-api.code-engine.app)
    - API Token (from your ACE server)
    - Cache TTL (default: 120 minutes)
    - Auto-update settings
 
-2. **Project Config** (`.claude/settings.local.json`):
+2. **Project Config** (`.claude/settings.json`):
    - MCP server definition
    - Project ID (from your ACE dashboard)
 
@@ -92,7 +92,7 @@ In Claude Code, run the interactive configuration wizard:
 
 ## ✨ What's New in v3.3.2
 
-- **Dual-Config Architecture** - Global org settings (`~/.ace/config.json`) + project MCP config (`.claude/settings.local.json`)
+- **Dual-Config Architecture** - Global org settings (`~/.config/ace/config.json`) + project MCP config (`.claude/settings.json`)
 - **ace-doctor Diagnostic** - Comprehensive health check for entire ACE system
 - **Version Checking** - Auto-detects plugin & CLAUDE.md updates
 - **Auto-Migration** - Seamless upgrade from v3.3.1 config structure
@@ -256,7 +256,7 @@ source ~/.zshrc
 ```bash
 # 1. Create global org-level config
 mkdir -p ~/.ace
-cat > ~/.ace/config.json <<EOF
+cat > ~/.config/ace/config.json <<EOF
 {
   "serverUrl": "https://ace-api.code-engine.app",
   "apiToken": "your-token-here",
@@ -267,12 +267,12 @@ EOF
 
 # 2. Create project MCP config
 mkdir -p .claude
-cat > .claude/settings.local.json <<EOF
+cat > .claude/settings.json <<EOF
 {
   "mcpServers": {
     "ace-pattern-learning": {
       "command": "npx",
-      "args": ["--yes", "@ce-dot-net/ace-client@3.7.0", "--project-id", "your-project-id"]
+      "args": ["--yes", "@ce-dot-net/ace-client@3.7.1", "--project-id", "your-project-id"]
     }
   }
 }
@@ -282,7 +282,7 @@ EOF
 **Configuration Priority:**
 1. Environment variables (highest)
 2. Command-line arguments (`--server-url`, `--api-token`, `--project-id`)
-3. Global config (`~/.ace/config.json`)
+3. Global config (`~/.config/ace/config.json`)
 4. Default values (lowest)
 
 **Architecture**: Dual-config system separates org settings (global) from project setup (local)

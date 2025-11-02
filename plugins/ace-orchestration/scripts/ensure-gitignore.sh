@@ -56,7 +56,7 @@ add_to_gitignore() {
 }
 
 # Check and add .ace/ pattern (backward compatibility with v3.3.1 and earlier)
-# Note: v3.3.2+ uses ~/.ace/config.json (global) + .claude/settings.local.json (project)
+# Note: v3.3.2+ uses ~/.config/ace/config.json (global) + .claude/settings.json (project)
 # This entry is kept for projects migrating from v3.3.1
 if ! pattern_exists ".ace" "$GITIGNORE_PATH"; then
     add_to_gitignore ".ace/" "# ACE legacy config (v3.3.1 compatibility - migration auto-cleans)" "$GITIGNORE_PATH"

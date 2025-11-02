@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "ace-pattern-learning": {
+      "command": "npx",
+      "args": [
+        "--yes",
+        "@ce-dot-net/ace-client@3.7.1",
+        "--config",
+        "${XDG_CONFIG_HOME:-${HOME}/.config}/ace/config.json",
+        "--projectID",
+        "${ACE_PROJECT_ID}"
+      ]
+    }
+  }
+}
