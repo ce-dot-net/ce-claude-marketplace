@@ -62,7 +62,7 @@ This document provides a comprehensive analysis of how the ACE (Agentic Context 
 │       "command": "npx",                                 │
 │       "args": [                                         │
 │         "--yes",                                        │
-│         "@ce-dot-net/ace-client@3.7.1",                │
+│         "@ce-dot-net/ace-client@3.7.2",                │
 │         "--project-id",                                 │
 │         "prj_xxxxx"                                     │
 │       ]                                                 │

@@ -147,13 +147,13 @@ echo ""
 
 # Check 5: Test package download
 echo "5️⃣  Testing MCP client package..."
-echo "  Attempting to download @ce-dot-net/ace-client@3.7.1..."
+echo "  Attempting to download @ce-dot-net/ace-client@3.7.2..."
 
 # Change to marketplace root for .npmrc
 cd "$MARKETPLACE_ROOT"
 
-if npx --yes @ce-dot-net/ace-client@3.7.1 --help 2>&1 | head -5; then
-    echo "  ✅ MCP client v3.7.1 can be downloaded and executed"
+if npx --yes @ce-dot-net/ace-client@3.7.2 --help 2>&1 | head -5; then
+    echo "  ✅ MCP client v3.7.2 can be downloaded and executed"
 else
     echo "  ❌ Failed to download/execute MCP client"
     echo "     Check .npmrc configuration and GitHub token"
@@ -185,7 +185,7 @@ echo ""
 echo "Required Configuration:"
 echo "  1. Global:  ~/.config/ace/config.json (org credentials)"
 echo "  2. Project: .claude/settings.json (MCP server + project ID)"
-echo "  3. MCP Client: @ce-dot-net/ace-client@3.7.1"
+echo "  3. MCP Client: @ce-dot-net/ace-client@3.7.2"
 echo ""
 echo "Next steps:"
 echo "1. Fix any ❌ items above"

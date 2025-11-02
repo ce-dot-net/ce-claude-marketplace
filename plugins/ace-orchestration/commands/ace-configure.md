@@ -373,7 +373,7 @@ Global Config (~/.config/ace/config.json):
 Project Config (.claude/settings.json):
   📂 Project Root: /Users/you/my-project
   🆔 Project ID: prj_d3a244129d62c198 (set as ACE_PROJECT_ID env var)
-  📦 MCP Client: @ce-dot-net/ace-client@3.7.1 (registered in plugin .mcp.json)
+  📦 MCP Client: @ce-dot-net/ace-client@3.7.2 (registered in plugin .mcp.json)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -584,7 +584,7 @@ Legacy configuration files are automatically detected and migrated:
    - Creates backup of old config before migration
    - Handles both v3.3.1 project configs and v3.3.2 global configs
 
-2. **MCP Client-level** (v3.7.1):
+2. **MCP Client-level** (v3.7.2):
    - Auto-migrates on first run if plugin migration was skipped
    - Migrates `~/.ace/config.json` → `~/.config/ace/config.json`
    - Creates backup: `~/.ace/config.json.bak`
