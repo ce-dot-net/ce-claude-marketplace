@@ -5,6 +5,49 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.6] - 2025-11-02
+
+### 🚨 CRITICAL FIX: Variable Expansion Issue
+
+**Problem**: Claude Code CLI does NOT expand nested shell variables in `.mcp.json`
+- Nested syntax `${VAR:-${OTHER}}` is not supported (not documented)
+- Variables passed as literal strings: `${HOME/.config}/ace/config.json`
+- Caused 401 Unauthorized errors despite correct configuration
+- Evidence from running processes confirmed variables not expanded
+
+**Solution**: MCP client now uses config auto-discovery (no --config parameter)
+- Follows XDG Base Directory Specification
+- Auto-discovers from standard locations
+- No reliance on Claude Code variable expansion
+- Only uses simple `${ACE_PROJECT_ID}` syntax (documented, supported)
+
+### Changed
+- **Updated MCP client**: v3.7.2 → v3.7.3
+  - Implements automatic config file discovery
+  - Searches: `ACE_CONFIG_PATH` env → `~/.config/ace/config.json` → `~/.ace/config.json`
+  - Backward compatible with explicit `--config` parameter
+
+- **Simplified .mcp.json**: Removed `--config` parameter
+  - Before: `--config "${XDG_CONFIG_HOME:-${HOME}/.config}/ace/config.json"`
+  - After: (auto-discovery, no parameter needed)
+
+### Fixed
+- **401 Unauthorized errors** caused by variable expansion failure
+- **Config file not found** errors (literal string passed to MCP client)
+- **Authentication failures** despite valid credentials
+
+### Technical Details
+- Claude Code only supports: `${VAR}` and `${VAR:-default}`
+- Nested expansion `${VAR:-${OTHER}}` NOT supported (per official docs)
+- Solution: MCP client implements XDG-compliant auto-discovery
+- See: `/tmp/ace_mcp_bug_report.md` and `/tmp/MCP_V3.7.3_AUTO_DISCOVERY_REQUIREMENTS.md`
+
+### Migration
+**No user action required!**
+- Config at `~/.config/ace/config.json` will be auto-discovered
+- Legacy `~/.ace/config.json` still works (with migration warning)
+- `ACE_PROJECT_ID` still set in `.claude/settings.json` (unchanged)
+
 ## [3.3.5] - 2025-11-02
 
 ### Changed
