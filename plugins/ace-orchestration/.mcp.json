@@ -4,7 +4,7 @@
       "command": "npx",
       "args": [
         "--yes",
-        "@ce-dot-net/ace-client@3.7.1",
+        "@ce-dot-net/ace-client@3.7.2",
         "--config",
         "${XDG_CONFIG_HOME:-${HOME}/.config}/ace/config.json",
         "--projectID",

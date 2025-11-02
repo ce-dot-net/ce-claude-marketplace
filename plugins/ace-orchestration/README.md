@@ -86,7 +86,7 @@ The ACE MCP Client (@ce-dot-net/ace-client) is maintained in a separate reposito
   "mcpServers": {
     "ace-pattern-learning": {
       "command": "npx",
-      "args": ["--yes", "@ce-dot-net/ace-client@3.7.1", "--project-id", "prj_your_project_id"]
+      "args": ["--yes", "@ce-dot-net/ace-client@3.7.2", "--project-id", "prj_your_project_id"]
     }
   }
 }
@@ -573,7 +573,7 @@ cat .claude/settings.json
 
 ```bash
 # MCP client is auto-installed from npm when Claude Code starts
-# It uses @ce-dot-net/ace-client package (v3.7.1)
+# It uses @ce-dot-net/ace-client package (v3.7.2)
 
 # Check project MCP configuration
 cat .claude/settings.json
@@ -583,7 +583,7 @@ cat .claude/settings.json
 #   "mcpServers": {
 #     "ace-pattern-learning": {
 #       "command": "npx",
-#       "args": ["--yes", "@ce-dot-net/ace-client@3.7.1", "--project-id", "prj_xxxxx"]
+#       "args": ["--yes", "@ce-dot-net/ace-client@3.7.2", "--project-id", "prj_xxxxx"]
 #     }
 #   }
 # }

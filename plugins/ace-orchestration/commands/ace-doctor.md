@@ -153,7 +153,7 @@ Recommended Actions:
 ⚠️ Project Configuration: USING @latest
 
 Current: "@ce-dot-net/ace-client@latest"
-Recommended: "@ce-dot-net/ace-client@3.7.1"
+Recommended: "@ce-dot-net/ace-client@3.7.2"
 
 Issue: @latest causes npx caching - updates won't install automatically
 
@@ -191,7 +191,7 @@ Recommended Actions:
 1. Restart Claude Code (Cmd+Q, then reopen)
 2. Check global config: cat ~/.config/ace/config.json
 3. Verify network access to npm registry
-4. Manual test: npx @ce-dot-net/ace-client@3.7.1 --version
+4. Manual test: npx @ce-dot-net/ace-client@3.7.2 --version
 ```
 
 ---
@@ -393,7 +393,7 @@ Optional: Clear cache manually
 cat ~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchestration/plugin.json | jq -r '.version'
 
 # Get MCP client version
-npx @ce-dot-net/ace-client@3.7.1 --version 2>/dev/null
+npx @ce-dot-net/ace-client@3.7.2 --version 2>/dev/null
 
 # Check GitHub for latest plugin release
 curl -s https://api.github.com/repos/ce-dot-net/ce-claude-marketplace/releases/latest | jq -r '.tag_name'
@@ -420,7 +420,7 @@ Recommended Actions:
 1. Update plugin from marketplace
 2. Update MCP client: Edit .claude/settings.json
    Change: "@ce-dot-net/ace-client@3.6.2"
-   To: "@ce-dot-net/ace-client@3.7.1"
+   To: "@ce-dot-net/ace-client@3.7.2"
 3. Update CLAUDE.md: /ace-orchestration:ace-claude-init
 4. Restart Claude Code
 ```

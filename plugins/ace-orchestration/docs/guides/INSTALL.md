@@ -272,7 +272,7 @@ cat > .claude/settings.json <<EOF
   "mcpServers": {
     "ace-pattern-learning": {
       "command": "npx",
-      "args": ["--yes", "@ce-dot-net/ace-client@3.7.1", "--project-id", "your-project-id"]
+      "args": ["--yes", "@ce-dot-net/ace-client@3.7.2", "--project-id", "your-project-id"]
     }
   }
 }

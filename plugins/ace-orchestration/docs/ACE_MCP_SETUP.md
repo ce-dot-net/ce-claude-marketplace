@@ -19,7 +19,7 @@ This setup ensures:
 - Node.js ≥ 18
 - `@ce-dot-net/ace-client` available (from npm or your private registry)
 
-**Latest version**: v3.7.1 (requires plugin v3.3.3+)
+**Latest version**: v3.7.2 (requires plugin v3.3.3+)
 
 ---
 
@@ -35,7 +35,7 @@ The plugin automatically provides `.mcp.json` which registers the MCP server:
       "command": "npx",
       "args": [
         "--yes",
-        "@ce-dot-net/ace-client@3.7.1",
+        "@ce-dot-net/ace-client@3.7.2",
         "--config",
         "${XDG_CONFIG_HOME:-${HOME}/.config}/ace/config.json",
         "--projectID",
@@ -255,7 +255,7 @@ This checks:
 2. **Expands placeholders**:
    - `${ACE_PROJECT_ID}` from `.claude/settings.json` (project scope)
    - `${HOME}`, `${XDG_CONFIG_HOME}` from shell environment
-3. **Starts MCP server**: Calls `npx @ce-dot-net/ace-client@3.7.1` with:
+3. **Starts MCP server**: Calls `npx @ce-dot-net/ace-client@3.7.2` with:
    - `--config ~/.config/ace/config.json` (global credentials)
    - `--projectID prj_xxxxx` (project-specific ID)
 
@@ -342,7 +342,7 @@ ls -la ~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchest
 cat ~/.config/ace/config.json
 
 # Test MCP client manually
-npx @ce-dot-net/ace-client@3.7.1 --version
+npx @ce-dot-net/ace-client@3.7.2 --version
 
 # Restart Claude Code
 # Press Cmd+Q (macOS) or Ctrl+Q (Linux), then reopen
@@ -492,10 +492,10 @@ grep -v "^#" .gitignore | grep ".claude/settings.json"
 
 ### Automatic Migration
 
-MCP client v3.7.1 includes automatic migration:
+MCP client v3.7.2 includes automatic migration:
 
 ```bash
-# First run with v3.7.1 will detect legacy config
+# First run with v3.7.2 will detect legacy config
 # Migrates: ~/.ace/config.json → ~/.config/ace/config.json
 # Creates backup: ~/.ace/config.json.bak
 ```
@@ -621,7 +621,7 @@ chmod 700 ~/.config/ace
 }
 ```
 
-MCP client v3.7.1 respects environment variables from this file.
+MCP client v3.7.2 respects environment variables from this file.
 
 **Warning**: This bypasses the global config and is not team-shareable.
 
@@ -675,7 +675,7 @@ All team members must:
 - [ACE Plugin README](../README.md) - Full plugin documentation
 - [ACE Plugin ARCHITECTURE](../ARCHITECTURE.md) - Technical architecture details
 - [ACE Client MCP Implementation](../docs/MCP_CLIENT_IMPLEMENTATION.md) - MCP client specification
-- [MCP Team Requirements](/tmp/MCP_V3.7.1_REQUIREMENTS.md) - Technical requirements for MCP v3.7.1
+- [MCP Team Requirements](/tmp/MCP_V3.7.2_REQUIREMENTS.md) - Technical requirements for MCP v3.7.2
 - [Claude Code Documentation](https://docs.claude.com) - Official Claude Code docs
 - [GitHub Issues](https://github.com/ce-dot-net/ce-claude-marketplace/issues) - Report bugs
 

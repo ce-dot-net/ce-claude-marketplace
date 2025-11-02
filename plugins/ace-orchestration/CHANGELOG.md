@@ -5,6 +5,33 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.5] - 2025-11-02
+
+### Changed
+- **Updated MCP client dependency**: v3.7.1 → v3.7.2
+  - Fixes critical environment variable forwarding issue
+  - Resolves 401 Unauthorized errors when config is properly set
+  - Improves path expansion for XDG_CONFIG_HOME
+  - Better configuration precedence handling
+
+### Fixed
+- **Environment variable support**: MCP client now properly reads env vars from `.claude/settings.json`
+  - `ACE_PROJECT_ID` correctly forwarded to MCP server process
+  - Path expansion works correctly (`${XDG_CONFIG_HOME:-${HOME}/.config}`)
+  - Config file at `--config` path properly loaded
+  - Authentication now works as expected
+
+### Requires
+- **@ce-dot-net/ace-client@3.7.2** - CRITICAL UPDATE
+  - Fixes environment variable forwarding
+  - Fixes config file reading
+  - Adds proper path expansion
+  - See `/tmp/MCP_CLIENT_ENV_VAR_ISSUE.md` for implementation details
+
+### Files Changed
+- Updated: `.mcp.json`, all documentation files (CHANGELOG.md, README.md, CLAUDE.md, INSTALL.md, ARCHITECTURE.md, ACE_MCP_SETUP.md, ace-configure.md, ace-doctor.md, ace-test.md, diagnose.sh)
+- Updated: All plugin.*.json files and marketplace.json
+
 ## [3.3.4] - 2025-11-02
 
 ### Changed
@@ -29,14 +56,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 **Critical Fix** - Corrects broken v3.3.2 architecture and adopts XDG config standard
 
-This release fixes critical issues in v3.3.2 where the `.mcp.json` was incorrectly removed and configuration paths didn't follow industry standards. We've also coordinated with the MCP team to implement proper CLI argument support in v3.7.1.
+This release fixes critical issues in v3.3.2 where the `.mcp.json` was incorrectly removed and configuration paths didn't follow industry standards. We've also coordinated with the MCP team to implement proper CLI argument support in v3.7.2.
 
 **What Changed from v3.3.2:**
 - **RESTORED**: `.mcp.json` in plugin directory (REQUIRED for MCP server registration)
 - **NEW**: XDG Base Directory Specification compliance (`~/.config/ace/config.json`)
 - **NEW**: Uses `.claude/settings.json` for project ID (not `.claude/settings.local.json`)
 - **NEW**: Environment variable expansion in `.mcp.json` (Claude Code's official method)
-- **REQUIRES**: MCP Client v3.7.1 (not v3.7.0)
+- **REQUIRES**: MCP Client v3.7.2 (not v3.7.0)
 
 **Configuration Architecture:**
 
@@ -46,7 +73,7 @@ This release fixes critical issues in v3.3.2 where the `.mcp.json` was incorrect
 | v3.3.3 (FIXED) | `~/.config/ace/config.json` | `.claude/settings.json` | ✅ `.mcp.json` |
 
 **Migration Path:**
-- ✅ **Automatic**: MCP client v3.7.1 auto-migrates config paths on first run
+- ✅ **Automatic**: MCP client v3.7.2 auto-migrates config paths on first run
 - ✅ **Manual**: Run `/ace-orchestration:ace-configure` for both global and project setup
 - ✅ **Verification**: Run `/ace-orchestration:ace-doctor` to verify complete setup
 
@@ -65,7 +92,7 @@ This release fixes critical issues in v3.3.2 where the `.mcp.json` was incorrect
   - Troubleshooting guide (8 common problems with solutions)
   - Migration guide from v3.3.2 and earlier
   - Security best practices and FAQ (11 questions)
-- `/tmp/MCP_V3.7.1_REQUIREMENTS.md` - Technical specification for MCP team (371 lines)
+- `/tmp/MCP_V3.7.2_REQUIREMENTS.md` - Technical specification for MCP team (371 lines)
   - CLI argument support (`--config`, `--projectID`)
   - XDG path autodiscovery with auto-migration
   - Configuration precedence (CLI > env > config > defaults)
@@ -77,7 +104,7 @@ This release fixes critical issues in v3.3.2 where the `.mcp.json` was incorrect
   - End-to-end workflow (6 steps)
   - Implementation checklist (20+ items)
 
-**MCP Client v3.7.1 Features:**
+**MCP Client v3.7.2 Features:**
 - `--config <path>` CLI argument for explicit config file path
 - `--projectID <id>` CLI argument for explicit project ID
 - XDG config path autodiscovery (`~/.config/ace/config.json`)
@@ -90,7 +117,7 @@ This release fixes critical issues in v3.3.2 where the `.mcp.json` was incorrect
 - `.mcp.json` - **CRITICAL**: Restored MCP server registration (was deleted in v3.3.2)
   - Registers `ace-pattern-learning` MCP server with Claude Code
   - Uses environment variable expansion (`${ACE_PROJECT_ID}`, `${HOME}`)
-  - References MCP client v3.7.1 with CLI arguments
+  - References MCP client v3.7.2 with CLI arguments
   - Passes `--config` and `--projectID` via expanded env vars
 
 **Updated Commands:**
@@ -112,7 +139,7 @@ This release fixes critical issues in v3.3.2 where the `.mcp.json` was incorrect
 - `commands/ace-test.md` - Updated all config references
   - Changed 15+ config path references to XDG standard
   - Updated projectId extraction to use env var approach
-  - Fixed MCP client version references (v3.7.0 → v3.7.1)
+  - Fixed MCP client version references (v3.7.0 → v3.7.2)
 
 **Updated Scripts:**
 - `scripts/diagnose.sh` - Updated config paths to XDG standard
@@ -124,21 +151,21 @@ This release fixes critical issues in v3.3.2 where the `.mcp.json` was incorrect
 - `README.md` - Updated Step 3 configuration with XDG paths and correct architecture
   - Changed all `~/.ace/config.json` → `~/.config/ace/config.json`
   - Changed all `.claude/settings.local.json` → `.claude/settings.json`
-  - Updated MCP client version references to v3.7.1
+  - Updated MCP client version references to v3.7.2
   - Fixed architecture diagrams to show `.mcp.json` + env var approach
 
 - `docs/guides/INSTALL.md` - Complete rewrite for corrected setup process
   - Added "What Changed in v3.3.3" section
   - XDG path examples throughout
   - Corrected project config approach (env var, not MCP server)
-  - Updated MCP client version references to v3.7.1
+  - Updated MCP client version references to v3.7.2
   - Added ace-doctor diagnostic command info
 
 - `docs/technical/ARCHITECTURE.md` - Added v3.3.3 architecture diagrams
   - New section: "XDG Config Standard & Environment Variable Expansion"
   - Visual diagrams for corrected dual-config flow
   - Environment variable resolution flow
-  - Updated file structure with v3.7.1 references
+  - Updated file structure with v3.7.2 references
   - Corrected scope separation (global vs. project)
 
 - `CLAUDE.md` - Version bump and architecture correction
@@ -175,22 +202,22 @@ This release fixes critical issues in v3.3.2 where the `.mcp.json` was incorrect
 **Documentation Consistency:**
 - All references to config paths updated to XDG standard
 - All references to project config updated to `.claude/settings.json`
-- All references to MCP client version updated to v3.7.1
+- All references to MCP client version updated to v3.7.2
 - All examples show correct architecture (`.mcp.json` + env vars)
 
 ### Requires
 
 **MCP Client:**
-- **@ce-dot-net/ace-client@3.7.1** (NOT v3.7.0 - that was already published without these features)
+- **@ce-dot-net/ace-client@3.7.2** (NOT v3.7.0 - that was already published without these features)
   - Implements `--config` and `--projectID` CLI arguments
   - Implements XDG config path autodiscovery
   - Implements auto-migration from legacy path
   - Implements backward compatibility with `~/.ace/config.json`
-  - See `/tmp/MCP_V3.7.1_REQUIREMENTS.md` for implementation details
+  - See `/tmp/MCP_V3.7.2_REQUIREMENTS.md` for implementation details
   - See `/tmp/MCP_TEAM_INSTRUCTIONS.md` for user-friendly instructions
 
 **Breaking Change Migration:**
-- Users must update MCP client to v3.7.1 when released
+- Users must update MCP client to v3.7.2 when released
 - Automatic migration of config paths on first run
 - Run `/ace-orchestration:ace-configure` to set up both global and project config
 - Run `/ace-orchestration:ace-doctor` to verify complete setup
@@ -208,14 +235,14 @@ This release fixes critical issues in v3.3.2 where the `.mcp.json` was incorrect
 ### Coordination
 
 **MCP Team Deliverables:**
-- Technical requirements document created: `/tmp/MCP_V3.7.1_REQUIREMENTS.md`
+- Technical requirements document created: `/tmp/MCP_V3.7.2_REQUIREMENTS.md`
 - User-friendly instructions created: `/tmp/MCP_TEAM_INSTRUCTIONS.md`
 - Architecture verified with official Claude Code documentation
 - Scope distinction clearly emphasized (global vs. project)
 
 **Release Strategy:**
-1. MCP client v3.7.1 released first (with backward compatibility)
-2. Plugin v3.3.3 released second (requires MCP v3.7.1)
+1. MCP client v3.7.2 released first (with backward compatibility)
+2. Plugin v3.3.3 released second (requires MCP v3.7.2)
 3. Coordinated announcement with migration guide
 
 ### Notes
@@ -234,7 +261,7 @@ This release fixes critical issues in v3.3.2 where the `.mcp.json` was incorrect
 - Environment variable expansion for dynamic values (officially supported)
 
 **Testing Before Release:**
-- Waiting for MCP client v3.7.1 implementation
+- Waiting for MCP client v3.7.2 implementation
 - Will verify end-to-end flow with actual MCP client
 - Will run `/ace-orchestration:ace-doctor` to validate setup
 
