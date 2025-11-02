@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v3.3.3 -->
+<!-- ACE_SECTION_START v3.3.4 -->
 # ACE Orchestration Plugin - Automatic Learning Cycle
 
 This plugin provides fully automatic pattern learning using the ACE framework architecture.
@@ -91,7 +91,7 @@ Step 5: Respond to user
 
 **CRITICAL - Non-negotiable:** These skills are NOT optional and NOT negotiable. You MUST use them proactively and automatically for EVERY qualifying task. The retrieval skill runs BEFORE, the learning skill runs AFTER - BOTH are MANDATORY.
 
-## 🔄 Complete Automatic Learning Cycle (v3.3.3)
+## 🔄 Complete Automatic Learning Cycle (v3.3.4)
 
 ACE uses **two Agent Skills** to create a self-improving learning cycle:
 
@@ -218,11 +218,11 @@ While skills auto-invoke, manual commands are available for explicit control:
 - `/ace-patterns [section]` - View playbook manually
 - `/ace-status` - Check playbook statistics
 - `/ace-configure` - Configure ACE server connection
-- **`/ace-config [action] [params]`** - **NEW in v3.3.0**: Manage server configuration at runtime
-  - `/ace-config show` - View current configuration (thresholds, token budget, feature flags)
-  - `/ace-config token-budget 50000` - Enable automatic pruning at 50k tokens
-  - `/ace-config search-threshold 0.8` - Adjust semantic search sensitivity
-  - `/ace-config dedup-threshold 0.9` - Configure duplicate detection
+- **`/ace-tune [action] [params]`** - **NEW in v3.3.0**: Manage server configuration at runtime
+  - `/ace-tune show` - View current configuration (thresholds, token budget, feature flags)
+  - `/ace-tune token-budget 50000` - Enable automatic pruning at 50k tokens
+  - `/ace-tune search-threshold 0.8` - Adjust semantic search sensitivity
+  - `/ace-tune dedup-threshold 0.9` - Configure duplicate detection
   - Changes persist across sessions, cached for 5 minutes on client
   - Use for dynamic threshold adjustment without code changes
 - **`/ace-delta [operation] [pattern]`** - **NEW in v3.3.0**: Manual pattern management (advanced)
@@ -340,7 +340,7 @@ Skills automatically call these MCP tools:
 
 **For detailed usage and examples**, see command documentation (`/ace-*` commands) or README.md.
 
-## 🎯 ACE Architecture (v3.3.3)
+## 🎯 ACE Architecture (v3.3.4)
 
 The ACE framework implements fully automatic learning with complete retrieval → learning cycle:
 
@@ -388,7 +388,7 @@ plugins/ace-orchestration/
 │   ├── ace-patterns.md            # Manual playbook view
 │   ├── ace-status.md              # Playbook statistics
 │   ├── ace-configure.md           # Server connection setup
-│   ├── ace-config.md              # NEW v3.3.0: Runtime configuration
+│   ├── ace-tune.md                # NEW v3.3.0: Runtime configuration
 │   ├── ace-search.md              # NEW v3.3.0: Semantic search
 │   ├── ace-top.md                 # NEW v3.3.0: Top patterns
 │   ├── ace-delta.md               # NEW v3.3.0: Manual pattern management
@@ -401,4 +401,4 @@ plugins/ace-orchestration/
 │   └── hooks.json                 # SessionStart + UserPromptSubmit
 └── CLAUDE.md                      # This file!
 ```
-<!-- ACE_SECTION_END v3.3.3 -->
+<!-- ACE_SECTION_END v3.3.4 -->

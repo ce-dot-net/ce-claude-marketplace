@@ -5,6 +5,24 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.4] - 2025-11-02
+
+### Changed
+- **Renamed command**: `ace-config` → `ace-tune` for better clarity
+  - Runtime server configuration command now clearly indicates its purpose (tuning)
+  - Reduces confusion with `ace-configure` (setup wizard)
+  - All documentation and examples updated
+
+### Fixed
+- **Improved ace-configure robustness**: Added execution guidelines for Claude
+  - Clearer instructions for handling bash/jq code
+  - Prevents issues with complex jq expressions in certain shell contexts
+
+### Files Changed
+- Renamed: `commands/ace-config.md` → `commands/ace-tune.md`
+- Updated: CHANGELOG.md, CLAUDE.md, README.md, ARCHITECTURE.md
+- Updated: All command references (39 replacements across 7 files)
+
 ## [3.3.3] - 2025-11-02
 
 ### 🔧 BREAKING CHANGES: XDG Standard & Architecture Correction
@@ -411,11 +429,11 @@ This release introduces a breaking change to simplify credential management and 
 - Example: `/ace-top troubleshooting_and_pitfalls 5` returns top 5 debugging patterns
 
 **Runtime Configuration Management**
-- NEW `/ace-config [action] [params]` command - Dynamic server configuration
+- NEW `/ace-tune [action] [params]` command - Dynamic server configuration
 - View and update server settings without code changes
 - Adjust search thresholds, enable token budget, configure deduplication
 - Changes persist across sessions, cached for 5 minutes on client
-- Example: `/ace-config search-threshold 0.8` for stricter matching
+- Example: `/ace-tune search-threshold 0.8` for stricter matching
 
 **Manual Pattern Management**
 - NEW `/ace-delta [operation] [pattern]` command - Direct playbook manipulation
@@ -436,7 +454,7 @@ This release introduces a breaking change to simplify credential management and 
 **New Slash Commands:**
 - `commands/ace-search.md` - Semantic search command with examples
 - `commands/ace-top.md` - Top patterns command with usage guide
-- `commands/ace-config.md` - Runtime configuration management
+- `commands/ace-tune.md` - Runtime configuration management
 - `commands/ace-delta.md` - Manual pattern operations (ADD/UPDATE/REMOVE)
 
 **Updated Skills:**
@@ -524,7 +542,7 @@ This release introduces a breaking change to simplify credential management and 
 - `skills/ace-playbook-retrieval/SKILL.md` - **MAJOR UPDATE: Intelligent tool selection with decision logic**
 - `commands/ace-search.md` - NEW semantic search command
 - `commands/ace-top.md` - NEW top patterns command
-- `commands/ace-config.md` - NEW runtime configuration command
+- `commands/ace-tune.md` - NEW runtime configuration command
 - `commands/ace-delta.md` - NEW manual pattern management command
 - `CHANGELOG.md` - This file
 
