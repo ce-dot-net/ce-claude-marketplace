@@ -32,15 +32,83 @@ fi
 ```
 
 **Configuration Scopes**:
-- **Global** (`~/.ace/config.json`): Org-level settings (serverUrl, apiToken, cache settings)
-- **Project** (`.claude/settings.local.json`): Project-specific MCP server definition with projectId
+- **Global** (`~/.config/ace/config.json`): Org-level settings (serverUrl, apiToken, cache settings)
+- **Project** (`.claude/settings.json`): Project-specific environment variable ACE_PROJECT_ID
 
-### Step 2: Read Existing Configuration
+### Step 2: Detect and Migrate Legacy Configurations
+
+**Check for Legacy Config Files** (v3.3.1 and v3.3.2):
+```bash
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+LEGACY_PROJECT_CONFIG="$PROJECT_ROOT/.ace/config.json"  # v3.3.1 and earlier
+LEGACY_GLOBAL_CONFIG="$HOME/.ace/config.json"           # v3.3.2
+XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+GLOBAL_CONFIG="$XDG_HOME/ace/config.json"               # v3.3.3+
+
+# Check if legacy configs exist
+FOUND_LEGACY=false
+MIGRATION_SOURCE=""
+
+if [ -f "$LEGACY_PROJECT_CONFIG" ]; then
+  echo "⚠️  Found legacy project config: $LEGACY_PROJECT_CONFIG"
+  echo "   This was used in v3.3.1 and earlier"
+  FOUND_LEGACY=true
+  MIGRATION_SOURCE="$LEGACY_PROJECT_CONFIG"
+elif [ -f "$LEGACY_GLOBAL_CONFIG" ]; then
+  echo "⚠️  Found legacy global config: $LEGACY_GLOBAL_CONFIG"
+  echo "   This was used in v3.3.2"
+  FOUND_LEGACY=true
+  MIGRATION_SOURCE="$LEGACY_GLOBAL_CONFIG"
+fi
+
+# If legacy config found, offer migration
+if [ "$FOUND_LEGACY" = true ]; then
+  echo ""
+  echo "🔄 Auto-Migration Available"
+  echo "   Old location: $MIGRATION_SOURCE"
+  echo "   New location: $GLOBAL_CONFIG"
+  echo ""
+
+  # Ask user if they want to migrate
+  read -p "Migrate config automatically? (y/n): " MIGRATE_CHOICE
+
+  if [ "$MIGRATE_CHOICE" = "y" ] || [ "$MIGRATE_CHOICE" = "Y" ]; then
+    # Create XDG directory
+    mkdir -p "$XDG_HOME/ace"
+    chmod 700 "$XDG_HOME/ace"
+
+    # Copy config
+    cp "$MIGRATION_SOURCE" "$GLOBAL_CONFIG"
+    chmod 600 "$GLOBAL_CONFIG"
+
+    # Backup old config
+    mv "$MIGRATION_SOURCE" "${MIGRATION_SOURCE}.v3.3.2.bak"
+
+    echo "✅ Migration complete!"
+    echo "   New config: $GLOBAL_CONFIG"
+    echo "   Backup: ${MIGRATION_SOURCE}.v3.3.2.bak"
+    echo ""
+
+    # If migrated from project config, also need to set up project ID
+    if [ "$MIGRATION_SOURCE" = "$LEGACY_PROJECT_CONFIG" ]; then
+      echo "ℹ️  Note: Project-specific ID needs to be set in .claude/settings.json"
+      echo "   Run: /ace-orchestration:ace-configure --project"
+      echo ""
+    fi
+  else
+    echo "⏭️  Skipping migration (you can run this command again later)"
+    echo ""
+  fi
+fi
+```
+
+### Step 3: Read Existing Configuration
 
 **For Global Config**:
 ```bash
-# Check if ~/.ace/config.json exists
-GLOBAL_CONFIG="$HOME/.ace/config.json"
+# Check if ~/.config/ace/config.json exists (XDG standard)
+XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+GLOBAL_CONFIG="$XDG_HOME/ace/config.json"
 
 if [ -f "$GLOBAL_CONFIG" ]; then
   # Read existing values
@@ -65,13 +133,13 @@ fi
 
 **For Project Config**:
 ```bash
-# Check if .claude/settings.local.json exists
+# Check if .claude/settings.json exists
 PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-PROJECT_CONFIG="$PROJECT_ROOT/.claude/settings.local.json"
+PROJECT_CONFIG="$PROJECT_ROOT/.claude/settings.json"
 
 if [ -f "$PROJECT_CONFIG" ]; then
-  # Extract existing projectId from MCP server args
-  EXISTING_PROJECT_ID=$(jq -r '.mcpServers."ace-pattern-learning".args[] | select(. != "--yes" and . != "--project-id" and (startswith("prj_") or startswith("@ce-dot-net")))' "$PROJECT_CONFIG" 2>/dev/null || echo "")
+  # Extract existing ACE_PROJECT_ID from env vars
+  EXISTING_PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // ""' "$PROJECT_CONFIG" 2>/dev/null || echo "")
 
   echo "✓ Found existing project configuration"
   echo "  Project ID: $EXISTING_PROJECT_ID"
@@ -81,7 +149,7 @@ else
 fi
 ```
 
-### Step 3: Interactive Configuration with Existing Values
+### Step 4: Interactive Configuration with Existing Values
 
 **IMPORTANT**: Use the `AskUserQuestion` tool to show existing values and collect new values.
 
@@ -200,13 +268,15 @@ AskUserQuestion({
 })
 ```
 
-### Step 4: Save Configuration (Merge, Don't Overwrite)
+### Step 5: Save Configuration (Merge, Don't Overwrite)
 
-#### For Global Config (`~/.ace/config.json`):
+#### For Global Config (`~/.config/ace/config.json`):
 
 ```bash
-# Create ~/.ace directory if it doesn't exist
-mkdir -p "$HOME/.ace"
+# Create XDG config directory if it doesn't exist
+XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+mkdir -p "$XDG_HOME/ace"
+GLOBAL_CONFIG="$XDG_HOME/ace/config.json"
 
 # Merge with existing config (preserve other fields)
 if [ -f "$GLOBAL_CONFIG" ]; then
@@ -245,44 +315,33 @@ chmod 600 "$GLOBAL_CONFIG"
 echo "✅ Global configuration saved to: $GLOBAL_CONFIG"
 ```
 
-#### For Project Config (`.claude/settings.local.json`):
+#### For Project Config (`.claude/settings.json`):
 
 ```bash
 # Get project root
 PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-PROJECT_CONFIG="$PROJECT_ROOT/.claude/settings.local.json"
+PROJECT_CONFIG="$PROJECT_ROOT/.claude/settings.json"
 
 # Create .claude directory if it doesn't exist
 mkdir -p "$PROJECT_ROOT/.claude"
 
-# Merge with existing settings (preserve other MCP servers)
+# Merge with existing settings (preserve other env vars)
 if [ -f "$PROJECT_CONFIG" ]; then
   # Read existing settings
   EXISTING=$(cat "$PROJECT_CONFIG")
 
-  # Merge ACE MCP server definition using jq
+  # Merge ACE_PROJECT_ID env var using jq
   echo "$EXISTING" | jq \
     --arg projectId "$NEW_PROJECT_ID" \
-    '.mcpServers."ace-pattern-learning" = {
-      command: "npx",
-      args: ["--yes", "@ce-dot-net/ace-client@3.7.0", "--project-id", $projectId]
-    }' > "$PROJECT_CONFIG.tmp"
+    '.env.ACE_PROJECT_ID = $projectId' > "$PROJECT_CONFIG.tmp"
 
   mv "$PROJECT_CONFIG.tmp" "$PROJECT_CONFIG"
 else
-  # Create new settings file with ACE MCP server
+  # Create new settings file with ACE_PROJECT_ID
   cat > "$PROJECT_CONFIG" <<EOF
 {
-  "mcpServers": {
-    "ace-pattern-learning": {
-      "command": "npx",
-      "args": [
-        "--yes",
-        "@ce-dot-net/ace-client@3.7.0",
-        "--project-id",
-        "$NEW_PROJECT_ID"
-      ]
-    }
+  "env": {
+    "ACE_PROJECT_ID": "$NEW_PROJECT_ID"
   }
 }
 EOF
@@ -291,7 +350,7 @@ fi
 echo "✅ Project configuration saved to: $PROJECT_CONFIG"
 ```
 
-### Step 5: Show Configuration Summary
+### Step 6: Show Configuration Summary
 
 ```
 ✅ ACE Configuration Complete!
@@ -299,16 +358,16 @@ echo "✅ Project configuration saved to: $PROJECT_CONFIG"
 Configuration saved:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Global Config (~/.ace/config.json):
+Global Config (~/.config/ace/config.json):
   📍 Server URL: https://ace-api.code-engine.app
   🔑 API Token: ace_gJ3XjvJK907T... (saved securely)
   ⏱️  Cache TTL: 120 minutes (2 hours)
   🔄 Auto-update: enabled
 
-Project Config (.claude/settings.local.json):
+Project Config (.claude/settings.json):
   📂 Project Root: /Users/you/my-project
-  🆔 Project ID: prj_d3a244129d62c198
-  📦 MCP Client: @ce-dot-net/ace-client@3.7.0
+  🆔 Project ID: prj_d3a244129d62c198 (set as ACE_PROJECT_ID env var)
+  📦 MCP Client: @ce-dot-net/ace-client@3.7.1 (registered in plugin .mcp.json)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -320,7 +379,7 @@ Next steps:
 ℹ️  No restart needed - configuration is active immediately!
 ```
 
-### Step 6: Validation (Optional but Recommended)
+### Step 7: Validation (Optional but Recommended)
 
 ```bash
 # Test connection to ACE server
@@ -378,7 +437,7 @@ Question 4: Enable automatic CLAUDE.md updates?
 
 User selects: Enabled
 
-✅ Global configuration saved to: ~/.ace/config.json
+✅ Global configuration saved to: ~/.config/ace/config.json
 ```
 
 ### Example 2: Update Existing Global Config
@@ -429,17 +488,16 @@ Question: ACE Project ID?
 
 User enters: prj_d3a244129d62c198
 
-✅ Project configuration saved to: /Users/you/my-project/.claude/settings.local.json
+✅ Project configuration saved to: /Users/you/my-project/.claude/settings.json
 
-MCP Server Definition:
+Project Settings (env var):
 {
-  "mcpServers": {
-    "ace-pattern-learning": {
-      "command": "npx",
-      "args": ["--yes", "@ce-dot-net/ace-client@3.7.0", "--project-id", "prj_d3a244129d62c198"]
-    }
+  "env": {
+    "ACE_PROJECT_ID": "prj_d3a244129d62c198"
   }
 }
+
+Note: MCP server is registered in plugin .mcp.json, which reads ACE_PROJECT_ID from environment.
 ```
 
 ### Example 4: Combined Setup (Auto-detect)
@@ -459,17 +517,17 @@ Claude: I'll set up ACE for both global and project configuration.
 
 ✅ ACE Configuration Complete!
 
-Global Config: ~/.ace/config.json ✓
-Project Config: /Users/you/my-project/.claude/settings.local.json ✓
+Global Config: ~/.config/ace/config.json ✓
+Project Config: /Users/you/my-project/.claude/settings.json ✓
 ```
 
 ## Configuration Architecture
 
-### Global Configuration (`~/.ace/config.json`)
+### Global Configuration (`~/.config/ace/config.json`)
 
 **Purpose**: Organization-level settings shared across all projects
 
-**Location**: `~/.ace/config.json`
+**Location**: `~/.config/ace/config.json`
 
 **Schema**:
 ```json
@@ -487,43 +545,50 @@ Project Config: /Users/you/my-project/.claude/settings.local.json ✓
 - `cacheTtlMinutes`: Cache TTL (default: 120 = 2 hours)
 - `autoUpdateEnabled`: Auto-update CLAUDE.md on version changes
 
-### Project Configuration (`.claude/settings.local.json`)
+### Project Configuration (`.claude/settings.json`)
 
-**Purpose**: Project-specific MCP server definition with projectId
+**Purpose**: Project-specific environment variable for ACE_PROJECT_ID
 
-**Location**: `<project-root>/.claude/settings.local.json`
+**Location**: `<project-root>/.claude/settings.json`
 
 **Schema**:
 ```json
 {
-  "mcpServers": {
-    "ace-pattern-learning": {
-      "command": "npx",
-      "args": [
-        "--yes",
-        "@ce-dot-net/ace-client@3.7.0",
-        "--project-id",
-        "prj_xxxxx"
-      ]
-    }
+  "env": {
+    "ACE_PROJECT_ID": "prj_xxxxx"
   }
 }
 ```
 
-**MCP Client Behavior**:
-1. Reads `~/.ace/config.json` for serverUrl, apiToken, cacheTtl
-2. Reads `--project-id` from command args
-3. Combines both to construct full ACE client context
+**How It Works**:
+1. Claude Code sets ACE_PROJECT_ID as environment variable from `.claude/settings.json`
+2. Plugin `.mcp.json` expands `${ACE_PROJECT_ID}` when starting MCP server
+3. MCP client receives `--projectID prj_xxxxx` as CLI argument
+4. MCP client reads `~/.config/ace/config.json` for serverUrl, apiToken, cacheTtl
+5. Combined context: projectId (from arg) + serverUrl/apiToken (from config)
 
-## Migration from v3.3.1
+## Migration from v3.3.1 and v3.3.2
 
-If you have old configuration files, they will be automatically migrated:
+Legacy configuration files are automatically detected and migrated:
 
-**Old Files** (v3.3.1 and earlier):
-- `.ace/config.json` in project root → Migrated to `~/.ace/config.json` + `.claude/settings.local.json`
-- `.mcp.json` in plugin directory → Replaced by `.claude/settings.local.json`
+**Migration Strategy:**
+1. **Plugin-level** (ace-configure command):
+   - Detects legacy configs at old paths (Step 2 above)
+   - Prompts user to migrate interactively
+   - Creates backup of old config before migration
+   - Handles both v3.3.1 project configs and v3.3.2 global configs
 
-**Migration happens automatically** on first run of v3.3.2 MCP client.
+2. **MCP Client-level** (v3.7.1):
+   - Auto-migrates on first run if plugin migration was skipped
+   - Migrates `~/.ace/config.json` → `~/.config/ace/config.json`
+   - Creates backup: `~/.ace/config.json.bak`
+   - Silent migration with console notification
+
+**Old Files:**
+- v3.3.1 and earlier: `<project>/.ace/config.json` → `~/.config/ace/config.json` + `.claude/settings.json`
+- v3.3.2: `~/.ace/config.json` → `~/.config/ace/config.json`
+
+**Best Practice**: Run `/ace-orchestration:ace-configure` after upgrading to handle migration interactively with clear feedback.
 
 ## Troubleshooting
 
@@ -570,8 +635,8 @@ If the interactive form doesn't show existing values, the config file may be cor
 
 ```bash
 # Validate JSON syntax
-jq . ~/.ace/config.json
-jq . .claude/settings.local.json
+jq . ~/.config/ace/config.json
+jq . .claude/settings.json
 
 # If invalid, you'll see syntax errors
 ```
@@ -579,8 +644,8 @@ jq . .claude/settings.local.json
 ## Security Notes
 
 - **API Token Security**: Global config is saved with `chmod 600` (readable only by user)
-- **Git Ignore**: `.claude/settings.local.json` should be committed (contains project ID, not secrets)
-- **Secret Management**: Never commit `~/.ace/config.json` (contains API token)
+- **Git Ignore**: `.claude/settings.json` should be committed (contains project ID, not secrets)
+- **Secret Management**: Never commit `~/.config/ace/config.json` (contains API token)
 
 ## See Also
 

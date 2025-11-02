@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
-  "version": "3.3.2",
-  "description": "ACE (Agentic Context Engineering) - Full ACE Paper Implementation with Dual-Config Architecture. Three-Agent Architecture (Generator → Reflector → Curator). Learns from execution feedback. Based on Stanford/SambaNova/UC Berkeley research (arXiv:2510.04618v1)",
+  "version": "3.3.3",
+  "description": "ACE (Agentic Context Engineering) - Full ACE Paper Implementation with XDG Config Standard. Three-Agent Architecture (Generator → Reflector → Curator). Learns from execution feedback. Requires MCP Client v3.7.1. Based on Stanford/SambaNova/UC Berkeley research (arXiv:2510.04618v1)",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
@@ -18,20 +18,10 @@
     "agentic",
     "research",
     "stanford",
-    "autonomous"
+    "autonomous",
+    "xdg-standard"
   ],
   "hooks": "./hooks/hooks.json",
   "commands": "./commands",
-  "agents": "./agents",
-  "mcpServers": {
-    "ace-pattern-learning": {
-      "command": "npx",
-      "args": ["-y", "@ce-dot-net/ace-client"],
-      "env": {
-        "ACE_SERVER_URL": "https://ace.your-domain.com",
-        "ACE_API_TOKEN": "${ACE_API_TOKEN}",
-        "ACE_PROJECT_ID": "${ACE_PROJECT_ID}"
-      }
-    }
-  }
+  "agents": "./agents"
 }

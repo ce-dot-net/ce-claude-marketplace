@@ -61,11 +61,13 @@ Recommended Actions:
 
 **What to Check**:
 ```bash
-# Check global config exists
-test -f ~/.ace/config.json && echo "EXISTS" || echo "MISSING"
+# Check global config exists (XDG standard path)
+XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+CONFIG_PATH="$XDG_HOME/ace/config.json"
+test -f "$CONFIG_PATH" && echo "EXISTS" || echo "MISSING"
 
 # If exists, validate JSON and check required fields
-jq -e '.serverUrl, .apiToken, .cacheTtlMinutes, .autoUpdateEnabled' ~/.ace/config.json
+jq -e '.serverUrl, .apiToken, .cacheTtlMinutes, .autoUpdateEnabled' "$CONFIG_PATH"
 ```
 
 **Expected**:
@@ -114,31 +116,28 @@ Recommended Actions:
 # Get project root
 PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 
-# Check project MCP config
-test -f "$PROJECT_ROOT/.claude/settings.local.json" && echo "EXISTS" || echo "MISSING"
+# Check project settings
+test -f "$PROJECT_ROOT/.claude/settings.json" && echo "EXISTS" || echo "MISSING"
 
-# If exists, validate MCP server definition
-jq -e '.mcpServers."ace-pattern-learning"' "$PROJECT_ROOT/.claude/settings.local.json"
+# If exists, validate ACE_PROJECT_ID env var
+jq -e '.env.ACE_PROJECT_ID' "$PROJECT_ROOT/.claude/settings.json"
 ```
 
 **Expected**:
 ```json
 {
-  "mcpServers": {
-    "ace-pattern-learning": {
-      "command": "npx",
-      "args": ["--yes", "@ce-dot-net/ace-client@3.7.0", "--project-id", "prj_xxxxx"]
-    }
+  "env": {
+    "ACE_PROJECT_ID": "prj_xxxxx"
   }
 }
 ```
 
 **Report**:
-- ✅ Project config valid
-- ⚠️ Project config exists but MCP server definition missing
-- ⚠️ Project ID missing from args
-- ⚠️ Using @latest instead of pinned version
+- ✅ Project config valid with ACE_PROJECT_ID set
+- ⚠️ Project config exists but ACE_PROJECT_ID missing
 - ❌ Project config missing
+
+**Note**: MCP server is registered in plugin `.mcp.json`, not in project config.
 
 **If Failed**:
 ```
@@ -154,7 +153,7 @@ Recommended Actions:
 ⚠️ Project Configuration: USING @latest
 
 Current: "@ce-dot-net/ace-client@latest"
-Recommended: "@ce-dot-net/ace-client@3.7.0"
+Recommended: "@ce-dot-net/ace-client@3.7.1"
 
 Issue: @latest causes npx caching - updates won't install automatically
 
@@ -190,9 +189,9 @@ Possible Causes:
 
 Recommended Actions:
 1. Restart Claude Code (Cmd+Q, then reopen)
-2. Check global config: cat ~/.ace/config.json
+2. Check global config: cat ~/.config/ace/config.json
 3. Verify network access to npm registry
-4. Manual test: npx @ce-dot-net/ace-client@3.7.0 --version
+4. Manual test: npx @ce-dot-net/ace-client@3.7.1 --version
 ```
 
 ---
@@ -202,9 +201,10 @@ Recommended Actions:
 **What to Check**:
 ```bash
 # Read serverUrl and apiToken from global config
-SERVER_URL=$(jq -r '.serverUrl' ~/.ace/config.json)
-API_TOKEN=$(jq -r '.apiToken' ~/.ace/config.json)
-PROJECT_ID=$(jq -r '.mcpServers."ace-pattern-learning".args[-1]' .claude/settings.local.json)
+XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+SERVER_URL=$(jq -r '.serverUrl' "$XDG_HOME/ace/config.json")
+API_TOKEN=$(jq -r '.apiToken' "$XDG_HOME/ace/config.json")
+PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID' .claude/settings.json)
 
 # Test connection to ACE server
 curl -s -X GET \
@@ -236,7 +236,7 @@ Recommended Actions:
 1. Test connection: curl https://ace-api.code-engine.app/api/health
 2. Check firewall settings
 3. Try different network (WiFi vs. Ethernet)
-4. Verify serverUrl in ~/.ace/config.json
+4. Verify serverUrl in ~/.config/ace/config.json
 ```
 
 **If 401 Unauthorized**:
@@ -393,7 +393,7 @@ Optional: Clear cache manually
 cat ~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace-orchestration/plugin.json | jq -r '.version'
 
 # Get MCP client version
-npx @ce-dot-net/ace-client@3.7.0 --version 2>/dev/null
+npx @ce-dot-net/ace-client@3.7.1 --version 2>/dev/null
 
 # Check GitHub for latest plugin release
 curl -s https://api.github.com/repos/ce-dot-net/ce-claude-marketplace/releases/latest | jq -r '.tag_name'
@@ -418,9 +418,9 @@ CLAUDE.md Template: v3.3.1 → v3.3.2 (latest)
 
 Recommended Actions:
 1. Update plugin from marketplace
-2. Update MCP client: Edit .claude/settings.local.json
+2. Update MCP client: Edit .claude/settings.json
    Change: "@ce-dot-net/ace-client@3.6.2"
-   To: "@ce-dot-net/ace-client@3.7.0"
+   To: "@ce-dot-net/ace-client@3.7.1"
 3. Update CLAUDE.md: /ace-orchestration:ace-claude-init
 4. Restart Claude Code
 ```

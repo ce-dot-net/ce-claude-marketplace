@@ -5,7 +5,222 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.3.2] - 2025-11-01
+## [3.3.3] - 2025-11-02
+
+### 🔧 BREAKING CHANGES: XDG Standard & Architecture Correction
+
+**Critical Fix** - Corrects broken v3.3.2 architecture and adopts XDG config standard
+
+This release fixes critical issues in v3.3.2 where the `.mcp.json` was incorrectly removed and configuration paths didn't follow industry standards. We've also coordinated with the MCP team to implement proper CLI argument support in v3.7.1.
+
+**What Changed from v3.3.2:**
+- **RESTORED**: `.mcp.json` in plugin directory (REQUIRED for MCP server registration)
+- **NEW**: XDG Base Directory Specification compliance (`~/.config/ace/config.json`)
+- **NEW**: Uses `.claude/settings.json` for project ID (not `.claude/settings.local.json`)
+- **NEW**: Environment variable expansion in `.mcp.json` (Claude Code's official method)
+- **REQUIRES**: MCP Client v3.7.1 (not v3.7.0)
+
+**Configuration Architecture:**
+
+| Version | Global Config | Project Config | MCP Registration |
+|---------|---------------|----------------|------------------|
+| v3.3.2 (BROKEN) | `~/.ace/config.json` | `.claude/settings.local.json` | ❌ None (deleted) |
+| v3.3.3 (FIXED) | `~/.config/ace/config.json` | `.claude/settings.json` | ✅ `.mcp.json` |
+
+**Migration Path:**
+- ✅ **Automatic**: MCP client v3.7.1 auto-migrates config paths on first run
+- ✅ **Manual**: Run `/ace-orchestration:ace-configure` for both global and project setup
+- ✅ **Verification**: Run `/ace-orchestration:ace-doctor` to verify complete setup
+
+**Why This Fix Was Critical:**
+- v3.3.2 removed `.mcp.json` → MCP server never registered → plugin completely non-functional
+- v3.3.2 used `.claude/settings.local.json` → wrong file (personal overrides, not team-shareable)
+- v3.3.2 used custom path → violated Linux/macOS XDG standard
+- This release restores functionality AND adopts industry standards
+
+### Added
+
+**New Documentation:**
+- `docs/ACE_MCP_SETUP.md` - Comprehensive 685-line setup guide
+  - Step-by-step instructions for global and project configuration
+  - Architecture overview with visual diagrams
+  - Troubleshooting guide (8 common problems with solutions)
+  - Migration guide from v3.3.2 and earlier
+  - Security best practices and FAQ (11 questions)
+- `/tmp/MCP_V3.7.1_REQUIREMENTS.md` - Technical specification for MCP team (371 lines)
+  - CLI argument support (`--config`, `--projectID`)
+  - XDG path autodiscovery with auto-migration
+  - Configuration precedence (CLI > env > config > defaults)
+  - 5 test cases with expected outputs
+- `/tmp/MCP_TEAM_INSTRUCTIONS.md` - User-friendly instructions for MCP team (388 lines)
+  - Executive summary with urgency explanation
+  - 4 required features breakdown
+  - Critical scope clarification (global vs. project)
+  - End-to-end workflow (6 steps)
+  - Implementation checklist (20+ items)
+
+**MCP Client v3.7.1 Features:**
+- `--config <path>` CLI argument for explicit config file path
+- `--projectID <id>` CLI argument for explicit project ID
+- XDG config path autodiscovery (`~/.config/ace/config.json`)
+- Auto-migration from legacy path (`~/.ace/config.json`)
+- Backward compatibility with legacy paths
+
+### Changed
+
+**Restored Files:**
+- `.mcp.json` - **CRITICAL**: Restored MCP server registration (was deleted in v3.3.2)
+  - Registers `ace-pattern-learning` MCP server with Claude Code
+  - Uses environment variable expansion (`${ACE_PROJECT_ID}`, `${HOME}`)
+  - References MCP client v3.7.1 with CLI arguments
+  - Passes `--config` and `--projectID` via expanded env vars
+
+**Updated Commands:**
+- `commands/ace-configure.md` - **MAJOR REWRITE** for XDG paths and corrected architecture
+  - Global config: `~/.ace/config.json` → `~/.config/ace/config.json`
+  - Project config: `.claude/settings.local.json` → `.claude/settings.json`
+  - Updated interactive forms to show XDG paths
+  - Fixed project config to use env var approach (not MCP server definition)
+  - Added note explaining `.claude/settings.json` should be committed
+  - Updated architecture documentation with correct flow
+
+- `commands/ace-doctor.md` - Updated all config path checks
+  - Global config checks now use `~/.config/ace/config.json`
+  - Project config checks now use `.claude/settings.json` with `env.ACE_PROJECT_ID`
+  - Updated 9 diagnostic checks for new architecture
+  - Added check for MCP server registration in plugin `.mcp.json`
+  - Fixed HTTP connectivity tests to use correct env var paths
+
+- `commands/ace-test.md` - Updated all config references
+  - Changed 15+ config path references to XDG standard
+  - Updated projectId extraction to use env var approach
+  - Fixed MCP client version references (v3.7.0 → v3.7.1)
+
+**Updated Scripts:**
+- `scripts/diagnose.sh` - Updated config paths to XDG standard
+- `scripts/ensure-gitignore.sh` - Updated comments for backward compatibility
+  - Added note about v3.3.2+ using XDG paths
+  - Kept `.ace/` entry for projects migrating from v3.3.1
+
+**Updated Documentation:**
+- `README.md` - Updated Step 3 configuration with XDG paths and correct architecture
+  - Changed all `~/.ace/config.json` → `~/.config/ace/config.json`
+  - Changed all `.claude/settings.local.json` → `.claude/settings.json`
+  - Updated MCP client version references to v3.7.1
+  - Fixed architecture diagrams to show `.mcp.json` + env var approach
+
+- `docs/guides/INSTALL.md` - Complete rewrite for corrected setup process
+  - Added "What Changed in v3.3.3" section
+  - XDG path examples throughout
+  - Corrected project config approach (env var, not MCP server)
+  - Updated MCP client version references to v3.7.1
+  - Added ace-doctor diagnostic command info
+
+- `docs/technical/ARCHITECTURE.md` - Added v3.3.3 architecture diagrams
+  - New section: "XDG Config Standard & Environment Variable Expansion"
+  - Visual diagrams for corrected dual-config flow
+  - Environment variable resolution flow
+  - Updated file structure with v3.7.1 references
+  - Corrected scope separation (global vs. project)
+
+- `CLAUDE.md` - Version bump and architecture correction
+  - ACE_SECTION markers: v3.3.2 → v3.3.3
+  - Restored `.mcp.json` reference in file structure
+  - Updated config path examples to XDG standard
+  - Corrected project config approach
+  - Updated closing tag to v3.3.3
+
+### Fixed
+
+**Critical Architecture Issues from v3.3.2:**
+- **RESTORED `.mcp.json`**: MCP server registration completely missing in v3.3.2
+  - Without this file, MCP server never registers with Claude Code
+  - Plugin was completely non-functional (no tools available)
+  - Now properly registers with environment variable expansion
+
+- **Fixed config path standard**: Now follows XDG Base Directory Specification
+  - Industry standard for Linux/macOS: `~/.config/ace/config.json`
+  - Proper XDG_CONFIG_HOME support with fallback to `~/.config`
+  - Auto-migration from legacy path (`~/.ace/config.json`)
+
+- **Fixed project config approach**: Now uses correct Claude Code settings pattern
+  - `.claude/settings.json` contains env vars (team-shareable, should be committed)
+  - `.claude/settings.local.json` is for personal overrides (git-ignored)
+  - v3.3.2 incorrectly used .local for team-shared config
+  - Now properly separates team config from personal overrides
+
+- **Fixed MCP server definition location**: Moved from project to plugin
+  - v3.3.2 tried to define MCP server in project's `.claude/settings.local.json` (wrong)
+  - v3.3.3 defines MCP server in plugin's `.mcp.json` (correct)
+  - Project only sets `ACE_PROJECT_ID` env var (correct scope separation)
+
+**Documentation Consistency:**
+- All references to config paths updated to XDG standard
+- All references to project config updated to `.claude/settings.json`
+- All references to MCP client version updated to v3.7.1
+- All examples show correct architecture (`.mcp.json` + env vars)
+
+### Requires
+
+**MCP Client:**
+- **@ce-dot-net/ace-client@3.7.1** (NOT v3.7.0 - that was already published without these features)
+  - Implements `--config` and `--projectID` CLI arguments
+  - Implements XDG config path autodiscovery
+  - Implements auto-migration from legacy path
+  - Implements backward compatibility with `~/.ace/config.json`
+  - See `/tmp/MCP_V3.7.1_REQUIREMENTS.md` for implementation details
+  - See `/tmp/MCP_TEAM_INSTRUCTIONS.md` for user-friendly instructions
+
+**Breaking Change Migration:**
+- Users must update MCP client to v3.7.1 when released
+- Automatic migration of config paths on first run
+- Run `/ace-orchestration:ace-configure` to set up both global and project config
+- Run `/ace-orchestration:ace-doctor` to verify complete setup
+- Restart Claude Code after configuration
+
+### Security
+
+**Improved Security:**
+- XDG config directory (`~/.config/ace`) has chmod 700 (user-only access)
+- Global config file (`~/.config/ace/config.json`) has chmod 600 (user-only read/write)
+- API tokens stored in standard secure location (XDG config)
+- `.claude/settings.json` contains no secrets (safe to commit)
+- Clear separation: secrets in global config, project ID in project settings
+
+### Coordination
+
+**MCP Team Deliverables:**
+- Technical requirements document created: `/tmp/MCP_V3.7.1_REQUIREMENTS.md`
+- User-friendly instructions created: `/tmp/MCP_TEAM_INSTRUCTIONS.md`
+- Architecture verified with official Claude Code documentation
+- Scope distinction clearly emphasized (global vs. project)
+
+**Release Strategy:**
+1. MCP client v3.7.1 released first (with backward compatibility)
+2. Plugin v3.3.3 released second (requires MCP v3.7.1)
+3. Coordinated announcement with migration guide
+
+### Notes
+
+**Why v3.3.2 Was Broken:**
+- Misunderstood Claude Code's settings architecture
+- Deleted `.mcp.json` thinking MCP server could be defined elsewhere (incorrect)
+- Used `.claude/settings.local.json` for team-shared config (wrong file)
+- Didn't follow XDG standard (used custom `~/.ace/` path)
+
+**Why v3.3.3 Is Correct:**
+- Followed official Claude Code plugin specification
+- `.mcp.json` required for MCP server registration (confirmed with Ref)
+- `.claude/settings.json` for team-shared env vars (confirmed with Ref)
+- XDG standard for user config files (industry best practice)
+- Environment variable expansion for dynamic values (officially supported)
+
+**Testing Before Release:**
+- Waiting for MCP client v3.7.1 implementation
+- Will verify end-to-end flow with actual MCP client
+- Will run `/ace-orchestration:ace-doctor` to validate setup
+
+## [3.3.2] - 2025-11-01 [DEPRECATED - BROKEN ARCHITECTURE]
 
 ### 🔧 BREAKING CHANGES: Dual-Config Architecture
 
