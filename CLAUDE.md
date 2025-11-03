@@ -402,12 +402,7 @@ plugins/ace-orchestration/
 │   ├── ace-export-patterns.md     # Export to JSON
 │   └── ace-import-patterns.md     # Import from JSON
 ├── hooks/
-│   └── hooks.json                 # SessionStart + UserPromptSubmit + PostToolUse + SubagentStop
-├── scripts/
-│   ├── inject-ace-retrieval-context.sh           # PostToolUse (ExitPlanMode) - v3.3.9
-│   ├── remind-ace-learning-after-edit.sh         # PostToolUse (Edit|Write) - v3.3.10
-│   ├── remind-ace-learning-after-subagent.sh     # SubagentStop - v3.3.10
-│   └── user-prompt-ace-trigger-check.sh          # UserPromptSubmit - v3.3.8
+│   └── hooks.json                 # SessionStart + UserPromptSubmit
 └── CLAUDE.md                      # This file!
 ```
 <!-- ACE_SECTION_END v3.3.6 -->
