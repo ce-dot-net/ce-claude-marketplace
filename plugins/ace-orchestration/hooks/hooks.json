@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '🚨 ACE SYSTEM ACTIVE: Skills ace-playbook-retrieval (BEFORE work) and ace-learning (AFTER work) auto-trigger on keywords: implement, build, create, update, modify, fix, debug, refactor, optimize, integrate, configure, setup, deploy, test, verify. Check EVERY user message for trigger words.'",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/session-start-ace-context.sh",
             "timeout": 1
           },
           {
@@ -32,13 +32,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '⚠️ ACE TRIGGER CHECK: If this message contains trigger words (implement|build|create|update|modify|fix|debug|refactor|optimize|integrate|configure|setup|deploy|test|verify|validate|add|develop|write|change|edit|enhance|extend|revise|troubleshoot|resolve|diagnose|improve|restructure|connect|install|architect|design|plan|migrate|upgrade), invoke ace-playbook-retrieval skill BEFORE other tools, then ace-learning skill AFTER completing work.'",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/user-prompt-ace-trigger-check.sh \"$USER_PROMPT\"",
             "timeout": 1
           }
         ]
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/inject-ace-retrieval-context.sh"
+          }
+        ]
+      },
       {
         "matcher": "Bash",
         "hooks": [
