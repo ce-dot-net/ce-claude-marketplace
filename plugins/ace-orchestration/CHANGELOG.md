@@ -5,6 +5,136 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.8] - 2025-11-03
+
+### ⚠️ BREAKING CHANGE: MCP Client v3.8.0 Response Structure
+
+**What Changed**: `ace_get_playbook` response structure is now nested under `playbook` key.
+
+**Before (v3.7.3)**:
+```json
+{
+  "strategies_and_hard_rules": [...],
+  "useful_code_snippets": [...],
+  "troubleshooting_and_pitfalls": [...],
+  "apis_to_use": [...]
+}
+```
+
+**After (v3.8.0)**:
+```json
+{
+  "playbook": {
+    "strategies_and_hard_rules": [...],
+    "useful_code_snippets": [...],
+    "troubleshooting_and_pitfalls": [...],
+    "apis_to_use": [...]
+  },
+  "metadata": {
+    "tokens_in_response": 30000
+  }
+}
+```
+
+**Impact**: Plugin documentation updated (no code changes needed - plugin is markdown-only).
+
+**Migration**: Access sections via `response.playbook.*` instead of `response.*`
+
+### ✨ NEW: Token Efficiency Metadata (MCP Client v3.8.0)
+
+**Supported Tools** (v3.8.0):
+- ✅ `ace_search` - Includes efficiency metrics (tokens saved, efficiency gain percentage)
+- ✅ `ace_get_playbook` - Includes token count
+- ❌ `ace_top_patterns` - NO metadata support in v3.8.0
+- ❌ `ace_batch_get` - NO metadata support in v3.8.0
+
+**Metadata Fields**:
+
+`ace_search` response:
+```json
+{
+  "patterns": [...],
+  "metadata": {
+    "tokens_in_response": 2400,
+    "tokens_saved_vs_full_playbook": 27600,
+    "efficiency_gain": "92%",
+    "full_playbook_size": 30000
+  }
+}
+```
+
+`ace_get_playbook` response:
+```json
+{
+  "playbook": {...},
+  "metadata": {
+    "tokens_in_response": 30000
+  }
+}
+```
+
+**Parameter**: `include_metadata` (optional, default: true)
+- Set to `false` to exclude metadata (~5-10ms faster response)
+
+### Changed
+
+- **Updated MCP client**: v3.7.3 → v3.8.0
+  - Adds `include_metadata` parameter to `ace_search` and `ace_get_playbook`
+  - Nests playbook response under `playbook` key (breaking change)
+  - Provides token efficiency metrics for optimization
+
+- **Updated documentation**:
+  - `skills/ace-playbook-retrieval/SKILL.md` - Nested playbook structure + metadata examples
+  - `commands/ace-search.md` - Added `include_metadata` parameter documentation
+  - `commands/ace-patterns.md` - Show nested playbook access pattern
+  - `commands/ace-top.md` - Clarified NO metadata support in v3.8.0
+  - `commands/ace-export-patterns.md` - Updated to access `response.playbook`
+  - `CLAUDE.md` - Version markers updated to v3.3.8
+  - All tool name inconsistencies fixed (removed `plugin_ace-orchestration` prefix)
+
+- **Token reduction claims updated**:
+  - Search: "80%" → **"50-92%"** (confirmed via metadata measurements)
+  - Performance: Updated with actual metadata overhead (~5-10ms, ~200-400 tokens)
+
+### Added
+
+- **Metadata support documentation** across all relevant command files
+- **Migration guide** in `ace-export-patterns.md` for nested playbook access
+- **Threshold update**: Default search threshold 0.7 → **0.85** (Server Team validated)
+
+### Fixed
+
+- **Tool naming inconsistency**: `ace-search.md` used wrong MCP tool prefix
+  - Was: `mcp__plugin_ace-orchestration_ace-pattern-learning__ace_search`
+  - Now: `mcp__ace-pattern-learning__ace_search`
+
+### Requires
+
+- **MCP Client**: v3.8.0+ (for `include_metadata` parameter and nested playbook structure)
+- **ACE Server**: v3.3.1+ (for metadata calculation support, deployed 2025-11-03)
+
+### Backward Compatibility
+
+- ✅ **Fully backward compatible**: Plugin works with older MCP clients (metadata omitted)
+- ✅ **Graceful degradation**: Missing metadata handled gracefully
+- ✅ **No breaking code**: Plugin is markdown-only (documentation updates only)
+
+### Migration Notes
+
+**If you access playbook sections in custom code**:
+
+```javascript
+// OLD (v3.3.7):
+const strategies = response.strategies_and_hard_rules;
+
+// NEW (v3.3.8):
+const strategies = response.playbook.strategies_and_hard_rules;
+```
+
+**Plugin documentation** (skills/commands) automatically updated - no user action needed.
+
+---
+
 ## [3.3.6] - 2025-11-02
 
 ### 🚨 CRITICAL FIX: Variable Expansion Issue

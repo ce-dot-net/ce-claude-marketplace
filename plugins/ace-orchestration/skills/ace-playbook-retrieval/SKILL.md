@@ -42,26 +42,45 @@ Use **BEFORE** starting:
 ```bash
 mcp__ace-pattern-learning__ace_search(
   query="JWT authentication with refresh tokens",
-  threshold=0.7
+  threshold=0.85  # Default: 0.85 (Server Team validated)
+)
+# with token efficiency metadata (default: true, v3.8.0+):
+mcp__ace-pattern-learning__ace_search(
+  query="JWT authentication",
+  threshold=0.85,
+  include_metadata=true
+)
+# without metadata (opt-out):
+mcp__ace-pattern-learning__ace_search(
+  query="JWT authentication",
+  include_metadata=false
 )
 ```
 **When to use**:
 - ✅ User request mentions specific technology/pattern (e.g., "JWT auth", "Stripe webhooks", "async debugging")
 - ✅ Narrow domain focus (authentication, error handling, API integration)
 - ✅ You can formulate the query as a natural language question
-- ✅ Want 50-80% token reduction
+- ✅ Want 50-92% token reduction (confirmed via metadata)
+
+**Metadata** (v3.8.0+): Returns efficiency metrics - `tokens_in_response`, `tokens_saved_vs_full_playbook`, `efficiency_gain`, `full_playbook_size`
 
 **Use `ace_get_playbook`** (for comprehensive needs):
 ```bash
 mcp__ace-pattern-learning__ace_get_playbook()
 # or with section filter:
 mcp__ace-pattern-learning__ace_get_playbook(section="strategies_and_hard_rules")
+# with token metadata (default: true, v3.8.0+):
+mcp__ace-pattern-learning__ace_get_playbook(include_metadata=true)
+# without metadata (opt-out):
+mcp__ace-pattern-learning__ace_get_playbook(include_metadata=false)
 ```
 **When to use**:
 - ✅ Complex multi-domain task (touches auth + database + API)
 - ✅ Architectural decisions requiring broad context
 - ✅ Refactoring affecting multiple areas
 - ✅ No clear narrow query to formulate
+
+**Metadata** (v3.8.0+): Returns token count in `metadata.tokens_in_response`
 
 **Use `ace_batch_get`** (for follow-up retrieval):
 ```bash
@@ -88,40 +107,47 @@ The MCP client uses 3-tier caching for optimal performance:
 
 ### Step 3: Review Retrieved Patterns
 
-The playbook returns JSON with four sections:
+The playbook returns JSON with nested structure (MCP Client v3.8.0+):
 
 ```json
 {
-  "strategies_and_hard_rules": [
-    {
-      "bullet": "Pattern or principle learned from past work",
-      "helpful": 5,
-      "harmful": 0
-    }
-  ],
-  "useful_code_snippets": [
-    {
-      "bullet": "Reusable code pattern with context",
-      "helpful": 8,
-      "harmful": 0
-    }
-  ],
-  "troubleshooting_and_pitfalls": [
-    {
-      "bullet": "Known issue and solution",
-      "helpful": 6,
-      "harmful": 0
-    }
-  ],
-  "apis_to_use": [
-    {
-      "bullet": "Recommended library or API with rationale",
-      "helpful": 7,
-      "harmful": 0
-    }
-  ]
+  "playbook": {
+    "strategies_and_hard_rules": [
+      {
+        "bullet": "Pattern or principle learned from past work",
+        "helpful": 5,
+        "harmful": 0
+      }
+    ],
+    "useful_code_snippets": [
+      {
+        "bullet": "Reusable code pattern with context",
+        "helpful": 8,
+        "harmful": 0
+      }
+    ],
+    "troubleshooting_and_pitfalls": [
+      {
+        "bullet": "Known issue and solution",
+        "helpful": 6,
+        "harmful": 0
+      }
+    ],
+    "apis_to_use": [
+      {
+        "bullet": "Recommended library or API with rationale",
+        "helpful": 7,
+        "harmful": 0
+      }
+    ]
+  },
+  "metadata": {
+    "tokens_in_response": 30000
+  }
 }
 ```
+
+**Access sections via**: `response.playbook.strategies_and_hard_rules`, `response.playbook.useful_code_snippets`, etc.
 
 ### Step 4: Apply Patterns to Current Task
 
