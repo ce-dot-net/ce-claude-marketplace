@@ -1,6 +1,6 @@
 {
   "name": "ace-orchestration",
-  "version": "3.3.9",
+  "version": "3.3.10",
   "description": "ACE (Agentic Context Engineering) - LOCAL DEVELOPMENT MODE - Uses local build instead of npm package",
   "author": {
     "name": "ACE Team",

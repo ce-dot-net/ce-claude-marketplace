@@ -5,6 +5,174 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.3.10] - 2025-11-03
+
+### ✅ COMPLETE ACE TRAINING CYCLE - Full Automatic Learning
+
+**Enhancement**: Implemented complete 3-layer ACE training cycle ensuring both retrieval AND learning happen automatically.
+
+### 🔄 The Complete Cycle Now Covered
+
+**Before Work (ace-playbook-retrieval)**:
+1. ✅ SessionStart hook - System initialization
+2. ✅ UserPromptSubmit hook - Trigger keyword detection + plan approval
+3. ✅ PostToolUse (ExitPlanMode) - Plan mode transitions
+
+**After Work (ace-learning)**:
+4. ✅ PostToolUse (Edit|Write) - Code modification detection (NEW)
+5. ✅ SubagentStop - Subagent task completion (NEW)
+6. ✅ SKILL.md description - Model-invoked fallback
+
+### ✨ NEW: Two Additional Learning Hooks
+
+**1. PostToolUse Hook for Edit/Write Operations**
+- **File**: `scripts/remind-ace-learning-after-edit.sh`
+- **Matcher**: `Edit|Write`
+- **Purpose**: Reminds Claude to invoke ace-learning after code modifications
+- **Trigger**: Every time Edit or Write tools modify code
+- **Mechanism**: Uses `hookSpecificOutput.additionalContext` to inject reminder
+- **Message**: "CODE MODIFICATION DETECTED: After completing this implementation task, remember to invoke ace-learning skill"
+
+**2. SubagentStop Hook for Subagent Completion**
+- **File**: `scripts/remind-ace-learning-after-subagent.sh`
+- **Purpose**: Ensures ace-learning triggers after subagent tasks complete
+- **Trigger**: When any subagent (spawned via Task tool) finishes
+- **Mechanism**:
+  - Uses `decision: "block"` with `reason` field to force continuation
+  - Includes `hookSpecificOutput.additionalContext` for redundancy
+  - Checks `stop_hook_active` flag to prevent infinite loops
+- **Message**: "SUBAGENT TASK COMPLETED: You MUST invoke ace-learning skill to capture patterns"
+
+### 📋 Changes
+
+**Modified Files**:
+- `hooks/hooks.json` - Added Edit|Write PostToolUse matcher + SubagentStop hook
+
+**New Files**:
+- `scripts/remind-ace-learning-after-edit.sh` - Learning reminder after code edits
+- `scripts/remind-ace-learning-after-subagent.sh` - Learning reminder after subagent tasks
+
+### 🎯 Complete Coverage Matrix
+
+| **Scenario** | **Hook Type** | **Coverage** |
+|-------------|---------------|--------------|
+| Session starts | SessionStart | ✅ Reminds about both skills |
+| User types trigger word | UserPromptSubmit | ✅ Detects keywords → retrieval |
+| User approves plan | UserPromptSubmit | ✅ Detects "continue" → retrieval |
+| ExitPlanMode called | PostToolUse | ✅ Forces retrieval before work |
+| Code edited/written | PostToolUse | ✅ Reminds about learning after work |
+| Subagent completes | SubagentStop | ✅ Blocks until learning invoked |
+| Model reasoning | SKILL.md | ✅ Fallback via description matching |
+
+### 🔄 Workflow Examples
+
+**Example 1: Main Agent Implementation**
+```
+User: "Implement JWT authentication"
+  ↓
+[UserPromptSubmit] "implement" detected → remind retrieval
+  ↓
+Claude: Invokes ace-playbook-retrieval ✅
+  ↓
+Claude: Uses Edit tool to implement
+  ↓
+[PostToolUse Edit] Reminds about learning ✅
+  ↓
+Claude: Invokes ace-learning ✅
+  ↓
+Result: Complete cycle! 🎉
+```
+
+**Example 2: Plan Mode Workflow**
+```
+User: "Implement OAuth flow"
+  ↓
+[Plan Mode] Claude creates plan
+  ↓
+User: "continue"
+  ↓
+[UserPromptSubmit] "continue" detected → suggest retrieval
+[PostToolUse ExitPlanMode] Forces retrieval ✅
+  ↓
+Claude: Invokes ace-playbook-retrieval ✅
+  ↓
+Claude: Uses Write tool to create files
+  ↓
+[PostToolUse Write] Reminds about learning ✅
+  ↓
+Claude: Invokes ace-learning ✅
+  ↓
+Result: Complete cycle even in plan mode! 🎉
+```
+
+**Example 3: Subagent Task**
+```
+User: "Use Task tool to refactor components"
+  ↓
+Claude: Spawns subagent via Task tool
+  ↓
+[Subagent works using Edit/Write]
+[PostToolUse Edit] Reminds subagent about learning
+  ↓
+[Subagent completes]
+  ↓
+[SubagentStop] Blocks parent → "MUST invoke ace-learning" ✅
+  ↓
+Claude: Invokes ace-learning ✅
+  ↓
+Result: Subagent patterns captured! 🎉
+```
+
+### 🎯 Expected Impact
+
+**Before v3.3.10**:
+- Retrieval: 95%+ (from v3.3.9)
+- Learning: 50-70% (relied on model following SKILL.md)
+- Complete cycle: ~50% (many implementations missed learning)
+
+**After v3.3.10**:
+- Retrieval: 95%+ (maintained)
+- Learning: **90%+** (enforced by hooks)
+- Complete cycle: **90%+** (both skills triggered reliably)
+
+**Result**: True automatic learning cycle - retrieval → work → learning happens automatically for users!
+
+### 🔧 Technical Details
+
+**Hook Format Used** (confirmed from official docs + community examples):
+```json
+{
+  "hookSpecificOutput": {
+    "hookEventName": "PostToolUse",
+    "additionalContext": "Message injected to Claude's context"
+  }
+}
+```
+
+**SubagentStop Special Format** (blocks continuation):
+```json
+{
+  "decision": "block",
+  "reason": "Instruction for Claude to follow",
+  "hookSpecificOutput": {
+    "hookEventName": "SubagentStop",
+    "additionalContext": "Additional context injection"
+  }
+}
+```
+
+**Safety**: SubagentStop hook checks `stop_hook_active` flag to prevent infinite blocking loops.
+
+### 📚 Research
+
+Based on deep research including:
+- Official Claude Code hooks reference
+- GitButler blog post practical examples
+- Community GitHub issues and discussions
+- Verified `Edit|Write` matcher pattern from production implementations
+
+---
+
 ## [3.3.9] - 2025-11-03
 
 ### 🚨 CRITICAL FIX: Plan Mode ACE Skill Triggering
