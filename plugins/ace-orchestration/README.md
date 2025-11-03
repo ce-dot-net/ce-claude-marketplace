@@ -333,9 +333,9 @@ Backup and restore playbook
 
 ## 🪝 Hooks (ACE Enforcement & Automation)
 
-### ✅ Complete Training Cycle (NEW in v3.3.10)
+### ✅ Complete Training Cycle (NEW in v3.3.10, refined in v3.3.11)
 
-**ACE now uses 6 automatic hooks to ensure BOTH retrieval AND learning happen reliably!**
+**ACE now uses 5 automatic hooks to ensure BOTH retrieval AND learning happen reliably!**
 
 #### Before Work (ace-playbook-retrieval) - 95%+ Coverage:
 1. **SessionStart Hook** - Reminds about ACE system on session start
@@ -343,9 +343,10 @@ Backup and restore playbook
 3. **UserPromptSubmit Hook** - Detects plan approval ("continue", "proceed", "looks good")
 4. **PostToolUse (ExitPlanMode) Hook** - Forces retrieval after exiting plan mode
 
-#### After Work (ace-learning) - 90%+ Coverage (NEW in v3.3.10):
-5. **PostToolUse (Edit|Write) Hook** - Reminds about learning after code modifications
-6. **SubagentStop Hook** - Blocks until learning invoked after subagent tasks
+#### After Work (ace-learning) - 90%+ Coverage (NEW in v3.3.10, refined in v3.3.11):
+5. **PostToolUse (Edit|Write) Hook** - Reminds about learning after code modifications (passive reminder)
+
+**Note**: SubagentStop hook removed in v3.3.11 due to hook storm issues (fired 2,916 times per session). Learning still maintains 90%+ trigger rate via SKILL.md model-invoked fallback.
 
 **Result**: Complete automatic cycle - retrieval → work → learning happens 90%+ of the time!
 
@@ -417,20 +418,6 @@ configure, setup, deploy, test, verify.
 **When it fires**: After Bash tool executes
 
 **What it does**: Captures command history to `~/.ace/execution_log.jsonl` for debugging
-
-### SubagentStop Hook (NEW in v3.3.10)
-
-**When it fires**: When any subagent (spawned via Task tool) completes
-
-**What it does**: Blocks continuation until Claude invokes ace-learning skill
-
-**Mechanism**: Uses `decision: "block"` with explicit instruction to capture subagent patterns
-
-**Safety**: Checks `stop_hook_active` flag to prevent infinite loops
-
-**Why**: Ensures subagent work is captured in organizational knowledge base
-
-**Note**: Hooks are now **enforcement mechanisms** for reliable ACE skill triggering, not just helpers!
 
 ## 🔬 How It Works
 

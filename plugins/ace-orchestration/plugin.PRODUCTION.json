@@ -1,6 +1,6 @@
 {
   "name": "ace-orchestration",
-  "version": "3.3.10",
+  "version": "3.3.11",
   "description": "ACE (Agentic Context Engineering) - Full ACE Paper Implementation with XDG Config Standard. Three-Agent Architecture (Generator → Reflector → Curator). Learns from execution feedback. Requires MCP Client v3.8.0. Based on Stanford/SambaNova/UC Berkeley research (arXiv:2510.04618v1)",
   "author": {
     "name": "ACE Team",
