@@ -15,7 +15,7 @@ Returns patterns sorted by helpful score (upvotes from successful usage), giving
 When the user runs `/ace-top [section] [limit]`, call the MCP tool:
 
 ```bash
-mcp__plugin_ace-orchestration_ace-pattern-learning__ace_top_patterns(
+mcp__ace-pattern-learning__ace_top_patterns(
   section="<optional section>",
   limit=<optional limit>,
   min_helpful=<optional threshold>
@@ -33,6 +33,14 @@ mcp__plugin_ace-orchestration_ace-pattern-learning__ace_top_patterns(
 - **min_helpful** (optional): Minimum helpful score threshold
   - Default: 0
   - Use `5` for only highly-rated patterns
+
+### Metadata Support
+
+**Note**: `ace_top_patterns` does **NOT** support metadata in MCP Client v3.8.0.
+
+For token usage metrics, use:
+- `ace_search` with `include_metadata=true` (efficiency metrics)
+- `ace_get_playbook` with `include_metadata=true` (token count)
 
 ### Example Usage
 

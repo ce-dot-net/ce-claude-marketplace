@@ -26,15 +26,33 @@ Use the mcp__ace-pattern-learning__ace_get_playbook tool.
 Arguments:
 - section: Optional section filter (strategies_and_hard_rules, useful_code_snippets, troubleshooting_and_pitfalls, apis_to_use)
 - min_helpful: Optional minimum helpful count (bullets with fewer helpful marks filtered out)
+- include_metadata: Optional include token count metadata (default: true, v3.8.0+)
 
 Examples:
 - All sections: Call with no arguments {}
 - Single section: { "section": "strategies_and_hard_rules" }
 - High-value bullets: { "min_helpful": 5 }
 - Both filters: { "section": "troubleshooting_and_pitfalls", "min_helpful": 3 }
+- Without metadata: { "include_metadata": false }
 ```
 
-The tool returns markdown with bullets sorted by helpful count.
+The tool returns a nested JSON structure (v3.8.0+):
+
+```json
+{
+  "playbook": {
+    "strategies_and_hard_rules": [...],
+    "useful_code_snippets": [...],
+    "troubleshooting_and_pitfalls": [...],
+    "apis_to_use": [...]
+  },
+  "metadata": {
+    "tokens_in_response": 30000
+  }
+}
+```
+
+**Access sections via**: `response.playbook.strategies_and_hard_rules`, `response.playbook.useful_code_snippets`, etc.
 
 Each bullet shows:
 - **ID**: ctx-{timestamp}-{random}
@@ -42,6 +60,7 @@ Each bullet shows:
 - **Confidence**: 100%
 - **Content**: The learned insight
 - **Evidence**: File paths, errors, line numbers
+- **Metadata** (v3.8.0+): Token count when include_metadata=true
 
 ## How Bullets Are Created
 
