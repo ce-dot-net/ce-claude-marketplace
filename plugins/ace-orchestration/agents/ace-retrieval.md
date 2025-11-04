@@ -1,7 +1,7 @@
 ---
 name: ace-retrieval
 description: Use PROACTIVELY before starting any user task. Searches ACE playbook for relevant patterns and lessons from past work to inform the current task.
-tools: mcp__ace-pattern-learning__ace_get_playbook, mcp__ace-pattern-learning__ace_search, mcp__ace-pattern-learning__ace_top_patterns, mcp__ace-pattern-learning__ace_batch_get
+tools: mcp__plugin_ace-orchestration_ace-pattern-learning__ace_get_playbook, mcp__plugin_ace-orchestration_ace-pattern-learning__ace_search, mcp__plugin_ace-orchestration_ace-pattern-learning__ace_top_patterns, mcp__plugin_ace-orchestration_ace-pattern-learning__ace_batch_get
 model: haiku
 ---
 
