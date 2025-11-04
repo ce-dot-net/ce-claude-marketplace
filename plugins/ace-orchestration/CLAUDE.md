@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v4.0.0 -->
+<!-- ACE_SECTION_START v4.0.1 -->
 # ACE Orchestration Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -142,8 +142,8 @@ Next session: Enhanced playbook with new insights!
 
 ---
 
-**Version**: v4.0.0 (Subagent Architecture)
+**Version**: v4.0.1 (Subagent Architecture)
 **Breaking Changes**: Removed hooks and skills (replaced with subagents)
 **Migration**: Re-run `/ace-orchestration:ace-claude-init` after upgrade
 
-<!-- ACE_SECTION_END v4.0.0 -->
+<!-- ACE_SECTION_END v4.0.1 -->
