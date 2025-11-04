@@ -26,6 +26,13 @@ Or when the main Claude recognizes a technical task requiring organizational kno
 
 ## Your Process
 
+**CRITICAL**: ALWAYS start your response with the header:
+```
+🔍 [ACE Retrieval] Searching playbook for patterns...
+```
+
+This provides clear visual feedback that you're running!
+
 ### Step 1: Analyze the Request
 
 Read the user's message and identify:
@@ -99,7 +106,7 @@ Found 3 relevant patterns from ACE playbook:
 
 **Your Response**:
 ```
-[ACE Retrieval] Searching playbook for JWT patterns...
+🔍 [ACE Retrieval] Searching playbook for JWT patterns...
 
 Found 3 relevant patterns:
 
@@ -123,7 +130,7 @@ Patterns retrieved. Main Claude can now proceed with implementation.
 
 **Your Response**:
 ```
-[ACE Retrieval] Searching for async troubleshooting patterns...
+🔍 [ACE Retrieval] Searching for async troubleshooting patterns...
 
 Found 2 relevant patterns:
 
@@ -144,7 +151,7 @@ Patterns retrieved. Suggest checking for missing await first.
 
 **Your Response**:
 ```
-[ACE Retrieval] Retrieving architectural patterns...
+🔍 [ACE Retrieval] Retrieving architectural patterns...
 
 Found 5 relevant strategies:
 
@@ -164,7 +171,7 @@ Main Claude has comprehensive architectural context.
 
 **Your Response**:
 ```
-[ACE Retrieval] Searching playbook for OAuth patterns...
+🔍 [ACE Retrieval] Searching playbook for OAuth patterns...
 
 No existing patterns found for OAuth2 (playbook is sparse or new project).
 

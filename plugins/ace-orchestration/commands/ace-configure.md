@@ -17,6 +17,76 @@ Interactive configuration wizard for ACE server connection with support for glob
 
 When the user runs `/ace-orchestration:ace-configure`, follow these steps:
 
+---
+
+## Helper Functions (v3.8.1 Multi-Org Support)
+
+### verify_token() - Verify API Token and Fetch Organization Info
+
+```bash
+verify_token() {
+  local TOKEN=$1
+  local SERVER_URL=$2
+
+  echo "🔍 Verifying token with ACE server..."
+
+  VERIFY_RESPONSE=$(curl -s -w "\n%{http_code}" \
+    -H "Authorization: Bearer $TOKEN" \
+    "$SERVER_URL/api/v1/config/verify")
+
+  HTTP_CODE=$(echo "$VERIFY_RESPONSE" | tail -n1)
+  BODY=$(echo "$VERIFY_RESPONSE" | head -n-1)
+
+  if [ "$HTTP_CODE" -eq 200 ]; then
+    ORG_ID=$(echo "$BODY" | jq -r '.org_id')
+    ORG_NAME=$(echo "$BODY" | jq -r '.org_name')
+    PROJECTS_JSON=$(echo "$BODY" | jq '.projects')
+    PROJECT_IDS=$(echo "$PROJECTS_JSON" | jq -r '.[].project_id')
+
+    echo "✅ Verified! Organization: $ORG_NAME ($ORG_ID)"
+    echo "📋 Available projects:"
+    echo "$PROJECTS_JSON" | jq -r '.[] | "  • \(.project_name) (\(.project_id))"'
+    echo ""
+
+    # Return as JSON for script to use
+    echo "$BODY"
+    return 0
+  else
+    echo "❌ Token verification failed (HTTP $HTTP_CODE)"
+    echo "Response: $BODY"
+    echo "Please check your token and try again."
+    return 1
+  fi
+}
+```
+
+### validate_project_in_orgs() - Validate Project Belongs to Organization
+
+```bash
+validate_project_in_orgs() {
+  local PROJECT_ID=$1
+  local GLOBAL_CONFIG_JSON=$2
+
+  # Find which org contains this project
+  MATCHING_ORG=$(echo "$GLOBAL_CONFIG_JSON" | jq -r \
+    ".orgs | to_entries[] | select(.value.projects | contains([\"$PROJECT_ID\"])) | .key" \
+    | head -n1)
+
+  if [ -n "$MATCHING_ORG" ]; then
+    ORG_NAME=$(echo "$GLOBAL_CONFIG_JSON" | jq -r ".orgs[\"$MATCHING_ORG\"].orgName")
+    echo "✅ Project validated in organization: $ORG_NAME ($MATCHING_ORG)"
+    return 0
+  else
+    echo "⚠️  Warning: Project ID not found in any configured organization"
+    echo "   The project will use the fallback token (root apiToken)"
+    echo ""
+    return 1
+  fi
+}
+```
+
+---
+
 ### Step 1: Detect Configuration Scope
 
 Determine if this is global or project configuration:
@@ -87,12 +157,29 @@ if [ "$FOUND_LEGACY" = true ]; then
     cp "$MIGRATION_SOURCE" "$GLOBAL_CONFIG"
     chmod 600 "$GLOBAL_CONFIG"
 
-    # Backup old config
-    mv "$MIGRATION_SOURCE" "${MIGRATION_SOURCE}.v3.3.2.bak"
+    # Move backup to new location (not in old .ace folder!)
+    BACKUP_NAME=$(basename "$MIGRATION_SOURCE").v3.3.2.bak
+    BACKUP_PATH="$XDG_HOME/ace/$BACKUP_NAME"
+    mv "$MIGRATION_SOURCE" "$BACKUP_PATH"
+
+    # Remove empty legacy directories
+    if [ "$MIGRATION_SOURCE" = "$LEGACY_PROJECT_CONFIG" ]; then
+      # Remove .ace folder if empty (project-level migration)
+      if [ -d "$PROJECT_ROOT/.ace" ] && [ -z "$(ls -A "$PROJECT_ROOT/.ace")" ]; then
+        rmdir "$PROJECT_ROOT/.ace"
+        echo "   🗑️  Removed empty legacy folder: $PROJECT_ROOT/.ace"
+      fi
+    elif [ "$MIGRATION_SOURCE" = "$LEGACY_GLOBAL_CONFIG" ]; then
+      # Remove ~/.ace folder if empty (global migration)
+      if [ -d "$HOME/.ace" ] && [ -z "$(ls -A "$HOME/.ace")" ]; then
+        rmdir "$HOME/.ace"
+        echo "   🗑️  Removed empty legacy folder: $HOME/.ace"
+      fi
+    fi
 
     echo "✅ Migration complete!"
     echo "   New config: $GLOBAL_CONFIG"
-    echo "   Backup: ${MIGRATION_SOURCE}.v3.3.2.bak"
+    echo "   Backup: $BACKUP_PATH"
     echo ""
 
     # If migrated from project config, also need to set up project ID
@@ -108,7 +195,7 @@ if [ "$FOUND_LEGACY" = true ]; then
 fi
 ```
 
-### Step 3: Read Existing Configuration
+### Step 3: Read Existing Configuration and Detect Multi-Org Mode
 
 **For Global Config**:
 ```bash
@@ -117,23 +204,49 @@ XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 GLOBAL_CONFIG="$XDG_HOME/ace/config.json"
 
 if [ -f "$GLOBAL_CONFIG" ]; then
-  # Read existing values
-  EXISTING_URL=$(jq -r '.serverUrl // "https://ace-api.code-engine.app"' "$GLOBAL_CONFIG")
-  EXISTING_TOKEN=$(jq -r '.apiToken // ""' "$GLOBAL_CONFIG")
-  EXISTING_TTL=$(jq -r '.cacheTtlMinutes // 120' "$GLOBAL_CONFIG")
-  EXISTING_AUTO_UPDATE=$(jq -r '.autoUpdateEnabled // false' "$GLOBAL_CONFIG")
+  # Read existing config
+  EXISTING_CONFIG=$(cat "$GLOBAL_CONFIG")
 
-  echo "✓ Found existing global configuration"
-  echo "  Server URL: $EXISTING_URL"
-  echo "  API Token: ${EXISTING_TOKEN:0:12}..." # Show first 12 chars
-  echo "  Cache TTL: $EXISTING_TTL minutes"
-  echo "  Auto-update: $EXISTING_AUTO_UPDATE"
+  # Read existing values
+  EXISTING_URL=$(echo "$EXISTING_CONFIG" | jq -r '.serverUrl // "https://ace-api.code-engine.app"')
+  EXISTING_TOKEN=$(echo "$EXISTING_CONFIG" | jq -r '.apiToken // ""')
+  EXISTING_TTL=$(echo "$EXISTING_CONFIG" | jq -r '.cacheTtlMinutes // 120')
+  EXISTING_AUTO_UPDATE=$(echo "$EXISTING_CONFIG" | jq -r '.autoUpdateEnabled // false')
+
+  # Check for multi-org mode (v3.8.1+)
+  HAS_ORGS=$(echo "$EXISTING_CONFIG" | jq 'has("orgs")')
+
+  if [ "$HAS_ORGS" = "true" ]; then
+    ORG_COUNT=$(echo "$EXISTING_CONFIG" | jq '.orgs | length')
+    echo "✓ Found existing global configuration (Multi-org mode)"
+    echo "  Server URL: $EXISTING_URL"
+    echo "  🌐 Organizations: $ORG_COUNT configured"
+    echo "  Cache TTL: $EXISTING_TTL minutes"
+    echo "  Auto-update: $EXISTING_AUTO_UPDATE"
+    echo ""
+
+    # Show org list
+    echo "  Configured organizations:"
+    echo "$EXISTING_CONFIG" | jq -r '.orgs | to_entries[] | "    • \(.value.orgName) (\(.key)) - \(.value.projects | length) projects"'
+
+    MULTI_ORG_MODE=true
+  else
+    echo "✓ Found existing global configuration"
+    echo "  Server URL: $EXISTING_URL"
+    echo "  API Token: ${EXISTING_TOKEN:0:12}..." # Show first 12 chars
+    echo "  Cache TTL: $EXISTING_TTL minutes"
+    echo "  Auto-update: $EXISTING_AUTO_UPDATE"
+
+    MULTI_ORG_MODE=false
+  fi
 else
   echo "ℹ No existing global configuration found"
+  EXISTING_CONFIG="{}"
   EXISTING_URL="https://ace-api.code-engine.app"
   EXISTING_TOKEN=""
   EXISTING_TTL=120
   EXISTING_AUTO_UPDATE=false
+  MULTI_ORG_MODE=false
 fi
 ```
 
@@ -158,6 +271,45 @@ fi
 ### Step 4: Interactive Configuration with Existing Values
 
 **IMPORTANT**: Use the `AskUserQuestion` tool to show existing values and collect new values.
+
+#### Multi-Org Mode Decision (if MULTI_ORG_MODE=true):
+
+If multi-org mode is detected, ask user what they want to do:
+
+```javascript
+// Only show if MULTI_ORG_MODE = true
+AskUserQuestion({
+  questions: [{
+    question: `Multi-org mode active with ${ORG_COUNT} organization(s). What would you like to do?`,
+    header: "Multi-Org",
+    multiSelect: false,
+    options: [
+      {
+        label: "Use existing org",
+        description: "Select from configured organizations"
+      },
+      {
+        label: "Add new org",
+        description: "Configure a new organization"
+      },
+      {
+        label: "Update existing org",
+        description: "Modify token or settings for an org"
+      },
+      {
+        label: "Convert to single org",
+        description: "Remove multi-org configuration"
+      }
+    ]
+  }]
+})
+```
+
+Based on user's choice, proceed with:
+- **"Use existing org"**: Show org list, let user select
+- **"Add new org"**: Call verify_token(), add to orgs
+- **"Update existing org"**: Show org list, update selected org
+- **"Convert to single org"**: Remove orgs field, keep one token
 
 #### For Global Configuration (`--global` or auto-detected):
 
@@ -245,6 +397,9 @@ AskUserQuestion({
 **Handle "Other" responses**:
 - If user selects "Custom URL", prompt for URL input
 - If user selects "Enter new token", prompt for token input (validate starts with "ace_")
+  - **IMPORTANT**: After collecting new token, call `verify_token(NEW_TOKEN, SERVER_URL)`
+  - This auto-populates org_id, org_name, and project list from server
+  - If verify fails, don't save the config and allow retry
 - If user selects "Custom" TTL, prompt for number input
 - Validate all inputs before saving
 
@@ -278,13 +433,55 @@ AskUserQuestion({
 
 #### For Global Config (`~/.config/ace/config.json`):
 
+**Multi-Org Mode (if verify_token() was called and returned org info)**:
+
+```bash
+# After verify_token() returns org info:
+# ORG_ID, ORG_NAME, PROJECTS_ARRAY are available
+
+# Create XDG config directory if it doesn't exist
+XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+mkdir -p "$XDG_HOME/ace"
+GLOBAL_CONFIG="$XDG_HOME/ace/config.json"
+
+# Read existing config or create empty object
+EXISTING=$(cat "$GLOBAL_CONFIG" 2>/dev/null || echo '{}')
+
+# Add org to orgs object (preserves other orgs and root-level fields)
+UPDATED=$(echo "$EXISTING" | jq \
+  --arg url "$NEW_SERVER_URL" \
+  --arg orgId "$ORG_ID" \
+  --arg orgName "$ORG_NAME" \
+  --arg token "$NEW_API_TOKEN" \
+  --argjson projects "$PROJECTS_ARRAY" \
+  --argjson ttl "$NEW_CACHE_TTL" \
+  --argjson autoUpdate "$NEW_AUTO_UPDATE" \
+  '. + {
+    serverUrl: $url,
+    cacheTtlMinutes: $ttl,
+    autoUpdateEnabled: $autoUpdate
+  } | .orgs[$orgId] = {
+    orgName: $orgName,
+    apiToken: $token,
+    projects: $projects
+  }')
+
+echo "$UPDATED" > "$GLOBAL_CONFIG"
+chmod 600 "$GLOBAL_CONFIG"
+
+echo "✅ Organization added: $ORG_NAME ($ORG_ID)"
+echo "   Projects: $(echo "$PROJECTS_ARRAY" | jq length)"
+```
+
+**Single-Org Mode (backward compatible - no verify_token() call)**:
+
 ```bash
 # Create XDG config directory if it doesn't exist
 XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 mkdir -p "$XDG_HOME/ace"
 GLOBAL_CONFIG="$XDG_HOME/ace/config.json"
 
-# Merge with existing config (preserve other fields)
+# Merge with existing config (preserve other fields including orgs!)
 if [ -f "$GLOBAL_CONFIG" ]; then
   # Read existing config
   EXISTING=$(cat "$GLOBAL_CONFIG")
@@ -327,6 +524,27 @@ echo "✅ Global configuration saved to: $GLOBAL_CONFIG"
 # Get project root
 PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 PROJECT_CONFIG="$PROJECT_ROOT/.claude/settings.json"
+
+# If multi-org mode, validate project belongs to an org
+if [ "$MULTI_ORG_MODE" = "true" ]; then
+  GLOBAL_CONFIG_JSON=$(cat "$GLOBAL_CONFIG")
+
+  # Call validate_project_in_orgs()
+  if validate_project_in_orgs "$NEW_PROJECT_ID" "$GLOBAL_CONFIG_JSON"; then
+    # Project validated - get org info for display
+    MATCHING_ORG=$(echo "$GLOBAL_CONFIG_JSON" | jq -r \
+      ".orgs | to_entries[] | select(.value.projects | contains([\"$NEW_PROJECT_ID\"])) | .key" \
+      | head -n1)
+    ORG_NAME=$(echo "$GLOBAL_CONFIG_JSON" | jq -r ".orgs[\"$MATCHING_ORG\"].orgName")
+
+    # Optionally set ACE_ORG_ID explicitly
+    echo ""
+    echo "ℹ️  Note: ACE_ORG_ID will be auto-resolved from project ID"
+    echo "   Or you can set it explicitly in .claude/settings.json"
+  else
+    echo "⚠️  Warning: Project not in any org, will use fallback token"
+  fi
+fi
 
 # Create .claude directory if it doesn't exist
 mkdir -p "$PROJECT_ROOT/.claude"
@@ -422,6 +640,7 @@ fi
 
 ### Step 7: Show Configuration Summary
 
+**Single-Org Mode**:
 ```
 ✅ ACE Configuration Complete!
 
@@ -437,7 +656,7 @@ Global Config (~/.config/ace/config.json):
 Project Config (.claude/settings.json):
   📂 Project Root: /Users/you/my-project
   🆔 Project ID: prj_d3a244129d62c198 (set as ACE_PROJECT_ID env var)
-  📦 MCP Client: @ce-dot-net/ace-client@3.7.2 (registered in plugin .mcp.json)
+  📦 MCP Client: @ce-dot-net/ace-client@3.8.1 (registered in plugin .mcp.json)
 
 Startup Announcements (~/.claude/settings.json):
   🔔 Configured to show ACE update reminders on startup
@@ -451,6 +670,44 @@ Next steps:
 
 ℹ️  No restart needed - configuration is active immediately!
    Startup announcements will appear on next Claude Code restart.
+```
+
+**Multi-Org Mode**:
+```
+✅ ACE Configuration Complete!
+
+Configuration saved:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Global Config (~/.config/ace/config.json):
+  📍 Server URL: https://ace-api.code-engine.app
+  🌐 Multi-org mode: 2 organization(s) configured
+  ⏱️  Cache TTL: 120 minutes (2 hours)
+  🔄 Auto-update: enabled
+
+  Organizations:
+    • ce-dot-net (org_34fYIl...JF) - 3 projects
+    • client-corp (org_xyz789) - 1 project
+
+Project Config (.claude/settings.json):
+  📂 Project Root: /Users/you/my-project
+  🆔 Project ID: prj_d3a244129d62c198
+  🎯 Active Org: ce-dot-net (auto-resolved from project ID)
+  📦 MCP Client: @ce-dot-net/ace-client@3.8.1 (registered in plugin .mcp.json)
+
+Startup Announcements (~/.claude/settings.json):
+  🔔 Configured to show ACE update reminders on startup
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Next steps:
+1. Run: /ace-orchestration:ace-status to verify connection
+2. Run: /ace-orchestration:ace-claude-init to add ACE instructions to CLAUDE.md
+3. Optional: /ace-orchestration:ace-bootstrap to populate initial playbook patterns
+
+ℹ️  No restart needed - configuration is active immediately!
+   Startup announcements will appear on next Claude Code restart.
+   🌐 Multi-org: Token auto-resolved from project ID (prj_d3a244129d62c198)
 ```
 
 ### Step 8: Validation (Optional but Recommended)

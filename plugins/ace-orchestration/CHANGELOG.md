@@ -5,6 +5,87 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0] - 2025-11-04
+
+### 🌐 NEW FEATURE: Multi-Organization Support
+
+**Manage multiple organizations in a single configuration!**
+
+#### Added
+
+- **Multi-Org Configuration**: New `orgs` object in global config for managing multiple organizations
+- **Automatic Org Resolution**: MCP Client auto-resolves organization from project ID
+- **Verification Endpoint Integration**: `/api/v1/config/verify` auto-populates org_id, org_name, and projects
+- **Multi-Org Flows in `/ace-configure`**:
+  - Detect and manage multi-org mode
+  - Add new organizations with token verification
+  - Validate projects belong to configured organizations
+  - Enhanced summary display with org info
+- **CLI Argument**: `--org-id` parameter in `.mcp.json` for explicit org selection
+- **Helper Functions**:
+  - `verify_token()` - Verify API token and fetch org info from server
+  - `validate_project_in_orgs()` - Validate project belongs to an organization
+
+#### Changed
+
+- **MCP Client Version**: Updated from v3.8.0 → v3.8.1 (includes multi-org support)
+- **Plugin Descriptions**: Updated to mention multi-org support and backward compatibility
+- **Configuration Summary**: Shows multi-org status when detected
+
+#### Enhanced
+
+- **🔍 Subagent Visibility**: Added emoji headers for better visual feedback
+  - ACE Retrieval: `🔍 [ACE Retrieval] Searching playbook for patterns...`
+  - ACE Learning: `📚 [ACE Learning] Analyzing completed work...`
+  - Updated all subagent instructions to ALWAYS output these headers
+  - Provides colored-background feeling users expect from subagents
+
+#### Documentation
+
+- **README.md**: New "Multi-Organization Support" section with examples
+- **ace-configure.md**: Comprehensive multi-org flows and examples
+- **CLAUDE.md**: Version markers updated to v4.1.0
+
+#### Backward Compatibility
+
+- ✅ **100% backward compatible** - Single-org configs (v4.0.x and earlier) work unchanged
+- ✅ **Zero migration required** - Both single-org and multi-org formats work simultaneously
+- ✅ **Fallback token** - Projects not in any org use root-level `apiToken`
+
+#### Requirements
+
+- **MCP Client**: v3.8.1+ (includes `--org-id` support and org auto-resolution)
+- **Server API**: `/api/v1/config/verify` endpoint for token verification
+
+#### Use Cases
+
+Perfect for:
+- 🧑‍💼 Consultants working with multiple clients
+- 🏢 Developers switching between company and personal projects
+- 👥 Teams managing multiple organizational accounts
+
+### Files Changed
+
+**Core Configuration**:
+- `.mcp.json` - Added `--org-id` CLI argument for v3.8.1 client
+
+**Commands**:
+- `commands/ace-configure.md` - Multi-org detection, verification, validation flows
+
+**Subagents** (Visibility Enhancement):
+- `agents/ace-retrieval.md` - Added mandatory emoji header `🔍 [ACE Retrieval]`
+- `agents/ace-learning.md` - Added mandatory emoji header `📚 [ACE Learning]`
+
+**Version Files**:
+- `.claude-plugin/plugin.json` - v4.1.0
+- `.claude-plugin/plugin.template.json` - v4.1.0
+- `../../.claude-plugin/marketplace.json` - v4.1.0
+
+**Documentation**:
+- `README.md` - Multi-org documentation section
+- `CLAUDE.md` - Version markers v4.1.0
+- `CHANGELOG.md` - This file
+
 ## [4.0.0] - 2025-11-04
 
 ### 🚀 MAJOR ARCHITECTURAL REFACTORING - Subagent Architecture

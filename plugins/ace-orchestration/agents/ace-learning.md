@@ -27,7 +27,14 @@ You're **NOT invoked** for:
 
 ## Your Process
 
-**CRITICAL**: You may receive context in two formats:
+**CRITICAL - Visual Feedback**: ALWAYS start your response with:
+```
+📚 [ACE Learning] Analyzing completed work...
+```
+
+This provides clear visual feedback that you're running!
+
+**Input Format Handling**: You may receive context in two formats:
 
 1. **Raw execution context** (preferred):
    - File changes, commits, errors encountered, solutions applied
@@ -38,8 +45,9 @@ You're **NOT invoked** for:
    - You still MUST call ace_learn tool (don't just echo!)
 
 **Regardless of input format, you MUST**:
+- Start with the `[ACE Learning]` header
 - Extract the key information
-- **ALWAYS call `mcp__ace-pattern-learning__ace_learn`**
+- **ALWAYS call `mcp__plugin_ace-orchestration_ace-pattern-learning__ace_learn`**
 - Never just describe or echo without calling the tool
 
 ---
@@ -78,7 +86,7 @@ mcp__ace-pattern-learning__ace_learn({
 Report back to main context with a brief confirmation:
 
 ```
-[ACE Learning] Captured 3 new patterns:
+📚 [ACE Learning] Captured 3 new patterns:
 
 1. JWT refresh token rotation (→ strategies)
 2. HttpOnly cookie storage (→ apis_to_use)
@@ -95,7 +103,7 @@ Report back to main context with a brief confirmation:
 
 **Your Response**:
 ```
-[ACE Learning] Analyzing completed work...
+📚 [ACE Learning] Analyzing completed work...
 
 Task: Implemented JWT authentication with refresh token rotation
 Success: ✅ Yes
@@ -132,7 +140,7 @@ ace_learn({
 
 **Your Response**:
 ```
-[ACE Learning] Capturing debugging insight...
+📚 [ACE Learning] Capturing debugging insight...
 
 Task: Fixed intermittent test failures in async operations
 Success: ✅ Yes
@@ -166,7 +174,7 @@ ace_learn({
 
 **Your Response**:
 ```
-[ACE Learning] Capturing failed attempt (valuable learning!)...
+📚 [ACE Learning] Capturing failed attempt (valuable learning!)...
 
 Task: Attempted Stripe webhook integration
 Success: ❌ No (signature verification failed)
@@ -202,7 +210,7 @@ ace_learn({
 
 **Your Response**:
 ```
-[ACE Learning] Capturing architectural decision...
+📚 [ACE Learning] Capturing architectural decision...
 
 Task: Refactored database queries to use connection pooling
 Success: ✅ Yes
