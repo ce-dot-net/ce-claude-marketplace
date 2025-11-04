@@ -356,7 +356,71 @@ fi
 echo "✅ Project configuration saved to: $PROJECT_CONFIG"
 ```
 
-### Step 6: Show Configuration Summary
+### Step 6: Configure Startup Announcements (Automatic)
+
+**This step runs automatically after global configuration** to add ACE version check reminders to Claude Code's startup announcements.
+
+```bash
+# Only configure announcements if global config was updated
+if [ "$SCOPE" = "global" ] || [ "$SCOPE" = "both" ]; then
+  echo ""
+  echo "🔔 Configuring startup announcements..."
+
+  # Path to Claude Code user-level settings.json
+  CLAUDE_SETTINGS="$HOME/.claude/settings.json"
+
+  # Check if companyAnnouncements already exists
+  if [ -f "$CLAUDE_SETTINGS" ]; then
+    HAS_ANNOUNCEMENTS=$(jq 'has("companyAnnouncements")' "$CLAUDE_SETTINGS" 2>/dev/null || echo "false")
+
+    if [ "$HAS_ANNOUNCEMENTS" = "true" ]; then
+      echo "   ℹ️  Startup announcements already configured - skipping"
+    else
+      echo "   ➕ Adding ACE announcements to ~/.claude/settings.json"
+
+      # Read existing settings
+      EXISTING=$(cat "$CLAUDE_SETTINGS")
+
+      # Add companyAnnouncements array (preserve other settings)
+      echo "$EXISTING" | jq '. + {
+        "companyAnnouncements": [
+          "ACE Plugin: Check for updates with /ace-orchestration:ace-status",
+          "ACE Plugin: Run /ace-claude-init after updating to refresh project instructions"
+        ]
+      }' > "$CLAUDE_SETTINGS.tmp"
+
+      mv "$CLAUDE_SETTINGS.tmp" "$CLAUDE_SETTINGS"
+      echo "   ✅ Startup announcements configured"
+    fi
+  else
+    # Create new settings.json with announcements
+    echo "   ➕ Creating ~/.claude/settings.json with ACE announcements"
+
+    mkdir -p "$HOME/.claude"
+    cat > "$CLAUDE_SETTINGS" <<'EOF'
+{
+  "companyAnnouncements": [
+    "ACE Plugin: Check for updates with /ace-orchestration:ace-status",
+    "ACE Plugin: Run /ace-claude-init after updating to refresh project instructions"
+  ]
+}
+EOF
+
+    echo "   ✅ Startup announcements configured"
+  fi
+
+  echo ""
+fi
+```
+
+**What This Does**:
+- Adds ACE-related announcements to `~/.claude/settings.json` (user-level global)
+- These announcements appear randomly on Claude Code startup (v2.0.32+)
+- Reminds users to check for plugin updates and refresh instructions
+- **Only adds if not already present** (won't overwrite existing announcements)
+- Preserves all other settings in the file
+
+### Step 7: Show Configuration Summary
 
 ```
 ✅ ACE Configuration Complete!
@@ -375,6 +439,9 @@ Project Config (.claude/settings.json):
   🆔 Project ID: prj_d3a244129d62c198 (set as ACE_PROJECT_ID env var)
   📦 MCP Client: @ce-dot-net/ace-client@3.7.2 (registered in plugin .mcp.json)
 
+Startup Announcements (~/.claude/settings.json):
+  🔔 Configured to show ACE update reminders on startup
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Next steps:
@@ -383,9 +450,10 @@ Next steps:
 3. Optional: /ace-orchestration:ace-bootstrap to populate initial playbook patterns
 
 ℹ️  No restart needed - configuration is active immediately!
+   Startup announcements will appear on next Claude Code restart.
 ```
 
-### Step 7: Validation (Optional but Recommended)
+### Step 8: Validation (Optional but Recommended)
 
 ```bash
 # Test connection to ACE server
