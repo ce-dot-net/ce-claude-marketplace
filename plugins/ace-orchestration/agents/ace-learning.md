@@ -1,7 +1,7 @@
 ---
 name: ace-learning
 description: MUST BE USED after completing multi-step work, immediately before responding to user. Captures lessons learned and patterns discovered during execution for future retrieval.
-tools: mcp__ace-pattern-learning__ace_learn, mcp__ace-pattern-learning__ace_status
+tools: mcp__plugin_ace-orchestration_ace-pattern-learning__ace_learn, mcp__plugin_ace-orchestration_ace-pattern-learning__ace_status
 model: haiku
 ---
 
