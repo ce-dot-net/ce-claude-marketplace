@@ -4,16 +4,17 @@
 
 ## 🎯 Features
 
-### 🤖 Automatic Learning Cycle
-- **ACE Playbook Retrieval Skill**: Auto-fetches learned patterns BEFORE tasks
-- **ACE Learning Skill**: Auto-captures insights AFTER task completion
-- **Model-Invoked**: Claude decides when to use skills (no manual intervention)
+### 🤖 Automatic Learning Cycle (v4.0.0: Subagent Architecture)
+- **ACE Retrieval Subagent**: Auto-fetches learned patterns BEFORE tasks (separate context)
+- **ACE Learning Subagent**: Auto-captures insights AFTER task completion (separate context)
+- **Transparent Operation**: Users see `[ACE Retrieval]` and `[ACE Learning]` in action
+- **No Blocking**: Separate contexts prevent interference with other plugins
 - **3-Tier Caching**: RAM → SQLite → Server for fast retrieval
 - **Complete Cycle**: Retrieve → Use → Learn → Update → Repeat
 
-### 🔍 Semantic Search & Targeted Retrieval (NEW in v3.3.0!)
-- **50-80% Token Reduction**: Semantic search returns only relevant patterns
-- **Intelligent Tool Selection**: Skills automatically choose optimal retrieval method
+### 🔍 Semantic Search & Targeted Retrieval (v3.3.0+)
+- **50-92% Token Reduction**: Semantic search returns only relevant patterns
+- **Intelligent Tool Selection**: Subagents automatically choose optimal retrieval method
 - **Natural Language Queries**: `/ace-search "JWT authentication"` finds matching patterns
 - **Quality Filtering**: `/ace-top` retrieves highest-rated patterns by helpful score
 - **Batch Retrieval**: 10x-50x faster bulk pattern fetching
@@ -176,44 +177,71 @@ export ACE_PROJECT_ID="prj_your_project_id"
 
 **📖 See [CONFIGURATION.md](./CONFIGURATION.md) for detailed setup instructions**
 
-## 🤖 Agent Skills (Automatic)
+## 🤖 Subagent Architecture (v4.0.0)
 
-### ACE Playbook Retrieval (Before Tasks)
-**Model-Invoked**: Claude automatically activates before complex tasks
+**Breaking Change**: Replaced hooks + skills with Claude Code CLI subagents for transparent, non-blocking operation.
 
-**Triggers**: implement, build, create, fix, debug, refactor, integrate, optimize
+### ACE Retrieval Subagent (Before Tasks)
+**Location**: `agents/ace-retrieval.md`
+
+**Auto-Invoked**: When user requests involve implementation, debugging, refactoring, etc.
+
+**Triggers**: implement, build, create, fix, debug, refactor, integrate, optimize, architect, test, deploy
 
 **What it does**:
-- Calls `mcp__ace-pattern-learning__ace_get_playbook`
-- Retrieves strategies, code snippets, troubleshooting tips, API recommendations
+- Runs in **separate context window** (no blocking!)
+- Calls `ace_get_playbook` or `ace_search` for relevant patterns
+- Returns 2-5 key insights to main Claude context
 - Uses 3-tier cache (RAM → SQLite → Server) for speed
 
-**Result**: Claude has organizational knowledge BEFORE starting!
+**You'll see**: `[ACE Retrieval] Searching playbook for patterns...`
 
-### ACE Learning from Execution (After Tasks)
-**Model-Invoked**: Claude automatically activates after substantial work
+**Result**: Main Claude has organizational knowledge BEFORE starting!
 
-**Triggers**: Successful implementations, debugging, refactoring, API integrations
+### ACE Learning Subagent (After Tasks)
+**Location**: `agents/ace-learning.md`
+
+**Auto-Invoked**: After substantial work completion (implementations, bug fixes, refactoring)
+
+**Triggers**: Work completion with valuable lessons (successes AND failures)
 
 **What it does**:
-- Calls `mcp__ace-pattern-learning__ace_learn`
-- Captures task description, trajectory, feedback, lessons learned
-- Sends to ACE Server for Reflector (Sonnet 4) → Curator (Haiku 4.5) analysis
+- Runs in **separate context window** (no blocking!)
+- Calls `ace_learn` with task description, trajectory, feedback
+- Sends execution trace to ACE Server
+- Server: Reflector (Sonnet 4) → Curator (Haiku 4.5) → Delta Merge
 
-**Result**: Playbook updated with new patterns!
+**You'll see**: `[ACE Learning] Captured 3 new patterns`
+
+**Result**: Playbook updated with new patterns for future retrieval!
 
 ### The Complete Automatic Cycle
 
 ```
-User Request → Retrieval Skill → Playbook Fetched → Claude Executes with Patterns →
-Learning Skill → Server Analysis → Playbook Updated → Next Request (Enhanced!) 🎯
+User Request
+    ↓
+[ACE Retrieval Subagent] ← Separate context (no blocking)
+    ↓ Returns 2-5 patterns
+Main Claude Executes with Patterns
+    ↓
+[ACE Learning Subagent] ← Separate context (no blocking)
+    ↓ Sends to server
+Server Analysis → Playbook Updated
+    ↓
+Next Request: Enhanced playbook! 🎯
 ```
+
+**Why Subagents?**
+- ✅ **No Hook Storms**: Zero hooks = Issue #3523 cannot occur
+- ✅ **No Skill Blocking**: Separate contexts = other plugins work normally
+- ✅ **Transparent**: See `[ACE Retrieval]` and `[ACE Learning]` running
+- ✅ **User Controllable**: Easy to disable (delete agent files or tell Claude)
 
 **📖 Full documentation**: See [CLAUDE.md](./CLAUDE.md) for complete cycle details
 
 ## 💻 Slash Commands
 
-While skills handle automatic operation, manual commands are available:
+While subagents handle automatic operation, manual commands are available:
 
 ### 🔍 Retrieval Commands (NEW in v3.3.0)
 
@@ -304,7 +332,7 @@ Verify ACE plugin is working correctly
 ```
 
 **What it does:**
-- Checks if ACE skills are loaded (ace-playbook-retrieval, ace-learning)
+- Checks if ACE subagents are loaded (ace-retrieval, ace-learning)
 - Verifies MCP server connection
 - Shows playbook statistics
 - Lists available ACE tools
@@ -331,93 +359,26 @@ Backup and restore playbook
 /ace-orchestration:ace-import-patterns
 ```
 
-## 🪝 Hooks (ACE Enforcement & Automation)
+## 🚨 v4.0.0: Hooks Removed (Breaking Change)
 
-### ✅ Complete Training Cycle (NEW in v3.3.10, refined in v3.3.12)
+**All hooks have been removed** and replaced with subagent architecture.
 
-**ACE now uses 5 automatic hooks to ensure BOTH retrieval AND learning happen reliably!**
+**Why?**
+- ✅ Fix hook storm bug (Issue #3523) - progressive duplication causing crashes
+- ✅ Fix skill blocking problem - separate contexts don't interfere with other plugins
+- ✅ Transparent operation - users see `[ACE Retrieval]` and `[ACE Learning]` running
+- ✅ User controllable - easy to disable without editing config files
 
-#### Before Work (ace-playbook-retrieval) - 95%+ Coverage:
-1. **SessionStart Hook** - Reminds about ACE system on session start
-2. **UserPromptSubmit Hook** - Detects trigger keywords (implement, build, fix, etc.)
-3. **UserPromptSubmit Hook** - Detects plan approval ("continue", "proceed", "looks good")
-4. **PostToolUse (ExitPlanMode) Hook** - Forces retrieval after exiting plan mode
+**v3.x Hooks (REMOVED)**:
+- ❌ SessionStart hook (context injection)
+- ❌ UserPromptSubmit hook (trigger keyword detection)
+- ❌ PostToolUse (ExitPlanMode) hook (forced retrieval)
+- ❌ PostToolUse (Edit|Write) hook (learning reminder)
+- ❌ Auto .gitignore management
+- ❌ Auto version checking
+- ❌ Auto-update feature
 
-#### After Work (ace-learning) - 90%+ Coverage (NEW in v3.3.10, refined in v3.3.11):
-5. **PostToolUse (Edit|Write) Hook** - Reminds about learning after code modifications (passive reminder)
-
-**Note**: SubagentStop hook removed in v3.3.11 due to hook storm issues (fired 2,916 times per session). Learning still maintains 90%+ trigger rate via SKILL.md model-invoked fallback.
-
-**Result**: Complete automatic cycle - retrieval → work → learning happens 90%+ of the time!
-
-**Impact**:
-- Before v3.3.10: Learning triggered 50-70% of the time
-- After v3.3.10: Learning triggered **90%+** of the time
-- Complete cycle success rate: **90%+**
-
----
-
-### UserPromptSubmit Hook (Enhanced in v3.3.10, introduced in v3.3.1)
-**Critical for ACE auto-triggering reliability!**
-
-Injects ACE trigger reminder before EVERY user prompt.
-
-**When it fires**: Before Claude processes each user message
-
-**What it does**:
-```
-⚠️ ACE TRIGGER CHECK: If this message contains trigger words
-(implement|build|create|update|modify|fix|debug|refactor|optimize|integrate|
-configure|setup|deploy|test|verify|validate|add|develop|write|change|edit|
-enhance|extend|revise|troubleshoot|resolve|diagnose|improve|restructure|
-connect|install|architect|design|plan|migrate|upgrade), invoke
-ace-playbook-retrieval skill BEFORE other tools, then ace-learning skill
-AFTER completing work.
-```
-
-**Why this matters**: Ensures Claude sees ACE trigger instructions BEFORE responding, making skill activation more reliable.
-
-### SessionStart Hook (Enhanced in v3.3.1)
-Announces ACE system activation and loads plugin instructions.
-
-**When it fires**: At session start or resume
-
-**What it does**:
-```
-🚨 ACE SYSTEM ACTIVE: Skills ace-playbook-retrieval (BEFORE work) and
-ace-learning (AFTER work) auto-trigger on keywords: implement, build,
-create, update, modify, fix, debug, refactor, optimize, integrate,
-configure, setup, deploy, test, verify.
-```
-
-**Additional functionality**:
-- Injects CLAUDE.md reference to make plugin instructions available
-- Checks for ACE version updates
-- Runs auto-update if enabled (via `/ace-orchestration:ace-enable-auto-update`)
-- Ensures `.gitignore` includes ACE config files
-
-### PostToolUse Hooks (Enhanced in v3.3.10)
-
-**Multiple matchers for different tool types**:
-
-#### PostToolUse (ExitPlanMode) - v3.3.9
-**When it fires**: After ExitPlanMode tool completes (plan mode → execution mode)
-
-**What it does**: Injects critical instruction to invoke ace-playbook-retrieval BEFORE implementation starts
-
-**Why**: Plan approval messages ("continue") have no trigger keywords, so this hook ensures retrieval happens
-
-#### PostToolUse (Edit|Write) - v3.3.10
-**When it fires**: After Edit or Write tools modify code
-
-**What it does**: Reminds Claude to invoke ace-learning skill after code modifications
-
-**Why**: Ensures patterns are captured after every substantial code change
-
-#### PostToolUse (Bash) - Logging
-**When it fires**: After Bash tool executes
-
-**What it does**: Captures command history to `~/.ace/execution_log.jsonl` for debugging
+**v4.0.0 Replacement**: See [🤖 Subagent Architecture](#-subagent-architecture-v400) section above for the new transparent, non-blocking approach.
 
 ## 🔬 How It Works
 
@@ -425,13 +386,13 @@ configure, setup, deploy, test, verify.
 
 **Generator → Reflector → Curator → Playbook Cycle**
 
-1. **Generator**: Claude Code with Agent Skills
+1. **Generator**: Claude Code with Subagents (v4.0.0: ace-retrieval, ace-learning)
 2. **Playbook**: Evolving context with learned patterns (4 sections)
 3. **Reflector**: Server-side pattern analysis (Sonnet 4 for intelligence)
 4. **Curator**: Server-side delta updates (Haiku 4.5 for cost efficiency)
 5. **Merge**: Non-LLM algorithm for incremental updates
 
-### Automatic Learning Flow
+### Automatic Learning Flow (v4.0.0: Subagent Architecture)
 
 ```
 ┌─────────────────────────────────────────────┐
@@ -439,19 +400,21 @@ configure, setup, deploy, test, verify.
 └─────────────────────────────────────────────┘
                 ↓
 ┌─────────────────────────────────────────────┐
-│ ACE Playbook Retrieval Skill AUTO-INVOKES  │
+│ [ACE Retrieval Subagent] AUTO-INVOKES      │
+│ - Runs in separate context (no blocking!)  │
 │ - Fetches learned patterns from cache/server│
 │ - Returns: "Refresh token rotation best"   │
 └─────────────────────────────────────────────┘
                 ↓
 ┌─────────────────────────────────────────────┐
-│ Claude Implements with Learned Patterns     │
+│ Main Claude Implements with Patterns       │
 │ - Uses strategies from playbook             │
 │ - Avoids known pitfalls                     │
 └─────────────────────────────────────────────┘
                 ↓
 ┌─────────────────────────────────────────────┐
-│ ACE Learning Skill AUTO-INVOKES            │
+│ [ACE Learning Subagent] AUTO-INVOKES      │
+│ - Runs in separate context (no blocking!)  │
 │ - Captures: task + trajectory + feedback   │
 │ - Sends to ACE Server                       │
 └─────────────────────────────────────────────┘
@@ -503,23 +466,25 @@ configure, setup, deploy, test, verify.
 # 1. User requests task
 User: "Implement JWT authentication with refresh tokens"
 
-# 2. ACE Playbook Retrieval Skill AUTO-INVOKES (no manual action!)
+# 2. [ACE Retrieval Subagent] AUTO-INVOKES (no manual action!)
+# - Runs in separate context (transparent operation)
 # - Fetches learned patterns from previous sessions
 # - Returns: "Refresh token rotation prevents theft attacks"
 
-# 3. Claude implements using learned pattern
+# 3. Main Claude implements using learned pattern
 # - Short-lived access tokens (15 min)
 # - Rotating refresh tokens (7 days)
 # - HttpOnly cookies for security
 
-# 4. ACE Learning Skill AUTO-INVOKES after completion
+# 4. [ACE Learning Subagent] AUTO-INVOKES after completion
+# - Runs in separate context (transparent operation)
 # - Captures successful implementation
 # - Sends feedback to server
 # - Pattern reinforced with +1 helpful score
 
 # 5. Next similar task is faster!
 User: "Add OAuth2 authentication"
-# Retrieval skill fetches: JWT patterns + auth strategies
+# [ACE Retrieval] fetches: JWT patterns + auth strategies
 # Implementation uses proven patterns from the start
 ```
 
@@ -545,8 +510,10 @@ User: "Add OAuth2 authentication"
 
 This plugin implements the complete ACE framework architecture:
 
-- ✅ **Automatic Retrieval** - Skills fetch playbook BEFORE tasks (Generator uses context)
-- ✅ **Automatic Learning** - Skills capture feedback AFTER tasks (closes the loop)
+- ✅ **Automatic Retrieval** - Subagents fetch playbook BEFORE tasks (separate context)
+- ✅ **Automatic Learning** - Subagents capture feedback AFTER tasks (closes the loop)
+- ✅ **Transparent Operation** - Users see `[ACE Retrieval]` and `[ACE Learning]` running
+- ✅ **No Blocking** - Separate contexts prevent interference with other plugins
 - ✅ **Server-Side Intelligence** - Reflector (Sonnet 4) + Curator (Haiku 4.5)
 - ✅ **Delta Updates** - Incremental improvements prevent context collapse
 - ✅ **4-Section Playbook** - Structured pattern organization
@@ -554,7 +521,7 @@ This plugin implements the complete ACE framework architecture:
 - ✅ **Cost Optimized** - Sonnet for intelligence, Haiku for efficiency (60% savings)
 - ✅ **Universal MCP** - Works with ANY MCP client (no sampling required)
 - ✅ **3-Tier Cache** - Fast retrieval (RAM → SQLite → Server)
-- ✅ **Model-Invoked Skills** - Claude decides when to use (fully automatic)
+- ✅ **Model-Invoked** - Claude decides when to use subagents (fully automatic)
 
 **Result**: Achieves significant performance improvement on agentic tasks!
 
@@ -680,15 +647,15 @@ cat .claude/settings.json
 /ace-orchestration:ace-configure --project
 ```
 
-### Skills not triggering
+### Subagents not triggering
 
-**ACE skills not auto-invoking when they should?**
+**ACE subagents not auto-invoking when they should?**
 
-1. **Verify skills are loaded:**
+1. **Verify subagents are loaded:**
    ```
-   /ace-orchestration:ace-test
+   /agents
    ```
-   Should show ace-playbook-retrieval and ace-learning as LOADED
+   Should show ace-retrieval and ace-learning in the list
 
 2. **Check CLAUDE.md has ACE instructions:**
    ```bash
@@ -699,10 +666,15 @@ cat .claude/settings.json
    /ace-orchestration:ace-claude-init
    ```
 
-3. **Ensure trigger words are present:**
-   - Skills trigger on: implement, build, create, update, modify, fix, debug, refactor, etc.
+3. **Restart Claude Code:**
+   - Subagents are loaded at startup
+   - Changes to agent files require restart
+   - Exit and relaunch Claude Code
+
+4. **Ensure trigger words are present:**
+   - Subagents trigger on: implement, build, create, update, modify, fix, debug, refactor, etc.
    - Use explicit trigger words in your requests
-   - Check hooks are working (UserPromptSubmit should inject reminders)
+   - Claude decides when to invoke based on task context
 
 ### Pattern database errors
 

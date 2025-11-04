@@ -13,8 +13,8 @@
     {
       "name": "ace-orchestration",
       "source": "./plugins/ace-orchestration",
-      "description": "Code Engine ACE - Intelligent pattern learning and code generation with Three-Agent Architecture. Learns from execution feedback to improve coding outcomes.",
-      "version": "3.3.12",
+      "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture (ACE Retrieval + ACE Learning). Learns from execution feedback to improve coding outcomes. No hooks, no skill blocking - transparent and controllable.",
+      "version": "4.0.0",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"
@@ -31,7 +31,8 @@
         "agentic",
         "research",
         "stanford",
-        "autonomous"
+        "autonomous",
+        "subagents"
       ],
       "category": "productivity"
     }

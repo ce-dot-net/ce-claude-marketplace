@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
-  "version": "3.3.12",
-  "description": "Code Engine ACE - Intelligent pattern learning and code generation with Three-Agent Architecture (Generator → Reflector → Curator). Learns from execution feedback to improve coding outcomes. XDG config standard with automatic migration. Requires MCP client v3.8.0+.",
+  "version": "4.0.0",
+  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture (ACE Retrieval + ACE Learning). Learns from execution feedback to improve coding outcomes. No hooks, no skill blocking - transparent and controllable.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
@@ -16,10 +16,10 @@
     "self-improving",
     "context-engineering",
     "agentic",
-    "code-engine",
-    "ai-assistant",
-    "autonomous"
+    "research",
+    "stanford",
+    "autonomous",
+    "subagents"
   ],
-  "hooks": "./hooks/hooks.json",
   "mcpServers": "./.mcp.json"
 }

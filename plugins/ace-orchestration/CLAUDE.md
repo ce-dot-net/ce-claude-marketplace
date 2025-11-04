@@ -1,436 +1,149 @@
-<!-- ACE_SECTION_START v3.3.12 -->
-# ACE Orchestration Plugin - Automatic Learning Cycle
+<!-- ACE_SECTION_START v4.0.0 -->
+# ACE Orchestration Plugin
 
-This plugin provides fully automatic pattern learning using the ACE framework architecture.
+This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
 
----
+## How It Works
 
-# ⚠️ CRITICAL: ACE PRE-FLIGHT CHECK
+**ACE helps Claude learn from your codebase over time:**
 
-**STOP! Before using ANY tool, execute this checklist:**
+1. **Before complex tasks** - Retrieve relevant patterns from past work
+2. **During execution** - Apply proven strategies and avoid known pitfalls
+3. **After completion** - Capture new patterns for future use
 
-## ✅ Step 1: Scan User Request for ACE Trigger Words
-Does the request contain: **implement, build, create, add, develop, write, update, modify, change, edit, enhance, extend, revise, fix, debug, troubleshoot, resolve, diagnose, refactor, optimize, improve, restructure, integrate, connect, setup, configure, install, architect, design, plan, test, verify, validate, deploy, migrate, upgrade**?
+Over time, the system builds organizational knowledge that compounds with each project session.
 
-**OR does the request clearly intend to:**
-- Write/modify code or solve technical problems
-- Make architectural decisions or work with APIs/tools
-- Perform substantial technical work (not simple Q&A)
+## Automatic Learning Cycle
 
-## ✅ Step 2: If Trigger Found → INVOKE RETRIEVAL SKILL FIRST
-```
-Skill: ace-orchestration:ace-playbook-retrieval
-```
-**DO THIS BEFORE Task, Edit, Write, Bash, or any other tool.**
+ACE uses **two subagents** that run in separate contexts:
 
-## ✅ Step 3: After Task Complete → INVOKE LEARNING SKILL LAST
-```
-Skill: ace-orchestration:ace-learning
-```
-**DO THIS IMMEDIATELY AFTER work completion, BEFORE responding to user.**
+### ACE Retrieval Subagent (Before Work)
 
----
+**When it runs**: Before implementation, debugging, refactoring, or architectural tasks
 
-## 📖 Setup Instructions
+**What it does**:
+- Searches the ACE playbook for relevant patterns
+- Returns 2-5 key insights to inform your work
+- Uses semantic search for 50-92% token efficiency
 
-**First-Time Setup:** Run `/ace-claude-init` in your project to add this file to your project's CLAUDE.md. This provides always-on context about the ACE system and ensures optimal skill triggering.
+**You'll see**: `[ACE Retrieval] Searching playbook for patterns...`
 
-## 🚨 MANDATORY: ACE Skill Usage Rules
+**Triggers**: implement, build, create, fix, debug, refactor, optimize, integrate, architect, test, deploy, etc.
 
-**YOU MUST FOLLOW THESE RULES FOR EVERY TASK:**
+### ACE Learning Subagent (After Work)
 
-### Before ANY Implementation, Debugging, or Refactoring Task:
+**When it runs**: After substantial work completion (implementation, bug fixes, refactoring)
 
-**ALWAYS invoke the ACE Playbook Retrieval skill FIRST:**
-```
-Skill: ace-orchestration:ace-playbook-retrieval
-```
+**What it does**:
+- Captures lessons learned from the work
+- Sends execution trace to ACE server
+- Updates playbook for future retrieval
 
-**Trigger keywords that require retrieval:**
-- **Implementation**: implement, build, create, add, develop, write
-- **Modification**: update, modify, change, edit, enhance, extend, revise
-- **Debugging**: debug, fix, troubleshoot, resolve, diagnose
-- **Refactoring**: refactor, optimize, improve, restructure
-- **Integration**: integrate, connect, setup, configure, install
-- **Architecture**: architect, design, plan
-- **Testing**: test, verify, validate
-- **Operations**: deploy, migrate, upgrade
+**You'll see**: `[ACE Learning] Captured 3 new patterns`
 
-**Intent-based fallback**: Even without exact keywords, invoke this skill when the request clearly intends to write/modify code, solve technical problems, make architectural decisions, or perform substantial technical work (not simple Q&A or informational queries).
+**Triggers**: Work completion with valuable lessons (successes AND failures)
 
-**You MUST call this skill BEFORE starting work when the user's request contains ANY of these keywords.**
+## The Playbook
 
-### After ANY Substantial Coding Task:
+The ACE playbook has 4 sections:
 
-**CRITICAL: ALWAYS invoke the ACE Learning skill IMMEDIATELY AFTER completion:**
-```
-Skill: ace-orchestration:ace-learning
-```
+1. **strategies_and_hard_rules** - Architectural patterns, coding principles
+2. **useful_code_snippets** - Reusable code patterns with context
+3. **troubleshooting_and_pitfalls** - Known issues, gotchas, solutions
+4. **apis_to_use** - Recommended libraries, frameworks, integration patterns
 
-**AUTOMATIC MANDATORY trigger conditions:**
-- Implemented new features or fixed bugs
-- Debugged and resolved issues
-- Discovered gotchas or edge cases
-- Used new APIs, libraries, or patterns
-- Made architectural decisions
-- Encountered and overcame errors
+Patterns accumulate helpful/harmful scores based on usage feedback.
 
-**You MUST call this skill IMMEDIATELY AFTER substantial work BEFORE responding to user. This is NOT OPTIONAL and NOT NEGOTIABLE. DO NOT SKIP THIS SKILL EVER. It must run just as reliably as the retrieval skill runs before tasks.**
+## Setup
 
-### Workflow Example:
+### First-Time Setup
+
+1. **Configure connection**:
+   ```
+   /ace-orchestration:ace-configure
+   ```
+   Sets up server URL, API token, and project ID.
+
+2. **Bootstrap initial patterns** (optional but recommended):
+   ```
+   /ace-orchestration:ace-bootstrap --mode hybrid --thoroughness deep
+   ```
+   Extracts patterns from docs, git history, and current code.
+
+3. **Start coding**: Subagents auto-invoke when relevant.
+
+### Manual Commands
+
+View and manage patterns:
+- `/ace-orchestration:ace-patterns` - View full playbook
+- `/ace-orchestration:ace-search <query>` - Semantic search
+- `/ace-orchestration:ace-top <section>` - Highest-rated patterns
+- `/ace-orchestration:ace-status` - Statistics and health check
+
+Configuration:
+- `/ace-orchestration:ace-configure` - Setup wizard
+- `/ace-orchestration:ace-tune` - Runtime configuration
+- `/ace-orchestration:ace-doctor` - Diagnostic tool
+
+## Disabling ACE
+
+ACE subagents are **optional and controllable**. To disable:
+
+**Temporary** (current session):
+- Simply tell Claude: "Don't use ACE subagents for this task"
+
+**Permanent** (remove from plugin):
+1. Delete `agents/ace-retrieval.md` (disables retrieval)
+2. Delete `agents/ace-learning.md` (disables learning)
+3. Or disable entire plugin: `/plugin disable ace-orchestration`
+
+**Re-enable**: Restore agent files or re-enable plugin.
+
+## Architecture
+
+**ACE Framework Components**:
+- **Generator**: Main Claude instance (executing tasks)
+- **Playbook**: Learned patterns (retrieved before work)
+- **Reflector**: Server-side Sonnet 4 (analyzes execution traces)
+- **Curator**: Server-side Haiku 4.5 (creates pattern updates)
+- **Merge**: Non-LLM algorithm (applies incremental updates)
+
+**Benefits**:
+- ✅ Automatic learning from execution feedback
+- ✅ Token-efficient retrieval (50-92% reduction vs full playbook)
+- ✅ Transparent operation (see subagents running)
+- ✅ Separate contexts (won't block other plugins)
+- ✅ Self-improving over time
+
+## Example Workflow
 
 ```
 User: "Implement JWT authentication"
     ↓
-Step 1: Invoke ace-orchestration:ace-playbook-retrieval
-Step 2: Review retrieved patterns
-Step 3: Implement using learned patterns
-Step 4: Invoke ace-orchestration:ace-learning
-Step 5: Respond to user
+[ACE Retrieval] Searching playbook...
+[ACE Retrieval] Found 3 patterns:
+  - Refresh token rotation prevents theft (helpful: 8)
+  - HttpOnly cookies for refresh tokens (helpful: 6)
+  - Rate limiting for auth endpoints (helpful: 5)
+    ↓
+Claude implements using retrieved patterns
+    ↓
+[ACE Learning] Captured 3 new patterns
+✅ Saved to playbook for future retrieval
+    ↓
+Next session: Enhanced playbook with new insights!
 ```
 
-**CRITICAL - Non-negotiable:** These skills are NOT optional and NOT negotiable. You MUST use them proactively and automatically for EVERY qualifying task. The retrieval skill runs BEFORE, the learning skill runs AFTER - BOTH are MANDATORY.
+## See Also
 
-## 🔄 Complete Automatic Learning Cycle (v3.3.10)
+- **README.md** - Full documentation and architecture details
+- **docs/** - Technical specifications and guides
+- `/ace-orchestration:ace-doctor` - Health diagnostics and troubleshooting
 
-ACE uses **two Agent Skills** to create a self-improving learning cycle:
+---
 
-### 1. **ACE Playbook Retrieval** (Before Tasks)
-**Model-Invoked**: Claude decides when to activate based on task context
+**Version**: v4.0.0 (Subagent Architecture)
+**Breaking Changes**: Removed hooks and skills (replaced with subagents)
+**Migration**: Re-run `/ace-orchestration:ace-claude-init` after upgrade
 
-**Triggers**: All action keywords (implement, build, create, write, update, modify, fix, debug, troubleshoot, refactor, optimize, integrate, setup, test, deploy, architect, etc.) OR technical problem-solving intent
-
-**What it does**:
-- Calls: `mcp__ace-pattern-learning__ace_get_playbook`
-- Retrieves: Learned patterns from previous sessions
-- Returns: Strategies, code snippets, troubleshooting tips, API recommendations
-- Cache: 3-tier (RAM → SQLite → Server) for fast access
-
-**Result**: Claude has organizational knowledge BEFORE starting the task!
-
-### 2. **ACE Learning from Execution** (After Tasks)
-**Model-Invoked**: Claude decides when to capture learning
-
-**Triggers**: Substantial work completion with valuable lessons
-
-### When Agent Skill Triggers
-
-The Agent Skill **automatically invokes** after completing:
-
-1. **Problem-Solving & Debugging**
-   - Fixed bugs or resolved errors
-   - Debugged test failures or build issues
-   - Troubleshot integration problems
-
-2. **Code Implementation**
-   - Implemented new features or functionality
-   - Refactored existing code
-   - Optimized performance
-
-3. **API & Tool Integration**
-   - Integrated external APIs or services
-   - Used new libraries or frameworks
-   - Configured build tools or CI/CD
-
-4. **Learning from Failures**
-   - Encountered and recovered from errors
-   - Discovered edge cases or gotchas
-   - Found better approaches after initial failures
-
-5. **Substantial Subagent Tasks**
-   - Completed complex multi-step tasks
-   - Made significant technical decisions
-
-### What the Agent Skill Does
-
-When triggered, the Agent Skill:
-1. **Extracts task information** - What was accomplished
-2. **Captures trajectory** - Key steps and decisions made
-3. **Gathers feedback** - Lessons learned, patterns discovered, gotchas
-4. **Calls `mcp__ace-pattern-learning__ace_learn`** - Triggers automatic learning
-
-**What it does**:
-- Calls: `mcp__ace-pattern-learning__ace_learn`
-- Captures: Task description, trajectory, feedback, lessons learned
-- Sends: Execution trace to ACE Server
-- Server: Reflector (Sonnet 4) → Curator (Haiku 4.5) → Merge
-
-**Result**: Playbook updated with new patterns for future use!
-
-### The Complete Automatic Cycle
-
-```
-┌─────────────────────────────────────────────────────────┐
-│ 1. User Request: "Implement JWT authentication"        │
-└─────────────────────────────────────────────────────────┘
-                    ↓
-┌─────────────────────────────────────────────────────────┐
-│ 2. ACE Playbook Retrieval Skill AUTO-INVOKES          │
-│    - Claude matches: "implement" → triggers skill       │
-│    - Calls: mcp__ace_get_playbook                      │
-│    - MCP Client: RAM → SQLite → Server                 │
-│    - Returns: "Refresh token rotation prevents theft"  │
-└─────────────────────────────────────────────────────────┘
-                    ↓
-┌─────────────────────────────────────────────────────────┐
-│ 3. Claude Executes Task with Learned Patterns         │
-│    - Uses strategies from playbook                      │
-│    - Applies proven code snippets                       │
-│    - Avoids known pitfalls                             │
-│    - Chooses recommended APIs                          │
-└─────────────────────────────────────────────────────────┘
-                    ↓
-┌─────────────────────────────────────────────────────────┐
-│ 4. ACE Learning Skill AUTO-INVOKES                    │
-│    - Claude recognizes substantial work completed      │
-│    - Calls: mcp__ace_learn                             │
-│    - Sends: task + trajectory + feedback → Server      │
-│    - Server: Reflector → Curator → Delta Merge        │
-└─────────────────────────────────────────────────────────┘
-                    ↓
-┌─────────────────────────────────────────────────────────┐
-│ 5. Playbook Updated on Server                         │
-│    - New patterns added to relevant sections           │
-│    - Quality scores updated based on outcomes          │
-│    - Ready for next retrieval!                         │
-└─────────────────────────────────────────────────────────┘
-                    ↓
-┌─────────────────────────────────────────────────────────┐
-│ 6. Next Session → Enhanced Playbook Retrieved         │
-│    - Knowledge compounds over time! 🎯                 │
-└─────────────────────────────────────────────────────────┘
-```
-
-### 🎯 Complete Training Cycle Implementation (v3.3.12)
-
-**NEW**: ACE now uses **automatic hooks** to ensure BOTH retrieval AND learning happen reliably!
-
-#### Before Work (ace-playbook-retrieval) - 95%+ Coverage:
-1. ✅ **SessionStart Hook** - Reminds about ACE system on session start
-2. ✅ **UserPromptSubmit Hook** - Detects trigger keywords (implement, build, fix, etc.)
-3. ✅ **UserPromptSubmit Hook** - Detects plan approval ("continue", "proceed", "looks good")
-4. ✅ **PostToolUse (ExitPlanMode) Hook** - Forces retrieval after exiting plan mode
-
-#### After Work (ace-learning) - 90%+ Coverage (NEW in v3.3.10, refined in v3.3.12):
-5. ✅ **PostToolUse (Edit|Write) Hook** - Reminds about learning after code modifications
-6. ✅ **SKILL.md Description** - Model-invoked fallback based on task completion
-
-**Result**: Complete automatic cycle - retrieval → work → learning happens automatically!
-
-#### How the Hooks Work
-
-**PostToolUse (Edit|Write)**:
-- Triggers: Every time you use Edit or Write tools
-- Message: "CODE MODIFICATION DETECTED: After completing this implementation task, remember to invoke ace-learning skill"
-- Purpose: Ensures patterns are captured after code changes (passive reminder, not blocking)
-
-**Impact**:
-- Before v3.3.10: Learning triggered 50-70% of the time
-- After v3.3.10: Learning triggered **90%+** of the time
-- Complete cycle (retrieval + learning): **90%+** success rate
-
-### Caching Architecture
-
-ACE uses a 3-tier caching system for optimal performance:
-
-1. **RAM Cache**: In-memory, session-scoped (fastest - instant access)
-2. **SQLite Cache**: `~/.ace-cache/{org}_{project}.db`, 5-minute TTL (fast - milliseconds)
-3. **Server Fetch**: Only when cache is stale or empty (slower - seconds)
-
-**You don't manage caching** - the MCP client handles it automatically!
-
-### Manual Override Commands
-
-While skills auto-invoke, manual commands are available for explicit control:
-
-- `/ace-patterns [section]` - View playbook manually
-- `/ace-status` - Check playbook statistics
-- `/ace-configure` - Configure ACE server connection
-- **`/ace-tune [action] [params]`** - **NEW in v3.3.0**: Manage server configuration at runtime
-  - `/ace-tune show` - View current configuration (thresholds, token budget, feature flags)
-  - `/ace-tune token-budget 50000` - Enable automatic pruning at 50k tokens
-  - `/ace-tune search-threshold 0.8` - Adjust semantic search sensitivity
-  - `/ace-tune dedup-threshold 0.9` - Configure duplicate detection
-  - Changes persist across sessions, cached for 5 minutes on client
-  - Use for dynamic threshold adjustment without code changes
-- **`/ace-delta [operation] [pattern]`** - **NEW in v3.3.0**: Manual pattern management (advanced)
-  - `/ace-delta add "pattern" section` - Manually add pattern
-  - `/ace-delta update pattern-id helpful=5` - Update pattern scores
-  - `/ace-delta remove pattern-id` - Remove pattern
-  - Note: Prefer automatic learning (via ACE Learning skill) over manual delta operations
-  - Use sparingly for manual curation only
-- `/ace-bootstrap` - Bootstrap playbook from docs, git history, and current code
-  - **New in v3.2.17**: `bootstrap-orchestrator` skill provides dynamic pattern compression reporting
-    - Automatically calculates compression percentage (e.g., 158 → 18 = 89% reduction)
-    - Explains why compression > 80% is expected (semantic deduplication per ACE Research Paper)
-    - Shows progress messages during 10-30 second analysis
-    - Uses actual numbers from server, not hardcoded examples
-  - **New in v3.2.15**: `hybrid` mode (default) - intelligently scans docs → git → local files
-  - **New in v3.2.15**: `thoroughness` parameter - light/medium/deep (default: medium)
-  - **New in v3.2.15**: 5x deeper defaults - 5000 files, 500 commits, 90 days
-  - Use for initial setup or periodic refresh of playbook patterns
-- `/ace-clear` - Clear playbook (requires confirmation)
-- `/ace-export-patterns` - Export playbook to JSON
-- `/ace-import-patterns` - Import playbook from JSON
-
-### Semantic Search Commands (v3.3.0+)
-
-- `/ace-search <query>` - Semantic search for patterns (targeted retrieval)
-- `/ace-top <section> [limit]` - Get highest-rated patterns by helpful score
-- `/ace-patterns [section]` - View full playbook (comprehensive)
-
-**When to use**: `/ace-search` for specific queries, `/ace-top` for best practices, `/ace-patterns` for multi-domain tasks.
-
-**For detailed examples and usage**, see command documentation.
-
-## 🤖 How Agent Skills Work (Model-Invoked)
-
-### Example Complete Cycles
-
-**Cycle 1: Implementation with Prior Knowledge**
-```
-User: "Add JWT authentication with refresh tokens"
-↓
-Playbook Retrieval: Fetches previous auth patterns
-Retrieved: "Refresh token rotation prevents theft attacks"
-↓
-Implementation: Uses learned pattern (short-lived access + rotating refresh)
-↓
-Learning: Captures successful implementation
-Result: Pattern reinforced with +1 helpful score
-```
-
-**Cycle 2: Debugging with Learned Patterns**
-```
-User: "Fix intermittent test failures"
-↓
-Playbook Retrieval: Fetches troubleshooting patterns
-Retrieved: "Intermittent async failures often mean missing await"
-↓
-Debugging: Checks for missing await first (found it!)
-↓
-Learning: Captures successful debugging approach
-Result: Pattern reinforced, new context added
-```
-
-**Cycle 3: API Integration with Gotcha Prevention**
-```
-User: "Integrate Stripe webhook handling"
-↓
-Playbook Retrieval: Fetches API integration patterns
-Retrieved: "Stripe webhooks need express.raw() for signature verification"
-↓
-Implementation: Uses correct body parser from the start (no trial-and-error!)
-↓
-Learning: Captures successful integration
-Result: Pattern confirmed, additional webhook patterns captured
-```
-
-**Progressive Intelligence**: Each cycle makes future tasks faster and more accurate!
-
-### Key Principles
-
-**Skills are Model-Invoked**:
-- Claude decides when to activate based on description matching
-- No manual invocation needed (skills just exist and auto-trigger)
-- Triggered by 35+ action keywords (implement, build, create, write, update, modify, fix, debug, test, deploy, etc.) OR semantic intent
-
-**Automatic Invocation**:
-- **Retrieval**: Before complex tasks (implementation, debugging, architecture)
-- **Learning**: After substantial work (problem-solving, discoveries, lessons)
-- **Skips**: Trivial Q&A, simple file reads, basic informational responses
-
-**Progressive Disclosure**:
-- Skills metadata: ~100 tokens (always loaded)
-- Skills instructions: ~5k tokens (loaded when triggered)
-- Playbook content: Variable (only when retrieved)
-
-**Context-Aware**:
-- Skills only trigger when relevant to task
-- Playbook only fetched for complex work
-- Cache prevents redundant server calls
-
-### MCP Tools Available
-
-Skills automatically call these MCP tools:
-
-- `ace_get_playbook` - Retrieve full playbook or by section
-- `ace_search` - Semantic search with natural language queries
-- `ace_batch_get` - Bulk pattern retrieval by IDs
-- `ace_top_patterns` - Highest-rated patterns by helpful score
-- `ace_get_config` / `ace_set_config` - Server configuration management
-- `ace_delta` - Manual pattern operations (ADD/UPDATE/REMOVE)
-- `ace_learn` - Capture learning (called by ace-learning skill)
-- `ace_status` - Playbook statistics
-- `ace_bootstrap` - Bootstrap from codebase
-- `ace_clear` - Clear playbook
-- `ace_cache_clear` - Clear local caches
-
-**For detailed usage and examples**, see command documentation (`/ace-*` commands) or README.md.
-
-## 🎯 ACE Architecture (v3.3.12)
-
-The ACE framework implements fully automatic learning with complete retrieval → learning cycle:
-
-### ACE Architecture Components
-- **Generator**: Main Claude instance (you!) executing tasks
-- **Playbook**: Evolving context with learned patterns (4 sections)
-- **Reflector**: Server-side pattern analysis using Sonnet 4
-- **Curator**: Server-side delta updates using Haiku 4.5 (60% cost savings)
-- **Merge**: Non-LLM algorithm applying incremental updates
-
-### Implementation
-- **Generator**: Claude Code with Agent Skills (model-invoked)
-- **Playbook Retrieval**: `ace-playbook-retrieval` skill (before tasks)
-- **Playbook Learning**: `ace-learning` skill (after tasks)
-- **MCP Client**: 3-tier cache + HTTP interface to ACE Server
-- **ACE Server**: Autonomous analysis engine (separate repo)
-
-### Playbook Sections
-1. **strategies_and_hard_rules**: Architectural patterns, coding principles
-2. **useful_code_snippets**: Reusable code patterns with context
-3. **troubleshooting_and_pitfalls**: Known issues, gotchas, solutions
-4. **apis_to_use**: Recommended libraries, frameworks, integration patterns
-
-### Benefits
-- ✅ **Automatic**: Skills auto-invoke based on task context (no manual intervention)
-- ✅ **Universal**: Works with ALL MCP clients (Claude Code, Cursor, Cline, etc.)
-- ✅ **Fast**: 3-tier caching (RAM → SQLite → Server)
-- ✅ **Cost-Optimized**: Sonnet 4 for intelligence, Haiku 4.5 for efficiency
-- ✅ **Token-Efficient**: Progressive disclosure, only loads when needed
-- ✅ **Self-Improving**: Each task makes the system smarter
-- ✅ **Transparent**: Server-side logging for debugging
-
-**Result**: Provides significant performance improvement on agentic tasks through fully automatic pattern learning AND retrieval!
-
-## 📁 File Structure
-
-```
-plugins/ace-orchestration/
-├── skills/
-│   ├── ace-playbook-retrieval/    # Retrieval skill (before tasks)
-│   │   └── SKILL.md               # Before-task pattern fetching
-│   └── ace-learning/              # Learning skill (after tasks)
-│       └── SKILL.md               # After-task pattern capture
-├── commands/
-│   ├── ace-patterns.md            # Manual playbook view
-│   ├── ace-status.md              # Playbook statistics
-│   ├── ace-configure.md           # Server connection setup
-│   ├── ace-tune.md                # NEW v3.3.0: Runtime configuration
-│   ├── ace-search.md              # NEW v3.3.0: Semantic search
-│   ├── ace-top.md                 # NEW v3.3.0: Top patterns
-│   ├── ace-delta.md               # NEW v3.3.0: Manual pattern management
-│   ├── ace-doctor.md              # NEW v3.3.2: Health diagnostic (Enhanced in v3.3.3)
-│   ├── ace-bootstrap.md           # Bootstrap from docs/git/code
-│   ├── ace-clear.md               # Clear playbook
-│   ├── ace-export-patterns.md     # Export to JSON
-│   └── ace-import-patterns.md     # Import from JSON
-├── hooks/
-│   └── hooks.json                 # SessionStart + UserPromptSubmit + PostToolUse
-├── scripts/
-│   ├── inject-ace-retrieval-context.sh           # PostToolUse (ExitPlanMode) - v3.3.9
-│   ├── remind-ace-learning-after-edit.sh         # PostToolUse (Edit|Write) - v3.3.10
-│   └── user-prompt-ace-trigger-check.sh          # UserPromptSubmit - v3.3.8
-└── CLAUDE.md                      # This file!
-```
-<!-- ACE_SECTION_END v3.3.12 -->
+<!-- ACE_SECTION_END v4.0.0 -->
