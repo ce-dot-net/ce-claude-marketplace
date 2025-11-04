@@ -624,6 +624,103 @@ This plugin implements the complete ACE framework architecture:
 
 **Result**: Achieves significant performance improvement on agentic tasks!
 
+## 🎯 Subagent Triggering Best Practices
+
+### Automatic vs Manual Invocation
+
+ACE subagents can trigger automatically based on task context, but you can also invoke them explicitly:
+
+**Automatic** (preferred):
+```
+Claude: I'll implement JWT authentication. Let me first use the ACE Retrieval subagent to search for relevant patterns...
+```
+
+**Explicit** (if needed):
+```
+User: Use the ACE Retrieval subagent to search for JWT authentication patterns
+```
+
+### When Subagents Should Trigger
+
+#### ACE Retrieval (before work)
+
+**Should trigger for:**
+- ✅ Implementing new features
+- ✅ Fixing bugs or debugging issues
+- ✅ Refactoring existing code
+- ✅ Making architectural decisions
+- ✅ Integrating APIs or libraries
+- ✅ Setting up configurations
+
+**Should NOT trigger for:**
+- ❌ Simple informational questions
+- ❌ Reading files without changes
+- ❌ Basic documentation queries
+
+#### ACE Learning (after work)
+
+**Should trigger for:**
+- ✅ Completed implementations
+- ✅ Resolved bugs or errors
+- ✅ Discovered gotchas or edge cases
+- ✅ Made technical decisions
+- ✅ Integrated new tools/APIs
+
+**Should NOT trigger for:**
+- ❌ Trivial changes (typo fixes)
+- ❌ Simple file reads or searches
+- ❌ No substantial work performed
+
+### Sequential Workflow
+
+ACE uses a **sequential** (not parallel) pattern:
+
+```
+1. User Request
+   ↓
+2. 🔍 ACE Retrieval (fetch patterns from playbook)
+   ↓
+3. Main Claude (execute work using patterns)
+   ↓
+4. 📚 ACE Learning (capture new patterns to playbook)
+   ↓
+5. Response to user
+```
+
+**This is NOT parallel invocation** - each step waits for the previous to complete.
+
+### Troubleshooting Triggering Issues
+
+If subagents aren't auto-triggering:
+
+1. **Explicitly invoke them:**
+   ```
+   User: "Use ACE Retrieval to search for X patterns"
+   ```
+
+2. **Check subagents are loaded:**
+   ```
+   /agents list
+   ```
+   Should show `ace-retrieval` and `ace-learning`
+
+3. **Verify plugin is enabled:**
+   ```
+   /plugin list
+   ```
+
+4. **Update to latest version:**
+   ```
+   /plugin update ace-orchestration
+   ```
+
+5. **Check CLAUDE.md has ACE section:**
+   ```bash
+   grep "ACE_SECTION_START" CLAUDE.md
+   ```
+
+See the [Troubleshooting](#-troubleshooting) section for more detailed debugging steps.
+
 ## 🔐 Data Privacy
 
 ### MCP Client (Local)

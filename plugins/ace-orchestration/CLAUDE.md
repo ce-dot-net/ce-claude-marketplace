@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v4.1.1 -->
+<!-- ACE_SECTION_START v4.1.2 -->
 # ACE Orchestration Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -42,6 +42,47 @@ ACE uses **two subagents** that run in separate contexts:
 **You'll see**: `[ACE Learning] Captured 3 new patterns`
 
 **Triggers**: Work completion with valuable lessons (successes AND failures)
+
+## 🚨 ACE Subagent Workflow
+
+**IMPORTANT**: ACE has two subagents that you should use proactively:
+
+### Before Starting Work
+🔍 **Use ACE Retrieval subagent** to search the playbook for:
+- Relevant patterns from past work
+- Proven strategies and approaches
+- Known pitfalls to avoid
+- Recommended APIs and libraries
+
+**Triggers**: implement, build, create, add, develop, write, update, modify, fix, debug, troubleshoot, refactor, optimize, integrate, setup, configure, architect, design, test
+
+**Example**: Before implementing JWT auth, invoke ACE Retrieval to fetch authentication patterns.
+
+### After Completing Work
+📚 **Use ACE Learning subagent** to capture:
+- Lessons learned from implementation
+- Patterns discovered during debugging
+- Gotchas and edge cases found
+- Successful approaches to reuse
+
+**Triggers**: After substantial work completion (features, bug fixes, refactoring, integrations)
+
+**Example**: After implementing JWT auth successfully, invoke ACE Learning to capture the patterns.
+
+### Sequential Workflow
+```
+User Request
+    ↓
+🔍 ACE Retrieval (fetch patterns)
+    ↓
+Main Claude (execute work using patterns)
+    ↓
+📚 ACE Learning (capture new patterns)
+    ↓
+Response to user
+```
+
+**Remember**: These subagents are designed to help you. Use them proactively on every qualifying task!
 
 ## The Playbook
 
@@ -142,9 +183,9 @@ Next session: Enhanced playbook with new insights!
 
 ---
 
-**Version**: v4.1.1 (Bug Fix: Single-Org Interactive Menu)
-**Bug Fixed**: Missing interactive menu in `/ace-configure` for existing single-org configurations
+**Version**: v4.1.2 (Enhanced Subagent Triggering Documentation)
+**Improvements**: Strengthened documentation and instructions to improve subagent triggering reliability
 **Requirements**: MCP Client v3.8.1+
-**Migration**: No action required - automatic detection and menu display
+**Migration**: No action required - documentation improvements only
 
-<!-- ACE_SECTION_END v4.1.1 -->
+<!-- ACE_SECTION_END v4.1.2 -->
