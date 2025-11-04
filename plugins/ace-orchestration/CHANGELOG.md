@@ -5,6 +5,32 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.1] - 2025-11-04
+
+### 🐛 Bug Fix: Single-Org Interactive Menu
+
+**Fixed**: Missing interactive menu when running `/ace-configure` with existing single-org configuration.
+
+#### The Issue
+- Users upgrading from v4.0.x to v4.1.0 had existing single-org configs
+- Running `/ace-configure` detected the config but showed no menu
+- Command had menus for fresh install and multi-org mode, but not single-org mode
+
+#### The Fix
+Added "Single-Org Mode Decision" menu with 4 options:
+1. **Keep current config** - No changes
+2. **Update settings** - Modify server URL, token, cache TTL, auto-update
+3. **Add another organization** - Convert to multi-org mode
+4. **Reconfigure from scratch** - Replace entire configuration
+
+#### Files Changed
+- `commands/ace-configure.md` - Added single-org menu flow in Step 4
+
+#### Impact
+- ✅ Users can now interact with `/ace-configure` when single-org config exists
+- ✅ Smooth upgrade path from v4.0.x to v4.1.x
+- ✅ Provides option to convert to multi-org mode
+
 ## [4.1.0] - 2025-11-04
 
 ### 🌐 NEW FEATURE: Multi-Organization Support

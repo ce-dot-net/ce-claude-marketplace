@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v4.1.0 -->
+<!-- ACE_SECTION_START v4.1.1 -->
 # ACE Orchestration Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -142,9 +142,9 @@ Next session: Enhanced playbook with new insights!
 
 ---
 
-**Version**: v4.1.0 (Multi-Organization Support + Enhanced Subagents)
-**New Features**: Multi-org configuration, enhanced subagent visibility with emoji headers
+**Version**: v4.1.1 (Bug Fix: Single-Org Interactive Menu)
+**Bug Fixed**: Missing interactive menu in `/ace-configure` for existing single-org configurations
 **Requirements**: MCP Client v3.8.1+
-**Migration**: Existing configs work unchanged (backward compatible)
+**Migration**: No action required - automatic detection and menu display
 
-<!-- ACE_SECTION_END v4.1.0 -->
+<!-- ACE_SECTION_END v4.1.1 -->
