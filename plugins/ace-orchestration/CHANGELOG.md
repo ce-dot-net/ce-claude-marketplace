@@ -5,6 +5,60 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.3] - 2025-11-04
+
+### 🐛 Bug Fix: Missing ACE_ORG_ID in Multi-Org Project Config
+
+**Fixed**: `/ace-configure` command was not writing `ACE_ORG_ID` to project's `.claude/settings.json` file when configuring multi-org projects.
+
+#### The Issue
+When running `/ace-configure` in a project that belongs to a multi-org setup:
+1. ✅ Command correctly verified token and found project in organization
+2. ✅ Command correctly added organization to global config (`~/.config/ace/config.json`)
+3. ❌ **Command forgot to write `ACE_ORG_ID` to project config** (`.claude/settings.json`)
+
+**Result**: MCP client received undefined `${ACE_ORG_ID}` environment variable, causing org resolution to fail.
+
+**Expected**:
+```json
+{
+  "env": {
+    "ACE_PROJECT_ID": "prj_374e70fce04f703c",
+    "ACE_ORG_ID": "org_34fYIlitYk4nyFuTvtsAzA6uUJF"
+  }
+}
+```
+
+**Actual** (before fix):
+```json
+{
+  "env": {
+    "ACE_PROJECT_ID": "prj_374e70fce04f703c"
+  }
+}
+```
+
+#### The Fix
+Updated `commands/ace-configure.md` Step 5 (project config save logic):
+- When `MATCHING_ORG` is found (project belongs to an org), write BOTH `ACE_PROJECT_ID` and `ACE_ORG_ID`
+- When creating new settings file, conditionally include `ACE_ORG_ID` if multi-org
+- When merging with existing settings, conditionally add `ACE_ORG_ID` if multi-org
+- Updated misleading comment "auto-resolved" → "set automatically for multi-org projects"
+
+#### Files Changed
+- `commands/ace-configure.md` - Fixed project config save logic (lines 591-633)
+
+#### Impact
+✅ Multi-org projects now get proper `ACE_ORG_ID` in `.claude/settings.json`
+✅ MCP client can correctly resolve organization from environment variable
+✅ Single-org projects unaffected (only `ACE_PROJECT_ID` as before)
+✅ 100% backward compatible
+
+#### Testing
+After updating, run `/ace-configure` in a multi-org project and verify `.claude/settings.json` contains both environment variables.
+
+---
+
 ## [4.1.2] - 2025-11-04
 
 ### 📚 Enhanced Subagent Triggering Documentation

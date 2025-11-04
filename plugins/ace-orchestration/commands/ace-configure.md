@@ -576,10 +576,10 @@ if [ "$MULTI_ORG_MODE" = "true" ]; then
       | head -n1)
     ORG_NAME=$(echo "$GLOBAL_CONFIG_JSON" | jq -r ".orgs[\"$MATCHING_ORG\"].orgName")
 
-    # Optionally set ACE_ORG_ID explicitly
+    # ACE_ORG_ID will be set in project config
     echo ""
-    echo "ℹ️  Note: ACE_ORG_ID will be auto-resolved from project ID"
-    echo "   Or you can set it explicitly in .claude/settings.json"
+    echo "ℹ️  Note: ACE_ORG_ID will be set automatically for multi-org projects"
+    echo "   Project belongs to: $ORG_NAME ($MATCHING_ORG)"
   else
     echo "⚠️  Warning: Project not in any org, will use fallback token"
   fi
@@ -593,21 +593,43 @@ if [ -f "$PROJECT_CONFIG" ]; then
   # Read existing settings
   EXISTING=$(cat "$PROJECT_CONFIG")
 
-  # Merge ACE_PROJECT_ID env var using jq
-  echo "$EXISTING" | jq \
-    --arg projectId "$NEW_PROJECT_ID" \
-    '.env.ACE_PROJECT_ID = $projectId' > "$PROJECT_CONFIG.tmp"
+  # Merge ACE_PROJECT_ID (and ACE_ORG_ID if multi-org) using jq
+  if [ -n "$MATCHING_ORG" ]; then
+    # Multi-org mode: set both ACE_PROJECT_ID and ACE_ORG_ID
+    echo "$EXISTING" | jq \
+      --arg projectId "$NEW_PROJECT_ID" \
+      --arg orgId "$MATCHING_ORG" \
+      '.env.ACE_PROJECT_ID = $projectId | .env.ACE_ORG_ID = $orgId' > "$PROJECT_CONFIG.tmp"
+  else
+    # Single-org or no org: only set ACE_PROJECT_ID
+    echo "$EXISTING" | jq \
+      --arg projectId "$NEW_PROJECT_ID" \
+      '.env.ACE_PROJECT_ID = $projectId' > "$PROJECT_CONFIG.tmp"
+  fi
 
   mv "$PROJECT_CONFIG.tmp" "$PROJECT_CONFIG"
 else
-  # Create new settings file with ACE_PROJECT_ID
-  cat > "$PROJECT_CONFIG" <<EOF
+  # Create new settings file
+  if [ -n "$MATCHING_ORG" ]; then
+    # Multi-org mode: include both ACE_PROJECT_ID and ACE_ORG_ID
+    cat > "$PROJECT_CONFIG" <<EOF
+{
+  "env": {
+    "ACE_PROJECT_ID": "$NEW_PROJECT_ID",
+    "ACE_ORG_ID": "$MATCHING_ORG"
+  }
+}
+EOF
+  else
+    # Single-org or no org: only ACE_PROJECT_ID
+    cat > "$PROJECT_CONFIG" <<EOF
 {
   "env": {
     "ACE_PROJECT_ID": "$NEW_PROJECT_ID"
   }
 }
 EOF
+  fi
 fi
 
 echo "✅ Project configuration saved to: $PROJECT_CONFIG"
