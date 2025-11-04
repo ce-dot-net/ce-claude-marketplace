@@ -311,6 +311,45 @@ Based on user's choice, proceed with:
 - **"Update existing org"**: Show org list, update selected org
 - **"Convert to single org"**: Remove orgs field, keep one token
 
+#### Single-Org Mode Decision (if MULTI_ORG_MODE=false AND config exists):
+
+If single-org config exists (no multi-org), ask user what they want to do:
+
+```javascript
+// Only show if MULTI_ORG_MODE = false AND EXISTING_TOKEN is not empty
+AskUserQuestion({
+  questions: [{
+    question: `Found existing single-org configuration. What would you like to do?`,
+    header: "Configuration",
+    multiSelect: false,
+    options: [
+      {
+        label: "Keep current config",
+        description: "No changes, use existing configuration"
+      },
+      {
+        label: "Update settings",
+        description: "Update server URL, token, cache TTL, or auto-update"
+      },
+      {
+        label: "Add another organization",
+        description: "Convert to multi-org mode by adding a second organization"
+      },
+      {
+        label: "Reconfigure from scratch",
+        description: "Replace entire configuration with new values"
+      }
+    ]
+  }]
+})
+```
+
+Based on user's choice, proceed with:
+- **"Keep current config"**: Exit, show summary of current config
+- **"Update settings"**: Show interactive form with current values pre-filled
+- **"Add another organization"**: Call verify_token() for new org, convert to multi-org format
+- **"Reconfigure from scratch"**: Proceed to full interactive configuration
+
 #### For Global Configuration (`--global` or auto-detected):
 
 ```javascript
