@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
-  "version": "4.0.3",
-  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture (ACE Retrieval + ACE Learning). Learns from execution feedback to improve coding outcomes. No hooks, no skill blocking - transparent and controllable. Requires MCP client v3.8.0+.",
+  "version": "4.1.0",
+  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Multi-Org Support. Auto-resolves organizations from project IDs. Enhanced subagent visibility with emoji headers. 100% backward compatible. Requires MCP client v3.8.1+.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

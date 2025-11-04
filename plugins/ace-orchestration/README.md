@@ -177,6 +177,105 @@ export ACE_PROJECT_ID="prj_your_project_id"
 
 **📖 See [CONFIGURATION.md](./CONFIGURATION.md) for detailed setup instructions**
 
+## 🌐 Multi-Organization Support (v4.1.0)
+
+**NEW in v4.1.0**: Manage multiple organizations in a single configuration!
+
+### Use Cases
+
+Perfect for:
+- 🧑‍💼 **Consultants** working with multiple clients
+- 🏢 **Developers** switching between company and personal projects
+- 👥 **Teams** managing multiple organizational accounts
+
+### How It Works
+
+**Automatic Organization Resolution**:
+- Each project has a `projectId` (e.g., `prj_d3a244129d62c198`)
+- MCP Client automatically resolves which organization owns that project
+- Uses the correct API token for that organization
+- **Zero manual org selection needed per-project**
+
+### Configuration Structure
+
+**Multi-Org Config** (`~/.config/ace/config.json`):
+```json
+{
+  "serverUrl": "https://ace-api.code-engine.app",
+  "cacheTtlMinutes": 120,
+  "orgs": {
+    "org_34fYIl...JF": {
+      "orgName": "ce-dot-net",
+      "apiToken": "ace_org1_xxxxx",
+      "projects": ["prj_abc", "prj_xyz", "prj_123"]
+    },
+    "org_xyz789": {
+      "orgName": "client-corp",
+      "apiToken": "ace_org2_yyyyy",
+      "projects": ["prj_client_app"]
+    }
+  }
+}
+```
+
+### Adding Organizations
+
+**First Organization** (automatic):
+```bash
+/ace-orchestration:ace-configure
+```
+- Enter API token
+- Server auto-populates `org_id`, `org_name`, and `projects`
+- Saved to `~/.config/ace/config.json`
+
+**Additional Organizations**:
+```bash
+/ace-orchestration:ace-configure --global
+```
+1. Select **"Add new org"**
+2. Enter new API token
+3. Server fetches org info automatically
+4. Added to `orgs` object
+
+### Project Configuration
+
+**Set up project with validation**:
+```bash
+/ace-orchestration:ace-configure --project
+```
+- Shows available projects by organization
+- Validates project ID belongs to an org
+- Warns if project not found (uses fallback token)
+- Sets `ACE_PROJECT_ID` in `.claude/settings.json`
+
+**Example** (`.claude/settings.json`):
+```json
+{
+  "env": {
+    "ACE_PROJECT_ID": "prj_client_app"
+  }
+}
+```
+
+### Backward Compatibility
+
+✅ **Single-org configurations continue to work unchanged:**
+
+```json
+{
+  "serverUrl": "https://ace-api.code-engine.app",
+  "apiToken": "ace_xxxxx",
+  "cacheTtlMinutes": 120
+}
+```
+
+**No migration required** - both formats work simultaneously.
+
+### Requirements
+
+- **MCP Client**: v3.8.1+ (includes multi-org support)
+- **Plugin Version**: v4.1.0+
+
 ## 🤖 Subagent Architecture (v4.0.0)
 
 **Breaking Change**: Replaced hooks + skills with Claude Code CLI subagents for transparent, non-blocking operation.
