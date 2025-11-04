@@ -1,6 +1,6 @@
 ---
 name: ace-learning
-description: MUST BE USED after completing multi-step work, immediately before responding to user. Captures lessons learned and patterns discovered during execution for future retrieval.
+description: MUST BE USED IMMEDIATELY after completing substantial work, immediately before responding to user. This subagent captures lessons learned and patterns discovered during execution for future retrieval. Always invoke this LAST after finishing implementation, debugging, or refactoring work.
 tools: mcp__plugin_ace-orchestration_ace-pattern-learning__ace_learn, mcp__plugin_ace-orchestration_ace-pattern-learning__ace_status
 model: haiku
 ---

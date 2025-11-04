@@ -5,6 +5,64 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.2] - 2025-11-04
+
+### 📚 Enhanced Subagent Triggering Documentation
+
+**Issue**: Community reports ACE subagents not auto-triggering as reliably as expected across different use cases.
+
+**Solution**: Strengthened documentation and instructions without adding hooks (conservative approach to maintain v4.0.0 architecture).
+
+#### Enhanced
+
+- **CLAUDE.md Template**: Added explicit "🚨 ACE Subagent Workflow" section with:
+  - Clear BEFORE/AFTER workflow reminders
+  - Comprehensive trigger keyword lists for both subagents
+  - Sequential workflow diagram showing Retrieval → Work → Learning cycle
+  - Usage examples (e.g., "Before implementing JWT auth, invoke ACE Retrieval")
+  - Proactive usage reminders
+
+- **Subagent Descriptions**: Strengthened with "MUST BE USED" and "ALWAYS invoke" emphasis
+  - `agents/ace-retrieval.md`: Enhanced description with "FIRST before beginning substantial work"
+  - `agents/ace-learning.md`: Enhanced description with "LAST after finishing implementation"
+  - Added specific task types in descriptions (implementation, debugging, refactoring, architectural)
+
+- **README.md**: New "🎯 Subagent Triggering Best Practices" section with:
+  - Automatic vs explicit invocation patterns
+  - When subagents should/shouldn't trigger (with ✅/❌ checklists)
+  - Sequential workflow explanation (not parallel)
+  - Troubleshooting guide for triggering issues
+  - Links to detailed debugging steps
+
+#### Rationale
+
+Conservative approach to improve triggering through better documentation rather than re-introducing hooks (removed in v4.0.0 due to Issue #3523). Community evidence (Reddit, GitHub issues) shows subagents often don't auto-trigger, but we're testing if strengthened docs can solve this before adding hooks back.
+
+**If v4.1.2 proves insufficient**, v4.2.0 may introduce lightweight reminder hooks based on community feedback.
+
+#### Files Changed
+
+- `CLAUDE.md` - Added "ACE Subagent Workflow" section (~40 lines), updated version markers
+- `agents/ace-retrieval.md` - Enhanced description with stronger trigger language
+- `agents/ace-learning.md` - Enhanced description with stronger trigger language
+- `README.md` - Added "Subagent Triggering Best Practices" section (~100 lines)
+- `CHANGELOG.md` - This entry
+
+#### No Breaking Changes
+
+✅ 100% backward compatible - documentation improvements only
+✅ No code changes, no hooks, no architecture modifications
+✅ Zero migration required
+
+#### Testing Plan
+
+After release, monitor:
+1. User feedback on triggering reliability
+2. ACE server metrics (ace_get_playbook and ace_learn call frequency)
+3. Community response to documentation improvements
+
+---
+
 ## [4.1.1] - 2025-11-04
 
 ### 🐛 Bug Fix: Single-Org Interactive Menu
