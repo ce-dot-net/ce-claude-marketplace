@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v3.3.11 -->
+<!-- ACE_SECTION_START v3.3.12 -->
 # ACE Orchestration Plugin - Automatic Learning Cycle
 
 This plugin provides fully automatic pattern learning using the ACE framework architecture.
@@ -201,7 +201,7 @@ When triggered, the Agent Skill:
 └─────────────────────────────────────────────────────────┘
 ```
 
-### 🎯 Complete Training Cycle Implementation (v3.3.11)
+### 🎯 Complete Training Cycle Implementation (v3.3.12)
 
 **NEW**: ACE now uses **automatic hooks** to ensure BOTH retrieval AND learning happen reliably!
 
@@ -211,7 +211,7 @@ When triggered, the Agent Skill:
 3. ✅ **UserPromptSubmit Hook** - Detects plan approval ("continue", "proceed", "looks good")
 4. ✅ **PostToolUse (ExitPlanMode) Hook** - Forces retrieval after exiting plan mode
 
-#### After Work (ace-learning) - 90%+ Coverage (NEW in v3.3.10, refined in v3.3.11):
+#### After Work (ace-learning) - 90%+ Coverage (NEW in v3.3.10, refined in v3.3.12):
 5. ✅ **PostToolUse (Edit|Write) Hook** - Reminds about learning after code modifications
 6. ✅ **SKILL.md Description** - Model-invoked fallback based on task completion
 
@@ -368,7 +368,7 @@ Skills automatically call these MCP tools:
 
 **For detailed usage and examples**, see command documentation (`/ace-*` commands) or README.md.
 
-## 🎯 ACE Architecture (v3.3.11)
+## 🎯 ACE Architecture (v3.3.12)
 
 The ACE framework implements fully automatic learning with complete retrieval → learning cycle:
 
@@ -433,4 +433,4 @@ plugins/ace-orchestration/
 │   └── user-prompt-ace-trigger-check.sh          # UserPromptSubmit - v3.3.8
 └── CLAUDE.md                      # This file!
 ```
-<!-- ACE_SECTION_END v3.3.11 -->
+<!-- ACE_SECTION_END v3.3.12 -->
