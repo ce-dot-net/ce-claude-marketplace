@@ -1,6 +1,6 @@
 ---
 name: ace-learning
-description: Capture patterns learned from execution AFTER substantial coding tasks (implementation, debugging, refactoring, API integration). Invoked when work is complete to save lessons for future retrieval.
+description: MUST BE USED after completing multi-step work, immediately before responding to user. Captures lessons learned and patterns discovered during execution for future retrieval.
 tools: mcp__ace-pattern-learning__ace_learn, mcp__ace-pattern-learning__ace_status
 model: haiku
 ---
@@ -27,9 +27,26 @@ You're **NOT invoked** for:
 
 ## Your Process
 
+**CRITICAL**: You may receive context in two formats:
+
+1. **Raw execution context** (preferred):
+   - File changes, commits, errors encountered, solutions applied
+   - You extract and structure the learning
+
+2. **Pre-formatted analysis**:
+   - Already structured with Task/Trajectory/Lessons
+   - You still MUST call ace_learn tool (don't just echo!)
+
+**Regardless of input format, you MUST**:
+- Extract the key information
+- **ALWAYS call `mcp__ace-pattern-learning__ace_learn`**
+- Never just describe or echo without calling the tool
+
+---
+
 ### Step 1: Extract Task Information
 
-From the main Claude's work, identify:
+From the provided context (raw OR pre-formatted), identify:
 
 1. **Task description** - What was accomplished? (1-2 sentences)
 2. **Success outcome** - Did it work? (true/false)
