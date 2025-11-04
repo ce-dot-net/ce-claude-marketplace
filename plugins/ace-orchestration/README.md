@@ -333,7 +333,7 @@ Backup and restore playbook
 
 ## 🪝 Hooks (ACE Enforcement & Automation)
 
-### ✅ Complete Training Cycle (NEW in v3.3.10, refined in v3.3.11)
+### ✅ Complete Training Cycle (NEW in v3.3.10, refined in v3.3.12)
 
 **ACE now uses 5 automatic hooks to ensure BOTH retrieval AND learning happen reliably!**
 
