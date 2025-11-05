@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "echo '\n🔍 ACE WORKFLOW REMINDER:\n\nBEFORE starting: Invoke ACE Retrieval subagent to fetch relevant patterns\nAFTER completion: Invoke ACE Learning subagent to capture new lessons\n\nSequential workflow: Retrieval → Work → Learning\n'"
+            "command": "printf '\\n🔍 ACE WORKFLOW REMINDER:\\n\\nBEFORE starting: Invoke ACE Retrieval subagent to fetch relevant patterns\\nAFTER completion: Invoke ACE Learning subagent to capture new lessons\\n\\nSequential workflow: Retrieval → Work → Learning\\n'"
           }
         ]
       }
