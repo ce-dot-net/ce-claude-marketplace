@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "check|verify|validate|review|analyze|investigate|inspect|examine|explore|assess|evaluate|understand|plan|design|architect|outline|structure|implement|build|create|add|develop|write|code|update|modify|change|edit|enhance|extend|revise|improve|fix|debug|troubleshoot|resolve|diagnose|solve|refactor|optimize|restructure|integrate|connect|setup|configure|install|deploy|choose|decide|select|compare|consider",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '\n🔍 ACE WORKFLOW REMINDER:\n\nBEFORE starting: Invoke ACE Retrieval subagent to fetch relevant patterns\nAFTER completion: Invoke ACE Learning subagent to capture new lessons\n\nSequential workflow: Retrieval → Work → Learning\n'"
+          }
+        ]
+      }
+    ]
+  }
+}
