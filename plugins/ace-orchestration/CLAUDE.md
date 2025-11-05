@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v4.1.4 -->
+<!-- ACE_SECTION_START v4.1.5 -->
 # ACE Orchestration Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -183,9 +183,12 @@ Next session: Enhanced playbook with new insights!
 
 ---
 
-**Version**: v4.1.4 (MCP Client v3.8.2)
-**Updated**: MCP client dependency to v3.8.2 with latest improvements and bug fixes
+**Version**: v4.1.5 (UserPromptSubmit Hook + MCP Client v3.8.2)
+**Updated**: Added lightweight UserPromptSubmit hook for workflow reminders
+**New Feature**: Hook fires when trigger words detected (check, implement, fix, debug, etc.)
+**Hook Behavior**: Shows reminder about ACE sequential workflow (Retrieval → Work → Learning)
 **Requirements**: MCP Client v3.8.2+
-**Migration**: Plugin will automatically use new MCP client on next Claude Code restart
+**Migration**: Hook activates automatically on next session. Opt-out: delete `hooks/` directory
+**Safety**: Single non-cascading hook (learned from v3.x Hook Storm Bug #3523)
 
-<!-- ACE_SECTION_END v4.1.4 -->
+<!-- ACE_SECTION_END v4.1.5 -->

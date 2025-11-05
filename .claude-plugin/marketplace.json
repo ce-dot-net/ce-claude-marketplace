@@ -13,8 +13,8 @@
     {
       "name": "ace-orchestration",
       "source": "./plugins/ace-orchestration",
-      "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Multi-Org Support. Auto-resolves organizations from project IDs. Enhanced subagent visibility. 100% backward compatible.",
-      "version": "4.1.4",
+      "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Multi-Org Support + Workflow Reminders. Lightweight UserPromptSubmit hook reminds Claude to use ACE subagents. Auto-resolves organizations. 100% backward compatible.",
+      "version": "4.1.5",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"

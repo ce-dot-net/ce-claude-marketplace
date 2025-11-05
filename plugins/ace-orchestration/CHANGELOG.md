@@ -5,6 +5,69 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.5] - 2025-11-05
+
+### ✨ Feature: UserPromptSubmit Hook for ACE Workflow Reminders
+
+**Added**: Lightweight UserPromptSubmit hook that reminds Claude to use ACE subagents when trigger words are detected.
+
+#### The Problem
+- **Issue**: ACE subagents (Retrieval & Learning) were not triggering reliably despite strong CLAUDE.md documentation
+- **Root cause**: CLAUDE.md guidance is passive - can be ignored without consequence
+- **Community feedback**: Multiple reports of subagents not auto-triggering (Reddit, GitHub)
+
+#### The Solution
+Introduced a single, minimal UserPromptSubmit hook that:
+- ✅ Fires when user message contains trigger words (check, verify, implement, build, fix, debug, refactor, etc.)
+- ✅ Shows reminder about ACE sequential workflow: Retrieval → Work → Learning
+- ✅ Non-cascading design (single hook, no exponential multiplication)
+- ✅ Task-based (fires once per user message, not per tool)
+- ✅ Optional (users can delete hooks/ directory if desired)
+
+#### Changed
+- **Added**: `hooks/hooks.json` with UserPromptSubmit configuration
+- **Updated**: `plugin.json` - Added hooks field pointing to `./hooks/hooks.json`
+- **Updated**: `plugin.template.json` - Added hooks field
+- **Updated**: Description mentions "Lightweight hook for workflow reminders"
+
+#### Trigger Words (Broad Matching)
+**Planning/Investigation**: check, verify, validate, review, analyze, investigate, inspect, examine, explore, assess, evaluate, understand
+**Design**: plan, design, architect, outline, structure
+**Implementation**: implement, build, create, add, develop, write, code
+**Modification**: update, modify, change, edit, enhance, extend, revise, improve
+**Debugging**: fix, debug, troubleshoot, resolve, diagnose, solve
+**Refactoring**: refactor, optimize, restructure
+**Integration**: integrate, connect, setup, configure, install, deploy
+**Decision Making**: choose, decide, select, compare, consider
+
+#### Why This Design is Safe
+**Learned from v3.x Hook Storm Bug (Issue #3523)**:
+- ❌ v3.x had multiple cascading hooks: SessionStart + PreToolUse + PostToolUse + UserPromptTrigger
+- ❌ Hooks triggered other hooks → exponential multiplication → crash
+- ✅ v4.1.5 has ONE hook: UserPromptSubmit only
+- ✅ Fires once per user message (not per tool)
+- ✅ Shows reminder (doesn't auto-invoke subagents which could cascade)
+- ✅ Non-cascading by design
+
+#### User Benefits
+- ✅ **Enforcement**: Visible reminder when trigger words detected
+- ✅ **Non-intrusive**: Brief one-liner, not blocking workflow
+- ✅ **Asymmetric triggering**: Broad triggers for planning AND implementation
+- ✅ **Sequential workflow**: Reminds about full cycle (Retrieval → Work → Learning)
+- ✅ **Optional**: Delete `hooks/` directory to disable
+
+#### Disabling the Hook
+Users can disable by:
+1. Delete `~/.claude/plugins/.../ace-orchestration/hooks/` directory
+2. Or edit `hooks.json` to remove/modify matchers
+
+#### Migration
+- **From v4.1.4**: Automatic - hook activates on next session
+- **No breaking changes**: 100% backward compatible
+- **Opt-out available**: Users can delete hooks directory
+
+---
+
 ## [4.1.4] - 2025-11-04
 
 ### ⬆️ Dependency Update: MCP Client v3.8.2

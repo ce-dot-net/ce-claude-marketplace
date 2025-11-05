@@ -2,7 +2,7 @@
 
 ## ACE Plugin Instructions
 
-<!-- ACE_SECTION_START v4.0.3 -->
+<!-- ACE_SECTION_START v4.1.5 -->
 # ACE Orchestration Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -46,6 +46,47 @@ ACE uses **two subagents** that run in separate contexts:
 **You'll see**: `[ACE Learning] Captured 3 new patterns`
 
 **Triggers**: Work completion with valuable lessons (successes AND failures)
+
+## 🚨 ACE Subagent Workflow
+
+**IMPORTANT**: ACE has two subagents that you should use proactively:
+
+### Before Starting Work
+🔍 **Use ACE Retrieval subagent** to search the playbook for:
+- Relevant patterns from past work
+- Proven strategies and approaches
+- Known pitfalls to avoid
+- Recommended APIs and libraries
+
+**Triggers**: implement, build, create, add, develop, write, update, modify, fix, debug, troubleshoot, refactor, optimize, integrate, setup, configure, architect, design, test
+
+**Example**: Before implementing JWT auth, invoke ACE Retrieval to fetch authentication patterns.
+
+### After Completing Work
+📚 **Use ACE Learning subagent** to capture:
+- Lessons learned from implementation
+- Patterns discovered during debugging
+- Gotchas and edge cases found
+- Successful approaches to reuse
+
+**Triggers**: After substantial work completion (features, bug fixes, refactoring, integrations)
+
+**Example**: After implementing JWT auth successfully, invoke ACE Learning to capture the patterns.
+
+### Sequential Workflow
+```
+User Request
+    ↓
+🔍 ACE Retrieval (fetch patterns)
+    ↓
+Main Claude (execute work using patterns)
+    ↓
+📚 ACE Learning (capture new patterns)
+    ↓
+Response to user
+```
+
+**Remember**: These subagents are designed to help you. Use them proactively on every qualifying task!
 
 ## The Playbook
 
@@ -146,8 +187,12 @@ Next session: Enhanced playbook with new insights!
 
 ---
 
-**Version**: v4.0.3 (Subagent Architecture)
-**Breaking Changes**: Removed hooks and skills (replaced with subagents)
-**Migration**: Re-run `/ace-orchestration:ace-claude-init` after upgrade
+**Version**: v4.1.5 (UserPromptSubmit Hook + MCP Client v3.8.2)
+**Updated**: Added lightweight UserPromptSubmit hook for workflow reminders
+**New Feature**: Hook fires when trigger words detected (check, implement, fix, debug, etc.)
+**Hook Behavior**: Shows reminder about ACE sequential workflow (Retrieval → Work → Learning)
+**Requirements**: MCP Client v3.8.2+
+**Migration**: Hook activates automatically on next session. Opt-out: delete `hooks/` directory
+**Safety**: Single non-cascading hook (learned from v3.x Hook Storm Bug #3523)
 
-<!-- ACE_SECTION_END v4.0.3 -->
+<!-- ACE_SECTION_END v4.1.5 -->
