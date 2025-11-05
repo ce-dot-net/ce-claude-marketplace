@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "printf '\\n🔍 ACE WORKFLOW REMINDER:\\n\\nBEFORE starting: Invoke ACE Retrieval subagent to fetch relevant patterns\\nAFTER completion: Invoke ACE Learning subagent to capture new lessons\\n\\nSequential workflow: Retrieval → Work → Learning\\n'"
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/user-prompt-reminder.py"
           }
         ]
       }
