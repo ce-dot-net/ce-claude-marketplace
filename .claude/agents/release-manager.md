@@ -135,50 +135,73 @@ echo "plugin.template.json:" && grep version plugins/ace-orchestration/plugin.te
 **Expected**: Both should show same version (e.g., 3.2.14)
 **If mismatch**: Update plugin.template.json and commit!
 
-### ❌ Mistake 6: Forgetting CLAUDE.md version references (UPDATED v3.2.37)
+### ❌ Mistake 6: Forgetting CLAUDE.md version references (UPDATED v4.1.5)
 **THE PROBLEM**: The `/ace-claude-init` command and script-based updates rely on CLAUDE.md version markers!
 
 **WHY THIS MATTERS**:
 - User runs `/ace-claude-init` in their project
 - Command reads plugin template: `plugins/ace-orchestration/CLAUDE.md`
-- Script checks HTML markers AND headers for version (NOT plugin.json!)
+- Script checks HTML markers for version (NOT plugin.json!)
 - If CLAUDE.md versions are old → users won't get update prompt or script-based fast path!
 
 **CRITICAL FILE**:
 - `plugins/ace-orchestration/CLAUDE.md` (the template `/ace-claude-init` copies)
 
-**Version References to Update** (4 locations in plugins/ace-orchestration/CLAUDE.md):
+**Version References to Update** (2 locations in plugins/ace-orchestration/CLAUDE.md):
 ```markdown
 Line ~1:   <!-- ACE_SECTION_START vX.X.X -->
-Line ~94:  ## 🔄 Complete Automatic Learning Cycle (vX.X.X)
-Line ~328: ## 🎯 ACE Architecture (vX.X.X)
-Line ~383: <!-- ACE_SECTION_END vX.X.X -->
+Line ~194: <!-- ACE_SECTION_END vX.X.X -->
 ```
 
-**Detection**: After determining target version, I check ALL 4 locations:
+**Detection**: After determining target version, I check BOTH locations:
 ```bash
 grep -n "ACE_SECTION_START v" plugins/ace-orchestration/CLAUDE.md
 grep -n "ACE_SECTION_END v" plugins/ace-orchestration/CLAUDE.md
-grep -n "Learning Cycle (v" plugins/ace-orchestration/CLAUDE.md
-grep -n "ACE Architecture (v" plugins/ace-orchestration/CLAUDE.md
 ```
 
-**Expected**: All 4 locations should show target version (e.g., v3.2.37)
-**If mismatch**: Update ALL FOUR locations and commit!
+**Expected**: Both HTML markers should show target version (e.g., v4.1.5)
+**If mismatch**: Update BOTH locations and commit!
 
 **Example**:
 ```bash
-# For v3.2.37 release, these lines should be:
-<!-- ACE_SECTION_START v3.2.37 -->
-## 🔄 Complete Automatic Learning Cycle (v3.2.37)
-## 🎯 ACE Architecture (v3.2.37)
-<!-- ACE_SECTION_END v3.2.37 -->
+# For v4.1.5 release, these lines should be:
+<!-- ACE_SECTION_START v4.1.5 -->
+<!-- ACE_SECTION_END v4.1.5 -->
 ```
 
-**Why 4 locations?**:
-- HTML markers (lines 1 & 383): Used by script-based updates for fast, token-free section detection
-- Header markers (lines 94 & 328): Used by LLM-based updates and version comparison
-- All must match for proper version detection and update prompts
+**Why HTML markers only?**:
+- HTML markers (lines 1 & ~194): Used by script-based updates for fast, token-free section detection
+- Script relies solely on these markers for version comparison
+- Must match for proper version detection and update prompts
+
+### ❌ Mistake 7: Adding Changelog Content to CLAUDE.md Footer (ADDED v4.1.5)
+**THE PROBLEM**: CLAUDE.md is a TEMPLATE for project instructions, NOT a changelog!
+
+**WHY THIS MATTERS**:
+- CLAUDE.md gets copied to user projects via `/ace-claude-init`
+- Users see the footer as "current version info", not release history
+- Detailed release notes belong in CHANGELOG.md ONLY
+- Footer should be minimal: version number + one-line summary + opt-out info
+
+**BAD EXAMPLE** (❌ TOO MUCH DETAIL):
+```markdown
+**Version**: v4.1.5 (UserPromptSubmit Hook + MCP Client v3.8.2)
+**Updated**: Added lightweight UserPromptSubmit hook for workflow reminders
+**New Feature**: Hook fires when trigger words detected (check, implement, fix, debug, etc.)
+**Hook Behavior**: Shows reminder about ACE sequential workflow (Retrieval → Work → Learning)
+**Requirements**: MCP Client v3.8.2+
+**Migration**: Hook activates automatically on next session. Opt-out: delete `hooks/` directory
+**Safety**: Single non-cascading hook (learned from v3.x Hook Storm Bug #3523)
+```
+
+**GOOD EXAMPLE** (✅ MINIMAL):
+```markdown
+**Version**: v4.1.5 (Subagent Architecture + UserPromptSubmit Hook)
+**New in v4.1.5**: Lightweight hook reminds Claude to use ACE workflow when trigger words detected
+**Opt-out**: Delete `hooks/` directory to disable hook reminders
+```
+
+**GOLDEN RULE**: Keep CLAUDE.md footer to 3-4 lines maximum. Detailed changelog goes in CHANGELOG.md only!
 
 ## My Process
 
@@ -188,7 +211,7 @@ grep -n "ACE Architecture (v" plugins/ace-orchestration/CLAUDE.md
    - plugin.json
    - plugin.template.json
    - marketplace.json
-   - CLAUDE.md (with updated version headers!)
+   - CLAUDE.md (with updated HTML version markers AND minimal footer!)
    - Any updated command files
 4. **Verify**: Confirm nothing left uncommitted
 5. **Push**: Push commit to GitHub
@@ -199,21 +222,24 @@ grep -n "ACE Architecture (v" plugins/ace-orchestration/CLAUDE.md
 ## Example Interaction
 
 ```
-User: Let's release v3.2.37
-Me: I'll manage the complete plugin release for v3.2.37.
+User: Let's release v4.1.6
+Me: I'll manage the complete plugin release for v4.1.6.
 
 [Checks all version files]
 Found version files:
 - plugins/ace-orchestration/plugin.json
 - plugins/ace-orchestration/plugin.template.json
 - .claude-plugin/marketplace.json
-- plugins/ace-orchestration/CLAUDE.md (4 version references)
+- plugins/ace-orchestration/CLAUDE.md (2 HTML markers + footer)
 
 [Checks CLAUDE.md versions]
-Line 1:   <!-- ACE_SECTION_START v3.2.36 --> → v3.2.37
-Line 94:  ## 🔄 Complete Automatic Learning Cycle (v3.2.36) → v3.2.37
-Line 328: ## 🎯 ACE Architecture (v3.2.36) → v3.2.37
-Line 383: <!-- ACE_SECTION_END v3.2.36 --> → v3.2.37
+Line 1:   <!-- ACE_SECTION_START v4.1.5 --> → v4.1.6
+Line 194: <!-- ACE_SECTION_END v4.1.5 --> → v4.1.6
+Footer:   **Version**: v4.1.5 (...) → v4.1.6 (...)
+
+[Verifies CLAUDE.md footer is minimal]
+✅ Footer is 3 lines (acceptable)
+✅ No detailed changelog content in footer
 
 [Updates versions]
 [Commits]
@@ -223,15 +249,15 @@ Commit: Plugin and marketplace files ✅
 ✅ All files committed
 
 [Pushes, tags, creates release]
-✅ Release v3.2.37 complete!
+✅ Release v4.1.6 complete!
 
 Verification:
 ✅ GitHub commit: Pushed
-✅ GitHub tag: v3.2.37
+✅ GitHub tag: v4.1.6
 ✅ GitHub release: Created
 ✅ marketplace.json: In tagged commit
 ✅ plugin.json: In tagged commit
-✅ CLAUDE.md: All 4 version references updated to v3.2.37
+✅ CLAUDE.md: Both HTML markers updated to v4.1.6, footer minimal
 ```
 
 ## Files I Always Check
@@ -242,11 +268,10 @@ For this plugin specifically:
 - `plugins/ace-orchestration/.mcp.json` (uses @latest, but check for other changes)
 - `plugins/ace-orchestration/.mcp.template.json` (uses @latest, but check for other changes)
 - `.claude-plugin/marketplace.json`
-- **`plugins/ace-orchestration/CLAUDE.md`** ⚠️ **CRITICAL: 4 version references for script-based updates**
+- **`plugins/ace-orchestration/CLAUDE.md`** ⚠️ **CRITICAL: 2 HTML markers + minimal footer**
   - Line ~1: `<!-- ACE_SECTION_START vX.X.X -->`
-  - Line ~94: `## 🔄 Complete Automatic Learning Cycle (vX.X.X)`
-  - Line ~328: `## 🎯 ACE Architecture (vX.X.X)`
-  - Line ~383: `<!-- ACE_SECTION_END vX.X.X -->`
+  - Line ~194: `<!-- ACE_SECTION_END vX.X.X -->`
+  - Footer: Version info (3-4 lines maximum, NO detailed changelog!)
 - All files in `plugins/ace-orchestration/commands/` (if documentation updated)
 
 **Files to IGNORE** (old/unused):
@@ -267,8 +292,9 @@ A release is successful when:
 2. ✅ All changed files are committed (verified with `git status`)
 3. ✅ Git tag points to commit with ALL files
 4. ✅ GitHub release created with correct notes
-5. ✅ CLAUDE.md has ALL 4 version references updated (HTML markers + headers)
-6. ✅ User can verify plugin in Claude Code marketplace
+5. ✅ CLAUDE.md has BOTH HTML markers updated AND footer is minimal (3-4 lines max)
+6. ✅ Detailed changelog is in CHANGELOG.md, NOT in CLAUDE.md footer
+7. ✅ User can verify plugin in Claude Code marketplace
 
 ## Release Types
 
