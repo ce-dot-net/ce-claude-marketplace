@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v4.1.3 -->
+<!-- ACE_SECTION_START v4.1.4 -->
 # ACE Orchestration Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -183,9 +183,9 @@ Next session: Enhanced playbook with new insights!
 
 ---
 
-**Version**: v4.1.3 (Bug Fix: Multi-Org ACE_ORG_ID)
-**Fixed**: `/ace-configure` now properly writes `ACE_ORG_ID` to `.claude/settings.json` for multi-org projects
-**Requirements**: MCP Client v3.8.1+
-**Migration**: Re-run `/ace-orchestration:ace-configure` in multi-org projects to add missing `ACE_ORG_ID`
+**Version**: v4.1.4 (MCP Client v3.8.2)
+**Updated**: MCP client dependency to v3.8.2 with latest improvements and bug fixes
+**Requirements**: MCP Client v3.8.2+
+**Migration**: Plugin will automatically use new MCP client on next Claude Code restart
 
-<!-- ACE_SECTION_END v4.1.3 -->
+<!-- ACE_SECTION_END v4.1.4 -->

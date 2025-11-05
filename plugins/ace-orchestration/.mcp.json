@@ -4,7 +4,7 @@
       "command": "npx",
       "args": [
         "--yes",
-        "@ce-dot-net/ace-client@3.8.1",
+        "@ce-dot-net/ace-client@3.8.2",
         "--projectID",
         "${ACE_PROJECT_ID}",
         "--org-id",
