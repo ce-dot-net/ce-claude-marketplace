@@ -5,6 +5,22 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.4] - 2025-11-04
+
+### ⬆️ Dependency Update: MCP Client v3.8.2
+
+**Updated**: MCP client dependency from v3.8.1 → v3.8.2
+
+#### Changed
+- `.mcp.json` - Updated `@ce-dot-net/ace-client` from v3.8.1 to v3.8.2
+
+#### Impact
+✅ Latest MCP client with improvements and bug fixes
+✅ No configuration changes required
+✅ 100% backward compatible
+
+---
+
 ## [4.1.3] - 2025-11-04
 
 ### 🐛 Bug Fix: Missing ACE_ORG_ID in Multi-Org Project Config
