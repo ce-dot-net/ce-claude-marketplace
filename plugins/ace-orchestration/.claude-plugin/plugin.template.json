@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
-  "version": "4.1.6",
-  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Multi-Org Support + Workflow Reminders. Lightweight UserPromptSubmit hook reminds Claude to use ACE subagents. Auto-resolves organizations. 100% backward compatible.",
+  "version": "4.1.7",
+  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Multi-Org Support + Workflow Reminders. JSON hook output + SubagentStop hook for complete workflow coverage. Auto-resolves organizations. 100% backward compatible.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
