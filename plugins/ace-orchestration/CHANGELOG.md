@@ -5,6 +5,38 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.6] - 2025-11-05
+
+### 🐛 Hotfix: UserPromptSubmit Hook Output Fix
+
+**Critical Bug**: UserPromptSubmit hook was not outputting properly, preventing workflow reminders from appearing in Claude's context.
+
+#### The Problem
+- Hook used `echo '...\n...'` with single quotes
+- Single quotes in shell don't interpret escape sequences
+- Hook was outputting literal backslash-n characters: `\n`
+- Result: No formatted output, no context injection
+
+#### The Solution
+Changed from `echo` to `printf` with properly escaped newlines:
+- Before: `echo '\n🔍 ACE...'` (outputs literal `\n`)
+- After: `printf '\\n🔍 ACE...'` (outputs actual newlines)
+
+#### Changed
+- **Fixed**: `hooks/hooks.json` - Replaced echo with printf (commit 9b0c5a0)
+
+#### Testing
+- ✅ Command executes without errors
+- ✅ Newlines render correctly
+- ✅ Output properly formatted
+
+#### Migration
+- **From v4.1.5**: Automatic - restart Claude Code or reload plugin
+- **Impact**: Hook now properly injects workflow reminders into Claude's context
+- **Breaking Changes**: None
+
+---
+
 ## [4.1.5] - 2025-11-05
 
 ### ✨ Feature: UserPromptSubmit Hook for ACE Workflow Reminders

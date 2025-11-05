@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v4.1.5 -->
+<!-- ACE_SECTION_START v4.1.6 -->
 # ACE Orchestration Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -183,8 +183,8 @@ Next session: Enhanced playbook with new insights!
 
 ---
 
-**Version**: v4.1.5 (Subagent Architecture + UserPromptSubmit Hook)
-**New in v4.1.5**: Lightweight hook reminds Claude to use ACE workflow when trigger words detected
+**Version**: v4.1.6 (Hotfix: UserPromptSubmit Hook Output)
+**Fixed in v4.1.6**: Hook now properly outputs newlines (changed echo to printf)
 **Opt-out**: Delete `hooks/` directory to disable hook reminders
 
-<!-- ACE_SECTION_END v4.1.5 -->
+<!-- ACE_SECTION_END v4.1.6 -->
