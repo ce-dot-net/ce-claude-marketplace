@@ -10,6 +10,16 @@
           }
         ]
       }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/subagent-stop-reminder.py"
+          }
+        ]
+      }
     ]
   }
 }
