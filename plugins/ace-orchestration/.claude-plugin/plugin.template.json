@@ -22,6 +22,9 @@
     "subagents"
   ],
   "mcpServers": "./.mcp.json",
-  "agents": "./agents/",
+  "agents": [
+    "./agents/ace-retrieval.md",
+    "./agents/ace-learning.md"
+  ],
   "hooks": "./hooks/hooks.json"
 }
