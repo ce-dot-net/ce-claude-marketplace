@@ -5,6 +5,89 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.7] - 2025-11-05
+
+### ✨ Feature: JSON Hook Output + SubagentStop Hook
+
+**Added**: JSON-based hook output format and SubagentStop hook for complete ACE workflow coverage.
+
+#### Problems Solved
+
+1. **Hook Output Visibility (GitHub Issue #4084)**
+   - **Problem**: v4.1.6 hooks used printf but output wasn't visible in Claude Code UI
+   - **Root cause**: Plain stdout doesn't display properly (Claude Code expects JSON)
+   - **Solution**: JSON output with systemMessage (visible to user) + additionalContext (injected into Claude's context)
+
+2. **No Reminder After Subagent Completion**
+   - **Problem**: Users forgot to invoke ACE Learning after subagent work completed
+   - **Solution**: SubagentStop hook fires after ANY subagent completes
+
+#### Changes
+
+**New Files**:
+- `hooks/user-prompt-reminder.py` - UserPromptSubmit hook with JSON output (commit f540dd9)
+- `hooks/subagent-stop-reminder.py` - SubagentStop hook with JSON output (commit 690cfc0)
+
+**Modified Files**:
+- `hooks/hooks.json` - Configured both hooks with ${CLAUDE_PLUGIN_ROOT} variable
+  - UserPromptSubmit: Triggers on 45+ action keywords (implement, build, create, fix, debug, etc.)
+  - SubagentStop: Triggers after any subagent completion
+
+**Hook Output Format**:
+```json
+{
+  "systemMessage": "🔍 ACE: Use Retrieval → Work → Learning",
+  "additionalContext": "REMINDER: Before starting implementation..."
+}
+```
+
+**Benefits**:
+- `systemMessage`: Visible to user in Claude Code UI
+- `additionalContext`: Injected into Claude's context (actual reminder)
+- Clean separation of user-facing vs Claude-facing content
+
+#### Workflow Coverage
+
+**Complete ACE Workflow**:
+1. **UserPromptSubmit**: "🔍 ACE: Use Retrieval → Work → Learning workflow"
+2. User does work (may invoke ACE Retrieval subagent)
+3. **SubagentStop**: "📚 ACE Learning: Capture lessons after subagent completion"
+4. User invokes ACE Learning subagent
+
+**Result**: Complete before + after coverage for ACE workflow!
+
+#### Testing
+
+✅ Both Python scripts output valid JSON
+✅ UserPromptSubmit tested with 45+ trigger words
+✅ SubagentStop tested with mock subagent input
+✅ hooks.json is valid JSON
+✅ systemMessage visible in transcript mode (Ctrl-R)
+
+#### Migration
+
+- **From v4.1.6**: Automatic - restart Claude Code or reload plugin
+- **Impact**: Hooks now properly display in UI and inject context
+- **Breaking Changes**: None
+
+#### Technical Notes
+
+**Why Python instead of Bash?**
+- Bash string escaping is error-prone (see v4.1.5, v4.1.6 issues)
+- Python json.dumps() ensures valid JSON
+- Easier to maintain and extend
+
+**Hook Variables**:
+- `${CLAUDE_PLUGIN_ROOT}`: Absolute path to plugin directory
+- Allows hooks to work regardless of where Claude Code is run
+
+**Hook Safety**:
+- Single non-cascading hooks (learned from v3.x Hook Storm Bug #3523)
+- UserPromptSubmit triggers once per user prompt
+- SubagentStop triggers once per subagent completion
+
+---
+
 ## [4.1.6] - 2025-11-05
 
 ### 🐛 Hotfix: UserPromptSubmit Hook Output Fix
