@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
-  "version": "4.1.8",
-  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Multi-Org Support. CRITICAL FIX: Added agents field for subagent auto-discovery. Auto-resolves organizations. 100% backward compatible.",
+  "version": "4.1.9",
+  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Multi-Org Support. HOTFIX: Fixed agents field format (array of .md files). Auto-resolves organizations. 100% backward compatible.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

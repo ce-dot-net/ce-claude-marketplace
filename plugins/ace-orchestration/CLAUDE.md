@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v4.1.8 -->
+<!-- ACE_SECTION_START v4.1.9 -->
 # ACE Orchestration Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -183,8 +183,8 @@ Next session: Enhanced playbook with new insights!
 
 ---
 
-**Version**: v4.1.8 (Subagent Auto-Discovery Fix)
-**New in v4.1.8**: Critical fix - added agents field to enable subagent auto-triggering
+**Version**: v4.1.9 (Agents Field Format Fix)
+**New in v4.1.9**: Fixed agents field validation error from v4.1.8
 **Opt-out**: Delete `agents/` or `hooks/` directories to disable ACE components
 
-<!-- ACE_SECTION_END v4.1.8 -->
+<!-- ACE_SECTION_END v4.1.9 -->
