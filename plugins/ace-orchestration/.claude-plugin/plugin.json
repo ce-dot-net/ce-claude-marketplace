@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
-  "version": "4.1.7",
-  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Multi-Org Support + Workflow Reminders. JSON hook output + SubagentStop hook for complete workflow coverage. Auto-resolves organizations. 100% backward compatible. Requires MCP client v3.8.2+.",
+  "version": "4.1.8",
+  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Multi-Org Support. CRITICAL FIX: Added agents field for subagent auto-discovery. Auto-resolves organizations. 100% backward compatible. Requires MCP client v3.8.2+.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
@@ -21,5 +21,6 @@
     "autonomous",
     "subagents"
   ],
+  "agents": "./agents/",
   "hooks": "./hooks/hooks.json"
 }
