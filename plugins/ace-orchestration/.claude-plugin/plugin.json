@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
-  "version": "4.1.9",
-  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Multi-Org Support. HOTFIX: Fixed agents field format (array of .md files). Auto-resolves organizations. 100% backward compatible. Requires MCP client v3.8.2+.",
+  "version": "4.1.10",
+  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Multi-Org Support. FIX: Removed duplicate agent registration + corrected agent workflow instructions. Auto-resolves organizations. 100% backward compatible. Requires MCP client v3.8.2+.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
@@ -20,10 +20,6 @@
     "ai-assistant",
     "autonomous",
     "subagents"
-  ],
-  "agents": [
-    "./agents/ace-retrieval.md",
-    "./agents/ace-learning.md"
   ],
   "hooks": "./hooks/hooks.json"
 }

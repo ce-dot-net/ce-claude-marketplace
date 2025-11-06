@@ -5,6 +5,24 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.10] - 2025-11-06
+
+### Fixed
+- Removed `agents` field from plugin.json to prevent duplicate agent registration
+  - Root cause: agents/ directory is auto-discovered, explicit field caused duplicates
+  - Impact: Each agent now appears once in /agents list
+  - Impact: Hook now fires once instead of twice per trigger
+- Removed `agents` field from plugin.template.json for consistency
+- Updated ace-retrieval.md and ace-learning.md agent instructions
+  - Clarified agents are manually invoked by main Claude (not automatic)
+  - Added workflow explanation: hook reminder → manual Task tool invocation
+  - Reflects reality: Auto-invoke unreliable in Claude Code per community feedback
+
+### Technical Details
+- Claude Code auto-discovers agents/ directory (no plugin.json field needed)
+- Per docs: "Custom paths supplement default directories" = duplicates if both exist
+- Manual invocation via Task tool works reliably when hook reminds main Claude
+
 ## [4.1.7] - 2025-11-05
 
 ### ✨ Feature: JSON Hook Output + SubagentStop Hook

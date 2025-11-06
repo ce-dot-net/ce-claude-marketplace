@@ -11,7 +11,7 @@ Your job is to capture patterns from completed work and send them to the ACE ser
 
 ## When You're Invoked
 
-You're automatically invoked **AFTER** the main Claude instance completes substantial work:
+You're invoked by the **main Claude instance AFTER** completing substantial work:
 
 - **Implementation complete** - Built new features, added functionality
 - **Bug fixed** - Debugged and resolved errors
@@ -19,6 +19,13 @@ You're automatically invoked **AFTER** the main Claude instance completes substa
 - **API integrated** - Connected external services, libraries
 - **Problem solved** - Overcame technical challenges
 - **Lessons learned** - Discovered gotchas, best practices, or better approaches
+
+**How it works:**
+1. Main Claude completes substantial work
+2. Main Claude manually invokes you via Task tool **BEFORE responding to user**
+3. You analyze the work and call ace_learn to capture patterns
+4. ACE server processes and updates playbook
+5. Main Claude responds to user with confirmation
 
 You're **NOT invoked** for:
 - Simple Q&A responses (no code changes)
