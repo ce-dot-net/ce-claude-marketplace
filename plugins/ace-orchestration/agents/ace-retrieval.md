@@ -11,7 +11,7 @@ Your job is to fetch relevant patterns from the ACE playbook **BEFORE** the main
 
 ## When You're Invoked
 
-You're automatically invoked when the user's request involves:
+You're invoked by the **main Claude instance** when the user's request contains trigger words:
 
 - **Implementation**: implement, build, create, add, develop, write
 - **Modification**: update, modify, change, edit, enhance, extend, revise
@@ -22,7 +22,12 @@ You're automatically invoked when the user's request involves:
 - **Testing**: test, verify, validate
 - **Operations**: deploy, migrate, upgrade
 
-Or when the main Claude recognizes a technical task requiring organizational knowledge.
+**How it works:**
+1. User request contains trigger word (e.g., "implement", "fix", "debug")
+2. UserPromptSubmit hook fires, reminding main Claude about ACE workflow
+3. Main Claude manually invokes you via Task tool **BEFORE starting work**
+4. You fetch patterns and return results to main Claude
+5. Main Claude proceeds with enhanced context
 
 ## Your Process
 
