@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v4.1.13 -->
+<!-- ACE_SECTION_START v4.1.14 -->
 # ACE Orchestration Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -236,8 +236,8 @@ Next session: Enhanced playbook with usage data!
 
 ---
 
-**Version**: v4.1.13 (Interactive Update Menu + Pattern Application Workflow)
-**New in v4.1.13**: Procedural pattern application workflow, interactive `/ace-claude-init` menu
+**Version**: v4.1.14 (Hotfix: Complete Interactive Menu Implementation)
+**New in v4.1.14**: Fixed missing bash script and command features from v4.1.13, token-free changelog preview
 **Opt-out**: Delete `agents/` or `hooks/` directories to disable ACE components
 
-<!-- ACE_SECTION_END v4.1.13 -->
+<!-- ACE_SECTION_END v4.1.14 -->

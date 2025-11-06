@@ -52,6 +52,92 @@ When the user runs `/ace-claude-init`, follow these steps:
 - ✅ Updates marker-based ACE sections (v3.2.36+)
 - ❌ Cannot handle: Files without HTML markers (uses LLM fallback)
 
+### Step 0a: Interactive Update Menu (NEW in v4.1.14)
+
+**When:** Script exits with code 2 AND output contains JSON with `"status":"update_available"`.
+
+**What to do:**
+
+1. **Parse version info from script output:**
+   - Look for JSON output: `{"status":"update_available","current_version":"X.X.X","plugin_version":"Y.Y.Y"}`
+   - Extract: `current_version` and `plugin_version`
+
+2. **Show interactive menu using AskUserQuestion:**
+   ```javascript
+   AskUserQuestion({
+     questions: [{
+       question: `Your project has ACE v${current_version}, but plugin is v${plugin_version}. Would you like to update?`,
+       header: "ACE Update",
+       multiSelect: false,
+       options: [
+         {
+           label: "Yes, update now",
+           description: `Update to v${plugin_version} (recommended)`
+         },
+         {
+           label: "Show what changed",
+           description: "View changelog before deciding"
+         },
+         {
+           label: "No, keep current version",
+           description: `Stay on v${current_version}`
+         }
+       ]
+     }]
+   })
+   ```
+
+3. **Handle user selection:**
+
+   **User selected "Yes, update now":**
+   - Run: `${CLAUDE_PLUGIN_ROOT}/scripts/ace-claude-init.sh --update`
+   - Display update result
+   - Exit successfully
+
+   **User selected "Show what changed":**
+   - Run: `${CLAUDE_PLUGIN_ROOT}/scripts/ace-claude-init.sh --show-changes`
+   - Display changelog output
+   - **Re-show the interactive menu** (same 3 options)
+   - User can now choose "Yes" or "No" with full context
+
+   **User selected "No, keep current version":**
+   - Tell user: "Keeping ACE v${current_version}. Run `/ace-claude-init` again if you change your mind."
+   - Exit successfully
+
+**Benefits:**
+- ✅ Token-free changelog preview (~50 tokens vs ~17k)
+- ✅ User-friendly interactive workflow
+- ✅ Informed decision-making
+- ✅ No manual flag typing
+
+**Example Flow:**
+```
+User runs: /ace-orchestration:ace-claude-init
+    ↓
+Script detects: v4.1.12 → v4.1.14
+Script outputs: {"status":"update_available","current_version":"4.1.12","plugin_version":"4.1.14"}
+Script exits: code 2
+    ↓
+Claude shows menu:
+  [1] Yes, update now
+  [2] Show what changed  ← User selects this
+  [3] No, keep current
+    ↓
+Claude runs: --show-changes
+Claude displays:
+  ## [4.1.14] - 2025-01-06
+  ### Fixed
+  - Missing interactive menu features...
+    ↓
+Claude re-shows menu:
+  [1] Yes, update now  ← User selects this
+  [2] Show what changed
+  [3] No, keep current
+    ↓
+Claude runs: --update
+Claude shows: ✅ Updated to v4.1.14
+```
+
 ### Step 1: Read Plugin CLAUDE.md (LLM Fallback Path)
 
 Read the full ACE plugin CLAUDE.md file:

@@ -5,6 +5,123 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.14] - 2025-11-06
+
+### 🐛 Fixed: Missing Interactive Menu Features from v4.1.13
+
+**Problem**: Version 4.1.13 was released with updated CLAUDE.md template showing "Interactive Update Menu" feature, but the actual bash script and command file implementations were never committed to the repository.
+
+**Discovery**: User ran `/ace-orchestration:ace-claude-init` after v4.1.13 release and saw old text-based warning instead of interactive menu. Investigation revealed:
+- ❌ `scripts/ace-claude-init.sh` - Missing `--show-changes` flag, `extract_changelog_between_versions()` function, JSON output
+- ❌ `commands/ace-claude-init.md` - Missing Step 0a (Interactive Update Menu)
+- ✅ `CLAUDE.md` - Template correctly updated (v4.1.13)
+- ✅ `plugin.json` - Version correctly bumped (v4.1.13)
+
+**Root Cause**: Features were designed and verbally implemented but never actually saved to repo files before release.
+
+**Solution**: Re-implemented all missing features properly in v4.1.14.
+
+#### Changes
+
+**Modified Files**:
+- `scripts/ace-claude-init.sh`
+  - Added `SHOW_CHANGES=false` flag variable
+  - Added `--show-changes` argument parser case
+  - Added `extract_changelog_between_versions()` function using BSD awk-compatible syntax
+  - Changed version mismatch handler to output JSON: `{"status":"update_available","current_version":"X","plugin_version":"Y"}`
+  - Added `--show-changes` handler to display changelog diff and exit
+  - Exit code 2 now signals "action required" instead of fallback
+
+- `commands/ace-claude-init.md`
+  - Added Step 0a: Interactive Update Menu (NEW in v4.1.14)
+  - Instructions for parsing JSON output from bash script
+  - Instructions for using AskUserQuestion with 3 options
+  - Handler for "Yes, update now" (run `--update`)
+  - Handler for "Show what changed" (run `--show-changes`, display, re-prompt)
+  - Handler for "No, keep current version" (exit gracefully)
+  - Complete example flow diagram
+
+- `CLAUDE.md`
+  - Updated version markers to v4.1.14
+  - No functional changes (v4.1.13 template was correct)
+
+- `plugin.json` & `plugin.template.json`
+  - Bumped version to 4.1.14
+  - Updated description to mention hotfix
+
+#### Interactive Menu Workflow
+
+**Token-Free Version Detection**:
+```bash
+# Bash script detects version mismatch
+EXISTING_VERSION="4.1.12"
+PLUGIN_VERSION="4.1.14"
+
+# Outputs JSON and exits with code 2
+echo '{"status":"update_available","current_version":"4.1.12","plugin_version":"4.1.14"}'
+exit 2
+```
+
+**Interactive Menu** (powered by AskUserQuestion):
+```
+Your project has ACE v4.1.12, but plugin is v4.1.14. Would you like to update?
+
+[1] Yes, update now (Update to v4.1.14 - recommended)
+[2] Show what changed (View changelog before deciding)
+[3] No, keep current version (Stay on v4.1.12)
+```
+
+**Token-Free Changelog Preview**:
+```bash
+# User selects "Show what changed"
+./ace-claude-init.sh --show-changes
+
+# Bash extracts diff using awk (0 tokens)
+📋 Changes from v4.1.12 to v4.1.14:
+
+## [4.1.14] - 2025-11-06
+### Fixed
+- Missing interactive menu features from v4.1.13
+...
+
+## [4.1.13] - 2025-11-06
+### Added
+- Interactive update menu with token-free changelog preview
+...
+```
+
+#### Benefits
+
+**For Users**:
+- ✅ No more typing `--update` flag manually
+- ✅ See what changed before updating (0 tokens)
+- ✅ Interactive workflow guides decision-making
+- ✅ Can always say "No" and keep current version
+
+**For Token Efficiency**:
+- ✅ Changelog extraction: 0 tokens (pure bash/awk)
+- ✅ Version detection: 0 tokens (bash regex)
+- ✅ Interactive menu: ~50 tokens (AskUserQuestion)
+- ✅ Total: ~50 tokens vs old ~17,000 tokens (99.7% reduction)
+
+**For Code Quality**:
+- ✅ BSD awk compatibility (works on macOS)
+- ✅ Exit code state machine (0=success, 1=error, 2=action required)
+- ✅ Hybrid architecture (bash=fast, Claude=rich UI)
+
+#### Migration
+
+- **From v4.1.13**: Automatic - adds missing features
+- **From v4.1.12**: Automatic - adds interactive menu
+- **Impact**: Users will now see interactive menu instead of text warning
+- **Backwards Compatible**: Yes - old `--update` flag still works
+
+#### Version Timeline
+
+- **v4.1.12** (2025-11-06): JSON Pattern Passthrough
+- **v4.1.13** (2025-11-06): Interactive Update Menu (INCOMPLETE - template only)
+- **v4.1.14** (2025-11-06): Hotfix - Complete interactive menu implementation
+
 ## [4.1.12] - 2025-11-06
 
 ### 🎯 Feature: JSON Pattern Passthrough - Making Patterns Actionable

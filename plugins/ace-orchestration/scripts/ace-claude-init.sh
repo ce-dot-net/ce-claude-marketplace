@@ -30,6 +30,7 @@ PLUGIN_JSON="${PLUGIN_ROOT}/.claude-plugin/plugin.json"
 AUTO_UPDATE=false
 FORCE_LLM=false
 UPDATE_MODE=false
+SHOW_CHANGES=false
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -44,6 +45,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --update)
             UPDATE_MODE=true
+            shift
+            ;;
+        --show-changes)
+            SHOW_CHANGES=true
             shift
             ;;
         *)
@@ -61,6 +66,29 @@ get_plugin_version() {
     fi
 
     grep '"version"' "$PLUGIN_JSON" | head -1 | sed 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/'
+}
+
+# Function: Extract changelog between versions
+extract_changelog_between_versions() {
+    local from_version="$1"
+    local to_version="$2"
+    local changelog="${PLUGIN_ROOT}/CHANGELOG.md"
+
+    if [ ! -f "$changelog" ]; then
+        echo "ERROR: Cannot find CHANGELOG.md" >&2
+        return 1
+    fi
+
+    awk -v from="$from_version" -v to="$to_version" '
+        /^## \[/ {
+            if (match($0, /\[[0-9]+\.[0-9]+\.[0-9]+\]/)) {
+                ver_str = substr($0, RSTART+1, RLENGTH-2)
+            }
+            if (ver_str == to) printing = 1
+            else if (ver_str == from) { printing = 0; exit }
+        }
+        printing { print }
+    ' "$changelog"
 }
 
 # Function: Fallback to LLM
@@ -164,15 +192,17 @@ fi
 
 # Versions differ - update needed
 if [ "$UPDATE_MODE" = false ] && [ "$AUTO_UPDATE" = false ]; then
-    echo "⚠️  ACE update available: v${EXISTING_VERSION} → v${PLUGIN_VERSION}"
-    echo ""
-    echo "Your project has ACE v${EXISTING_VERSION}, but plugin is v${PLUGIN_VERSION}."
-    echo "Run with --update flag to perform update:"
-    echo ""
-    echo "  /ace-orchestration:ace-claude-init --update"
-    echo ""
-    echo "Or use --force-llm for LLM-based update."
-    exit 0
+    if [ "$SHOW_CHANGES" = true ]; then
+        # Display changelog and exit
+        echo "📋 Changes from v${EXISTING_VERSION} to v${PLUGIN_VERSION}:"
+        echo ""
+        extract_changelog_between_versions "$EXISTING_VERSION" "$PLUGIN_VERSION"
+        exit 0
+    else
+        # Output JSON for interactive menu
+        echo "{\"status\":\"update_available\",\"current_version\":\"${EXISTING_VERSION}\",\"plugin_version\":\"${PLUGIN_VERSION}\"}"
+        exit 2
+    fi
 fi
 
 # Perform update
