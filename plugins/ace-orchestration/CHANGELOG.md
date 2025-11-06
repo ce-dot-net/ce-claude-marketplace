@@ -5,6 +5,146 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.15] - 2025-11-06
+
+### 🐛 Fixed: Multi-Org Project Configuration Issues
+
+**Problem**: When using `/ace-orchestration:ace-configure` in multi-org mode with new projects, two critical UX issues prevented proper project setup:
+
+1. **Stale Project Lists**: When selecting "Use existing org", the command showed projects from the config file (captured during initial token verification), not fresh data from the server. Newly created projects on the server weren't visible.
+
+2. **Can't Add New Projects**: When entering a custom project ID that didn't exist in any configured org, the command just warned and used "fallback token" mode instead of asking which organization the new project belongs to.
+
+**User Impact**:
+- ❌ Users couldn't see newly created projects from their org
+- ❌ Users couldn't add new project IDs to existing organizations
+- ❌ Project config missing `ACE_ORG_ID` when it should be set
+- ❌ Had to manually edit `~/.config/ace/config.json` to add projects
+
+**Solution**: Enhanced multi-org project selection workflow with fresh server data and interactive org assignment.
+
+#### Changes
+
+**Modified Files**:
+- `commands/ace-configure.md`
+  - Added **Step 4a: Use Existing Org Flow** (lines 314-445)
+  - Fetches fresh project list from server using `verify_token()`
+  - Updates global config with fresh projects automatically
+  - Allows adding new projects to existing orgs
+  - Updated project config validation to ask for org selection when new project detected (lines 717-758)
+
+#### New Multi-Org Project Selection Flow
+
+**Scenario 1: Use Existing Org → Fresh Project List**:
+```
+User: "Use existing org"
+  ↓
+Ask: Which organization? [XpertPulse, ce-dot-net]
+  ↓
+User selects: "XpertPulse"
+  ↓
+Fetch fresh projects from server:
+  → Call verify_token(XpertPulse_token, server_url)
+  → Returns: [prj_abc, prj_def, prj_xyz] ← FRESH from server!
+  ↓
+Update ~/.config/ace/config.json with fresh list
+  ↓
+Show project selection:
+  • prj_913f898c709d9f89
+  • prj_3600aeeef46e10f4
+  • prj_185ba193e965e55c ← NEW project now visible!
+  • Enter new project ID
+  ↓
+User selects or enters project
+  ↓
+If new ID entered → Add to org's projects array in config
+  ↓
+Save .claude/settings.json with:
+  ACE_PROJECT_ID=prj_xxx
+  ACE_ORG_ID=org_xxx ✓
+```
+
+**Scenario 2: New Project ID → Ask Which Org**:
+```
+User enters: prj_185ba193e965e55c (not in config)
+  ↓
+Detect: Project not in any configured org
+  ↓
+Ask: Which organization does this project belong to?
+  • XpertPulse (org_34geJJ3Xr3ZmNVF6FYHLMhpAv61)
+  • ce-dot-net (org_34fYIlitYk4nyFuTvtsAzA6uUJF)
+  ↓
+User selects: "XpertPulse"
+  ↓
+Add prj_185ba193e965e55c to XpertPulse's projects array
+  ↓
+Update ~/.config/ace/config.json:
+  orgs.org_34geJJ3Xr3ZmNVF6FYHLMhpAv61.projects += ["prj_185ba193e965e55c"]
+  ↓
+Save .claude/settings.json with:
+  ACE_PROJECT_ID=prj_185ba193e965e55c
+  ACE_ORG_ID=org_34geJJ3Xr3ZmNVF6FYHLMhpAv61 ✓
+```
+
+#### Implementation Details
+
+**Step 4a: Use Existing Org Flow**:
+1. Ask which org to use (interactive selection from configured orgs)
+2. Fetch fresh project list from server via `verify_token(org_token, server_url)`
+3. Update global config with fresh projects array
+4. Show project selection (fresh list + "Enter new project ID" option)
+5. If new project entered, add to org's projects array in global config
+6. Set both `ACE_PROJECT_ID` and `ACE_ORG_ID` in `.claude/settings.json`
+
+**Project Config Validation Enhancement** (lines 726-758):
+- Detects when `MATCHING_ORG` is not set (new project not in any org)
+- Shows AskUserQuestion with org options dynamically built from config
+- Adds project to selected org's projects array
+- Updates `~/.config/ace/config.json` automatically
+- Sets `MATCHING_ORG` variable for proper config creation
+
+#### Benefits
+
+**For Users**:
+- ✅ Always see fresh project list from server (no stale data)
+- ✅ Can add new projects to existing orgs interactively
+- ✅ No manual config file editing required
+- ✅ Proper `ACE_ORG_ID` set automatically in project config
+
+**For Multi-Org Workflows**:
+- ✅ Config stays in sync with server state
+- ✅ New projects created on server are immediately visible
+- ✅ Can create project IDs on-the-fly and assign to orgs
+- ✅ Global config updated automatically with new projects
+
+**For Token Resolution**:
+- ✅ Projects get correct org-specific token (not fallback)
+- ✅ MCP client resolves `ACE_ORG_ID` → org token correctly
+- ✅ 404 errors eliminated for newly added projects
+
+#### Migration
+
+- **From v4.1.14**: Automatic - no breaking changes
+- **Impact**: Interactive org selection added, fresh project lists fetched from server
+- **Backwards Compatible**: Yes - single-org mode unchanged, existing multi-org configs work as before
+
+#### Testing
+
+**Manual Test - Scenario 1 (Fresh Project List)**:
+1. Create new project on ACE server (via web UI or API)
+2. Run `/ace-orchestration:ace-configure` in any project directory
+3. Select "Use existing org"
+4. Select your organization
+5. Verify: NEW project appears in list (fetched fresh from server)
+
+**Manual Test - Scenario 2 (Add New Project)**:
+1. Run `/ace-orchestration:ace-configure` in new project directory
+2. Enter custom project ID: `prj_newproject123`
+3. Select which org it belongs to from menu
+4. Verify: Project added to `~/.config/ace/config.json` in org's projects array
+5. Verify: `.claude/settings.json` has both `ACE_PROJECT_ID` and `ACE_ORG_ID`
+6. Run `/ace-orchestration:ace-status` to verify 200 response (not 404)
+
 ## [4.1.14] - 2025-11-06
 
 ### 🐛 Fixed: Missing Interactive Menu Features from v4.1.13
