@@ -13,8 +13,8 @@
     {
       "name": "ace-orchestration",
       "source": "./plugins/ace-orchestration",
-      "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Multi-Org Support. FIX: Corrected agent instructions perspective + fixed MCP tool names. Subagents now have accurate role definitions and working tool calls. 100% backward compatible.",
-      "version": "4.1.11",
+      "description": "Code Engine ACE - Intelligent pattern learning with JSON Pattern Passthrough. NEW: ACE Retrieval returns structured JSON with pattern IDs, scores, confidence + evidence. ACE Learning tracks pattern usage. Makes patterns actionable instead of advisory. 100% backward compatible.",
+      "version": "4.1.12",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"

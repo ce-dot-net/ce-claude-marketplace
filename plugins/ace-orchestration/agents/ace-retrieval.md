@@ -70,24 +70,63 @@ mcp__plugin_ace-orchestration_ace-pattern-learning__ace_get_playbook({
 
 **Default strategy**: Try `ace_search` first. If results are too sparse, fall back to `ace_get_playbook`.
 
-### Step 3: Return Concise Summary
+### Step 3: Return Structured JSON
 
-Return to the main context with a **brief summary** (2-5 bullets max):
+Return to the main context with **structured JSON** from the MCP tool (DO NOT convert to text):
+
+```json
+{
+  "retrieval_status": "success",
+  "patterns_found": 3,
+  "patterns": [
+    {
+      "id": "ctx-1749038481-2b49",
+      "content": "JWT refresh token rotation prevents theft attacks - rotate on every use, not just expiry",
+      "helpful": 8,
+      "harmful": 0,
+      "confidence": 1,
+      "evidence": [
+        "Rotate refresh token on each use",
+        "Short-lived access tokens (15min) balance security/UX"
+      ]
+    },
+    {
+      "id": "ctx-1749038492-5c3a",
+      "content": "HttpOnly cookies for refresh tokens prevent XSS attacks",
+      "helpful": 6,
+      "harmful": 0,
+      "confidence": 1,
+      "evidence": [
+        "Never expose refresh tokens to JavaScript",
+        "Use SameSite=Strict for CSRF protection"
+      ]
+    },
+    {
+      "id": "ctx-1749038503-7d2b",
+      "content": "Rate limit authentication endpoints to prevent brute force",
+      "helpful": 5,
+      "harmful": 0,
+      "confidence": 1,
+      "evidence": [
+        "5 attempts per IP per 15 minutes",
+        "Exponential backoff on repeated failures"
+      ]
+    }
+  ]
+}
+```
+
+**CRITICAL**: After the JSON, add this reminder:
 
 ```
-Found 3 relevant patterns from ACE playbook:
+**IMPORTANT - Pattern Application**:
+1. Review all patterns above (sorted by helpful score descending)
+2. Patterns with helpful >= 5 are proven effective - strongly consider them
+3. Check evidence arrays for specific implementation details
+4. Note pattern IDs - you'll report which ones you used to ACE Learning
+5. High confidence (>= 0.8) patterns are reliable unless you have good reason to deviate
 
-1. JWT refresh token rotation prevents theft attacks (helpful: 8)
-   - Rotate refresh token on each use
-   - Short-lived access tokens (15min) balance security/UX
-
-2. HttpOnly cookies for refresh tokens prevent XSS (helpful: 6)
-   - Never expose refresh tokens to JavaScript
-   - Use SameSite=Strict for CSRF protection
-
-3. Rate limit authentication endpoints (helpful: 5)
-   - 5 attempts per IP per 15 minutes
-   - Exponential backoff on repeated failures
+Main Claude: Before starting implementation, confirm which patterns you'll apply.
 ```
 
 ## Examples
@@ -100,20 +139,19 @@ Found 3 relevant patterns from ACE playbook:
 ```
 🔍 [ACE Retrieval] Searching playbook for JWT patterns...
 
-Found 3 relevant patterns:
+```json
+{
+  "retrieval_status": "success",
+  "patterns_found": 3,
+  "patterns": [
+    {"id": "ctx-xxx", "content": "Refresh token rotation prevents theft", "helpful": 8, "evidence": ["Rotate on every use", "Short-lived access (15min)"]},
+    {"id": "ctx-yyy", "content": "HttpOnly cookies prevent XSS", "helpful": 6, "evidence": ["Store in HttpOnly cookies, not localStorage"]},
+    {"id": "ctx-zzz", "content": "Rate limiting prevents brute force", "helpful": 5, "evidence": ["5 attempts / 15 minutes per IP"]}
+  ]
+}
+```
 
-1. **Refresh token rotation** (helpful: 8)
-   - Rotate refresh token on every use to prevent theft
-   - Short-lived access (15min), long-lived refresh (7 days)
-
-2. **HttpOnly cookie storage** (helpful: 6)
-   - Store refresh tokens in HttpOnly cookies, not localStorage
-   - Prevents XSS token theft
-
-3. **Rate limiting** (helpful: 5)
-   - Limit auth endpoints: 5 attempts / 15 minutes per IP
-
-Patterns retrieved. Main Claude can now proceed with implementation.
+**IMPORTANT**: Review patterns (helpful >= 5), note IDs for ACE Learning.
 ```
 
 ### Example 2: Debugging Task
@@ -124,17 +162,40 @@ Patterns retrieved. Main Claude can now proceed with implementation.
 ```
 🔍 [ACE Retrieval] Searching for async troubleshooting patterns...
 
-Found 2 relevant patterns:
+```json
+{
+  "retrieval_status": "success",
+  "patterns_found": 2,
+  "patterns": [
+    {
+      "id": "ctx-1749038514-8e4f",
+      "content": "Missing await in cleanup functions causes intermittent async test failures",
+      "helpful": 7,
+      "harmful": 0,
+      "confidence": 0.9,
+      "evidence": [
+        "Intermittent async failures often indicate missing await",
+        "Check cleanup functions (afterEach, teardown, database.close())",
+        "Always await async cleanup operations"
+      ]
+    },
+    {
+      "id": "ctx-1749038525-9f5g",
+      "content": "Database connection pool exhaustion causes intermittent test failures",
+      "helpful": 5,
+      "harmful": 0,
+      "confidence": 0.85,
+      "evidence": [
+        "Connection not closed in tests causes pool exhaustion",
+        "Always close connections in teardown",
+        "Use connection pool monitoring in tests"
+      ]
+    }
+  ]
+}
+```
 
-1. **Missing await in cleanup** (helpful: 7)
-   - Intermittent async failures often indicate missing await
-   - Check cleanup functions (afterEach, teardown)
-
-2. **Database connection pool exhaustion** (helpful: 5)
-   - Connection not closed in tests causes intermittent failures
-   - Always close connections in teardown
-
-Patterns retrieved. Suggest checking for missing await first.
+**IMPORTANT**: Review patterns (helpful >= 5). Check missing await in cleanup functions first (higher helpful score).
 ```
 
 ### Example 3: Broad Architectural Decision
@@ -145,16 +206,76 @@ Patterns retrieved. Suggest checking for missing await first.
 ```
 🔍 [ACE Retrieval] Retrieving architectural patterns...
 
-Found 5 relevant strategies:
+```json
+{
+  "retrieval_status": "success",
+  "patterns_found": 5,
+  "patterns": [
+    {
+      "id": "ctx-1749038536-1a6h",
+      "content": "Event sourcing provides complete audit trail and temporal queries for event-driven systems",
+      "helpful": 9,
+      "harmful": 0,
+      "confidence": 0.95,
+      "evidence": [
+        "Store all state changes as immutable events",
+        "Enables time-travel debugging and audit compliance",
+        "Rebuild state by replaying events"
+      ]
+    },
+    {
+      "id": "ctx-1749038547-2b7i",
+      "content": "Saga pattern manages distributed transactions across microservices",
+      "helpful": 8,
+      "harmful": 0,
+      "confidence": 0.9,
+      "evidence": [
+        "Choreography for simple workflows, orchestration for complex",
+        "Implement compensating transactions for rollback",
+        "Use correlation IDs to track saga execution"
+      ]
+    },
+    {
+      "id": "ctx-1749038558-3c8j",
+      "content": "Message queue reliability requires idempotent consumers and dead letter queues",
+      "helpful": 7,
+      "harmful": 0,
+      "confidence": 0.88,
+      "evidence": [
+        "Design consumers to be idempotent (handle duplicates)",
+        "Use DLQ for poison messages",
+        "Implement exponential backoff for retries"
+      ]
+    },
+    {
+      "id": "ctx-1749038569-4d9k",
+      "content": "Define service boundaries using Domain-Driven Design bounded contexts",
+      "helpful": 6,
+      "harmful": 0,
+      "confidence": 0.85,
+      "evidence": [
+        "Each microservice owns its domain model",
+        "Use context maps to define relationships",
+        "Avoid shared databases across bounded contexts"
+      ]
+    },
+    {
+      "id": "ctx-1749038580-5e0l",
+      "content": "Eventual consistency requires careful UX design and conflict resolution strategies",
+      "helpful": 5,
+      "harmful": 0,
+      "confidence": 0.82,
+      "evidence": [
+        "Show optimistic UI updates with rollback on conflict",
+        "Implement last-write-wins or vector clocks",
+        "Design for acceptable staleness windows"
+      ]
+    }
+  ]
+}
+```
 
-1. **Event sourcing for audit trails** (helpful: 9)
-2. **Saga pattern for distributed transactions** (helpful: 8)
-3. **Message queue reliability patterns** (helpful: 7)
-4. **Service boundaries via DDD** (helpful: 6)
-5. **Eventual consistency handling** (helpful: 5)
-
-Full playbook section retrieved (strategies_and_hard_rules).
-Main Claude has comprehensive architectural context.
+**IMPORTANT**: Review all 5 patterns (helpful >= 5). Prioritize event sourcing (9) and saga pattern (8) for core architecture.
 ```
 
 ### Example 4: Empty Playbook
@@ -165,7 +286,14 @@ Main Claude has comprehensive architectural context.
 ```
 🔍 [ACE Retrieval] Searching playbook for OAuth patterns...
 
-No existing patterns found for OAuth2 (playbook is sparse or new project).
+```json
+{
+  "retrieval_status": "no_patterns_found",
+  "patterns_found": 0,
+  "patterns": [],
+  "message": "No existing patterns found for OAuth2 (playbook is sparse or new project)"
+}
+```
 
 Main Claude will proceed using general knowledge. After completion, patterns will be captured via ACE Learning subagent.
 ```

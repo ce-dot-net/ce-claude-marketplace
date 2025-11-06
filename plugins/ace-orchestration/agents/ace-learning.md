@@ -62,6 +62,19 @@ From the provided context (raw OR pre-formatted), identify:
 2. **Success outcome** - Did it work? (true/false)
 3. **Key steps taken** - Trajectory of the solution (3-5 steps)
 4. **Lessons learned** - What insights emerged? Gotchas? Best practices?
+5. **Pattern IDs used** - Which patterns from ACE Retrieval were applied? (if any)
+
+**IMPORTANT - Pattern Tracking**: If ACE Retrieval subagent was invoked before this task and returned patterns, **ask main Claude which pattern IDs were actually used** during implementation. This helps track pattern effectiveness.
+
+For example:
+```
+Main Claude, which patterns from the retrieval phase did you apply?
+- ctx-xxx (Refresh token rotation)?
+- ctx-yyy (HttpOnly cookies)?
+- ctx-zzz (Rate limiting)?
+```
+
+If main Claude says "I used ctx-xxx and ctx-yyy", you'll include these in the `playbook_used` parameter.
 
 ### Step 2: Call ace_learn
 
@@ -72,7 +85,8 @@ mcp__plugin_ace-orchestration_ace-pattern-learning__ace_learn({
   task: "Brief description of what was accomplished",
   success: true,  // or false if it failed
   trajectory: "Step 1: Did X\nStep 2: Discovered Y\nStep 3: Implemented Z",
-  output: "Key lessons: Token rotation prevents theft. HttpOnly cookies prevent XSS. Rate limiting is essential for auth endpoints."
+  output: "Key lessons: Token rotation prevents theft. HttpOnly cookies prevent XSS. Rate limiting is essential for auth endpoints.",
+  playbook_used: ["ctx-xxx", "ctx-yyy"]  // OPTIONAL: IDs of patterns from retrieval that were used
 })
 ```
 
@@ -82,6 +96,7 @@ mcp__plugin_ace-orchestration_ace-pattern-learning__ace_learn({
 - **success**: true if it worked, false if it failed (both are valuable learning!)
 - **trajectory**: Key steps taken, decisions made, approaches tried
 - **output**: Lessons learned, gotchas discovered, patterns used, things that surprised you
+- **playbook_used**: (OPTIONAL) Array of pattern IDs from ACE Retrieval that were actually applied. Helps track pattern effectiveness over time.
 
 ### Step 3: Return Confirmation
 
@@ -132,9 +147,12 @@ ace_learn({
   task: "Implemented JWT authentication with refresh token rotation, HttpOnly cookie storage, and rate limiting",
   success: true,
   trajectory: "Step 1: Chose JWT with separate access/refresh tokens for security\nStep 2: Implemented token rotation (refresh token changes on each use)\nStep 3: Stored refresh tokens in HttpOnly cookies (prevents XSS)\nStep 4: Added rate limiting (5 attempts per 15 minutes per IP)",
-  output: "Key patterns discovered: (1) Refresh token rotation prevents theft attacks - rotate on every use, not just on expiry. (2) Short-lived access tokens (15min) balance security and UX - longer causes security risk, shorter frustrates users. (3) HttpOnly cookies for refresh tokens prevent XSS - never expose to JavaScript. (4) Rate limiting is essential for auth endpoints - 5 attempts per 15 minutes prevents brute force."
+  output: "Key patterns discovered: (1) Refresh token rotation prevents theft attacks - rotate on every use, not just on expiry. (2) Short-lived access tokens (15min) balance security and UX - longer causes security risk, shorter frustrates users. (3) HttpOnly cookies for refresh tokens prevent XSS - never expose to JavaScript. (4) Rate limiting is essential for auth endpoints - 5 attempts per 15 minutes prevents brute force.",
+  playbook_used: ["ctx-xxx", "ctx-yyy", "ctx-zzz"]  // Patterns from ACE Retrieval that were applied
 })
 ```
+
+**Note**: In this example, main Claude confirmed using all 3 patterns retrieved: token rotation (ctx-xxx), HttpOnly cookies (ctx-yyy), and rate limiting (ctx-zzz).
 
 ### Example 2: Debugging Success
 
