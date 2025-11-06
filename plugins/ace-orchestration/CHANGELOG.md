@@ -5,6 +5,164 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.12] - 2025-11-06
+
+### 🎯 Feature: JSON Pattern Passthrough - Making Patterns Actionable
+
+**Problem**: Patterns retrieved by ACE Retrieval were advisory text, not actionable structured data. Main Claude treated retrieval as a formality instead of systematically using patterns to inform work.
+
+**Root Cause**: MCP client returned perfect JSON with pattern IDs, helpful scores, evidence arrays, and confidence levels - but the ACE Retrieval subagent was converting this structured data to plain text summaries. This destroyed the machine-readable data needed for pattern application.
+
+**Solution**: JSON passthrough - subagents now return MCP tool JSON directly without conversion.
+
+#### Changes
+
+**Modified Files**:
+- `agents/ace-retrieval.md`
+  - Changed Step 3: "Return Concise Summary" → "Return Structured JSON"
+  - Updated all 4 examples to return JSON instead of text
+  - Added pattern application reminder after JSON
+  - Instructions emphasize: DO NOT convert to text, return raw JSON from MCP
+
+- `agents/ace-learning.md`
+  - Added Step 1.5: Extract pattern IDs used from retrieval
+  - Added `playbook_used` parameter to ace_learn tool examples
+  - Instructions now ask main Claude which pattern IDs were applied
+  - Enables tracking pattern effectiveness over time
+
+- `CLAUDE.md`
+  - Added section: "ACE Retrieval returns structured JSON"
+  - Added "How to use patterns" checklist (prioritize by helpful score, check confidence, review evidence, note IDs)
+  - Updated Example Workflow to show JSON pattern application flow
+  - Updated version to v4.1.12
+
+#### JSON Pattern Structure
+
+**Before (v4.1.11)**:
+```
+Found 3 relevant patterns:
+1. JWT refresh token rotation prevents theft (helpful: 8)
+2. HttpOnly cookies for refresh tokens (helpful: 6)
+```
+
+**After (v4.1.12)**:
+```json
+{
+  "retrieval_status": "success",
+  "patterns_found": 3,
+  "patterns": [
+    {
+      "id": "ctx-1749038481-2b49",
+      "content": "JWT refresh token rotation prevents theft attacks",
+      "helpful": 8,
+      "harmful": 0,
+      "confidence": 1,
+      "evidence": [
+        "Rotate refresh token on each use",
+        "Short-lived access tokens (15min) balance security/UX"
+      ]
+    }
+  ]
+}
+```
+
+#### Benefits
+
+**For Main Claude**:
+- ✅ Machine-readable pattern data (not advisory text)
+- ✅ Pattern IDs for tracking usage
+- ✅ Helpful scores for prioritization (>= 5 = proven effective)
+- ✅ Evidence arrays for implementation details
+- ✅ Confidence levels for decision-making (>= 0.8 = reliable)
+
+**For Pattern Effectiveness Tracking**:
+- ✅ ACE Learning now asks which pattern IDs were used
+- ✅ Server tracks pattern usage via `playbook_used` parameter
+- ✅ Patterns that get used frequently accumulate higher helpful scores
+- ✅ Unused patterns can be identified and improved
+
+**For Self-Improving System**:
+- ✅ Patterns are now systematically applied (not advisory)
+- ✅ Usage tracking enables data-driven pattern curation
+- ✅ High-quality patterns surface naturally through usage
+- ✅ ACE fulfills its promise: self-improving organizational knowledge
+
+#### Migration
+
+- **From v4.1.11**: Automatic - no breaking changes
+- **Impact**: ACE Retrieval returns JSON instead of text (main Claude must parse JSON)
+- **Backwards Compatible**: Empty playbook still works (returns `{"patterns_found": 0, "patterns": []}`)
+
+#### Testing
+
+**Manual Test**:
+1. Invoke ACE Retrieval subagent
+2. Verify JSON output (not text summary)
+3. Check pattern structure (id, content, helpful, evidence, confidence)
+4. Invoke ACE Learning subagent
+5. Verify it asks which pattern IDs were used
+
+**Expected Behavior**:
+- ACE Retrieval: Returns structured JSON with pattern details
+- Main Claude: Parses JSON, prioritizes by helpful score, notes IDs
+- ACE Learning: Asks for pattern IDs used, includes in `playbook_used` parameter
+- Server: Tracks pattern effectiveness over time
+
+#### Technical Details
+
+**MCP Client Already Perfect**:
+- `mcp__plugin_ace-orchestration_ace-pattern-learning__ace_get_playbook` returns JSON
+- `mcp__plugin_ace-orchestration_ace-pattern-learning__ace_search` returns JSON
+- Problem was 100% in subagent text conversion, not MCP client
+
+**Why JSON Passthrough Works**:
+- Main Claude can parse JSON natively
+- Pattern IDs enable tracking
+- Helpful scores enable prioritization
+- Evidence arrays provide implementation guidance
+- No information loss from structured to unstructured data
+
+**Pattern Application Flow**:
+```
+ACE Retrieval returns JSON
+    ↓
+Main Claude parses JSON
+    ↓
+Prioritizes by helpful score (>= 5)
+    ↓
+Checks evidence arrays
+    ↓
+Notes pattern IDs for tracking
+    ↓
+Implements using patterns
+    ↓
+ACE Learning asks: "Which pattern IDs did you use?"
+    ↓
+Main Claude responds: ["ctx-xxx", "ctx-yyy"]
+    ↓
+ACE Learning calls ace_learn(playbook_used=["ctx-xxx", "ctx-yyy"])
+    ↓
+Server tracks pattern effectiveness
+```
+
+## [4.1.11] - 2025-11-06
+
+### Fixed
+- Fixed agent instructions to use correct perspective (subagent view, not main Claude view)
+  - Removed trigger word lists (subagent already invoked, doesn't need them)
+  - Removed hook workflow explanations (subagent doesn't need context)
+  - Focused on: role, input, procedure, output
+- Fixed all MCP tool names to use correct namespace
+  - Old: `mcp__ace-pattern-learning__ace_search` ❌
+  - New: `mcp__plugin_ace-orchestration_ace-pattern-learning__ace_search` ✅
+  - Applied to both agent files (ace-retrieval.md, ace-learning.md)
+  - Applied to all tool examples and instructions
+
+### Technical Details
+- Tool name format: `mcp__plugin_{plugin-name}_{mcp-server-name}__{tool-name}`
+- For ACE: plugin=ace-orchestration, server=ace-pattern-learning
+- Both frontmatter and instructions now use correct names
+
 ## [4.1.10] - 2025-11-06
 
 ### Fixed
