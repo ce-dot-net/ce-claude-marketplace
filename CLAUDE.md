@@ -2,7 +2,7 @@
 
 ## ACE Plugin Instructions
 
-<!-- ACE_SECTION_START v4.1.5 -->
+<!-- ACE_SECTION_START v4.1.12 -->
 # ACE Orchestration Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -62,16 +62,41 @@ ACE uses **two subagents** that run in separate contexts:
 
 **Example**: Before implementing JWT auth, invoke ACE Retrieval to fetch authentication patterns.
 
+**ACE Retrieval returns structured JSON** with pattern details:
+```json
+{
+  "retrieval_status": "success",
+  "patterns_found": 3,
+  "patterns": [
+    {
+      "id": "ctx-xxx",
+      "content": "Pattern description",
+      "helpful": 8,
+      "confidence": 0.9,
+      "evidence": ["Detail 1", "Detail 2"]
+    }
+  ]
+}
+```
+
+**How to use patterns**:
+1. **Prioritize by helpful score** - Patterns with helpful >= 5 are proven effective
+2. **Check confidence levels** - High confidence (>= 0.8) patterns are reliable
+3. **Review evidence arrays** - Contain specific implementation details
+4. **Note pattern IDs** - Track which ones you use for ACE Learning
+5. **Apply strategically** - Don't blindly follow; use patterns to inform decisions
+
 ### After Completing Work
 📚 **Use ACE Learning subagent** to capture:
 - Lessons learned from implementation
 - Patterns discovered during debugging
 - Gotchas and edge cases found
 - Successful approaches to reuse
+- **Which pattern IDs you used** from ACE Retrieval (for tracking effectiveness)
 
 **Triggers**: After substantial work completion (features, bug fixes, refactoring, integrations)
 
-**Example**: After implementing JWT auth successfully, invoke ACE Learning to capture the patterns.
+**Example**: After implementing JWT auth successfully, invoke ACE Learning to capture the patterns. Report which pattern IDs (e.g., ctx-xxx, ctx-yyy) you actually applied.
 
 ### Sequential Workflow
 ```
@@ -166,17 +191,28 @@ ACE subagents are **optional and controllable**. To disable:
 User: "Implement JWT authentication"
     ↓
 [ACE Retrieval] Searching playbook...
-[ACE Retrieval] Found 3 patterns:
-  - Refresh token rotation prevents theft (helpful: 8)
-  - HttpOnly cookies for refresh tokens (helpful: 6)
-  - Rate limiting for auth endpoints (helpful: 5)
+[ACE Retrieval] Returns JSON with 3 patterns:
+  {
+    "patterns": [
+      {"id": "ctx-xxx", "content": "Refresh token rotation prevents theft", "helpful": 8, "evidence": [...]},
+      {"id": "ctx-yyy", "content": "HttpOnly cookies for refresh tokens", "helpful": 6, "evidence": [...]},
+      {"id": "ctx-zzz", "content": "Rate limiting for auth endpoints", "helpful": 5, "evidence": [...]}
+    ]
+  }
     ↓
-Claude implements using retrieved patterns
+Claude reviews JSON patterns:
+  - Prioritizes by helpful score (ctx-xxx: 8 > ctx-yyy: 6 > ctx-zzz: 5)
+  - Checks evidence arrays for implementation details
+  - Notes pattern IDs for later reporting
     ↓
-[ACE Learning] Captured 3 new patterns
-✅ Saved to playbook for future retrieval
+Claude implements using patterns ctx-xxx, ctx-yyy, ctx-zzz
     ↓
-Next session: Enhanced playbook with new insights!
+[ACE Learning] Asks Claude which patterns were used
+Claude responds: "Used ctx-xxx, ctx-yyy, ctx-zzz"
+[ACE Learning] Captures new patterns + reports pattern usage
+✅ Saved to playbook + pattern effectiveness tracked
+    ↓
+Next session: Enhanced playbook with usage data!
 ```
 
 ## See Also
@@ -187,12 +223,8 @@ Next session: Enhanced playbook with new insights!
 
 ---
 
-**Version**: v4.1.5 (UserPromptSubmit Hook + MCP Client v3.8.2)
-**Updated**: Added lightweight UserPromptSubmit hook for workflow reminders
-**New Feature**: Hook fires when trigger words detected (check, implement, fix, debug, etc.)
-**Hook Behavior**: Shows reminder about ACE sequential workflow (Retrieval → Work → Learning)
-**Requirements**: MCP Client v3.8.2+
-**Migration**: Hook activates automatically on next session. Opt-out: delete `hooks/` directory
-**Safety**: Single non-cascading hook (learned from v3.x Hook Storm Bug #3523)
+**Version**: v4.1.12 (JSON Pattern Passthrough)
+**New in v4.1.12**: ACE Retrieval returns structured JSON for actionable patterns, ACE Learning tracks pattern usage
+**Opt-out**: Delete `agents/` or `hooks/` directories to disable ACE components
 
-<!-- ACE_SECTION_END v4.1.5 -->
+<!-- ACE_SECTION_END v4.1.12 -->
