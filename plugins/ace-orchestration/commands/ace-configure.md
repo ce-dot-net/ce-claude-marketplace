@@ -306,10 +306,143 @@ AskUserQuestion({
 ```
 
 Based on user's choice, proceed with:
-- **"Use existing org"**: Show org list, let user select
+- **"Use existing org"**: See "Step 4a: Use Existing Org Flow" below
 - **"Add new org"**: Call verify_token(), add to orgs
 - **"Update existing org"**: Show org list, update selected org
 - **"Convert to single org"**: Remove orgs field, keep one token
+
+### Step 4a: Use Existing Org Flow (Multi-Org Project Selection)
+
+**When**: User selected "Use existing org" in multi-org mode decision.
+
+**Purpose**: Let user select which org to use, fetch fresh project list from server, and configure project.
+
+**Implementation**:
+
+1. **Ask which organization to use**:
+```javascript
+// Build org options from global config
+// orgs = {"org_abc": {"orgName": "XpertPulse", ...}, "org_xyz": {"orgName": "ce-dot-net", ...}}
+AskUserQuestion({
+  questions: [{
+    question: "Which organization would you like to use for this project?",
+    header: "Select Org",
+    multiSelect: false,
+    options: [
+      {
+        label: "XpertPulse",
+        description: "org_34geJJ3Xr3ZmNVF6FYHLMhpAv61 - 2 projects"
+      },
+      {
+        label: "ce-dot-net",
+        description: "org_34fYIlitYk4nyFuTvtsAzA6uUJF - 5 projects"
+      }
+    ]
+  }]
+})
+```
+
+2. **Fetch fresh project list from server**:
+```bash
+# After user selects org (e.g., "XpertPulse" → org_34geJJ3Xr3ZmNVF6FYHLMhpAv61)
+SELECTED_ORG_ID="org_34geJJ3Xr3ZmNVF6FYHLMhpAv61"
+ORG_TOKEN=$(echo "$GLOBAL_CONFIG_JSON" | jq -r ".orgs[\"$SELECTED_ORG_ID\"].apiToken")
+
+# Call verify_token() to get FRESH project list
+echo "🔍 Fetching latest project list from server..."
+VERIFY_RESPONSE=$(verify_token "$ORG_TOKEN" "$SERVER_URL")
+
+# Extract fresh projects array
+FRESH_PROJECTS=$(echo "$VERIFY_RESPONSE" | jq '.projects')
+FRESH_PROJECT_IDS=$(echo "$FRESH_PROJECTS" | jq -r '.[].project_id')
+
+echo "✅ Found $(echo "$FRESH_PROJECTS" | jq length) project(s) in organization"
+echo ""
+```
+
+3. **Update global config with fresh project list**:
+```bash
+# Update the org's projects array in global config
+UPDATED_CONFIG=$(echo "$GLOBAL_CONFIG_JSON" | jq \
+  --arg orgId "$SELECTED_ORG_ID" \
+  --argjson freshProjects "$(echo "$FRESH_PROJECTS" | jq '[.[].project_id]')" \
+  '.orgs[$orgId].projects = $freshProjects')
+
+echo "$UPDATED_CONFIG" > "$GLOBAL_CONFIG"
+echo "✅ Updated project list in config"
+echo ""
+```
+
+4. **Show project selection with fresh list**:
+```javascript
+// Build options from fresh project list
+// FRESH_PROJECTS = [{"project_id": "prj_xxx", "project_name": "foo"}, ...]
+AskUserQuestion({
+  questions: [{
+    question: "Which project would you like to use for lohnpulse-aws-iac?",
+    header: "Project ID",
+    multiSelect: false,
+    options: [
+      {
+        label: "prj_913f898c709d9f89",
+        description: "XpertPulse organization project"
+      },
+      {
+        label: "prj_3600aeeef46e10f4",
+        description: "XpertPulse organization project"
+      },
+      {
+        label: "prj_185ba193e965e55c",  // ← NEW project fetched from server
+        description: "XpertPulse organization project"
+      },
+      {
+        label: "Enter new project ID",
+        description: "Create a new project ID for this codebase"
+      }
+    ]
+  }]
+})
+```
+
+5. **Handle new project ID entry**:
+```bash
+# If user selected "Enter new project ID" or typed custom value
+if [ "$SELECTED_PROJECT" = "Enter new project ID" ] || [ "$SELECTED_PROJECT" = "Type something" ]; then
+  # Prompt for project ID
+  # NEW_PROJECT_ID = user's input (e.g., "prj_abc123")
+
+  echo "➕ Adding new project $NEW_PROJECT_ID to organization $SELECTED_ORG_ID"
+
+  # Add to org's projects array in global config
+  UPDATED_CONFIG=$(echo "$GLOBAL_CONFIG_JSON" | jq \
+    --arg orgId "$SELECTED_ORG_ID" \
+    --arg newProjectId "$NEW_PROJECT_ID" \
+    '.orgs[$orgId].projects += [$newProjectId]')
+
+  echo "$UPDATED_CONFIG" > "$GLOBAL_CONFIG"
+
+  echo "✅ Added $NEW_PROJECT_ID to organization's project list"
+
+  # Set variables for Step 5
+  MATCHING_ORG="$SELECTED_ORG_ID"
+  NEW_PROJECT_ID="$NEW_PROJECT_ID"
+else
+  # User selected existing project
+  NEW_PROJECT_ID="$SELECTED_PROJECT"
+  MATCHING_ORG="$SELECTED_ORG_ID"
+fi
+```
+
+6. **Proceed to Step 5** (Save Project Config) with:
+   - `NEW_PROJECT_ID` = selected or entered project ID
+   - `MATCHING_ORG` = selected org ID
+   - This ensures `.claude/settings.json` gets both `ACE_PROJECT_ID` and `ACE_ORG_ID`
+
+**Benefits**:
+- ✅ Always shows fresh project list from server
+- ✅ Can add new projects to existing orgs
+- ✅ Updates global config automatically
+- ✅ Properly sets ACE_ORG_ID in project config
 
 #### Single-Org Mode Decision (if MULTI_ORG_MODE=false AND config exists):
 
@@ -581,8 +714,47 @@ if [ "$MULTI_ORG_MODE" = "true" ]; then
     echo "ℹ️  Note: ACE_ORG_ID will be set automatically for multi-org projects"
     echo "   Project belongs to: $ORG_NAME ($MATCHING_ORG)"
   else
-    echo "⚠️  Warning: Project not in any org, will use fallback token"
-  fi
+    echo "⚠️  New project ID detected: $NEW_PROJECT_ID"
+    echo "   This project doesn't exist in any configured organization yet."
+    echo ""
+
+    # Ask user which org this new project belongs to
+    # Build org list from global config for AskUserQuestion
+fi
+
+# If we need to ask for org selection (new project), do it here:
+if [ "$MULTI_ORG_MODE" = "true" ] && [ -z "$MATCHING_ORG" ]; then
+  # Use AskUserQuestion to select org
+  # Example:
+  # AskUserQuestion({
+  #   questions: [{
+  #     question: "Which organization does project $NEW_PROJECT_ID belong to?",
+  #     header: "Select Org",
+  #     multiSelect: false,
+  #     options: [
+  #       {label: "XpertPulse", description: "org_34geJJ3Xr3ZmNVF6FYHLMhpAv61"},
+  #       {label: "ce-dot-net", description: "org_34fYIlitYk4nyFuTvtsAzA6uUJF"}
+  #     ]
+  #   }]
+  # })
+
+  # After user answers, extract org ID from their selection
+  # SELECTED_ORG_ID = org ID corresponding to selected label
+
+  # Add project to org's projects array
+  UPDATED_CONFIG=$(cat "$GLOBAL_CONFIG" | jq \
+    --arg orgId "$SELECTED_ORG_ID" \
+    --arg newProjectId "$NEW_PROJECT_ID" \
+    '.orgs[$orgId].projects += [$newProjectId]')
+
+  echo "$UPDATED_CONFIG" > "$GLOBAL_CONFIG"
+
+  ORG_NAME=$(echo "$UPDATED_CONFIG" | jq -r ".orgs[\"$SELECTED_ORG_ID\"].orgName")
+  echo "✅ Added $NEW_PROJECT_ID to $ORG_NAME organization"
+  echo ""
+
+  # Set MATCHING_ORG for .claude/settings.json creation below
+  MATCHING_ORG="$SELECTED_ORG_ID"
 fi
 
 # Create .claude directory if it doesn't exist

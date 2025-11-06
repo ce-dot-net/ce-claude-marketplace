@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
-  "version": "4.1.14",
-  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Multi-Org Support. HOTFIX: Complete interactive menu implementation (v4.1.13 bash/command features). Token-free changelog preview. Procedural pattern application workflow. 100% backward compatible. Requires MCP client v3.8.2+.",
+  "version": "4.1.15",
+  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Multi-Org Support. FIX: Multi-org project configuration with fresh server lists + interactive org assignment. Stale project lists resolved. Can add new projects to existing orgs. 100% backward compatible. Requires MCP client v3.8.2+.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
