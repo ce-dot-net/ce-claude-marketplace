@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v4.1.14 -->
+<!-- ACE_SECTION_START v4.2.0 -->
 # ACE Orchestration Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -236,8 +236,8 @@ Next session: Enhanced playbook with usage data!
 
 ---
 
-**Version**: v4.1.14 (Hotfix: Complete Interactive Menu Implementation)
-**New in v4.1.14**: Fixed missing bash script and command features from v4.1.13, token-free changelog preview
+**Version**: v4.2.0 (BREAKING CHANGE: Project-Level Config Scope)
+**New in v4.2.0**: Multi-tenant bug fix - /ace-tune now project-scoped, prevents config conflicts across teams/projects
 **Opt-out**: Delete `agents/` or `hooks/` directories to disable ACE components
 
-<!-- ACE_SECTION_END v4.1.14 -->
+<!-- ACE_SECTION_END v4.2.0 -->
