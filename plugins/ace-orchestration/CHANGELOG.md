@@ -5,6 +5,168 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.0] - 2025-11-14
+
+### 🚨 BREAKING CHANGE: Project-Level Configuration Scope
+
+**Critical Multi-Tenant Bug Fix**: `/ace-orchestration:ace-tune` now correctly enforces **project-level scope** to prevent multi-tenant configuration conflicts.
+
+**Problem**: In v4.1.x and earlier, `/ace-tune` commands updated configuration **globally**, affecting **ALL users on the server**. This violated multi-tenant isolation and could cause unexpected configuration changes across projects and organizations.
+
+**Solution**: ACE server now supports **hierarchical multi-tenant configuration** with proper scope isolation:
+- **Server defaults** (global baseline)
+- **Organization-level** (per org) ← Managed via web dashboard
+- **Project-level** (per project) ← `/ace-tune` scope
+
+**Priority**: `Project > Org > Server` (project overrides org overrides server)
+
+#### Breaking Changes
+
+**MCP Tool Signature Change** (REQUIRED):
+- `ace_set_config()` now **requires** `scope` parameter
+- All `/ace-tune` commands MUST pass `scope="project"`
+- Old commands without `scope` will fail with clear error message
+
+**Migration Required**:
+- ✅ Plugin v4.2.0+ includes updated commands with `scope="project"`
+- ✅ No user action required after updating plugin
+- ⚠️ Users on v4.1.x will see error until they update
+
+#### New Features
+
+**1. Project-Level Configuration Isolation**:
+```bash
+/ace-tune token-budget 50000
+# Now asks for confirmation: "⚠️ Update THIS PROJECT ONLY?"
+# Only affects current project, other projects unaffected
+```
+
+**2. Interactive Confirmation Warnings**:
+All `/ace-tune` commands now show:
+```
+⚠️  This will update config for THIS PROJECT ONLY.
+
+Current project: {project_name}
+
+Other projects in your organization will NOT be affected.
+
+Continue? [y/N]
+```
+
+**3. New Command: `/ace-tune reset`**:
+Reset project configuration to org/server defaults:
+```bash
+/ace-tune reset
+# Removes all project-level overrides
+# Reverts to organization and server defaults
+```
+
+**4. Config Source Attribution**:
+`/ace-tune show` now displays where each setting comes from:
+```
+┌─────────────────────────────────────────────────────┐
+│ ACE Configuration (Project: ce-ai-ace)              │
+├─────────────────────────────────────────────────────┤
+│ dedup_similarity_threshold: 0.85 (from org)         │
+│ constitution_threshold: 0.7 (from server)           │
+│ token_budget_enforcement: true (from project)       │
+│                                                     │
+│ 💡 Config source: project < org < server           │
+│    To change org defaults, use web dashboard.      │
+└─────────────────────────────────────────────────────┘
+```
+
+#### Modified Files
+
+**Commands**:
+- `commands/ace-tune.md` - Complete rewrite with project scope enforcement
+  - Added `scope="project"` to ALL `ace_set_config()` calls
+  - Added interactive confirmation steps
+  - Added `/ace-tune reset` command documentation
+  - Added hierarchical configuration explanation
+  - Updated all examples to show warnings and confirmations
+
+**Documentation**:
+- `README.md` - Updated `/ace-tune` section
+  - Clear warning about project-level scope
+  - Added `/ace-tune reset` command
+  - Added note about web dashboard for org-wide config
+- `CHANGELOG.md` - This entry
+
+**Metadata**:
+- `plugin.json` - Version bump to 4.2.0
+- `marketplace.json` - Version bump to 4.2.0, updated description
+
+#### User Impact
+
+**✅ Benefits**:
+- **Multi-tenant safety**: Projects are properly isolated
+- **Clear scope**: Users understand changes affect only current project
+- **Flexible management**: Project-level overrides + org defaults + server defaults
+- **Easy reset**: `/ace-tune reset` removes customizations
+
+**⚠️ Migration**:
+- Users on v4.1.x will get error when running `/ace-tune` until they update
+- Error message clearly indicates plugin update required
+- No data loss - existing configurations remain valid
+
+#### Example Workflows
+
+**Project-Specific Customization**:
+```bash
+# Project A needs strict search
+cd ~/projects/security-tool
+/ace-tune search-threshold 0.9
+→ ⚠️ Update THIS PROJECT ONLY? [y] y
+→ ✅ Project config updated (only affects this project)
+
+# Project B uses org defaults
+cd ~/projects/internal-app
+/ace-tune show
+→ search_threshold: 0.7 (from org)  ← Not affected by Project A
+```
+
+**Reset Project to Org Defaults**:
+```bash
+# Remove project-specific customizations
+/ace-tune reset
+→ ⚠️ Reset to org/server defaults? [y] y
+→ ✅ All project overrides removed
+→ Project now inherits org and server defaults
+```
+
+#### Technical Details
+
+**Hierarchical Configuration Resolution**:
+1. Check project-level config for setting
+2. If not found, check organization-level config
+3. If not found, use server default
+4. Server handles resolution automatically
+
+**Scope Enforcement**:
+- CLI commands: `scope="project"` (enforced in command files)
+- Web dashboard: Can set org-level or project-level
+- MCP tool validates scope parameter
+
+**Backward Compatibility**:
+- Single-org configs continue to work
+- Multi-org configs gain per-project customization
+- Server-side resolution ensures consistency
+
+#### Requirements
+
+- **Plugin Version**: v4.2.0+
+- **MCP Client**: v3.9.0+ (includes `scope` parameter support for multi-tenant config)
+- **ACE Server**: v3.4.0+ (includes hierarchical config)
+
+#### See Also
+
+- **Web Dashboard**: https://ace-dashboard.code-engine.app/org/{org_id}/settings
+- **Multi-Org Setup**: See v4.1.0 changelog
+- **Configuration Guide**: docs/guides/CONFIGURATION.md
+
+---
+
 ## [4.1.15] - 2025-11-06
 
 ### 🐛 Fixed: Multi-Org Project Configuration Issues

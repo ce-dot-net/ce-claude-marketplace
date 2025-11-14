@@ -87,7 +87,7 @@ The ACE MCP Client (@ce-dot-net/ace-client) is maintained in a separate reposito
   "mcpServers": {
     "ace-pattern-learning": {
       "command": "npx",
-      "args": ["--yes", "@ce-dot-net/ace-client@3.7.2", "--project-id", "prj_your_project_id"]
+      "args": ["--yes", "@ce-dot-net/ace-client@3.9.0", "--project-id", "prj_your_project_id"]
     }
   }
 }
@@ -273,8 +273,8 @@ Perfect for:
 
 ### Requirements
 
-- **MCP Client**: v3.8.1+ (includes multi-org support)
-- **Plugin Version**: v4.1.0+
+- **MCP Client**: v3.9.0+ (includes multi-org support + scope parameter)
+- **Plugin Version**: v4.2.0+
 
 ## 🤖 Subagent Architecture (v4.0.0)
 
@@ -375,12 +375,17 @@ View full playbook (comprehensive)
 ### ⚙️ Configuration Commands (NEW in v3.3.0)
 
 #### `/ace-orchestration:ace-tune [action] [params]`
-Runtime server configuration
+Runtime project configuration (⚠️ **Project-level scope only** - affects THIS PROJECT, not organization)
 ```
-/ace-orchestration:ace-tune show                        # View current configuration
-/ace-orchestration:ace-tune token-budget 50000          # Enable token budget
-/ace-orchestration:ace-tune search-threshold 0.8        # Adjust semantic search sensitivity
+/ace-orchestration:ace-tune show                        # View current effective config with sources
+/ace-orchestration:ace-tune token-budget 50000          # Enable token budget (project only)
+/ace-orchestration:ace-tune search-threshold 0.8        # Adjust semantic search (project only)
+/ace-orchestration:ace-tune dedup-threshold 0.9         # Adjust deduplication (project only)
+/ace-orchestration:ace-tune pruning-threshold 0.4       # Adjust pruning (project only)
+/ace-orchestration:ace-tune reset                       # Reset to org/server defaults
 ```
+
+**Important**: All `/ace-tune` commands affect THIS PROJECT ONLY. Other projects in your organization are NOT affected. For organization-wide configuration, use the web dashboard.
 
 #### `/ace-orchestration:ace-configure`
 Interactive ACE server connection setup
@@ -784,7 +789,7 @@ cat .claude/settings.json
 #   "mcpServers": {
 #     "ace-pattern-learning": {
 #       "command": "npx",
-#       "args": ["--yes", "@ce-dot-net/ace-client@3.7.2", "--project-id", "prj_xxxxx"]
+#       "args": ["--yes", "@ce-dot-net/ace-client@3.9.0", "--project-id", "prj_xxxxx"]
 #     }
 #   }
 # }

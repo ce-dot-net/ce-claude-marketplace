@@ -13,8 +13,8 @@
     {
       "name": "ace-orchestration",
       "source": "./plugins/ace-orchestration",
-      "description": "Code Engine ACE - Intelligent pattern learning with JSON Pattern Passthrough. NEW: ACE Retrieval returns structured JSON with pattern IDs, scores, confidence + evidence. ACE Learning tracks pattern usage. Makes patterns actionable instead of advisory. 100% backward compatible.",
-      "version": "4.1.12",
+      "description": "Code Engine ACE - Intelligent pattern learning with multi-tenant project-level config scope. BREAKING CHANGE v4.2.0: /ace-tune now enforces project-level scope to prevent multi-tenant conflicts. Requires MCP Client v3.9.0+. Includes JSON pattern passthrough, config reset capability.",
+      "version": "4.2.0",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"
