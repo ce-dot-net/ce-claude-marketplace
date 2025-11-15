@@ -2,11 +2,32 @@
   "hooks": {
     "UserPromptSubmit": [
       {
-        "matcher": "check|verify|validate|review|analyze|investigate|inspect|examine|explore|assess|evaluate|understand|plan|design|architect|outline|structure|implement|build|create|add|develop|write|code|update|modify|change|edit|enhance|extend|revise|improve|fix|debug|troubleshoot|resolve|diagnose|solve|refactor|optimize|restructure|integrate|connect|setup|configure|install|deploy|choose|decide|select|compare|consider",
+        "matcher": "implement|build|create|add|develop|write|update|modify|change|edit|fix|debug|troubleshoot|refactor|optimize|integrate|setup|configure|architect|design|test|deploy",
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/user-prompt-reminder.py"
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/enforce-ace-retrieval.py"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/track-substantial-work.py"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/pre-compact-ace-learning.py"
           }
         ]
       }

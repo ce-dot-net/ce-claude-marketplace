@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
-  "version": "4.2.0",
-  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Multi-Org Support. BREAKING: Project-level config scope enforcement. Multi-tenant bug fix: /ace-tune now properly isolated per-project. New: /ace-tune reset command. Requires MCP client v3.9.0+.",
+  "version": "4.2.1",
+  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Workflow Enforcement Hooks. NEW: Three-tier hook enforcement ensures ACE Retrieval/Learning workflow compliance. Prevents empty playbook and pattern loss. Requires MCP client v3.9.0+.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
@@ -20,6 +20,5 @@
     "ai-assistant",
     "autonomous",
     "subagents"
-  ],
-  "hooks": "./hooks/hooks.json"
+  ]
 }

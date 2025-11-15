@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v4.2.0 -->
+<!-- ACE_SECTION_START v4.2.1 -->
 # ACE Orchestration Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -43,88 +43,21 @@ ACE uses **two subagents** that run in separate contexts:
 
 **Triggers**: Work completion with valuable lessons (successes AND failures)
 
-## 🚨 ACE Subagent Workflow
+## 🚨 ACE Workflow (Enforced by Hooks)
 
-**IMPORTANT**: ACE has two subagents that you should use proactively:
+ACE uses **automated hooks** to ensure proper workflow compliance:
 
-### Before Starting Work
-🔍 **Use ACE Retrieval subagent** to search the playbook for:
-- Relevant patterns from past work
-- Proven strategies and approaches
-- Known pitfalls to avoid
-- Recommended APIs and libraries
+**Automatic Reminders**:
+- **Before implementation work**: Hook detects keywords and reminds you to invoke ACE Retrieval
+- **During substantial work**: Hook tracks file edits and reminds you to invoke ACE Learning
+- **Before compaction**: Hook issues urgent reminder if Learning wasn't invoked
 
-**Triggers**: implement, build, create, add, develop, write, update, modify, fix, debug, troubleshoot, refactor, optimize, integrate, setup, configure, architect, design, test
+**Your Role**:
+- **Respond to hook reminders** by invoking the requested subagent (Task tool)
+- **Review retrieved patterns** from ACE Retrieval and apply relevant ones
+- **Report pattern usage** to ACE Learning when capturing lessons
 
-**Example**: Before implementing JWT auth, invoke ACE Retrieval to fetch authentication patterns.
-
-**ACE Retrieval returns structured JSON** with pattern details:
-```json
-{
-  "retrieval_status": "success",
-  "patterns_found": 3,
-  "patterns": [
-    {
-      "id": "ctx-xxx",
-      "content": "Pattern description",
-      "helpful": 8,
-      "confidence": 0.9,
-      "evidence": ["Detail 1", "Detail 2"]
-    }
-  ]
-}
-```
-
-**Pattern application workflow**:
-
-1. **Review each pattern**:
-   - List pattern ID, helpful score, and confidence
-   - Read content and evidence arrays
-
-2. **Decide on application**:
-
-   **Pattern has helpful >= 5 and confidence >= 0.8?**
-   → Apply this pattern (proven effective)
-   → If skipping: Document why in your response
-
-   **Pattern has helpful < 5 or confidence < 0.8?**
-   → Evaluate based on current task context
-   → Use evidence arrays to inform decision
-
-3. **During implementation**:
-   - Apply selected patterns to your code/approach
-   - Track which pattern IDs you're using
-
-4. **Report usage to ACE Learning**:
-   - List pattern IDs you applied
-   - Note any you skipped with reasoning
-
-### After Completing Work
-📚 **Use ACE Learning subagent** to capture:
-- Lessons learned from implementation
-- Patterns discovered during debugging
-- Gotchas and edge cases found
-- Successful approaches to reuse
-- **Which pattern IDs you used** from ACE Retrieval (for tracking effectiveness)
-
-**Triggers**: After substantial work completion (features, bug fixes, refactoring, integrations)
-
-**Example**: After implementing JWT auth successfully, invoke ACE Learning to capture the patterns. Report which pattern IDs (e.g., ctx-xxx, ctx-yyy) you actually applied.
-
-### Sequential Workflow
-```
-User Request
-    ↓
-🔍 ACE Retrieval (fetch patterns)
-    ↓
-Main Claude (execute work using patterns)
-    ↓
-📚 ACE Learning (capture new patterns)
-    ↓
-Response to user
-```
-
-**Remember**: These subagents are designed to help you. Use them proactively on every qualifying task!
+**Note**: Hooks guarantee you won't forget workflow steps. Just follow the reminders!
 
 ## The Playbook
 
@@ -228,6 +161,32 @@ Claude responds: "Used ctx-xxx, ctx-yyy, ctx-zzz"
 Next session: Enhanced playbook with usage data!
 ```
 
+## Workflow Enforcement (v4.2.1+)
+
+**Three-tier hook system ensures ACE workflow compliance:**
+
+### 1. Pre-Implementation Check
+- **Hook**: `enforce-ace-retrieval.py` (UserPromptSubmit)
+- **Trigger**: Implementation keywords in user prompt
+- **Action**: Reminds to invoke ACE Retrieval if not already done
+
+### 2. During-Work Tracking
+- **Hook**: `track-substantial-work.py` (PostToolUse)
+- **Trigger**: 3+ file edits in recent 50 messages
+- **Action**: Reminds to invoke ACE Learning after substantial work
+
+### 3. Pre-Compaction Safety
+- **Hook**: `pre-compact-ace-learning.py` (PreCompact)
+- **Trigger**: Conversation compaction with uncaptured patterns
+- **Action**: Urgent reminder to invoke Learning before trace is lost
+
+### Benefits
+- Deterministic workflow enforcement
+- Prevents empty playbook
+- Non-blocking reminders (never breaks workflow)
+
+**Opt-out**: Delete hook files from `hooks/` directory
+
 ## See Also
 
 - **README.md** - Full documentation and architecture details
@@ -236,8 +195,9 @@ Next session: Enhanced playbook with usage data!
 
 ---
 
-**Version**: v4.2.0 (BREAKING CHANGE: Project-Level Config Scope)
-**New in v4.2.0**: Multi-tenant bug fix - /ace-tune now project-scoped, prevents config conflicts across teams/projects
+**Version**: v4.2.1 (NEW: Workflow Enforcement Hooks)
+**New in v4.2.1**: Three-tier hook enforcement prevents empty playbook, ensures ACE Retrieval/Learning workflow compliance
+**Previous**: v4.2.0 - Multi-tenant bug fix (/ace-tune now project-scoped)
 **Opt-out**: Delete `agents/` or `hooks/` directories to disable ACE components
 
-<!-- ACE_SECTION_END v4.2.0 -->
+<!-- ACE_SECTION_END v4.2.1 -->
