@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v4.2.2 -->
+<!-- ACE_SECTION_START v4.2.3 -->
 # ACE Orchestration Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -58,6 +58,22 @@ ACE uses **automated hooks** to ensure proper workflow compliance:
 - **Report pattern usage** to ACE Learning when capturing lessons
 
 **Note**: Hooks guarantee you won't forget workflow steps. Just follow the reminders!
+
+## 🔍 Visibility Instructions (v4.2.3+)
+
+**IMPORTANT - Conversation Transparency**: Provide visibility into ACE workflow execution.
+
+### When Hooks Inject Reminders
+1. **Acknowledge** - Mention the hook: "🚨 Hook reminder - invoking ACE Retrieval before implementation"
+2. **Announce intent** - Tell user what you're doing: "Searching for authentication patterns..."
+3. **Then invoke** - Use Task tool to spawn subagent
+
+### After Subagents Return
+1. **Announce completion** - Tell user: "[ACE Retrieval] completed - found {count} patterns"
+2. **Summarize results** - Key findings: "Top pattern: {content} (helpful: {score})"
+3. **State next steps** - What you'll do: "Applying these patterns to implementation..."
+
+**Note**: Subagents are configured to be verbose (report steps). You see their output and should summarize for the user.
 
 ## The Playbook
 
@@ -161,7 +177,7 @@ Claude responds: "Used ctx-xxx, ctx-yyy, ctx-zzz"
 Next session: Enhanced playbook with usage data!
 ```
 
-## Workflow Enforcement (v4.2.2+)
+## Workflow Enforcement (v4.2.1+)
 
 **Three-tier hook system ensures ACE workflow compliance:**
 
@@ -198,8 +214,8 @@ Next session: Enhanced playbook with usage data!
 
 ---
 
-**Version**: v4.2.2 (Research-Optimized Hook Language)
-**New in v4.2.2**: Scientifically-validated directive language patterns improve workflow compliance +5-10%
+**Version**: v4.2.3 (Conversation-Level Visibility)
+**New in v4.2.3**: Verbose subagent execution, completion announcements, transparent workflow without CLI debug flags
 **Opt-out**: Delete `agents/` or `hooks/` directories to disable ACE components
 
-<!-- ACE_SECTION_END v4.2.2 -->
+<!-- ACE_SECTION_END v4.2.3 -->

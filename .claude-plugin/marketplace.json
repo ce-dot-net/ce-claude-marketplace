@@ -13,8 +13,8 @@
     {
       "name": "ace-orchestration",
       "source": "./plugins/ace-orchestration",
-      "description": "Code Engine ACE - Intelligent pattern learning with workflow enforcement hooks. NEW v4.2.2: Research-optimized directive language improves compliance +5-10% (based on peer-reviewed LLM instruction-following studies). Requires MCP Client v3.9.0+.",
-      "version": "4.2.2",
+      "description": "Code Engine ACE - Intelligent pattern learning with conversation-level visibility. NEW v4.2.3: Verbose subagent execution, completion announcements, transparent workflow without CLI debug flags. Requires MCP Client v3.9.0+.",
+      "version": "4.2.3",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"

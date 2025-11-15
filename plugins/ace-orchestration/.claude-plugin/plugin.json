@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
-  "version": "4.2.2",
-  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Workflow Enforcement Hooks. NEW: Three-tier hook enforcement ensures ACE Retrieval/Learning workflow compliance. Prevents empty playbook and pattern loss. Requires MCP client v3.9.0+.",
+  "version": "4.2.3",
+  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Workflow Enforcement Hooks. NEW: Conversation-level visibility shows subagent execution steps without CLI debug flags. Transparent hooks, verbose subagents, clear progress tracking. Requires MCP client v3.9.0+.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

@@ -5,6 +5,122 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.3] - 2025-11-16
+
+### ✨ Feature: Conversation-Level Visibility for Subagent Execution
+
+**Problem**: Users couldn't see subagent execution details without CLI debug flags (`--verbose`, `--debug`, `--mcp-debug`), making the ACE workflow feel opaque and hard to follow.
+
+**Solution**: Implemented comprehensive conversation-level visibility that shows hook injections, subagent execution steps, and MCP tool calls directly in the conversation thread.
+
+#### What's New
+
+**1. Verbose Subagent Definitions**
+- **ACE Retrieval** (`agents/ace-retrieval.md`):
+  - Added step-by-step progress reporting (5 steps)
+  - Start banner: `🔍 [ACE Retrieval] Subagent started - analyzing request...`
+  - Progress indicators: `[ACE Retrieval] Step 1: Analyzing request - identified domain: {domain}`
+  - Completion status: `✅ [ACE Retrieval] Search complete - returning {count} patterns`
+
+- **ACE Learning** (`agents/ace-learning.md`):
+  - Added step-by-step progress reporting (5 steps)
+  - Start banner: `📚 [ACE Learning] Subagent started - capturing patterns...`
+  - Progress indicators: `[ACE Learning] Step 1: Analyzing completed work - {task}`
+  - Completion status: `✅ [ACE Learning] Pattern capture complete - saved {count} patterns`
+
+**2. Subagent Completion Announcement Hook**
+- **New Hook**: `announce-subagent.py` (PostToolUse for Task tool)
+- **Triggers**: When any subagent completes execution
+- **Action**: Reminds main Claude to announce completion and summarize results
+- **Benefit**: Ensures users always see subagent outcomes
+
+**3. Main Claude Behavioral Documentation**
+- **New Section**: "Conversation-Level Visibility" in `CLAUDE.md` (lines 62-132)
+- **Behavior Patterns**:
+  - Acknowledge hook reminders: "🚨 Hook reminder received - invoking ACE Retrieval"
+  - Announce before invoking: "Invoking ACE Retrieval subagent to search for patterns..."
+  - Summarize after completion: "[ACE Retrieval] completed - found 3 patterns"
+- **Example Flow**: Complete conversation example showing all visibility touchpoints
+
+#### User Experience Improvements
+
+**Before (v4.2.2)**:
+```
+User: "Implement JWT authentication"
+Claude: [invokes subagent silently]
+Claude: "I'll implement JWT auth with refresh tokens..."
+[User has no idea ACE was used]
+```
+
+**After (v4.2.3)**:
+```
+User: "Implement JWT authentication"
+Claude: "🚨 Hook reminder - invoking ACE Retrieval before implementation"
+[ACE Retrieval]: 🔍 Subagent started...
+[ACE Retrieval]: Step 1: Analyzing request...
+[ACE Retrieval]: Step 2: Calling ace_search(query="JWT auth", threshold=0.85)
+[ACE Retrieval]: Step 3: Found 3 patterns
+[ACE Retrieval]: ✅ Search complete
+Claude: "Found 3 patterns: token rotation (8), HttpOnly cookies (6), rate limiting (5)"
+Claude: "Implementing with these patterns..."
+[Implementation]
+Claude: "📚 Invoking ACE Learning to capture patterns..."
+[ACE Learning]: 📚 Subagent started...
+[ACE Learning]: Step 1: Analyzing work...
+[ACE Learning]: ✅ Pattern capture complete - saved 4 patterns
+Claude: "Saved 4 new patterns for future retrieval"
+```
+
+#### Benefits
+
+- ✅ **No CLI flags needed** - All visibility in conversation (no `--verbose`, `--debug`, `--mcp-debug`)
+- ✅ **Transparent hooks** - See when hooks fire and what they inject
+- ✅ **Step-by-step subagents** - Watch subagents execute in real-time
+- ✅ **Clear completions** - Know when subagents finish and what they return
+- ✅ **Better debugging** - Trace full ACE workflow execution visually
+- ✅ **Improved trust** - Users understand what ACE is doing behind the scenes
+
+#### Files Modified
+
+**Subagent Definitions** (verbose reporting):
+- `agents/ace-retrieval.md` - Lines 21-46: Added VERBOSE REPORTING section with 5-step progress
+- `agents/ace-learning.md` - Lines 32-129: Added VERBOSE REPORTING section with 5-step progress
+- Updated all 4 examples in each subagent to show verbose output
+
+**Hook System** (completion announcements):
+- `hooks/announce-subagent.py` - NEW: PostToolUse hook for Task tool subagent completions
+- `hooks/hooks.json` - Lines 24-32: Added Task tool PostToolUse hook configuration
+
+**Documentation** (behavioral guidelines):
+- `CLAUDE.md` - Lines 62-132: New "Conversation-Level Visibility" section
+  - Main Claude behavior patterns (acknowledge, announce, summarize)
+  - Subagent verbose configuration details
+  - Complete example conversation flow
+  - Benefits summary
+
+#### Testing
+
+All hooks verified working:
+- ✅ `enforce-ace-retrieval.py` - Outputs retrieval reminder with natural language
+- ✅ `track-substantial-work.py` - Tracks file edits and reminds for learning
+- ✅ `pre-compact-ace-learning.py` - Safety net before compaction
+- ✅ `announce-subagent.py` - Announces subagent completions (NEW)
+
+#### Migration Notes
+
+**No Breaking Changes** - Visibility improvements are purely additive:
+- Existing workflows continue to work
+- Hooks remain non-blocking (inject reminders, don't force actions)
+- Subagent behavior unchanged (just more verbose output)
+- No configuration changes required
+
+**Immediate Benefits** - Users will see:
+- More transparent ACE workflow execution
+- Better understanding of when/why subagents run
+- Clearer progress tracking through complex tasks
+
+---
+
 ## [4.2.2] - 2025-11-15
 
 ### 🔬 Improved: Research-Optimized Hook Language
