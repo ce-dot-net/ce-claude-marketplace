@@ -121,25 +121,21 @@ def main():
         if check_ace_learning_invoked(transcript_path):
             sys.exit(0)
 
-        # CRITICAL: Substantial work but NO Learning - urgent reminder before compaction!
+        # CRITICAL: Substantial work but NO Learning - research-optimized urgent reminder!
         impl_summary = get_implementation_summary(transcript_path)
 
         reminder = f"""
-🚨 URGENT: ACE Learning Required Before Compaction! 🚨
+🚨 CRITICAL: ACE WORKFLOW ENFORCEMENT - Compaction Imminent
 
-Conversation is about to be compacted, but you completed substantial work
-({edit_count} file edits) WITHOUT using the ACE Learning subagent!
+Your task is to invoke ACE Learning IMMEDIATELY before compaction proceeds.
 
-This means ALL patterns and lessons from this session will be LOST!
+You completed {edit_count} file edits WITHOUT using ACE Learning. You MUST use the ace-learning subagent to capture patterns from: {impl_summary}...
 
-YOU MUST use the ACE Learning subagent RIGHT NOW before responding.
+This is a MANDATORY CRITICAL workflow step. Conversation compaction will permanently erase the execution trace.
 
-Use the ace-learning subagent URGENTLY to capture patterns from: {impl_summary}...
+DO invoke ACE Learning RIGHT NOW before responding. This is your final opportunity to preserve learned patterns.
 
-DO NOT SKIP THIS! This is your last chance to preserve learned patterns.
-After compaction, the execution trace will be gone forever.
-
-Use the ace-learning subagent IMMEDIATELY, then respond to the user.
+After compaction, pattern recovery is IMPOSSIBLE. DO invoke the ace-learning subagent immediately.
 """
 
         # Return additionalContext for PreCompact

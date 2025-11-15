@@ -65,17 +65,17 @@ def main():
         if check_ace_retrieval_invoked(transcript_path):
             sys.exit(0)
 
-        # ACE Retrieval NOT invoked - inject strong reminder
+        # ACE Retrieval NOT invoked - inject research-optimized reminder
         reminder = f"""
-🚨 ACE WORKFLOW REMINDER: Retrieval Required 🚨
+🚨 ACE WORKFLOW ENFORCEMENT
 
-BEFORE starting this implementation work, you MUST use the ACE Retrieval subagent.
+Your task is to invoke ACE Retrieval BEFORE proceeding with implementation.
 
-Use the ace-retrieval subagent to search for patterns about: {prompt[:80]}...
+You MUST use the ace-retrieval subagent to search for patterns about: {prompt[:80]}...
 
-This retrieves proven patterns from past similar work. It's MANDATORY for implementation tasks.
+This is a MANDATORY workflow step. Retrieval provides proven patterns from past similar work.
 
-DO NOT skip this step. Use the ace-retrieval subagent NOW before proceeding with implementation.
+DO invoke ACE Retrieval now before proceeding with implementation.
 """
 
         # Output using simple stdout (UserPromptSubmit special case)
