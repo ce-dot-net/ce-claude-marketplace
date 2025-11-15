@@ -5,6 +5,141 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.1] - 2025-11-15
+
+### ✨ New Feature: ACE Workflow Enforcement Hooks
+
+**Problem Solved**: Claude Code (Generator) could forget to invoke ACE Retrieval before implementation or ACE Learning after completion, leading to empty playbook and broken learning cycle.
+
+**Root Cause**: Pure LLM reasoning is probabilistic, not deterministic. Even with strong language in agent descriptions ("MUST BE USED PROACTIVELY"), Claude can forget to invoke subagents, especially on long tasks or after compaction.
+
+**Solution**: Three-tier hook enforcement strategy ensures ACE workflow compliance:
+
+#### New Hooks
+
+**1. `enforce-ace-retrieval.py` (UserPromptSubmit)**
+- **When**: User submits prompt with implementation keywords
+- **What**: Checks transcript to see if ACE Retrieval already invoked
+- **Action**: Injects strong reminder if NOT invoked
+- **Triggers**: implement, build, create, add, develop, write, update, modify, fix, debug, troubleshoot, refactor, optimize, integrate, setup, configure, architect, design, test, deploy
+- **Result**: Ensures patterns are retrieved BEFORE work begins
+
+**2. `track-substantial-work.py` (PostToolUse)**
+- **When**: After Write, Edit, or NotebookEdit tools complete
+- **What**: Counts recent file edits (50-message window) and checks for implementation context
+- **Action**: Reminds Claude to invoke ACE Learning if substantial work detected (3+ edits OR keywords + 1+ edit) but Learning not invoked yet
+- **Result**: Continuous reminder during implementation to capture patterns
+
+**3. `pre-compact-ace-learning.py` (PreCompact)**
+- **When**: Before conversation compaction occurs
+- **What**: Counts ALL edits in conversation, checks if ACE Learning ever invoked
+- **Action**: Issues URGENT reminder if substantial work occurred but Learning not invoked - last chance before execution trace is lost forever
+- **Result**: Safety net to prevent pattern loss during compaction
+
+#### Workflow Enforcement
+
+**Sequential Enforcement**:
+```
+User: "Implement JWT authentication"
+    ↓
+UserPromptSubmit Hook: Detects "implement" keyword
+                       Checks transcript - no ACE Retrieval found
+                       Injects: "🚨 ACE WORKFLOW REMINDER: Retrieval Required 🚨"
+    ↓
+Claude: Invokes ACE Retrieval subagent
+        Retrieves patterns about JWT auth
+        Implements using patterns
+    ↓
+PostToolUse Hook: Detects 5 file edits
+                  Checks transcript - no ACE Learning found yet
+                  Injects: "📚 ACE WORKFLOW REMINDER: Capture Patterns 📚"
+    ↓
+Claude: Invokes ACE Learning subagent
+        Captures lessons learned
+        Reports pattern IDs used
+    ↓
+PreCompact Hook: (safety net - won't trigger since Learning was invoked)
+```
+
+**Compaction Safety**:
+```
+[Long session, multiple implementations, compaction triggered]
+    ↓
+PreCompact Hook: Counts 12 file edits
+                 Checks transcript - ACE Learning NEVER invoked!
+                 Injects: "🚨 URGENT: ACE Learning Required Before Compaction! 🚨"
+    ↓
+Claude: MUST invoke ACE Learning NOW or lose all patterns forever
+```
+
+#### Technical Implementation
+
+**Transcript Analysis**:
+All hooks read `transcript_path` (JSONL conversation history):
+```python
+with open(transcript_path, 'r') as f:
+    for line in f:
+        msg = json.loads(line)
+        content = msg.get('message', {}).get('content', [])
+
+        # Check for Task tool with ace-retrieval subagent
+        for item in content:
+            if item.get('name') == 'Task':
+                subagent_type = item.get('input', {}).get('subagent_type', '')
+                if 'ace-retrieval' in subagent_type.lower():
+                    # ACE Retrieval was invoked!
+```
+
+**Context Injection**:
+- UserPromptSubmit: Uses stdout (special case)
+- PostToolUse: Returns JSON with `additionalContext`
+- PreCompact: Returns JSON with `additionalContext`
+
+**Error Handling**:
+All hooks fail gracefully - on error, they allow the operation to proceed without blocking. This ensures hooks never break the user's workflow.
+
+#### Benefits
+
+- ✅ **Deterministic Workflow**: Hooks guarantee ACE workflow compliance
+- ✅ **Empty Playbook Prevention**: Ensures patterns are captured, breaking vicious cycle
+- ✅ **Compaction Safety**: PreCompact hook prevents pattern loss
+- ✅ **Non-Blocking**: Hooks never block user's workflow on error
+- ✅ **Transparent**: Clear reminders show when workflow is enforced
+- ✅ **Progressive**: Three-tier defense (before, during, pre-compact)
+
+#### Modified Files
+
+**New Hooks**:
+- `hooks/enforce-ace-retrieval.py` - UserPromptSubmit enforcement
+- `hooks/track-substantial-work.py` - PostToolUse tracking
+- `hooks/pre-compact-ace-learning.py` - PreCompact safety net
+
+**Configuration**:
+- `hooks/hooks.json` - Added configurations for all three hooks
+- `plugin.json` - Removed duplicate hooks reference (auto-loads from hooks/)
+- `plugin.template.json` - Removed duplicate hooks reference
+
+**Documentation**:
+- `CHANGELOG.md` - This entry
+- Version bump to 4.2.1
+
+#### User Impact
+
+**No Breaking Changes**: Existing workflows continue to work
+
+**What Users See**:
+- More frequent ACE subagent invocations (as intended!)
+- Clear reminders when workflow steps are missed
+- Reduced empty playbook problem
+- Better pattern learning over time
+
+**Opt-Out**: Users can disable hooks by:
+- Deleting specific hook files
+- Removing entries from hooks/hooks.json
+- Disabling entire plugin
+
+---
+
 ## [4.2.0] - 2025-11-14
 
 ### 🚨 BREAKING CHANGE: Project-Level Configuration Scope

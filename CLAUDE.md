@@ -2,7 +2,7 @@
 
 ## ACE Plugin Instructions
 
-<!-- ACE_SECTION_START v4.1.12 -->
+<!-- ACE_SECTION_START v4.1.14 -->
 # ACE Orchestration Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -79,12 +79,29 @@ ACE uses **two subagents** that run in separate contexts:
 }
 ```
 
-**How to use patterns**:
-1. **Prioritize by helpful score** - Patterns with helpful >= 5 are proven effective
-2. **Check confidence levels** - High confidence (>= 0.8) patterns are reliable
-3. **Review evidence arrays** - Contain specific implementation details
-4. **Note pattern IDs** - Track which ones you use for ACE Learning
-5. **Apply strategically** - Don't blindly follow; use patterns to inform decisions
+**Pattern application workflow**:
+
+1. **Review each pattern**:
+   - List pattern ID, helpful score, and confidence
+   - Read content and evidence arrays
+
+2. **Decide on application**:
+
+   **Pattern has helpful >= 5 and confidence >= 0.8?**
+   → Apply this pattern (proven effective)
+   → If skipping: Document why in your response
+
+   **Pattern has helpful < 5 or confidence < 0.8?**
+   → Evaluate based on current task context
+   → Use evidence arrays to inform decision
+
+3. **During implementation**:
+   - Apply selected patterns to your code/approach
+   - Track which pattern IDs you're using
+
+4. **Report usage to ACE Learning**:
+   - List pattern IDs you applied
+   - Note any you skipped with reasoning
 
 ### After Completing Work
 📚 **Use ACE Learning subagent** to capture:
@@ -223,8 +240,8 @@ Next session: Enhanced playbook with usage data!
 
 ---
 
-**Version**: v4.1.12 (JSON Pattern Passthrough)
-**New in v4.1.12**: ACE Retrieval returns structured JSON for actionable patterns, ACE Learning tracks pattern usage
+**Version**: v4.1.14 (Hotfix: Complete Interactive Menu Implementation)
+**New in v4.1.14**: Fixed missing bash script and command features from v4.1.13, token-free changelog preview
 **Opt-out**: Delete `agents/` or `hooks/` directories to disable ACE components
 
-<!-- ACE_SECTION_END v4.1.12 -->
+<!-- ACE_SECTION_END v4.1.14 -->
