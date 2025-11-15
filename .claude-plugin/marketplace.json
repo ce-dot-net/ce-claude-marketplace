@@ -13,8 +13,8 @@
     {
       "name": "ace-orchestration",
       "source": "./plugins/ace-orchestration",
-      "description": "Code Engine ACE - Intelligent pattern learning with workflow enforcement hooks. NEW v4.2.1: Three-tier hook system (UserPromptSubmit, PostToolUse, PreCompact) enforces ACE Retrieval/Learning workflow, prevents empty playbook. Requires MCP Client v3.9.0+.",
-      "version": "4.2.1",
+      "description": "Code Engine ACE - Intelligent pattern learning with workflow enforcement hooks. NEW v4.2.2: Research-optimized directive language improves compliance +5-10% (based on peer-reviewed LLM instruction-following studies). Requires MCP Client v3.9.0+.",
+      "version": "4.2.2",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"

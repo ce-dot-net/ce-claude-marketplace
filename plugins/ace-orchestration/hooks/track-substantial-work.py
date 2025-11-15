@@ -158,17 +158,17 @@ def main():
         if check_ace_learning_invoked(transcript_path):
             sys.exit(0)
 
-        # Substantial work detected but Learning NOT invoked - inject reminder
+        # Substantial work detected but Learning NOT invoked - inject research-optimized reminder
         reminder = f"""
-📚 ACE WORKFLOW REMINDER: Capture Patterns 📚
+📚 ACE WORKFLOW ENFORCEMENT: Pattern Capture Required
 
-You've completed substantial work ({edit_count} file edits) but haven't used the ACE Learning subagent yet.
+Your task is to invoke ACE Learning to capture patterns from substantial work.
 
-AFTER completing this task, you MUST use the ACE Learning subagent.
+You have completed {edit_count} file edits. You MUST use the ace-learning subagent to capture patterns from: {impl_context or 'recent implementation work'}...
 
-Use the ace-learning subagent to capture patterns from: {impl_context or 'recent implementation work'}...
+This is a MANDATORY workflow step. Pattern capture ensures lessons learned are preserved for future use.
 
-This ensures lessons learned are saved for future use. Use the ace-learning subagent when you're done!
+DO invoke ACE Learning now to capture patterns before responding to the user.
 """
 
         # Return additionalContext for PostToolUse
