@@ -13,8 +13,8 @@
     {
       "name": "ace-orchestration",
       "source": "./plugins/ace-orchestration",
-      "description": "Code Engine ACE - Intelligent pattern learning with conversation-level visibility. FIXED v4.2.5: Console output freezing resolved - removed transcript-reading PostToolUse hook. Real-time console output, no freezing. Requires MCP Client v3.9.0+.",
-      "version": "4.2.5",
+      "description": "Code Engine ACE - Intelligent pattern learning with conversation-level visibility. FIXED v4.2.6: Removed ALL PostToolUse hooks (Claude Code blocking bug #4809, #11504) + macOS compatibility fix. Requires MCP Client v3.9.0+.",
+      "version": "4.2.6",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"

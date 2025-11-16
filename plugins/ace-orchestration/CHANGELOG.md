@@ -5,6 +5,92 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.6] - 2025-11-16
+
+### 🐛 Fix: PostToolUse Hook Blocking Bug + macOS Compatibility
+
+**Critical Fixes**:
+
+1. **Removed ALL PostToolUse hooks** due to known Claude Code bug
+2. **Fixed macOS compatibility** in ace-configure command
+
+#### Issue 1: PostToolUse Hooks Block Execution (Claude Code Bug)
+
+**Problem**: Console freezes at "Running PostToolUse hook…" after any Edit/Write operation, requiring restart with `claude -c` to continue.
+
+**Root Cause**:
+- **Known Claude Code bug** (GitHub Issues #4809, #11504)
+- PostToolUse hooks **claim** to be "non-blocking" in documentation
+- **Reality**: They BLOCK execution despite documentation
+- Bug present since July 2024, still unfixed
+
+**Solution**: Removed ALL PostToolUse hooks from hooks.json:
+- ❌ Removed `announce-subagent.py` (Task PostToolUse hook)
+- ❌ Already removed `track-substantial-work.py` in v4.2.5
+
+**Impact**: Console no longer freezes! Hooks are now limited to:
+- ✅ UserPromptSubmit: `enforce-ace-retrieval.py` (still works)
+- ✅ PreCompact: `pre-compact-ace-learning.py` (still works)
+
+#### Issue 2: macOS Compatibility in /ace-configure Command
+
+**Problem**: `head -n-1` command fails on macOS with "illegal line count" error.
+
+**Root Cause**:
+- Linux: `head -n-1` supported (all lines except last)
+- macOS: Negative line counts not supported
+
+**Solution**: Changed to `sed '$d'` (cross-platform, removes last line)
+
+**File Changed**:
+- `commands/ace-configure.md` (Line 38): `head -n-1` → `sed '$d'`
+- Function: `verify_token()` helper used by `/ace-orchestration:ace-configure`
+
+#### Changes Summary
+
+**Removed**:
+- `hooks/hooks.json`: Removed entire PostToolUse section due to Claude Code blocking bug
+
+**Fixed**:
+- `commands/ace-configure.md`: Changed `head -n-1` → `sed '$d'` for macOS compatibility
+
+#### User Impact
+
+**Before (v4.2.5)**:
+```
+User makes edit → PostToolUse hook fires → console freezes at "Running PostToolUse hook…"
+User must: Close and restart Claude Code with -c flag
+```
+
+**After (v4.2.6)**:
+```
+User makes edit → no PostToolUse hooks → console works normally ✅
+User can: Continue working without interruption
+```
+
+**macOS Users**:
+- `/ace-orchestration:ace-configure` now works on macOS without "illegal line count" errors
+
+#### Trade-offs
+
+**What you lose**:
+- ❌ No automatic subagent completion announcements (announce-subagent.py removed)
+- ❌ No automatic edit tracking reminders (already removed in v4.2.5)
+
+**What you keep**:
+- ✅ ACE Retrieval reminders before implementation (UserPromptSubmit hook)
+- ✅ ACE Learning safety net before compaction (PreCompact hook)
+- ✅ Console works without freezing
+- ✅ Real-time output visibility
+
+#### References
+
+- **GitHub Issue #4809**: "PostToolUse Hook Exit Code 1 Blocks Claude Execution"
+- **GitHub Issue #11504**: "plugin PostToolUse hook crashes Claude Code when interacting with long files"
+- **Bug Status**: Reported July 2024, still present in Claude Code as of November 2024
+
+---
+
 ## [4.2.5] - 2025-11-16
 
 ### 🐛 Fix: Console Output Freezing Issue

@@ -35,7 +35,7 @@ verify_token() {
     "$SERVER_URL/api/v1/config/verify")
 
   HTTP_CODE=$(echo "$VERIFY_RESPONSE" | tail -n1)
-  BODY=$(echo "$VERIFY_RESPONSE" | head -n-1)
+  BODY=$(echo "$VERIFY_RESPONSE" | sed '$d')
 
   if [ "$HTTP_CODE" -eq 200 ]; then
     ORG_ID=$(echo "$BODY" | jq -r '.org_id')
