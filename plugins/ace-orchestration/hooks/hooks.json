@@ -11,17 +11,6 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": "Task",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}\"/hooks/announce-subagent.py"
-          }
-        ]
-      }
-    ],
     "PreCompact": [
       {
         "hooks": [
