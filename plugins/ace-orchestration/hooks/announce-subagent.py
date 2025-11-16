@@ -45,19 +45,12 @@ For conversation visibility, you should announce:
 This helps the user see the subagent execution in the conversation without CLI debug flags.
 """
 
-        # Return additionalContext for PostToolUse
-        result = {
-            "decision": "allow",
-            "additionalContext": reminder
-        }
-
-        print(json.dumps(result))
+        # Print reminder directly (same format as other hooks)
+        print(reminder)
         sys.exit(0)
 
     except Exception as e:
-        # On error, don't block - just allow
-        result = {"decision": "allow"}
-        print(json.dumps(result), file=sys.stderr)
+        # On error, don't block - just exit silently
         sys.exit(0)
 
 if __name__ == '__main__':

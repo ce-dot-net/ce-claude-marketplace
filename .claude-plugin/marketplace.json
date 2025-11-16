@@ -13,8 +13,8 @@
     {
       "name": "ace-orchestration",
       "source": "./plugins/ace-orchestration",
-      "description": "Code Engine ACE - Intelligent pattern learning with conversation-level visibility. NEW v4.2.3: Verbose subagent execution, completion announcements, transparent workflow without CLI debug flags. Requires MCP Client v3.9.0+.",
-      "version": "4.2.3",
+      "description": "Code Engine ACE - Intelligent pattern learning with conversation-level visibility. FIXED v4.2.4: Hook hanging issue resolved - announcement hook now uses plain text output. Smooth workflow execution, no blocking. Requires MCP Client v3.9.0+.",
+      "version": "4.2.4",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"
