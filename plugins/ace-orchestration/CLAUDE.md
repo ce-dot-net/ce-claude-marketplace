@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v4.2.3 -->
+<!-- ACE_SECTION_START v4.2.4 -->
 # ACE Orchestration Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -214,8 +214,8 @@ Next session: Enhanced playbook with usage data!
 
 ---
 
-**Version**: v4.2.3 (Conversation-Level Visibility)
-**New in v4.2.3**: Verbose subagent execution, completion announcements, transparent workflow without CLI debug flags
+**Version**: v4.2.4 (Hook Hanging Fix)
+**Fixed in v4.2.4**: Hook hanging issue resolved - announcement hook now uses plain text output for smooth execution
 **Opt-out**: Delete `agents/` or `hooks/` directories to disable ACE components
 
-<!-- ACE_SECTION_END v4.2.3 -->
+<!-- ACE_SECTION_END v4.2.4 -->

@@ -5,6 +5,54 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.4] - 2025-11-16
+
+### 🐛 Fix: Announcement Hook Hanging Issue
+
+**Problem**: The `announce-subagent.py` PostToolUse hook was hanging after Task tool execution, blocking workflow and preventing users from seeing results.
+
+**Root Cause**: Hook was outputting JSON format (`print(json.dumps(result))`) instead of plain text, which caused the hook to hang and block execution.
+
+**Solution**: Updated hook to print reminder text directly (matching format of other hooks like `enforce-ace-retrieval.py` and `track-substantial-work.py`).
+
+#### Changes
+
+**Fixed Files**:
+- `hooks/announce-subagent.py` (Lines 48-54):
+  - Changed from: `print(json.dumps(result))` with JSON wrapper
+  - Changed to: `print(reminder)` with plain text output
+  - Simplified error handling to exit silently without blocking
+
+**Subagent Instructions**:
+- `agents/ace-retrieval.md`: Simplified verbose instructions (removed rigid step numbering)
+- `agents/ace-learning.md`: Simplified verbose instructions (removed rigid step numbering)
+
+#### User Impact
+
+**Before (v4.2.3)**:
+```
+⏺ ace-orchestration:ace-retrieval(Search for formatting patterns)
+  ⎿  Done (3 tool uses · 14.5k tokens · 11s)
+  ⎿  Running PostToolUse hook… [HANGS HERE - workflow blocked]
+```
+
+**After (v4.2.4)**:
+```
+⏺ ace-orchestration:ace-retrieval(Search for formatting patterns)
+  ⎿  Done (3 tool uses · 14.5k tokens · 11s)
+  ⎿  PostToolUse hook complete ✅
+[Workflow continues normally]
+```
+
+#### Benefits
+
+- ✅ Hooks no longer hang or block execution
+- ✅ Workflow continues smoothly after subagent completion
+- ✅ Simplified subagent verbose instructions (more flexible)
+- ✅ Consistent hook output format across all hooks
+
+---
+
 ## [4.2.3] - 2025-11-16
 
 ### ✨ Feature: Conversation-Level Visibility for Subagent Execution

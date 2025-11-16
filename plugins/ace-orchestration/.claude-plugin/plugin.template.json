@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
-  "version": "4.2.3",
-  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Workflow Enforcement Hooks. NEW: Three-tier hook enforcement ensures ACE Retrieval/Learning workflow compliance. Prevents empty playbook and pattern loss.",
+  "version": "4.2.4",
+  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Workflow Enforcement Hooks. FIXED v4.2.4: Hook hanging issue resolved - announcement hook now uses plain text output. Smooth workflow execution, no blocking.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
