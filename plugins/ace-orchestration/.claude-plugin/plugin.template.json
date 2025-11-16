@@ -1,7 +1,7 @@
 {
   "name": "ace-orchestration",
-  "version": "4.2.4",
-  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Workflow Enforcement Hooks. FIXED v4.2.4: Hook hanging issue resolved - announcement hook now uses plain text output. Smooth workflow execution, no blocking.",
+  "version": "4.2.5",
+  "description": "Code Engine ACE - Intelligent pattern learning with Subagent Architecture + Workflow Enforcement Hooks. FIXED v4.2.5: Console output freezing resolved - removed transcript-reading PostToolUse hook. Real-time console output, no freezing.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
