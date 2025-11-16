@@ -5,6 +5,34 @@ All notable changes to the ACE Orchestration Plugin will be documented in this f
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.5] - 2025-11-16
+
+### 🐛 Fix: Console Output Freezing Issue
+
+**Problem**: Console output would freeze/block during execution. Users had to close and reopen Claude Code with `-c` flag to see what happened. Steps and progress not displayed in real-time.
+
+**Root Cause**: `track-substantial-work.py` PostToolUse hook was reading the entire transcript file on **every** Write/Edit/NotebookEdit, causing:
+- File locking on transcript
+- Blocked output stream
+- Console freezing
+- Deadlock-like behavior
+
+**Solution**: Removed `track-substantial-work.py` hook from hooks.json.
+
+#### Changes
+
+- **hooks/hooks.json**: Removed `Write|Edit|NotebookEdit` PostToolUse hook entry
+- Kept lightweight hooks: UserPromptSubmit (enforce-ace-retrieval.py), PostToolUse for Task only (announce-subagent.py), PreCompact (pre-compact-ace-learning.py)
+
+#### Impact
+
+**Before (v4.2.4)**: Console freezes → need to restart with `-c` flag
+**After (v4.2.5)**: Console output flows normally ✅
+
+**Trade-off**: No automatic reminder after 3+ edits. Manually invoke ACE Learning after substantial work, or rely on PreCompact hook as safety net.
+
+---
+
 ## [4.2.4] - 2025-11-16
 
 ### 🐛 Fix: Announcement Hook Hanging Issue
