@@ -39,7 +39,7 @@ if [ -z "$ORG_ID" ] || [ -z "$PROJECT_ID" ]; then
 fi
 
 # Call ce-ace search (user query via args, not stdin)
-ce-ace --json --org "$ORG_ID" --project "$PROJECT_ID" \
+ce-ace --org "$ORG_ID" --project "$PROJECT_ID" \
   search "$*" \
   --threshold 0.85
 ```

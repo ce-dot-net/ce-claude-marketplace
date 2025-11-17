@@ -20,7 +20,7 @@
 npm install -g @ce-dot-net/ce-ace-cli
 ```
 
-**Requirements:** ce-ace >= v1.0.3 (for tune command and full feature support)
+**Requirements:** ce-ace >= v1.0.4 (critical threshold bug fix - ensures server constitution_threshold is applied)
 
 ### 2. Enable Plugin
 
