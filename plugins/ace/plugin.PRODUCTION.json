@@ -1,0 +1,27 @@
+{
+  "name": "ace",
+  "version": "3.3.12",
+  "description": "ACE (Agentic Context Engineering) - CLI-based pattern learning. Direct ce-ace CLI integration via hooks. No MCP server, no subagents. Learns from execution feedback. Requires ce-ace >= v1.0.1. Based on Stanford/SambaNova/UC Berkeley research (arXiv:2510.04618v1)",
+  "author": {
+    "name": "ACE Team",
+    "email": "ace@ce-dot-net.com"
+  },
+  "homepage": "https://github.com/ce-dot-net/ce-ai-ace",
+  "repository": "https://github.com/ce-dot-net/ce-ai-ace",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "ace",
+    "pattern-learning",
+    "self-improving",
+    "context-engineering",
+    "agentic",
+    "research",
+    "stanford",
+    "autonomous",
+    "cli-integration"
+  ],
+  "hooks": "./hooks/hooks.json",
+  "commands": "./commands",
+  "agents": "./agents"
+}
