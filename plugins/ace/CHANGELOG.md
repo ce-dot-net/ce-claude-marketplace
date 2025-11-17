@@ -5,6 +5,28 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.4] - 2025-11-17
+
+### 🐛 Critical Bug Fix & UX Improvements
+
+**CLI Dependency Update (CRITICAL)**
+
+- ✅ **Requires ce-ace >= v1.0.4**: Updated CLI dependency to fix critical threshold bug
+- 🐛 **Bug fixed**: CLI was hardcoding `constitution_threshold = 0.75` instead of using server config (0.45)
+- ✅ **Fix**: ce-ace v1.0.4 now respects `serverConfig.constitution_threshold` from server
+- 🎯 **Impact**: Hooks now correctly apply server-configured threshold (e.g., 0.45 for semantic filtering)
+
+**Command Output Improvements**
+
+- ✅ **Removed --json flag**: User-facing commands now show formatted output instead of raw JSON
+- ✅ **Commands updated**: `/ace-patterns`, `/ace-status`, `/ace-search`, `/ace-top`
+- 🎨 **Better UX**: Users now see emoji-enhanced formatted text instead of machine-readable JSON
+- 📊 **Developer note**: `--json` still available for programmatic use, just not default
+
+**Why This Matters**
+
+The threshold bug meant hooks were filtering patterns too strictly (0.75 vs 0.45), causing relevant patterns to be missed. This release ensures server configuration is properly respected.
+
 ## [5.0.3] - 2025-11-17
 
 ### ✨ Enhanced Hook Visibility & Server-Side Configuration

@@ -26,7 +26,7 @@ if [ -z "$ORG_ID" ] || [ -z "$PROJECT_ID" ]; then
   exit 1
 fi
 
-ce-ace --json --org "$ORG_ID" --project "$PROJECT_ID" status
+ce-ace --org "$ORG_ID" --project "$PROJECT_ID" status
 ```
 
 ## What You'll See

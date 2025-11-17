@@ -54,9 +54,9 @@ echo "🏆 Fetching top-rated patterns..."
 
 # Execute command
 if [ -n "$ORG_ID" ]; then
-  ce-ace --json --org "$ORG_ID" --project "$PROJECT_ID" top $CMD_ARGS
+  ce-ace --org "$ORG_ID" --project "$PROJECT_ID" top $CMD_ARGS
 else
-  ce-ace --json --project "$PROJECT_ID" top $CMD_ARGS
+  ce-ace --project "$PROJECT_ID" top $CMD_ARGS
 fi
 
 if [ $? -eq 0 ]; then

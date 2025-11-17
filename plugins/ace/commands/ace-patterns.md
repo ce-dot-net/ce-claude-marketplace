@@ -43,8 +43,8 @@ fi
 SECTION="${1:-}"  # Optional section filter
 MIN_HELPFUL="${2:-0}"  # Optional min helpful score
 
-# Call ce-ace patterns
-ce-ace --json --org "$ORG_ID" --project "$PROJECT_ID" \
+# Call ce-ace patterns (without --json for formatted output)
+ce-ace --org "$ORG_ID" --project "$PROJECT_ID" \
   patterns \
   ${SECTION:+--section "$SECTION"} \
   --min-helpful "$MIN_HELPFUL"
