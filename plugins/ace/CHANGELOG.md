@@ -5,6 +5,59 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.3] - 2025-11-17
+
+### ✨ Enhanced Hook Visibility & Server-Side Configuration
+
+**Hook Visibility Improvements**
+
+- ✅ **User-visible hook output**: Hooks now use `systemMessage` JSON format for Claude Code UI visibility (GitHub issue #4084)
+- ✅ **Pattern retrieval messages**: Users see when patterns are being searched and how many are found
+- ✅ **Learning capture progress**: Users see when learning is being captured after work completion
+- ✅ **Based on Claude Code v1.0.64+ feature**: Leverages built-in support for hook output visibility
+
+**Server-Side Configuration Control**
+
+- ✅ **Removed hardcoded threshold from hooks**: Hooks no longer contain hardcoded `constitution_threshold` values
+- ✅ **Server-side threshold control**: All threshold configuration managed via `ce-ace tune --constitution-threshold`
+- ✅ **Web dashboard integration**: Changes from web dashboard apply immediately to hook behavior
+- ✅ **Single source of truth**: Configuration centralized on server, not in plugin hooks
+
+**Documentation Updates**
+
+- ✅ **Release manager agent updated**: Corrected MCP → CLI architecture references
+- ✅ **CLI version requirements**: Updated from v1.0.1 → v1.0.3 (required for `tune` command support)
+- ✅ **File path corrections**: Updated all references from `ace-orchestration` → `ace`
+- ✅ **Fixed plugin structure references**: Corrected paths throughout documentation
+
+**Benefits**
+
+- 🚀 **Better UX**: Users see what ACE is doing in real-time (no more silent hooks)
+- 🎯 **Easier debugging**: Hook output visible in Claude Code UI
+- 🛠️ **Flexible configuration**: Tune thresholds without editing hook files
+- ⚡ **Immediate updates**: Web dashboard changes apply without plugin restart
+
+**Requirements**
+
+- **CE-ACE CLI**: v1.0.3+ (required for `tune` command support)
+- **Claude Code**: v1.0.64+ (recommended for best hook visibility)
+- **Node.js**: v18+
+- **Python**: v3.8+
+
+**Files Modified**
+
+- `hooks/ace_before_task.py` - Added systemMessage output, removed hardcoded threshold
+- `hooks/ace_after_task.py` - Added systemMessage output
+- `~/.claude/agents/release-manager.md` - Updated architecture references
+- `README.md` - Updated CLI version requirements
+- `CLAUDE.md` - Updated documentation paths and structure
+
+**Breaking Changes**
+
+- None - all changes are backwards compatible enhancements
+
+---
+
 ## [5.0.2] - 2025-11-17
 
 ### 📚 Documentation Updates
