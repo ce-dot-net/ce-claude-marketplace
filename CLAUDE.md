@@ -2,7 +2,7 @@
 
 ## ACE Plugin Instructions
 
-<!-- ACE_SECTION_START v4.2.1 -->
+<!-- ACE_SECTION_START v4.2.6 -->
 # ACE Orchestration Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -63,6 +63,22 @@ ACE uses **automated hooks** to ensure proper workflow compliance:
 
 **Note**: Hooks guarantee you won't forget workflow steps. Just follow the reminders!
 
+## 🔍 Visibility Instructions (v4.2.3+)
+
+**IMPORTANT - Conversation Transparency**: Provide visibility into ACE workflow execution.
+
+### When Hooks Inject Reminders
+1. **Acknowledge** - Mention the hook: "🚨 Hook reminder - invoking ACE Retrieval before implementation"
+2. **Announce intent** - Tell user what you're doing: "Searching for authentication patterns..."
+3. **Then invoke** - Use Task tool to spawn subagent
+
+### After Subagents Return
+1. **Announce completion** - Tell user: "[ACE Retrieval] completed - found {count} patterns"
+2. **Summarize results** - Key findings: "Top pattern: {content} (helpful: {score})"
+3. **State next steps** - What you'll do: "Applying these patterns to implementation..."
+
+**Note**: Subagents are configured to be verbose (report steps). You see their output and should summarize for the user.
+
 ## The Playbook
 
 The ACE playbook has 4 sections:
@@ -80,13 +96,13 @@ Patterns accumulate helpful/harmful scores based on usage feedback.
 
 1. **Configure connection**:
    ```
-   /ace-orchestration:ace-configure
+   /ace:ace-configure
    ```
    Sets up server URL, API token, and project ID.
 
 2. **Bootstrap initial patterns** (optional but recommended):
    ```
-   /ace-orchestration:ace-bootstrap --mode hybrid --thoroughness deep
+   /ace:ace-bootstrap --mode hybrid --thoroughness deep
    ```
    Extracts patterns from docs, git history, and current code.
 
@@ -95,15 +111,15 @@ Patterns accumulate helpful/harmful scores based on usage feedback.
 ### Manual Commands
 
 View and manage patterns:
-- `/ace-orchestration:ace-patterns` - View full playbook
-- `/ace-orchestration:ace-search <query>` - Semantic search
-- `/ace-orchestration:ace-top <section>` - Highest-rated patterns
-- `/ace-orchestration:ace-status` - Statistics and health check
+- `/ace:ace-patterns` - View full playbook
+- `/ace:ace-search <query>` - Semantic search
+- `/ace:ace-top <section>` - Highest-rated patterns
+- `/ace:ace-status` - Statistics and health check
 
 Configuration:
-- `/ace-orchestration:ace-configure` - Setup wizard
-- `/ace-orchestration:ace-tune` - Runtime configuration
-- `/ace-orchestration:ace-doctor` - Diagnostic tool
+- `/ace:ace-configure` - Setup wizard
+- `/ace:ace-tune` - Runtime configuration
+- `/ace:ace-doctor` - Diagnostic tool
 
 ## Disabling ACE
 
@@ -115,7 +131,7 @@ ACE subagents are **optional and controllable**. To disable:
 **Permanent** (remove from plugin):
 1. Delete `agents/ace-retrieval.md` (disables retrieval)
 2. Delete `agents/ace-learning.md` (disables learning)
-3. Or disable entire plugin: `/plugin disable ace-orchestration`
+3. Or disable entire plugin: `/plugin disable ace`
 
 **Re-enable**: Restore agent files or re-enable plugin.
 
@@ -188,6 +204,9 @@ Next session: Enhanced playbook with usage data!
 - Deterministic workflow enforcement
 - Prevents empty playbook
 - Non-blocking reminders (never breaks workflow)
+- **Research-optimized language** (v4.2.2): Scientifically-validated directive patterns improve compliance +5-10%
+
+**Research**: Based on "Principled Instructions Are All You Need" (2023) and "Should We Respect LLMs?" (2024), hook reminders use explicit task framing ("Your task is"), strengthened imperatives ("You MUST"), affirmative language ("DO invoke"), and respectful tone for optimal LLM instruction-following.
 
 **Opt-out**: Delete hook files from `hooks/` directory
 
@@ -195,13 +214,12 @@ Next session: Enhanced playbook with usage data!
 
 - **README.md** - Full documentation and architecture details
 - **docs/** - Technical specifications and guides
-- `/ace-orchestration:ace-doctor` - Health diagnostics and troubleshooting
+- `/ace:ace-doctor` - Health diagnostics and troubleshooting
 
 ---
 
-**Version**: v4.2.1 (NEW: Workflow Enforcement Hooks)
-**New in v4.2.1**: Three-tier hook enforcement prevents empty playbook, ensures ACE Retrieval/Learning workflow compliance
-**Previous**: v4.2.0 - Multi-tenant bug fix (/ace-tune now project-scoped)
+**Version**: v4.2.6 (PostToolUse Hook Blocking Bug + macOS Fix)
+**Fixed in v4.2.6**: Removed ALL PostToolUse hooks (Claude Code bug #4809, #11504) + macOS compatibility fix in ace-configure
 **Opt-out**: Delete `agents/` or `hooks/` directories to disable ACE components
 
-<!-- ACE_SECTION_END v4.2.1 -->
+<!-- ACE_SECTION_END v4.2.6 -->

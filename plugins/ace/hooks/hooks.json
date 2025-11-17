@@ -1,0 +1,25 @@
+{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "implement|build|create|add|develop|write|update|modify|change|edit|fix|debug|troubleshoot|refactor|optimize|integrate|setup|configure|architect|design|test|deploy",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_before_task_wrapper.sh"
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_after_task_wrapper.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

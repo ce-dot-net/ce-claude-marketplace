@@ -80,7 +80,7 @@
 /plugin marketplace add ce-dot-net/ce-claude-marketplace
 
 # 2. Install ACE Orchestration plugin
-/plugin install ace-orchestration@ce-dot-net-marketplace
+/plugin install ace@ce-dot-net-marketplace
 
 # 3. Configure ACE server connection
 /ace-configure
@@ -388,7 +388,7 @@ MIT License - See LICENSE file for details.
 
 ```bash
 /plugin marketplace add ce-dot-net/ce-claude-marketplace
-/plugin install ace-orchestration@ce-dot-net-marketplace
+/plugin install ace@ce-dot-net-marketplace
 /ace-configure
 ```
 

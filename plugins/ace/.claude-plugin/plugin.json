@@ -1,0 +1,24 @@
+{
+  "name": "ace",
+  "version": "4.2.6",
+  "description": "Code Engine ACE - Intelligent pattern learning with CLI Architecture. v5.0.0: Complete MCP → CLI refactoring. No MCP server, no subagents, direct ce-ace CLI integration. Requires ce-ace >= v1.0.1.",
+  "author": {
+    "name": "ACE Team",
+    "email": "ace@ce-dot-net.com"
+  },
+  "homepage": "https://github.com/ce-dot-net/ce-ai-ace",
+  "repository": "https://github.com/ce-dot-net/ce-ai-ace",
+  "license": "MIT",
+  "keywords": [
+    "claude-code",
+    "ace",
+    "pattern-learning",
+    "self-improving",
+    "context-engineering",
+    "agentic",
+    "code-engine",
+    "ai-assistant",
+    "autonomous",
+    "cli-integration"
+  ]
+}
