@@ -41,9 +41,6 @@ def main():
             print("⚠️ [ACE] No project context found - skipping search")
             sys.exit(0)
 
-        # Always show that search is running
-        print("🔍 [ACE] Searching playbook...")
-
         # Call ce-ace search --stdin
         # Note: Threshold controlled by server config (ce-ace tune --constitution-threshold)
         patterns = run_search(
@@ -53,31 +50,43 @@ def main():
         )
 
         if not patterns:
-            # Search failed or returned no results
-            print("❌ [ACE] Search failed or returned no results")
+            # Search failed - show error to user
+            output = {
+                "systemMessage": "❌ [ACE] Search failed or returned no results"
+            }
+            print(json.dumps(output))
             sys.exit(0)
 
-        # Output for Claude (hidden context block)
-        print("<ace-patterns>")
-        print(json.dumps(patterns, indent=2))
-        print("</ace-patterns>")
+        # Build context for Claude (XML format)
+        ace_context = f"<ace-patterns>\n{json.dumps(patterns, indent=2)}\n</ace-patterns>"
 
-        # Output for user (visible summary)
+        # Build user-visible message
         pattern_list = patterns.get('similar_patterns', [])
         pattern_count = len(pattern_list)
 
         if pattern_count > 0:
-            print(f"✅ [ACE] Found {pattern_count} relevant patterns:")
+            # Build summary for user
+            summary_lines = [f"✅ [ACE] Found {pattern_count} relevant patterns:"]
             for pattern in pattern_list[:5]:
                 content = pattern.get('content', '')
-                # Truncate long content
                 if len(content) > 80:
                     content = content[:77] + '...'
                 helpful = pattern.get('helpful', 0)
-                print(f"   • {content} (+{helpful} helpful)")
-        else:
-            print("ℹ️  [ACE] Playbook is empty - no patterns found (try /ace-bootstrap)")
+                summary_lines.append(f"   • {content} (+{helpful} helpful)")
 
+            user_message = "\n".join(summary_lines)
+        else:
+            user_message = "ℹ️  [ACE] Playbook is empty - no patterns found (try /ace-bootstrap)"
+
+        # Output JSON with both user message and Claude context
+        output = {
+            "systemMessage": user_message,
+            "hookSpecificOutput": {
+                "hookEventName": "UserPromptSubmit",
+                "additionalContext": ace_context
+            }
+        }
+        print(json.dumps(output))
         sys.exit(0)
 
     except Exception as e:
