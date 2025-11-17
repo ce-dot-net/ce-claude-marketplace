@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 """
 ACE Before Task Hook - UserPromptSubmit Event Handler
 
@@ -27,11 +31,18 @@ def main():
             # No prompt, nothing to search
             sys.exit(0)
 
+        # Skip slash commands (e.g., /plugin, /ace-configure, etc.)
+        if user_prompt.strip().startswith('/'):
+            sys.exit(0)
+
         # Get project context from .claude/settings.json
         context = get_context()
         if not context:
-            print("⚠️ [ACE] No project context found - skipping search", file=sys.stderr)
+            print("⚠️ [ACE] No project context found - skipping search")
             sys.exit(0)
+
+        # Always show that search is running
+        print("🔍 [ACE] Searching playbook...")
 
         # Call ce-ace search --stdin
         patterns = run_search(
@@ -42,7 +53,8 @@ def main():
         )
 
         if not patterns:
-            # Search failed or returned no results, continue without patterns
+            # Search failed or returned no results
+            print("❌ [ACE] Search failed or returned no results")
             sys.exit(0)
 
         # Output for Claude (hidden context block)
@@ -55,15 +67,16 @@ def main():
         pattern_count = len(pattern_list)
 
         if pattern_count > 0:
-            print(f"\n🔍 [ACE] Found {pattern_count} relevant patterns:")
+            print(f"✅ [ACE] Found {pattern_count} relevant patterns:")
             for pattern in pattern_list[:5]:
                 content = pattern.get('content', '')
                 # Truncate long content
                 if len(content) > 80:
                     content = content[:77] + '...'
                 helpful = pattern.get('helpful', 0)
-                print(f"• {content} (+{helpful} helpful)")
-            print()
+                print(f"   • {content} (+{helpful} helpful)")
+        else:
+            print("ℹ️  [ACE] Playbook is empty - no patterns found (try /ace-bootstrap)")
 
         sys.exit(0)
 
