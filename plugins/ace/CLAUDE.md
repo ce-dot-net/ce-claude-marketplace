@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.0.4 -->
+<!-- ACE_SECTION_START v5.1.0 -->
 # ACE Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -18,7 +18,7 @@ Then configure:
 ## How It Works
 
 **Before tasks** - Hook searches playbook → Injects relevant patterns as context
-**After tasks** - Hook reminds to capture learning → Run `/ace-learn`
+**After tasks** - Hook automatically captures learning → Playbook updates incrementally
 **Manual access** - Use slash commands like `/ace-search <query>`
 
 **No subagents, no MCP server** - Just direct CLI calls via hooks!
@@ -35,13 +35,18 @@ When you start a task with keywords like `implement`, `build`, `fix`, `debug`, e
 
 ### After Completion
 
-When conversation compacts, a hook reminds:
-```
-📚 [ACE] Reminder: Capture learning from this session
-   /ace-learn
-```
+**Automatic learning per task** (ACE Research Paper alignment):
+- After substantial work completes (Task tool, multiple edits, implementations)
+- Hook automatically calls `ce-ace learn --stdin` with execution trace
+- Learning captured and sent to server for analysis
+- Playbook updates incrementally without manual intervention
+- Shows confirmation: `✅ [ACE] Learned from: Implementation task...`
 
-Run `/ace-learn` to capture patterns interactively.
+**Backup learning at session end**:
+- PreCompact hook captures any missed learning when conversation compacts
+- Stop hook ensures learning is saved at session end
+
+**Manual override**: Run `/ace-learn` anytime to capture learning interactively.
 
 ## The Playbook
 
@@ -137,32 +142,40 @@ Returns: 3 patterns
     ↓
 Claude implements using these patterns
     ↓
-Work complete → PreCompact hook reminds:
-"📚 [ACE] Run /ace-learn to capture patterns"
+Task completes → PostToolUse hook automatically:
     ↓
-User runs: /ace-learn
+Calls: ce-ace learn --stdin (with execution trace)
     ↓
-Calls: ce-ace learn --interactive
+Server: Reflector → Curator → Playbook merge
     ↓
-✅ Patterns saved to playbook
+Shows: "✅ [ACE] Learned from: Implement JWT authentication..."
     ↓
-Next session: Enhanced playbook!
+✅ Playbook updated automatically!
+    ↓
+Next task: Enhanced playbook with new patterns!
 ```
 
 ## Hooks
 
-**Two simple hooks**:
+**Three automatic hooks**:
 
 1. **ace_before_task_wrapper.sh** (UserPromptSubmit)
    - Triggers on: `implement`, `build`, `fix`, `debug`, etc.
    - Calls: `ce-ace search --stdin`
    - Shows: Pattern summaries
 
-2. **ace_after_task_wrapper.sh** (PreCompact)
-   - Triggers on: Conversation compaction
-   - Shows: Reminder to run `/ace-learn`
+2. **ace_task_complete_wrapper.sh** (PostToolUse) **NEW in v5.1.0**
+   - Triggers on: Task completion, multiple edits, implementations
+   - Calls: `ce-ace learn --stdin` automatically
+   - Shows: Learning confirmation
+   - Skips: Trivial operations (single reads, basic Q&A)
+
+3. **ace_after_task_wrapper.sh** (PreCompact, Stop)
+   - Triggers on: Conversation compaction, session end
+   - Captures any missed learning as backup
 
 **Non-blocking** - Never interrupts your workflow!
+**Per-task learning** - Aligns with ACE Research Paper (2510.04618v1)
 
 ## See Also
 
@@ -172,8 +185,8 @@ Next session: Enhanced playbook!
 
 ---
 
-**Version**: v5.0.4
-**New in v5.0.4**: CLI bug fix (respects server threshold) + formatted command output
+**Version**: v5.1.0
+**New in v5.1.0**: Automatic per-task learning via PostToolUse hook - aligns with ACE Research Paper
 **Install**: `npm install -g @ce-dot-net/ce-ace-cli@1.0.4`
 
-<!-- ACE_SECTION_END v5.0.4 -->
+<!-- ACE_SECTION_END v5.1.0 -->

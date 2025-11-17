@@ -20,8 +20,8 @@ if ! command -v ce-ace >/dev/null 2>&1; then
 fi
 
 # Read context
-ORG_ID=$(jq -r '.orgId // empty' .claude/settings.json 2>/dev/null || echo "")
-PROJECT_ID=$(jq -r '.projectId // empty' .claude/settings.json 2>/dev/null || echo "")
+ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
 
 # Try env wrapper format
 if [ -z "$ORG_ID" ] || [ -z "$PROJECT_ID" ]; then
