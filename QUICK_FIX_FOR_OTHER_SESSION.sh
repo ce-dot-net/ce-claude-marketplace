@@ -12,7 +12,7 @@ if [ -f .npmrc ]; then
   echo "✅ .npmrc exists"
 else
   echo "❌ .npmrc missing - creating it now..."
-  cd plugins/ace-orchestration
+  cd plugins/ace
   ./scripts/install.sh
   cd ../..
 fi
