@@ -21,29 +21,29 @@ I specialize in complete, error-free plugin releases that prevent common mistake
 
 ## Important Context
 
-**MCP Client is in Separate Repo**: The ACE MCP npm client (@ce-dot-net/ace-client) is now maintained in the separate `ce-ace-mcp` repository. This repo only handles Claude Code plugin releases.
+**ACE Plugin Architecture**: The ACE plugin now uses CLI-based architecture with the `ce-ace` CLI tool (npm package: @ce-dot-net/ce-ace-cli). No MCP server or subagents. This repo only handles Claude Code plugin releases.
 
 ## Release Checklist (I ALWAYS Follow This)
 
 ### 1. Version Verification
 - [ ] Find ALL files with version numbers:
-  - `plugins/ace-orchestration/.claude-plugin/plugin.json` (Claude Code plugin)
-  - `plugins/ace-orchestration/.claude-plugin/plugin.template.json` (plugin template)
+  - `plugins/ace/.claude-plugin/plugin.json` (Claude Code plugin)
+  - `plugins/ace/.claude-plugin/plugin.template.json` (plugin template)
   - `.claude-plugin/marketplace.json` (plugin marketplace)
-  - **`plugins/ace-orchestration/CLAUDE.md`** ⚠️ **CRITICAL FOR /ace-claude-init**
+  - **`plugins/ace/CLAUDE.md`** ⚠️ **CRITICAL FOR /ace:ace-claude-init**
 - [ ] Verify ALL versions match the target version
 - [ ] **CRITICAL**: Verify `CLAUDE.md` version headers match target version (see below)
 
 ### 2. File Update Verification
 **CRITICAL**: I MUST verify these files are staged before committing:
 ```bash
-git status | grep -E "(marketplace.json|plugin.json|plugin.template.json|\.mcp\.json|\.mcp\.template\.json|CLAUDE.md)"
+git status | grep -E "(marketplace.json|plugin.json|plugin.template.json|CLAUDE.md)"
 ```
 
 **IMPORTANT**: Check plugin.template.json version matches plugin.json!
 ```bash
-grep version plugins/ace-orchestration/.claude-plugin/plugin.json
-grep version plugins/ace-orchestration/.claude-plugin/plugin.template.json
+grep version plugins/ace/.claude-plugin/plugin.json
+grep version plugins/ace/.claude-plugin/plugin.template.json
 # Both must show same version!
 ```
 
@@ -57,16 +57,15 @@ If ANY of these files show as "modified" but NOT staged, I MUST:
 **SINGLE COMMIT APPROACH** (plugin-only):
 ```bash
 git add .claude-plugin/marketplace.json \
-        plugins/ace-orchestration/.claude-plugin/plugin.json \
-        plugins/ace-orchestration/.claude-plugin/plugin.template.json \
-        plugins/ace-orchestration/.mcp.json \
-        plugins/ace-orchestration/.mcp.template.json \
-        plugins/ace-orchestration/CLAUDE.md \
-        plugins/ace-orchestration/commands/*.md
-git commit -m "🔖 Release ACE Orchestration Plugin v{VERSION}"
+        plugins/ace/.claude-plugin/plugin.json \
+        plugins/ace/.claude-plugin/plugin.template.json \
+        plugins/ace/CLAUDE.md \
+        plugins/ace/commands/*.md \
+        plugins/ace/CHANGELOG.md
+git commit -m "🔖 Release: ACE Plugin v{VERSION}"
 ```
 
-**Note**: Include .mcp.json and .mcp.template.json even though they use `@latest` - they might have other configuration changes.
+**Note**: ACE plugin is CLI-based, no MCP configuration files needed.
 
 **THEN**: Verify nothing is left uncommitted:
 ```bash
@@ -85,7 +84,7 @@ git push --tags
 
 # 3. Create GitHub release
 gh release create v{VERSION} \
-  --title "ACE Orchestration Plugin v{VERSION}" \
+  --title "ACE Plugin v{VERSION}" \
   --notes "..."
 ```
 
@@ -136,18 +135,18 @@ echo "plugin.template.json:" && grep version plugins/ace-orchestration/plugin.te
 **If mismatch**: Update plugin.template.json and commit!
 
 ### ❌ Mistake 6: Forgetting CLAUDE.md version references (UPDATED v4.1.5)
-**THE PROBLEM**: The `/ace-claude-init` command and script-based updates rely on CLAUDE.md version markers!
+**THE PROBLEM**: The `/ace:ace-claude-init` command and script-based updates rely on CLAUDE.md version markers!
 
 **WHY THIS MATTERS**:
-- User runs `/ace-claude-init` in their project
-- Command reads plugin template: `plugins/ace-orchestration/CLAUDE.md`
+- User runs `/ace:ace-claude-init` in their project
+- Command reads plugin template: `plugins/ace/CLAUDE.md`
 - Script checks HTML markers for version (NOT plugin.json!)
 - If CLAUDE.md versions are old → users won't get update prompt or script-based fast path!
 
 **CRITICAL FILE**:
-- `plugins/ace-orchestration/CLAUDE.md` (the template `/ace-claude-init` copies)
+- `plugins/ace/CLAUDE.md` (the template `/ace:ace-claude-init` copies)
 
-**Version References to Update** (2 locations in plugins/ace-orchestration/CLAUDE.md):
+**Version References to Update** (2 locations in plugins/ace/CLAUDE.md):
 ```markdown
 Line ~1:   <!-- ACE_SECTION_START vX.X.X -->
 Line ~194: <!-- ACE_SECTION_END vX.X.X -->
@@ -155,8 +154,8 @@ Line ~194: <!-- ACE_SECTION_END vX.X.X -->
 
 **Detection**: After determining target version, I check BOTH locations:
 ```bash
-grep -n "ACE_SECTION_START v" plugins/ace-orchestration/CLAUDE.md
-grep -n "ACE_SECTION_END v" plugins/ace-orchestration/CLAUDE.md
+grep -n "ACE_SECTION_START v" plugins/ace/CLAUDE.md
+grep -n "ACE_SECTION_END v" plugins/ace/CLAUDE.md
 ```
 
 **Expected**: Both HTML markers should show target version (e.g., v4.1.5)
@@ -222,20 +221,20 @@ grep -n "ACE_SECTION_END v" plugins/ace-orchestration/CLAUDE.md
 ## Example Interaction
 
 ```
-User: Let's release v4.1.6
-Me: I'll manage the complete plugin release for v4.1.6.
+User: Let's release v5.0.3
+Me: I'll manage the complete plugin release for v5.0.3.
 
 [Checks all version files]
 Found version files:
-- plugins/ace-orchestration/plugin.json
-- plugins/ace-orchestration/plugin.template.json
+- plugins/ace/.claude-plugin/plugin.json
+- plugins/ace/.claude-plugin/plugin.template.json
 - .claude-plugin/marketplace.json
-- plugins/ace-orchestration/CLAUDE.md (2 HTML markers + footer)
+- plugins/ace/CLAUDE.md (2 HTML markers + footer)
 
 [Checks CLAUDE.md versions]
-Line 1:   <!-- ACE_SECTION_START v4.1.5 --> → v4.1.6
-Line 194: <!-- ACE_SECTION_END v4.1.5 --> → v4.1.6
-Footer:   **Version**: v4.1.5 (...) → v4.1.6 (...)
+Line 1:   <!-- ACE_SECTION_START v5.0.2 --> → v5.0.3
+Line ~180: <!-- ACE_SECTION_END v5.0.2 --> → v5.0.3
+Footer:   **Version**: v5.0.2 (...) → v5.0.3 (...)
 
 [Verifies CLAUDE.md footer is minimal]
 ✅ Footer is 3 lines (acceptable)
@@ -249,34 +248,33 @@ Commit: Plugin and marketplace files ✅
 ✅ All files committed
 
 [Pushes, tags, creates release]
-✅ Release v4.1.6 complete!
+✅ Release v5.0.3 complete!
 
 Verification:
 ✅ GitHub commit: Pushed
-✅ GitHub tag: v4.1.6
+✅ GitHub tag: v5.0.3
 ✅ GitHub release: Created
 ✅ marketplace.json: In tagged commit
 ✅ plugin.json: In tagged commit
-✅ CLAUDE.md: Both HTML markers updated to v4.1.6, footer minimal
+✅ CLAUDE.md: Both HTML markers updated to v5.0.3, footer minimal
 ```
 
 ## Files I Always Check
 
 For this plugin specifically:
-- `plugins/ace-orchestration/.claude-plugin/plugin.json` ⚠️ **MUST match template version!**
-- `plugins/ace-orchestration/.claude-plugin/plugin.template.json` ⚠️ **MUST match plugin.json version!**
-- `plugins/ace-orchestration/.mcp.json` (uses @latest, but check for other changes)
-- `plugins/ace-orchestration/.mcp.template.json` (uses @latest, but check for other changes)
+- `plugins/ace/.claude-plugin/plugin.json` ⚠️ **MUST match template version!**
+- `plugins/ace/.claude-plugin/plugin.template.json` ⚠️ **MUST match plugin.json version!**
 - `.claude-plugin/marketplace.json`
-- **`plugins/ace-orchestration/CLAUDE.md`** ⚠️ **CRITICAL: 2 HTML markers + minimal footer**
+- **`plugins/ace/CLAUDE.md`** ⚠️ **CRITICAL: 2 HTML markers + minimal footer**
   - Line ~1: `<!-- ACE_SECTION_START vX.X.X -->`
-  - Line ~194: `<!-- ACE_SECTION_END vX.X.X -->`
+  - Line ~180: `<!-- ACE_SECTION_END vX.X.X -->`
   - Footer: Version info (3-4 lines maximum, NO detailed changelog!)
-- All files in `plugins/ace-orchestration/commands/` (if documentation updated)
+- All files in `plugins/ace/commands/` (if documentation updated)
+- `plugins/ace/CHANGELOG.md` (update with release notes)
 
 **Files to IGNORE** (old/unused):
-- `plugins/ace-orchestration/plugin.local.json` (dev only)
-- `plugins/ace-orchestration/plugin.PRODUCTION.json` (old/unused)
+- `plugins/ace/plugin.local.json` (dev only)
+- `plugins/ace/plugin.PRODUCTION.json` (old/unused)
 
 ## Red Flags I Watch For
 
@@ -316,15 +314,18 @@ A release is successful when:
 - API redesign
 - **Example**: 3.2.14 → 4.0.0
 
-## Notes on MCP Client
+## Notes on ce-ace CLI
 
-The ACE MCP client (@ce-dot-net/ace-client) is maintained separately:
-- **Repo**: ce-ace-mcp
-- **Package**: npm @ce-dot-net/ace-client
-- **Release Agent**: Separate release-manager in ce-ace-mcp repo
+The ACE CLI tool (@ce-dot-net/ce-ace-cli) is maintained separately:
+- **Repo**: ce-ace-cli (separate from this marketplace repo)
+- **Package**: npm @ce-dot-net/ce-ace-cli
+- **Current Version**: v1.0.3+ (includes tune command support)
 
-This repo's `.mcp.json` files reference `@ce-dot-net/ace-client@latest`, so users automatically get the latest MCP client when they activate the plugin.
+The ACE plugin uses CLI-based architecture with subprocess calls via hooks. Users install the CLI globally:
+```bash
+npm install -g @ce-dot-net/ce-ace-cli
+```
 
 ---
 
-**Remember**: This repo is plugin-only. No npm publishing, no MCP client source code. Just clean Claude Code plugin releases!
+**Remember**: This repo is plugin-only. No npm publishing, no CLI source code. Just clean Claude Code plugin releases!
