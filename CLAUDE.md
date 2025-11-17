@@ -2,224 +2,65 @@
 
 ## ACE Plugin Instructions
 
-<!-- ACE_SECTION_START v4.2.6 -->
-# ACE Orchestration Plugin
+<!-- ACE_SECTION_START v5.0.1 -->
+# ACE Plugin Instructions
 
-This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
+Automatic pattern learning plugin. Hooks inject learned patterns before tasks, capture new patterns after completion.
 
-## How It Works
+## Commands Available
 
-**ACE helps Claude learn from your codebase over time:**
+**Pattern Access:**
+- `/ace:ace-search <query>` - Search for relevant patterns
+- `/ace:ace-patterns [section]` - View all patterns
+- `/ace:ace-top [section] [limit]` - Get highest-rated patterns
+- `/ace:ace-status` - Show statistics
 
-1. **Before complex tasks** - Retrieve relevant patterns from past work
-2. **During execution** - Apply proven strategies and avoid known pitfalls
-3. **After completion** - Capture new patterns for future use
+**Pattern Capture:**
+- `/ace:ace-learn` - Capture learning from recent work (uses AskUserQuestion prompts)
 
-Over time, the system builds organizational knowledge that compounds with each project session.
+**Setup:**
+- `/ace:ace-configure` - Interactive setup wizard
+- `/ace:ace-bootstrap` - Initialize playbook from codebase
 
-## Automatic Learning Cycle
+**Management:**
+- `/ace:ace-export-patterns [file]` - Export to JSON
+- `/ace:ace-import-patterns <file>` - Import from JSON
+- `/ace:ace-clear` - Clear playbook
+- `/ace:ace-doctor` - Run diagnostics
 
-ACE uses **two subagents** that run in separate contexts:
+## Guidelines
 
-### ACE Retrieval Subagent (Before Work)
+**When hooks inject patterns:**
+- Use them to inform your work
+- Don't quote them verbatim unless asked
 
-**When it runs**: Before implementation, debugging, refactoring, or architectural tasks
+**When user asks "how do we handle X?":**
+- Suggest `/ace:ace-search <X>`
 
-**What it does**:
-- Searches the ACE playbook for relevant patterns
-- Returns 2-5 key insights to inform your work
-- Uses semantic search for 50-92% token efficiency
+**After substantial work:**
+- Remind user they can capture learning with `/ace:ace-learn`
 
-**You'll see**: `[ACE Retrieval] Searching playbook for patterns...`
+**For /ace:ace-learn command:**
+- Use AskUserQuestion tool for interactive prompts
+- Collect: task description, success/failure, lessons learned
 
-**Triggers**: implement, build, create, fix, debug, refactor, optimize, integrate, architect, test, deploy, etc.
+## Playbook Sections
 
-### ACE Learning Subagent (After Work)
+Patterns are organized into:
+- `strategies_and_hard_rules` - Architectural patterns, principles
+- `useful_code_snippets` - Reusable code patterns
+- `troubleshooting_and_pitfalls` - Known issues, solutions
+- `apis_to_use` - Recommended libraries, frameworks
 
-**When it runs**: After substantial work completion (implementation, bug fixes, refactoring)
+## Technical Notes
 
-**What it does**:
-- Captures lessons learned from the work
-- Sends execution trace to ACE server
-- Updates playbook for future retrieval
-
-**You'll see**: `[ACE Learning] Captured 3 new patterns`
-
-**Triggers**: Work completion with valuable lessons (successes AND failures)
-
-## 🚨 ACE Workflow (Enforced by Hooks)
-
-ACE uses **automated hooks** to ensure proper workflow compliance:
-
-**Automatic Reminders**:
-- **Before implementation work**: Hook detects keywords and reminds you to invoke ACE Retrieval
-- **During substantial work**: Hook tracks file edits and reminds you to invoke ACE Learning
-- **Before compaction**: Hook issues urgent reminder if Learning wasn't invoked
-
-**Your Role**:
-- **Respond to hook reminders** by invoking the requested subagent (Task tool)
-- **Review retrieved patterns** from ACE Retrieval and apply relevant ones
-- **Report pattern usage** to ACE Learning when capturing lessons
-
-**Note**: Hooks guarantee you won't forget workflow steps. Just follow the reminders!
-
-## 🔍 Visibility Instructions (v4.2.3+)
-
-**IMPORTANT - Conversation Transparency**: Provide visibility into ACE workflow execution.
-
-### When Hooks Inject Reminders
-1. **Acknowledge** - Mention the hook: "🚨 Hook reminder - invoking ACE Retrieval before implementation"
-2. **Announce intent** - Tell user what you're doing: "Searching for authentication patterns..."
-3. **Then invoke** - Use Task tool to spawn subagent
-
-### After Subagents Return
-1. **Announce completion** - Tell user: "[ACE Retrieval] completed - found {count} patterns"
-2. **Summarize results** - Key findings: "Top pattern: {content} (helpful: {score})"
-3. **State next steps** - What you'll do: "Applying these patterns to implementation..."
-
-**Note**: Subagents are configured to be verbose (report steps). You see their output and should summarize for the user.
-
-## The Playbook
-
-The ACE playbook has 4 sections:
-
-1. **strategies_and_hard_rules** - Architectural patterns, coding principles
-2. **useful_code_snippets** - Reusable code patterns with context
-3. **troubleshooting_and_pitfalls** - Known issues, gotchas, solutions
-4. **apis_to_use** - Recommended libraries, frameworks, integration patterns
-
-Patterns accumulate helpful/harmful scores based on usage feedback.
-
-## Setup
-
-### First-Time Setup
-
-1. **Configure connection**:
-   ```
-   /ace:ace-configure
-   ```
-   Sets up server URL, API token, and project ID.
-
-2. **Bootstrap initial patterns** (optional but recommended):
-   ```
-   /ace:ace-bootstrap --mode hybrid --thoroughness deep
-   ```
-   Extracts patterns from docs, git history, and current code.
-
-3. **Start coding**: Subagents auto-invoke when relevant.
-
-### Manual Commands
-
-View and manage patterns:
-- `/ace:ace-patterns` - View full playbook
-- `/ace:ace-search <query>` - Semantic search
-- `/ace:ace-top <section>` - Highest-rated patterns
-- `/ace:ace-status` - Statistics and health check
-
-Configuration:
-- `/ace:ace-configure` - Setup wizard
-- `/ace:ace-tune` - Runtime configuration
-- `/ace:ace-doctor` - Diagnostic tool
-
-## Disabling ACE
-
-ACE subagents are **optional and controllable**. To disable:
-
-**Temporary** (current session):
-- Simply tell Claude: "Don't use ACE subagents for this task"
-
-**Permanent** (remove from plugin):
-1. Delete `agents/ace-retrieval.md` (disables retrieval)
-2. Delete `agents/ace-learning.md` (disables learning)
-3. Or disable entire plugin: `/plugin disable ace`
-
-**Re-enable**: Restore agent files or re-enable plugin.
-
-## Architecture
-
-**ACE Framework Components**:
-- **Generator**: Main Claude instance (executing tasks)
-- **Playbook**: Learned patterns (retrieved before work)
-- **Reflector**: Server-side Sonnet 4 (analyzes execution traces)
-- **Curator**: Server-side Haiku 4.5 (creates pattern updates)
-- **Merge**: Non-LLM algorithm (applies incremental updates)
-
-**Benefits**:
-- ✅ Automatic learning from execution feedback
-- ✅ Token-efficient retrieval (50-92% reduction vs full playbook)
-- ✅ Transparent operation (see subagents running)
-- ✅ Separate contexts (won't block other plugins)
-- ✅ Self-improving over time
-
-## Example Workflow
-
-```
-User: "Implement JWT authentication"
-    ↓
-[ACE Retrieval] Searching playbook...
-[ACE Retrieval] Returns JSON with 3 patterns:
-  {
-    "patterns": [
-      {"id": "ctx-xxx", "content": "Refresh token rotation prevents theft", "helpful": 8, "evidence": [...]},
-      {"id": "ctx-yyy", "content": "HttpOnly cookies for refresh tokens", "helpful": 6, "evidence": [...]},
-      {"id": "ctx-zzz", "content": "Rate limiting for auth endpoints", "helpful": 5, "evidence": [...]}
-    ]
-  }
-    ↓
-Claude reviews JSON patterns:
-  - Prioritizes by helpful score (ctx-xxx: 8 > ctx-yyy: 6 > ctx-zzz: 5)
-  - Checks evidence arrays for implementation details
-  - Notes pattern IDs for later reporting
-    ↓
-Claude implements using patterns ctx-xxx, ctx-yyy, ctx-zzz
-    ↓
-[ACE Learning] Asks Claude which patterns were used
-Claude responds: "Used ctx-xxx, ctx-yyy, ctx-zzz"
-[ACE Learning] Captures new patterns + reports pattern usage
-✅ Saved to playbook + pattern effectiveness tracked
-    ↓
-Next session: Enhanced playbook with usage data!
-```
-
-## Workflow Enforcement (v4.2.1+)
-
-**Three-tier hook system ensures ACE workflow compliance:**
-
-### 1. Pre-Implementation Check
-- **Hook**: `enforce-ace-retrieval.py` (UserPromptSubmit)
-- **Trigger**: Implementation keywords in user prompt
-- **Action**: Reminds to invoke ACE Retrieval if not already done
-
-### 2. During-Work Tracking
-- **Hook**: `track-substantial-work.py` (PostToolUse)
-- **Trigger**: 3+ file edits in recent 50 messages
-- **Action**: Reminds to invoke ACE Learning after substantial work
-
-### 3. Pre-Compaction Safety
-- **Hook**: `pre-compact-ace-learning.py` (PreCompact)
-- **Trigger**: Conversation compaction with uncaptured patterns
-- **Action**: Urgent reminder to invoke Learning before trace is lost
-
-### Benefits
-- Deterministic workflow enforcement
-- Prevents empty playbook
-- Non-blocking reminders (never breaks workflow)
-- **Research-optimized language** (v4.2.2): Scientifically-validated directive patterns improve compliance +5-10%
-
-**Research**: Based on "Principled Instructions Are All You Need" (2023) and "Should We Respect LLMs?" (2024), hook reminders use explicit task framing ("Your task is"), strengthened imperatives ("You MUST"), affirmative language ("DO invoke"), and respectful tone for optimal LLM instruction-following.
-
-**Opt-out**: Delete hook files from `hooks/` directory
-
-## See Also
-
-- **README.md** - Full documentation and architecture details
-- **docs/** - Technical specifications and guides
-- `/ace:ace-doctor` - Health diagnostics and troubleshooting
+- All commands use `ce-ace` CLI (subprocess calls)
+- Hooks run automatically on trigger keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
+- Settings in `.claude/settings.json` - supports both `{orgId, projectId}` and `{env: {ACE_ORG_ID, ACE_PROJECT_ID}}` formats
 
 ---
 
-**Version**: v4.2.6 (PostToolUse Hook Blocking Bug + macOS Fix)
-**Fixed in v4.2.6**: Removed ALL PostToolUse hooks (Claude Code bug #4809, #11504) + macOS compatibility fix in ace-configure
-**Opt-out**: Delete `agents/` or `hooks/` directories to disable ACE components
+**Version**: v5.0.1
+**Requires**: ce-ace CLI >= v1.0.2
 
-<!-- ACE_SECTION_END v4.2.6 -->
+<!-- ACE_SECTION_END v5.0.1 -->
