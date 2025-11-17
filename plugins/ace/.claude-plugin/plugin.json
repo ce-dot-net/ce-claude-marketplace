@@ -1,7 +1,7 @@
 {
   "name": "ace",
   "version": "5.0.2",
-  "description": "Code Engine ACE - Intelligent pattern learning with CLI Architecture. v5.0.0: Complete MCP → CLI refactoring. No MCP server, no subagents, direct ce-ace CLI integration. Requires ce-ace >= v1.0.1.",
+  "description": "Code Engine ACE - Intelligent pattern learning with CLI Architecture. v5.0.0: Complete MCP → CLI refactoring. No MCP server, no subagents, direct ce-ace CLI integration. Requires ce-ace >= v1.0.3 (tune command support).",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

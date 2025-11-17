@@ -20,7 +20,7 @@
 npm install -g @ce-dot-net/ce-ace-cli
 ```
 
-**Requirements:** ce-ace >= v1.0.1 (for --stdin support)
+**Requirements:** ce-ace >= v1.0.3 (for tune command and full feature support)
 
 ### 2. Enable Plugin
 
