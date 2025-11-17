@@ -45,11 +45,11 @@ def main():
         print("🔍 [ACE] Searching playbook...")
 
         # Call ce-ace search --stdin
+        # Note: Threshold controlled by server config (ce-ace tune --constitution-threshold)
         patterns = run_search(
             query=user_prompt,
             org=context['org'],
-            project=context['project'],
-            threshold=0.85
+            project=context['project']
         )
 
         if not patterns:

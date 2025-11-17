@@ -6,7 +6,7 @@ import json
 from typing import Optional, Dict, Any
 
 
-def run_search(query: str, org: str, project: str, threshold: float = 0.85) -> Optional[Dict[str, Any]]:
+def run_search(query: str, org: str, project: str) -> Optional[Dict[str, Any]]:
     """
     Call ce-ace search --stdin
 
@@ -14,10 +14,13 @@ def run_search(query: str, org: str, project: str, threshold: float = 0.85) -> O
         query: Search query text
         org: Organization ID (org_xxx)
         project: Project ID (prj_xxx)
-        threshold: Similarity threshold (0.0-1.0)
 
     Returns:
         Parsed JSON response or None on failure
+
+    Note:
+        Threshold is controlled by server-side config (ce-ace tune --constitution-threshold)
+        No --threshold flag passed to allow server config to take precedence
     """
     try:
         result = subprocess.run(
@@ -27,8 +30,7 @@ def run_search(query: str, org: str, project: str, threshold: float = 0.85) -> O
                 '--org', org,
                 '--project', project,
                 'search',
-                '--stdin',
-                '--threshold', str(threshold)
+                '--stdin'
             ],
             input=query.encode('utf-8'),
             capture_output=True,
