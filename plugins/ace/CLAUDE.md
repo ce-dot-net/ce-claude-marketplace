@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.0.0 -->
+<!-- ACE_SECTION_START v5.0.2 -->
 # ACE Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -172,8 +172,8 @@ Next session: Enhanced playbook!
 
 ---
 
-**Version**: v5.0.0 (MCP → CLI Migration)
-**Breaking Changes**: Removed MCP server, removed subagents, added ce-ace CLI integration
+**Version**: v5.0.2
+**New in v5.0.2**: Updated documentation and verified ce-ace v1.0.3 compatibility
 **Install**: `npm install -g @ce-dot-net/ce-ace-cli`
 
-<!-- ACE_SECTION_END v5.0.0 -->
+<!-- ACE_SECTION_END v5.0.2 -->
