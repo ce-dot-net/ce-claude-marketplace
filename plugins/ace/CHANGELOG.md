@@ -5,6 +5,58 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.1] - 2025-11-17
+
+### ✨ New Features - Enhanced Hook Visibility & Auto-Install
+
+**Auto-Install CLI via Hook**
+
+- ✅ **SessionStart hook auto-installs ce-ace CLI**: First-time users get automatic `npm install -g @ce-dot-net/ce-ace-cli` on session start
+- ✅ **Smart detection**: Hook checks if CLI already installed before attempting install
+- ✅ **Non-blocking**: Install happens asynchronously, doesn't slow down session start
+- ✅ **Clear feedback**: Users see installation progress and completion status
+
+**Enhanced Hook Visibility**
+
+- ✅ **Verbose hook output**: All hooks now output detailed progress messages (searching playbook, found X patterns, reminder to capture learning)
+- ✅ **PEP 723 inline dependencies**: Python hooks declare dependencies in script headers (no separate requirements.txt)
+- ✅ **Skip slash commands**: Hooks skip execution when user input is slash command (efficiency improvement)
+
+**Automatic Learning on Stop Events**
+
+- ✅ **PreCompact hook**: Automatically reminds to capture learning before conversation compaction
+- ✅ **Stop hook**: Triggers learning capture when conversation ends (ensures patterns aren't lost)
+- ✅ **Proper ExecutionTrace format**: Learning hooks use `ce-ace learn --stdin` with structured JSON input
+
+### 🔧 Changes
+
+**Hook Architecture**
+
+- 🔄 **Python hooks use subprocess**: All CLI calls via `subprocess.run(['ce-ace', ...], stdin=PIPE)` with proper JSON input
+- 🔄 **ExecutionTrace format**: Structured format with `task`, `trajectory`, `outcome`, `lessons_learned`, `success` fields
+- 🔄 **Bash wrappers delegate to Python**: Thin bash scripts forward to shared Python hooks
+
+**Command Updates**
+
+- 🔄 **ace-configure command**: Enhanced with clearer prompts and macOS compatibility (already in v5.0.0)
+- 🔄 **All slash commands**: Use `ce-ace` CLI directly (already in v5.0.0)
+
+### 📦 Benefits
+
+- 🚀 **Zero manual setup**: Users don't need to manually install CLI - it happens automatically
+- 🎯 **Better feedback**: Hook visibility helps users understand what ACE is doing
+- 🔍 **Easier debugging**: Verbose output makes troubleshooting simpler
+- ⚡ **More efficient**: Skip slash commands reduces unnecessary hook execution
+- 📚 **Better learning capture**: Automatic triggers on Stop/PreCompact prevent pattern loss
+
+### 🔗 Requirements
+
+- **CE-ACE CLI**: v1.0.0+ (auto-installed via SessionStart hook)
+- **Node.js**: v18+ (required for npm install)
+- **Python**: v3.8+ (for hook execution with PEP 723 support)
+
+---
+
 ## [5.0.0] - 2025-11-16
 
 ### 🚨 BREAKING CHANGES - Complete Architecture Refactor
