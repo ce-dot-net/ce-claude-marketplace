@@ -2,7 +2,7 @@
 
 ## ACE Plugin Instructions
 
-<!-- ACE_SECTION_START v5.0.2 -->
+<!-- ACE_SECTION_START v5.0.3 -->
 # ACE Plugin Instructions
 
 Automatic pattern learning plugin. Hooks inject learned patterns before tasks, capture new patterns after completion.
@@ -60,7 +60,7 @@ Patterns are organized into:
 
 ---
 
-**Version**: v5.0.2
-**Requires**: ce-ace CLI >= v1.0.2
+**Version**: v5.0.3
+**Requires**: ce-ace CLI >= v1.0.3
 
-<!-- ACE_SECTION_END v5.0.2 -->
+<!-- ACE_SECTION_END v5.0.3 -->
