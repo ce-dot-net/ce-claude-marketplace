@@ -5,6 +5,76 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.0] - 2025-11-17
+
+### 🚀 Major Feature: Automatic Per-Task Learning
+
+**Aligns with ACE Research Paper (2510.04618v1)**
+
+This release implements true "cycle per task" automatic learning as described in the ACE research paper Section 4.2, where learning happens after EACH task completion, not just at session end.
+
+**New PostToolUse Hook**
+
+- ✅ **ace_task_complete.py**: New hook triggers automatic learning after substantial task completion
+- ✅ **ace_task_complete_wrapper.sh**: Bash wrapper for the new hook
+- ✅ **PostToolUse event**: Captures learning immediately after Task tool, multiple edits, implementations
+- ✅ **Smart detection**: Skips trivial operations (single reads, basic Q&A)
+- ✅ **Non-blocking**: Silent failure on errors, never interrupts workflow
+
+**How It Works**
+
+Before (v5.0.4 and earlier):
+```
+Task completes → PreCompact hook reminds → User manually runs /ace-learn
+```
+
+After (v5.1.0):
+```
+Task completes → PostToolUse hook automatically → ce-ace learn --stdin → Playbook updated
+```
+
+**Architecture Changes**
+
+- ✅ **Three hooks now**: UserPromptSubmit (before), PostToolUse (after task), PreCompact/Stop (backup)
+- ✅ **Automatic execution trace**: Extracts task/trajectory/success from PostToolUse event
+- ✅ **Server-side analysis**: Reflector → Curator → Playbook merge (all automatic)
+- ✅ **User visibility**: Shows confirmation when learning is captured
+
+**Research Paper Alignment**
+
+From ACE Paper Section 4.2:
+> "For online context adaptation, methods are evaluated sequentially on the test split: for each sample, the model first predicts with the current context, then updates its context based on that sample."
+
+This release fully implements this approach:
+- ✅ Per-task retrieval (UserPromptSubmit hook)
+- ✅ Per-task learning (PostToolUse hook) **NEW**
+- ✅ Incremental delta updates (server-side Curator)
+- ✅ Execution feedback (no labeled supervision needed)
+
+**Files Changed**
+
+- `shared-hooks/ace_task_complete.py` - NEW: PostToolUse hook implementation
+- `plugins/ace/scripts/ace_task_complete_wrapper.sh` - NEW: Bash wrapper
+- `plugins/ace/hooks/hooks.json` - UPDATED: Register PostToolUse hook
+- `plugins/ace/CLAUDE.md` - UPDATED: Document automatic per-task learning
+- `plugins/ace/CHANGELOG.md` - UPDATED: This entry
+
+**Benefits**
+
+- 🎯 **True per-task learning**: Knowledge captured immediately after each meaningful task
+- 📈 **Faster playbook growth**: Learning happens continuously, not just at session end
+- 🔄 **Self-improving cycle**: Each task makes the next task smarter
+- 📚 **Research-backed**: Aligns with peer-reviewed ACE framework architecture
+- ✅ **Backward compatible**: Manual `/ace-learn` still works for explicit captures
+
+**Breaking Changes**
+
+None - this is a pure addition. Existing workflows continue to work.
+
+**Upgrade Notes**
+
+No action required - the new PostToolUse hook activates automatically on plugin update.
+
 ## [5.0.4] - 2025-11-17
 
 ### 🐛 Critical Bug Fix & UX Improvements
