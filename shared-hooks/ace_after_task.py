@@ -92,21 +92,26 @@ def main():
         # Get project context
         context = get_context()
         if not context:
-            print("⚠️ [ACE] No project context found - skipping automatic learning")
+            output = {
+                "systemMessage": "⚠️ [ACE] No project context found - skipping automatic learning"
+            }
+            print(json.dumps(output))
             sys.exit(0)
-
-        print()
-        print("📚 [ACE] Automatically capturing learning from this session...")
 
         # Build ExecutionTrace from event
         trace = extract_execution_trace(event)
 
-        # Show what we're capturing (verbose)
-        print(f"   Task: {trace['task'][:80]}...")
-        print(f"   Steps: {len(trace['trajectory'])} actions")
-        print(f"   Status: {'✅ Success' if trace['result']['success'] else '❌ Failed'}")
+        # Build user-visible message lines
+        message_lines = [
+            "",
+            "📚 [ACE] Automatically capturing learning from this session...",
+            f"   Task: {trace['task'][:80]}...",
+            f"   Steps: {len(trace['trajectory'])} actions",
+            f"   Status: {'✅ Success' if trace['result']['success'] else '❌ Failed'}"
+        ]
+
         if trace['playbook_used']:
-            print(f"   Patterns used: {len(trace['playbook_used'])}")
+            message_lines.append(f"   Patterns used: {len(trace['playbook_used'])}")
 
         # Build ce-ace learn command with --stdin
         cmd = ['ce-ace', '--json']
@@ -130,28 +135,34 @@ def main():
             )
 
             if result.returncode == 0:
-                print("✅ [ACE] Learning captured and sent to server!")
+                message_lines.append("✅ [ACE] Learning captured and sent to server!")
                 # Parse JSON response if available
                 try:
                     response = json.loads(result.stdout)
                     if response.get('analysis_triggered'):
-                        print("   🧠 Server analysis triggered - playbook will be updated")
+                        message_lines.append("   🧠 Server analysis triggered - playbook will be updated")
                 except:
                     pass
             else:
-                print(f"⚠️ [ACE] Learning capture failed: {result.stderr}")
-                print("   You can manually capture with: /ace-learn")
+                message_lines.append(f"⚠️ [ACE] Learning capture failed: {result.stderr}")
+                message_lines.append("   You can manually capture with: /ace-learn")
 
         except subprocess.TimeoutExpired:
-            print("⚠️ [ACE] Learning capture timed out")
-            print("   You can manually capture with: /ace-learn")
+            message_lines.append("⚠️ [ACE] Learning capture timed out")
+            message_lines.append("   You can manually capture with: /ace-learn")
         except FileNotFoundError:
-            print("⚠️ [ACE] ce-ace CLI not found - install with: npm install -g @ce-dot-net/ce-ace-cli")
+            message_lines.append("⚠️ [ACE] ce-ace CLI not found - install with: npm install -g @ce-dot-net/ce-ace-cli")
         except Exception as e:
-            print(f"⚠️ [ACE] Learning capture error: {e}")
-            print("   You can manually capture with: /ace-learn")
+            message_lines.append(f"⚠️ [ACE] Learning capture error: {e}")
+            message_lines.append("   You can manually capture with: /ace-learn")
 
-        print()
+        message_lines.append("")
+
+        # Output JSON with systemMessage for user visibility
+        output = {
+            "systemMessage": "\n".join(message_lines)
+        }
+        print(json.dumps(output))
         sys.exit(0)
 
     except Exception as e:
