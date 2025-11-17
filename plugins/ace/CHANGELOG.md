@@ -5,6 +5,39 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.0.2] - 2025-11-17
+
+### 📚 Documentation Updates
+
+**CLAUDE.md Improvements**
+
+- ✅ **Root CLAUDE.md updated**: Migrated from v4.2.6 format (subagent-based) to v5.0.1 format (CLI-based)
+- ✅ **Simplified instructions**: Reduced from 224 lines to 65 lines
+- ✅ **Clear architecture**: Documented CLI-based hooks architecture (no MCP server, no subagents)
+- ✅ **Removed confusing subagent references**: Instructions now focus on direct CLI integration
+- ✅ **Added ce-ace v1.0.3 compatibility notes**: Documented `tune` command support
+
+**Verification & Testing**
+
+- ✅ **ce-ace v1.0.3 compatibility verified**: Tested `tune` command for runtime configuration updates
+- ✅ **Hooks tested with real events**: Verified complete workflow (SessionStart, UserPromptSubmit, PreCompact, Stop)
+- ✅ **Server-side threshold config verified**: Hooks now use server-configured threshold (0.5) instead of hardcoded values
+- ✅ **Automatic learning cycle confirmed**: Before-task search (66 patterns retrieved) + after-task capture working
+
+**HTML Marker Corrections**
+
+- ✅ **plugins/ace/CLAUDE.md markers fixed**: Updated from v5.0.0 → v5.0.2
+- ✅ **Root CLAUDE.md markers synced**: Updated from v5.0.1 → v5.0.2
+- ✅ **Footer updated**: Minimal footer with version and one-line summary
+
+### 🔗 Requirements
+
+- **CE-ACE CLI**: v1.0.2+ (v1.0.3 recommended for `tune` command)
+- **Node.js**: v18+
+- **Python**: v3.8+
+
+---
+
 ## [5.0.1] - 2025-11-17
 
 ### ✨ New Features - Enhanced Hook Visibility & Auto-Install
