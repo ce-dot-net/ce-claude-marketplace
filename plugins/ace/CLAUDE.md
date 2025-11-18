@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.1.0 -->
+<!-- ACE_SECTION_START v5.1.1 -->
 # ACE Plugin
 
 This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
@@ -185,8 +185,8 @@ Next task: Enhanced playbook with new patterns!
 
 ---
 
-**Version**: v5.1.0
-**New in v5.1.0**: Automatic per-task learning via PostToolUse hook - aligns with ACE Research Paper
+**Version**: v5.1.1
+**New in v5.1.1**: Fix /ace-configure settings.json format bug (env.ACE_ORG_ID/ACE_PROJECT_ID)
 **Install**: `npm install -g @ce-dot-net/ce-ace-cli@1.0.4`
 
-<!-- ACE_SECTION_END v5.1.0 -->
+<!-- ACE_SECTION_END v5.1.1 -->

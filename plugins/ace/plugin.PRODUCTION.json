@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.1.0",
-  "description": "ACE (Agentic Context Engineering) - CLI-based pattern learning. Direct ce-ace CLI integration via hooks. No MCP server, no subagents. Automatic per-task learning via PostToolUse hook. Requires ce-ace >= v1.0.4. Based on Stanford/SambaNova/UC Berkeley research (arXiv:2510.04618v1)",
+  "version": "5.1.1",
+  "description": "ACE (Agentic Context Engineering) - CLI-based pattern learning. Direct ce-ace CLI integration via hooks. No MCP server, no subagents. Automatic per-task learning via PostToolUse hook. v5.1.1: Fix /ace-configure settings.json format bug. Requires ce-ace >= v1.0.4. Based on Stanford/SambaNova/UC Berkeley research (arXiv:2510.04618v1)",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
