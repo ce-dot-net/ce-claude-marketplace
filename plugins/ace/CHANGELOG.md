@@ -5,6 +5,55 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.1] - 2025-11-18
+
+### 🐛 Bug Fixes: /ace-configure Command
+
+**Issue 1**: `/ace-configure` command was creating `.claude/settings.json` with incorrect format
+**Issue 2**: `ce-ace config validate` doesn't accept `--server-url` flag (CLI bug workaround)
+
+**Wrong format** (what it was creating):
+```json
+{
+  "orgId": "org_xxx",
+  "projectId": "prj_xxx"
+}
+```
+
+**Correct format** (what it should create):
+```json
+{
+  "env": {
+    "ACE_ORG_ID": "org_xxx",
+    "ACE_PROJECT_ID": "prj_xxx"
+  }
+}
+```
+
+**What Was Fixed**:
+- ✅ Updated `/ace-configure` command to write `env` wrapper format
+- ✅ Updated documentation examples to show correct format
+- ✅ Backward compatible: ace_context.py already reads both formats
+- ✅ Added workaround for ce-ace CLI bug: use environment variables instead of flags for validation
+
+**Files Changed**:
+- `plugins/ace/commands/ace-configure.md` - Fixed settings.json generation (lines 276-302, 385-402) + validation workaround (lines 138-161)
+
+**Impact**:
+- Hooks now correctly resolve org/project IDs
+- Pattern retrieval works reliably
+- No migration needed - old format still works
+
+**Affected Versions**: v5.1.0 and earlier
+
+**Upgrade Notes**:
+If you configured ACE before this fix, your hooks may show "Playbook is empty" messages. Fix by running:
+```
+/ace-configure --project
+```
+
+This will regenerate `.claude/settings.json` with the correct format.
+
 ## [5.1.0] - 2025-11-17
 
 ### 🚀 Major Feature: Automatic Per-Task Learning
