@@ -143,9 +143,33 @@ def main():
             )
 
             if result.returncode == 0:
-                # Learning captured successfully
+                # Learning captured successfully - show details
+                message_lines = [
+                    f"✅ [ACE] Learned from: {trace['task'][:60]}..."
+                ]
+
+                # Parse response to show what was learned
+                try:
+                    response = json.loads(result.stdout)
+
+                    # Show pattern count if available
+                    patterns_count = response.get('patterns_extracted')
+                    if patterns_count:
+                        message_lines.append(f"   📝 {patterns_count} new patterns")
+
+                    # Show sections affected
+                    sections = response.get('sections_affected', [])
+                    if sections:
+                        sections_str = ', '.join(sections[:2])
+                        if len(sections) > 2:
+                            sections_str += f' +{len(sections)-2} more'
+                        message_lines.append(f"   📚 {sections_str}")
+
+                except (json.JSONDecodeError, Exception):
+                    pass  # No extra details available
+
                 output = {
-                    "systemMessage": f"✅ [ACE] Learned from: {trace['task'][:60]}..."
+                    "systemMessage": "\n".join(message_lines)
                 }
             else:
                 # Failed silently - don't interrupt user

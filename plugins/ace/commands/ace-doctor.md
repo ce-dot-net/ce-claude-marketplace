@@ -29,12 +29,14 @@ ls -la ~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace/
 **Expected Structure**:
 ```
 ace/
-├── skills/
-│   ├── ace-playbook-retrieval/
-│   └── ace-learning/
-├── commands/
+├── commands/           # Slash commands (/ace-search, /ace-patterns, etc.)
 ├── hooks/
-│   └── hooks.json
+│   └── hooks.json     # Hook definitions
+├── scripts/           # Hook wrapper scripts
+│   ├── ace_install_cli.sh
+│   ├── ace_before_task_wrapper.sh
+│   ├── ace_task_complete_wrapper.sh
+│   └── ace_after_task_wrapper.sh
 ├── plugin.json
 └── CLAUDE.md
 ```
@@ -269,36 +271,52 @@ Recommended Actions:
 
 ---
 
-### Check 6: Skills Loaded
+### Check 6: Hooks Registered
 
 **What to Check**:
 ```bash
-# Check if skills are available in current session
-# This can be verified by checking skill descriptions
+# Check if hook scripts exist
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+PLUGIN_ROOT="$HOME/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace"
+
+# Check hook wrappers in scripts/
+test -f "$PLUGIN_ROOT/scripts/ace_before_task_wrapper.sh" && echo "before_task: EXISTS"
+test -f "$PLUGIN_ROOT/scripts/ace_task_complete_wrapper.sh" && echo "task_complete: EXISTS"
+test -f "$PLUGIN_ROOT/scripts/ace_after_task_wrapper.sh" && echo "after_task: EXISTS"
+test -f "$PLUGIN_ROOT/scripts/ace_install_cli.sh" && echo "install_cli: EXISTS"
+
+# Check hooks.json
+test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "hooks.json: EXISTS"
 ```
 
-**Expected Skills**:
-- `ace:ace-playbook-retrieval`
-- `ace:ace-learning`
+**Expected Hooks** (5 total):
+1. `SessionStart` → `ace_install_cli.sh`
+2. `UserPromptSubmit` → `ace_before_task_wrapper.sh`
+3. `PostToolUse` → `ace_task_complete_wrapper.sh`
+4. `PreCompact` → `ace_after_task_wrapper.sh`
+5. `Stop` → `ace_after_task_wrapper.sh`
 
 **Report**:
-- ✅ Both skills loaded and available
-- ⚠️ Only one skill loaded
-- ❌ No skills loaded
+- ✅ All hooks registered (5/5)
+- ⚠️ Some hooks missing (e.g., 3/5)
+- ❌ No hooks registered (0/5)
 
 **If Failed**:
 ```
-❌ Skills: NOT LOADED
+❌ Hooks: NOT REGISTERED
 
-Expected Skills:
-- ace:ace-playbook-retrieval (before tasks)
-- ace:ace-learning (after tasks)
+Expected Hook Scripts:
+- ace_before_task_wrapper.sh (retrieves patterns before tasks)
+- ace_task_complete_wrapper.sh (captures learning after tasks)
+- ace_after_task_wrapper.sh (backup learning at session end)
+- ace_install_cli.sh (ensures ce-ace CLI is available)
 
 Recommended Actions:
 1. Verify plugin installation (Check 1)
-2. Check skills/ directory exists in plugin
-3. Restart Claude Code
-4. Check Claude Code logs for skill loading errors
+2. Check scripts/ directory exists in plugin
+3. Verify hooks.json exists in hooks/ directory
+4. Run: /ace:ace-test to verify hook execution
+5. Check Claude Code logs for hook errors
 ```
 
 ---
@@ -319,9 +337,9 @@ grep -oP 'ACE_SECTION_START v\K[\d.]+' "$PROJECT_ROOT/CLAUDE.md"
 ```
 
 **Report**:
-- ✅ CLAUDE.md exists with ACE instructions (v3.3.2)
+- ✅ CLAUDE.md exists with ACE instructions (v5.x.x)
 - ⚠️ CLAUDE.md exists but no ACE section
-- ⚠️ CLAUDE.md exists but outdated version (v3.3.1)
+- ⚠️ CLAUDE.md exists but outdated version (< v5.0.0)
 - ❌ CLAUDE.md missing
 
 **If Missing**:
@@ -330,57 +348,72 @@ grep -oP 'ACE_SECTION_START v\K[\d.]+' "$PROJECT_ROOT/CLAUDE.md"
 
 Recommended Actions:
 1. Run: /ace:ace-claude-init
-2. This will create CLAUDE.md with full ACE instructions
-3. Commit CLAUDE.md to your repository
+2. This will create CLAUDE.md with ACE instructions
+3. Documents hook-based architecture and automatic learning
+4. Commit CLAUDE.md to your repository
 ```
 
 **If Outdated**:
 ```
 ⚠️ CLAUDE.md: OUTDATED VERSION
 
-Current: v3.3.1
-Latest: v3.3.2
+Current: v4.x.x (or earlier)
+Latest: v5.1.2
+
+Breaking Change: v5.x uses hooks instead of skills/subagents
 
 Recommended Actions:
 1. Run: /ace:ace-claude-init
-2. OR enable auto-update: /ace:ace-enable-auto-update
-3. This will update ACE instructions to latest version
+2. This will update to hook-based architecture
+3. Review CHANGELOG.md for migration details
 ```
 
 ---
 
-### Check 8: Cache Status
+### Check 8: CLI Configuration
 
 **What to Check**:
 ```bash
-# Check if cache directory exists
-test -d ~/.ace-cache && echo "EXISTS" || echo "MISSING"
+# Check ce-ace CLI config
+XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+test -f "$XDG_HOME/ace/config.json" && echo "CONFIG: EXISTS"
 
-# Check cache database files
-ls -lh ~/.ace-cache/*.db 2>/dev/null | wc -l
+# Check if multi-org format (ce-ace v1.x)
+jq -e '.organizations' "$XDG_HOME/ace/config.json" >/dev/null 2>&1 && echo "FORMAT: MULTI-ORG"
 
-# Check cache age
-find ~/.ace-cache -name "*.db" -mmin +120 2>/dev/null | wc -l
+# Check required fields
+jq -e '.organizations[0].apiKey' "$XDG_HOME/ace/config.json" >/dev/null 2>&1 && echo "API_KEY: SET"
+```
+
+**Expected** (ce-ace v1.x multi-org format):
+```json
+{
+  "organizations": [
+    {
+      "name": "ce-dot-net",
+      "apiKey": "ace_xxxxx"
+    }
+  ],
+  "activeOrg": "ce-dot-net"
+}
 ```
 
 **Report**:
-- ✅ Cache active and fresh (< 360 min old)
-- ⚠️ Cache exists but stale (> 360 min old)
-- ⚠️ Cache directory exists but no databases
-- ❌ Cache directory missing
+- ✅ CLI config valid (multi-org format)
+- ⚠️ CLI config exists but old format (single-org)
+- ❌ CLI config missing
 
-**If Stale**:
+**If Old Format**:
 ```
-⚠️ Cache: STALE (> 6 hours old)
+⚠️ CLI Configuration: OLD FORMAT
 
-Cache TTL: 120 minutes (2 hours)
-Last updated: 12 hours ago
+Current: Single-org format (ce-ace v0.x)
+Expected: Multi-org format (ce-ace v1.x+)
 
-Note: This is normal if you haven't used ACE recently.
-Cache will refresh automatically on next playbook fetch.
-
-Optional: Clear cache manually
-/ace:ace-clear-cache
+Recommended Actions:
+1. Update ce-ace CLI: npm install -g @ce-dot-net/ce-ace-cli@latest
+2. Run: ce-ace configure
+3. Or run: /ace:ace-configure
 ```
 
 ---
@@ -390,36 +423,54 @@ Optional: Clear cache manually
 **What to Check**:
 ```bash
 # Get plugin version
-cat ~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace/plugin.json | jq -r '.version'
+PLUGIN_JSON="$HOME/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace/plugin.json"
+if [ -f "$PLUGIN_JSON" ]; then
+    jq -r '.version' "$PLUGIN_JSON"
+else
+    echo "unknown"
+fi
 
 # Get ce-ace CLI version
-ce-ace --version 2>/dev/null
+if command -v ce-ace >/dev/null 2>&1; then
+    ce-ace --version 2>/dev/null || echo "unknown"
+else
+    echo "not installed"
+fi
 
-# Check GitHub for latest plugin release
-curl -s https://api.github.com/repos/ce-dot-net/ce-claude-marketplace/releases/latest | jq -r '.tag_name'
-
-# Check GitHub for latest CLAUDE.md template version
-curl -s https://raw.githubusercontent.com/ce-dot-net/ce-claude-marketplace/main/plugins/ace/CLAUDE.md | grep -oP 'ACE_SECTION_START v\K[\d.]+'
+# Check for Python hooks (shared-hooks/)
+if [ -d "shared-hooks" ]; then
+    echo "Python hooks: present"
+else
+    echo "Python hooks: missing (required for v5.x)"
+fi
 ```
+
+**Expected Versions** (as of 2024-11):
+- Plugin: v5.1.2+
+- ce-ace CLI: v1.0.9+
+- CLAUDE.md: v5.0.3+
 
 **Report**:
 - ✅ All components up to date
-- ⚠️ Plugin update available (current: v4.x, latest: v5.x)
-- ⚠️ ce-ace CLI update available
-- ⚠️ CLAUDE.md template update available
+- ⚠️ Plugin outdated (< v5.1.2)
+- ⚠️ CLI outdated (< v1.0.9)
+- ❌ Critical version mismatch
 
 **If Updates Available**:
 ```
-⚠️ Updates Available
+⚠️ Updates Recommended
 
-Plugin: v4.2.6 → v5.0.0 (latest)
-ce-ace CLI: v1.0.1 → v1.0.2 (latest)
-CLAUDE.md Template: v4.2.6 → v5.0.0 (latest)
+Plugin: v5.1.1 → v5.1.2 (latest)
+ce-ace CLI: v1.0.8 → v1.0.9 (latest)
+
+Changes in v5.1.2:
+- Context passing bug fix (subprocess environment variables)
+- Improved error handling in Python hooks
 
 Recommended Actions:
-1. Update plugin from marketplace
-2. Update ce-ace CLI: npm update -g @ce-dot-net/ce-ace-cli
-3. Update CLAUDE.md: /ace:ace-claude-init
+1. Update ce-ace CLI: npm install -g @ce-dot-net/ce-ace-cli@latest
+2. Update plugin from marketplace (if available)
+3. Run: /ace:ace-claude-init to update CLAUDE.md
 4. Restart Claude Code
 ```
 
@@ -435,54 +486,116 @@ After running all checks, present results in this format:
 
 [1] Plugin Installation................... ✅ PASS
 [2] Global Configuration................. ✅ PASS
-[3] Project Configuration................ ⚠️  WARN
-[4] CLI Availability..................... ✅ PASS
+[3] Project Configuration................ ✅ PASS
+[4] CLI Availability..................... ✅ PASS (v1.0.9)
 [5] ACE Server Connectivity.............. ✅ PASS (HTTP 200)
-[6] Hooks Loaded......................... ✅ PASS (2/2)
-[7] CLAUDE.md Status..................... ⚠️  WARN (outdated)
-[8] Cache Status......................... ✅ PASS
-[9] Version Status....................... ⚠️  WARN (updates available)
+[6] Hooks Registered..................... ✅ PASS (5/5)
+[7] CLAUDE.md Status..................... ✅ PASS (v5.1.2)
+[8] CLI Configuration.................... ✅ PASS (multi-org)
+[9] Version Status....................... ✅ PASS
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Overall Health: 🟡 NEEDS ATTENTION (2 warnings)
+Overall Health: 🟢 HEALTHY
+
+✅ All systems operational!
+
+ACE is properly configured and ready to use.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+System Information:
+
+Plugin Version: v5.1.2
+CLI Version: v1.0.9
+Architecture: Hook-based (v5.x)
+Project ID: prj_d3a244129d62c198
+Organization: org_34fYIlitYk4nyFuTvtsAzA6uUJF
+
+Registered Hooks:
+• SessionStart → ace_install_cli.sh
+• UserPromptSubmit → ace_before_task_wrapper.sh
+• PostToolUse → ace_task_complete_wrapper.sh
+• PreCompact → ace_after_task_wrapper.sh
+• Stop → ace_after_task_wrapper.sh
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+For detailed troubleshooting, see:
+- README.md (section: 🐛 Troubleshooting)
+- /ace:ace-test (hook execution test)
+
+Report issues: https://github.com/ce-dot-net/ce-claude-marketplace/issues
+```
+
+### Example with Warnings
+
+```
+🩺 ACE Doctor - Health Diagnostic Report
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[1] Plugin Installation................... ✅ PASS
+[2] Global Configuration................. ✅ PASS
+[3] Project Configuration................ ⚠️  WARN
+[4] CLI Availability..................... ✅ PASS (v1.0.9)
+[5] ACE Server Connectivity.............. ✅ PASS (HTTP 200)
+[6] Hooks Registered..................... ⚠️  WARN (3/5)
+[7] CLAUDE.md Status..................... ⚠️  WARN (v4.2.0)
+[8] CLI Configuration.................... ✅ PASS
+[9] Version Status....................... ⚠️  WARN
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Overall Health: 🟡 NEEDS ATTENTION (4 warnings)
 
 ⚠️  Warnings Found:
 
 [3] Project Configuration
-    Issue: Using @latest instead of pinned version
-    Impact: Updates may not install automatically due to npx caching
-    Fix: /ace:ace-configure --project
+    Issue: projectId missing in .claude/settings.json
+    Impact: Hooks cannot determine which project to use
+    Fix: Run /ace:ace-configure
+
+[6] Hooks Registered
+    Issue: Some hook scripts missing (3/5 found)
+    Missing: ace_task_complete_wrapper.sh, ace_after_task_wrapper.sh
+    Impact: Learning capture won't work after tasks
+    Fix: Reinstall plugin or check scripts/ directory
 
 [7] CLAUDE.md Status
-    Issue: Outdated version (v3.3.1, latest: v3.3.2)
-    Impact: Missing latest ACE features and improvements
-    Fix: /ace:ace-claude-init
+    Issue: Outdated version (v4.2.0, latest: v5.1.2)
+    Impact: Using old skills-based architecture instead of hooks
+    Fix: Run /ace:ace-claude-init
+
+[9] Version Status
+    Issue: Updates available
+    Plugin: v5.1.1 → v5.1.2
+    CLI: v1.0.8 → v1.0.9
+    Fix: See recommended actions below
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 🎯 Quick Fix All Issues:
 
 Run these commands in order:
-1. /ace:ace-configure --project
+1. /ace:ace-configure
 2. /ace:ace-claude-init
-3. Restart Claude Code
+3. npm install -g @ce-dot-net/ce-ace-cli@latest
+4. Restart Claude Code
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 System Information:
 
-Plugin Version: v5.0.0
-ce-ace CLI Version: v1.0.2
-Cache TTL: 120 minutes (2 hours)
-Project ID: prj_d3a244129d62c198
-Server URL: https://ace-api.code-engine.app
+Plugin Version: v5.1.1
+CLI Version: v1.0.8
+Architecture: Hook-based (v5.x)
+Project ID: (not configured)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 For detailed troubleshooting, see:
 - README.md (section: 🐛 Troubleshooting)
-- /ace:ace-test (plugin-specific diagnostics)
+- /ace:ace-test (hook execution test)
 
 Report issues: https://github.com/ce-dot-net/ce-claude-marketplace/issues
 ```

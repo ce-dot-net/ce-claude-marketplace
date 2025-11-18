@@ -1,192 +1,56 @@
-<!-- ACE_SECTION_START v5.1.2 -->
+<!-- ACE_SECTION_START v5.1.3 -->
 # ACE Plugin
 
-This plugin provides automatic pattern learning using the ACE (Adaptive Context Evolution) framework.
+Automatic pattern learning - captures what works, retrieves it when needed.
 
 ## Installation
 
-**Prerequisites:**
 ```bash
 npm install -g @ce-dot-net/ce-ace-cli
-```
-
-Then configure:
-```
 /ace-configure
 ```
 
 ## How It Works
 
-**Before tasks** - Hook searches playbook → Injects relevant patterns as context
-**After tasks** - Hook automatically captures learning → Playbook updates incrementally
-**Manual access** - Use slash commands like `/ace-search <query>`
+**Before tasks**: Hook searches playbook → Injects relevant patterns
+**After tasks**: Hook captures learning → Playbook updates automatically
 
-**No subagents, no MCP server** - Just direct CLI calls via hooks!
+Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
-## Automatic Workflow
-
-### Before Implementation
-
-When you start a task with keywords like `implement`, `build`, `fix`, `debug`, etc., a hook automatically:
-- Calls `ce-ace search --stdin` with your prompt
-- Retrieves relevant patterns from the playbook
-- Injects them as hidden context for Claude
-- Shows you a summary: `🔍 [ACE] Found 3 relevant patterns`
-
-### After Completion
-
-**Automatic learning per task** (ACE Research Paper alignment):
-- After substantial work completes (Task tool, multiple edits, implementations)
-- Hook automatically calls `ce-ace learn --stdin` with execution trace
-- Learning captured and sent to server for analysis
-- Playbook updates incrementally without manual intervention
-- Shows confirmation: `✅ [ACE] Learned from: Implementation task...`
-
-**Backup learning at session end**:
-- PreCompact hook captures any missed learning when conversation compacts
-- Stop hook ensures learning is saved at session end
-
-**Manual override**: Run `/ace-learn` anytime to capture learning interactively.
-
-## The Playbook
-
-The ACE playbook has 4 sections:
+## Playbook Sections
 
 1. **strategies_and_hard_rules** - Architectural patterns, coding principles
-2. **useful_code_snippets** - Reusable code patterns with context
-3. **troubleshooting_and_pitfalls** - Known issues, gotchas, solutions
-4. **apis_to_use** - Recommended libraries, frameworks, integration patterns
+2. **useful_code_snippets** - Reusable code patterns
+3. **troubleshooting_and_pitfalls** - Known issues, solutions
+4. **apis_to_use** - Recommended libraries, frameworks
 
-Patterns accumulate helpful/harmful scores based on usage feedback.
+## Commands
 
-## Setup
-
-### First-Time Setup
-
-1. **Install CLI**:
-   ```bash
-   npm install -g @ce-dot-net/ce-ace-cli
-   ```
-
-2. **Configure connection**:
-   ```
-   /ace-configure
-   ```
-
-3. **Bootstrap** (optional):
-   ```
-   /ace-bootstrap
-   ```
-
-4. **Start coding**: Hooks auto-run when you implement tasks.
-
-### Manual Commands
-
-**View patterns**:
-- `/ace-search <query>` - Semantic search
+**Search & View**:
+- `/ace-search <query>` - Find relevant patterns
 - `/ace-patterns [section]` - View playbook
 - `/ace-status` - Statistics
 
-**Manage patterns**:
-- `/ace-learn` - Capture learning
+**Setup & Manage**:
+- `/ace-configure` - Setup wizard
 - `/ace-bootstrap` - Initialize from codebase
+- `/ace-learn` - Manual learning capture
 - `/ace-clear` - Reset playbook
 
-**Configuration**:
-- `/ace-configure` - Setup wizard
+## Quick Start
 
-## Disabling ACE
+1. Install: `npm install -g @ce-dot-net/ce-ace-cli`
+2. Configure: `/ace-configure`
+3. Optional: `/ace-bootstrap` to seed from codebase
+4. Start coding - hooks run automatically!
 
-To disable:
-1. Delete hook wrappers from `scripts/`
-2. Or disable plugin: `/plugin disable ace`
-
-## Architecture
-
-**Simple & Direct**:
-```
-Claude Code
-    ↓
-Hooks (UserPromptSubmit, PreCompact)
-    ↓
-Bash Wrappers
-    ↓
-Python Shared Hooks
-    ↓
-ce-ace CLI (subprocess)
-    ↓
-ACE Server
-```
-
-**Benefits**:
-- ✅ No MCP server required
-- ✅ No subagent overhead
-- ✅ Direct subprocess calls
-- ✅ Easy debugging
-- ✅ Faster execution
-- ✅ Self-improving playbook
-
-## Example Workflow
-
-```
-User: "Implement JWT authentication"
-    ↓
-Hook detects "implement" keyword
-    ↓
-Calls: ce-ace search --stdin (with user's prompt)
-    ↓
-Returns: 3 patterns
-  • Refresh token rotation prevents theft (+8 helpful)
-  • HttpOnly cookies for refresh tokens (+6 helpful)
-  • Rate limiting for auth endpoints (+5 helpful)
-    ↓
-Claude implements using these patterns
-    ↓
-Task completes → PostToolUse hook automatically:
-    ↓
-Calls: ce-ace learn --stdin (with execution trace)
-    ↓
-Server: Reflector → Curator → Playbook merge
-    ↓
-Shows: "✅ [ACE] Learned from: Implement JWT authentication..."
-    ↓
-✅ Playbook updated automatically!
-    ↓
-Next task: Enhanced playbook with new patterns!
-```
-
-## Hooks
-
-**Three automatic hooks**:
-
-1. **ace_before_task_wrapper.sh** (UserPromptSubmit)
-   - Triggers on: `implement`, `build`, `fix`, `debug`, etc.
-   - Calls: `ce-ace search --stdin`
-   - Shows: Pattern summaries
-
-2. **ace_task_complete_wrapper.sh** (PostToolUse) **NEW in v5.1.0**
-   - Triggers on: Task completion, multiple edits, implementations
-   - Calls: `ce-ace learn --stdin` automatically
-   - Shows: Learning confirmation
-   - Skips: Trivial operations (single reads, basic Q&A)
-
-3. **ace_after_task_wrapper.sh** (PreCompact, Stop)
-   - Triggers on: Conversation compaction, session end
-   - Captures any missed learning as backup
-
-**Non-blocking** - Never interrupts your workflow!
-**Per-task learning** - Aligns with ACE Research Paper (2510.04618v1)
-
-## See Also
-
-- **README.md** - Full documentation
-- **docs/** - Technical specifications
-- `/ace-status` - Health check
+**Messages you'll see**:
+- `🔍 [ACE] Found 3 relevant patterns` - Before tasks
+- `✅ [ACE] Learned from: Implementation task...` - After completion
 
 ---
 
-**Version**: v5.1.2
-**New in v5.1.2**: Fix context passing bug in Python hooks (subprocess environment variables)
-**Install**: `npm install -g @ce-dot-net/ce-ace-cli@1.0.4`
+**Version**: v5.1.3
+**Requires**: ce-ace CLI v1.0.4+
 
-<!-- ACE_SECTION_END v5.1.2 -->
+<!-- ACE_SECTION_END v5.1.3 -->

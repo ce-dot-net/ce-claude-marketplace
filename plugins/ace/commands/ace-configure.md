@@ -221,8 +221,8 @@ echo ""
 2. **Check Existing Config**:
    ```bash
    if [ -f "$PROJECT_CONFIG" ]; then
-     EXISTING_ORG=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' "$PROJECT_CONFIG" 2>/dev/null || echo "")
-     EXISTING_PROJECT=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' "$PROJECT_CONFIG" 2>/dev/null || echo "")
+     EXISTING_ORG=$(jq -r '.env.ACE_ORG_ID // empty' "$PROJECT_CONFIG" 2>/dev/null || echo "")
+     EXISTING_PROJECT=$(jq -r '.env.ACE_PROJECT_ID // empty' "$PROJECT_CONFIG" 2>/dev/null || echo "")
 
      if [ -n "$EXISTING_ORG" ] && [ -n "$EXISTING_PROJECT" ]; then
        echo "ℹ️  Found existing project configuration:"

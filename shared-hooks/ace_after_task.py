@@ -101,14 +101,22 @@ def main():
         # Build ExecutionTrace from event
         trace = extract_execution_trace(event)
 
-        # Build user-visible message lines
+        # Build user-visible message lines with details
         message_lines = [
             "",
             "📚 [ACE] Automatically capturing learning from this session...",
             f"   Task: {trace['task'][:80]}...",
-            f"   Steps: {len(trace['trajectory'])} actions",
             f"   Status: {'✅ Success' if trace['result']['success'] else '❌ Failed'}"
         ]
+
+        # Show trajectory details (up to 5 key actions)
+        if trace['trajectory']:
+            message_lines.append(f"   Actions performed ({len(trace['trajectory'])} total):")
+            for step in trace['trajectory'][:5]:
+                action_summary = step['action'][:80]
+                message_lines.append(f"     {step['step']}. {action_summary}")
+            if len(trace['trajectory']) > 5:
+                message_lines.append(f"     ... and {len(trace['trajectory']) - 5} more actions")
 
         if trace['playbook_used']:
             message_lines.append(f"   Patterns used: {len(trace['playbook_used'])}")
@@ -135,13 +143,31 @@ def main():
 
             if result.returncode == 0:
                 message_lines.append("✅ [ACE] Learning captured and sent to server!")
-                # Parse JSON response if available
+                # Parse JSON response to show what was learned
                 try:
                     response = json.loads(result.stdout)
                     if response.get('analysis_triggered'):
-                        message_lines.append("   🧠 Server analysis triggered - playbook will be updated")
-                except:
-                    pass
+                        message_lines.append("   🧠 Server analysis in progress...")
+
+                    # Show pattern count if available
+                    patterns_count = response.get('patterns_extracted')
+                    if patterns_count:
+                        message_lines.append(f"   📝 {patterns_count} patterns extracted for review")
+
+                    # Show sections affected
+                    sections = response.get('sections_affected', [])
+                    if sections:
+                        sections_str = ', '.join(sections)
+                        message_lines.append(f"   📚 Sections: {sections_str}")
+
+                    # Show summary if available
+                    summary = response.get('summary')
+                    if summary:
+                        message_lines.append(f"   💡 {summary[:100]}")
+                except json.JSONDecodeError:
+                    pass  # CLI response wasn't JSON, that's okay
+                except Exception:
+                    pass  # Don't fail on response parsing
             else:
                 message_lines.append(f"⚠️ [ACE] Learning capture failed: {result.stderr}")
                 message_lines.append("   You can manually capture with: /ace-learn")
