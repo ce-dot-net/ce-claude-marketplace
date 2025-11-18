@@ -202,6 +202,43 @@ grep -n "ACE_SECTION_END v" plugins/ace/CLAUDE.md
 
 **GOLDEN RULE**: Keep CLAUDE.md footer to 3-4 lines maximum. Detailed changelog goes in CHANGELOG.md only!
 
+### ❌ Mistake 8: Bloated CLAUDE.md Template (ADDED v5.1.2)
+**THE PROBLEM**: CLAUDE.md should be minimal (~50-70 lines), focused on essentials users need.
+
+**WHY THIS MATTERS**:
+- CLAUDE.md is injected as context for EVERY task
+- Verbose documentation wastes tokens and clutters context
+- Users can read README.md for detailed documentation
+- Template should be scannable and action-oriented
+
+**WHAT TO KEEP** (✅ ESSENTIAL):
+- One-line description of what ACE does
+- Installation (2 commands: npm + /ace-configure)
+- How it works (before/after tasks, 2-3 lines)
+- 4 playbook sections (list only)
+- Commands (grouped: search/view, setup/manage)
+- Quick start (4 steps)
+- Version info (1-2 lines)
+
+**WHAT TO REMOVE** (❌ BLOAT):
+- Architecture diagrams
+- Example workflows with ASCII art
+- Hook implementation details
+- Benefits lists
+- Verbose explanations
+- "Disabling ACE" sections
+- Duplicate setup instructions
+
+**TARGET LENGTH**: 50-70 lines (currently 56 lines ✓)
+
+**DETECTION**: Check line count:
+```bash
+wc -l plugins/ace/CLAUDE.md
+# Should be ~50-70 lines, not 150-200 lines!
+```
+
+**GOLDEN RULE**: If it's in README.md, it doesn't need to be in CLAUDE.md!
+
 ## My Process
 
 1. **Analyze**: Find all version-related files
@@ -265,10 +302,12 @@ For this plugin specifically:
 - `plugins/ace/.claude-plugin/plugin.json` ⚠️ **MUST match template version!**
 - `plugins/ace/.claude-plugin/plugin.template.json` ⚠️ **MUST match plugin.json version!**
 - `.claude-plugin/marketplace.json`
-- **`plugins/ace/CLAUDE.md`** ⚠️ **CRITICAL: 2 HTML markers + minimal footer**
+- **`plugins/ace/CLAUDE.md`** ⚠️ **CRITICAL: Multiple requirements**
   - Line ~1: `<!-- ACE_SECTION_START vX.X.X -->`
-  - Line ~180: `<!-- ACE_SECTION_END vX.X.X -->`
-  - Footer: Version info (3-4 lines maximum, NO detailed changelog!)
+  - Line ~55: `<!-- ACE_SECTION_END vX.X.X -->`
+  - Footer: Version info (2-3 lines maximum, NO detailed changelog!)
+  - **Total length: 50-70 lines (check with `wc -l`)**
+  - **No verbose documentation** (architecture diagrams, example workflows, etc.)
 - All files in `plugins/ace/commands/` (if documentation updated)
 - `plugins/ace/CHANGELOG.md` (update with release notes)
 
@@ -290,9 +329,10 @@ A release is successful when:
 2. ✅ All changed files are committed (verified with `git status`)
 3. ✅ Git tag points to commit with ALL files
 4. ✅ GitHub release created with correct notes
-5. ✅ CLAUDE.md has BOTH HTML markers updated AND footer is minimal (3-4 lines max)
-6. ✅ Detailed changelog is in CHANGELOG.md, NOT in CLAUDE.md footer
-7. ✅ User can verify plugin in Claude Code marketplace
+5. ✅ CLAUDE.md has BOTH HTML markers updated AND footer is minimal (2-3 lines max)
+6. ✅ CLAUDE.md is minimal length (50-70 lines, NOT 150-200 lines)
+7. ✅ Detailed changelog is in CHANGELOG.md, NOT in CLAUDE.md footer
+8. ✅ User can verify plugin in Claude Code marketplace
 
 ## Release Types
 

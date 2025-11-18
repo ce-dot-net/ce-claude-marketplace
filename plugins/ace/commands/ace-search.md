@@ -39,26 +39,34 @@ if [ -z "$ACE_ORG_ID" ] || [ -z "$ACE_PROJECT_ID" ]; then
 fi
 
 # Call ce-ace search - CLI reads org/project from env vars automatically
-ce-ace search "$*" --threshold 0.85
+# Threshold comes from server config (ce-ace tune show) - don't override!
+ce-ace search "$*"
 ```
 
 ### Parameters
 
 - **query** (required): Natural language description passed as command argument
   - Examples: "authentication patterns", "async debugging tips", "database connection pooling best practices"
-- **--threshold**: Similarity threshold (default: 0.85)
+- **--threshold**: Similarity threshold (optional, overrides server config)
+  - Default: Uses server config from `ce-ace tune show`
   - Range: 0.0 - 1.0 (higher = stricter matching)
-- **--limit**: Maximum patterns to return (default: 10)
+  - Only specify if you want to override project's default
+- **--limit**: Maximum patterns to return (optional, overrides server config)
 - **--json**: Return JSON format for programmatic use
 
 ### Example Usage
 
 ```bash
 /ace-search JWT authentication best practices
-→ Calls: ce-ace search "JWT authentication best practices" --threshold 0.85
+→ Calls: ce-ace search "JWT authentication best practices"
+→ Uses: Server config threshold (e.g., 0.45)
 
 /ace-search async test failures debugging
-→ Calls: ce-ace search "async test failures debugging" --threshold 0.85
+→ Calls: ce-ace search "async test failures debugging"
+
+# Override threshold if needed:
+/ace-search "JWT auth" --threshold 0.7
+→ Calls: ce-ace search "JWT auth" --threshold 0.7
 ```
 
 ### When to Use This

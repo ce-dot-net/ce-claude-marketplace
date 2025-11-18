@@ -4,12 +4,6 @@ description: View and update ACE project configuration dynamically at runtime
 
 # ACE Configuration Management (Project-Level)
 
-⚠️ **NOTE**: Runtime configuration tuning is not yet available in ce-ace CLI v1.0.2. This feature is planned for a future release.
-
-For now, runtime configuration (thresholds, token budgets, etc.) must be managed through the ACE web dashboard or server API.
-
----
-
 Manage ACE configuration for **THIS PROJECT ONLY**. Adjust thresholds, enable token budget, and configure runtime behavior dynamically.
 
 ## 🚨 Important: Project-Level Scope
@@ -43,14 +37,20 @@ Allows you to **fetch and update ACE project configuration** in real-time:
 
 ## Instructions for Claude
 
-When the user runs `/ace-tune [action] [params]`, follow these steps:
+When the user runs `/ace-tune [action] [params]`, use ce-ace CLI directly:
 
 ### 1. View Current Configuration
 
 ```bash
-/ace-tune show
-→ Step 1: Call mcp__plugin_ace_ace-pattern-learning__ace_get_config()
-→ Step 2: Display config with source attribution (project/org/server)
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Export context for CLI
+export ACE_ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+export ACE_PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+
+# Show current config - CLI fetches from server
+ce-ace tune show
 ```
 
 **Display format:**
@@ -82,33 +82,72 @@ When the user runs `/ace-tune [action] [params]`, follow these steps:
 - `max_playbook_tokens` - Token limit before pruning (default: null)
 - `max_batch_size` - Max patterns per batch request (default: 50)
 
-### 2. Enable Token Budget
+### 2. Interactive Mode (Recommended)
+
+When user runs `/ace-tune` without arguments, use AskUserQuestion tool for interactive configuration:
+
+```python
+# Step 1: Show current config first
+ce-ace tune show
+
+# Step 2: Ask what they want to change
+AskUserQuestion({
+  "questions": [{
+    "question": "What would you like to configure?",
+    "header": "ACE Setting",
+    "multiSelect": false,
+    "options": [
+      {
+        "label": "Search Threshold",
+        "description": "Adjust similarity threshold for pattern retrieval (0.0-1.0)"
+      },
+      {
+        "label": "Search Top K",
+        "description": "Maximum patterns returned per search (1-100)"
+      },
+      {
+        "label": "Token Budget",
+        "description": "Enable automatic playbook pruning at token limit"
+      },
+      {
+        "label": "View Only",
+        "description": "Just show current configuration"
+      }
+    ]
+  }]
+})
+
+# Step 3: Based on selection, ask for value
+# Example: If "Search Threshold" selected
+AskUserQuestion({
+  "questions": [{
+    "question": "What threshold value? (0.0-1.0)",
+    "header": "Threshold",
+    "multiSelect": false,
+    "options": [
+      {"label": "0.35", "description": "Broad matches (more results)"},
+      {"label": "0.45", "description": "Balanced (recommended)"},
+      {"label": "0.60", "description": "Strict matches (fewer results)"},
+      {"label": "0.75", "description": "Very strict (only close matches)"}
+    ]
+  }]
+})
+
+# Step 4: Apply with CLI
+ce-ace tune --constitution-threshold 0.45
+```
+
+### 3. Non-Interactive Mode (Direct)
 
 ```bash
-/ace-tune token-budget 50000
+# Single setting
+ce-ace tune --constitution-threshold 0.6
 
-→ Step 1: Show warning
-⚠️  This will update config for THIS PROJECT ONLY.
-
-Current project: {project_name}
-
-Other projects in your organization will NOT be affected.
-
-Continue? [y/N]
-
-→ Step 2: If user confirms (y/yes), call:
-mcp__plugin_ace_ace-pattern-learning__ace_set_config(
-  scope="project",
-  token_budget_enforcement=true,
-  max_playbook_tokens=50000
-)
-
-→ Step 3: Display success message
-✅ Project config updated for: {project_name}
-   - token_budget_enforcement: true
-   - max_playbook_tokens: 50000
-
-💡 Other projects inherit org/server defaults.
+# Multiple settings
+ce-ace tune \
+  --constitution-threshold 0.5 \
+  --search-top-k 15 \
+  --dedup-enabled true
 ```
 
 **What this does**:
@@ -118,120 +157,47 @@ mcp__plugin_ace_ace-pattern-learning__ace_set_config(
   - Keeps high-quality patterns
   - Maintains playbook size within budget
 
-### 3. Adjust Search Threshold
+### 3. Direct CLI Examples
 
+**Adjust Search Threshold**:
 ```bash
-/ace-tune search-threshold 0.8
+# Lower threshold for broader matches
+ce-ace tune --constitution-threshold 0.35
 
-→ Step 1: Show warning
-⚠️  This will update config for THIS PROJECT ONLY.
-Current project: {project_name}
-Continue? [y/N]
-
-→ Step 2: If confirmed, call:
-mcp__plugin_ace_ace-pattern-learning__ace_set_config(
-  scope="project",
-  constitution_threshold=0.8
-)
-
-→ Step 3: Display result
-✅ Project config updated
-   - constitution_threshold: 0.8 (project override)
-
-💡 Other projects inherit org default.
+# Higher threshold for stricter matches
+ce-ace tune --constitution-threshold 0.8
 ```
 
 **Effect on `/ace-search`**:
 - **Lower (0.3-0.5)**: Broader matches, more results
-- **Medium (0.6-0.7)**: Balanced precision/recall (default)
+- **Medium (0.6-0.7)**: Balanced precision/recall
 - **Higher (0.8-0.9)**: Stricter matches, fewer but more precise results
 
-### 4. Adjust Deduplication Threshold
-
+**Adjust Multiple Settings**:
 ```bash
-/ace-tune dedup-threshold 0.9
+# Configure search behavior
+ce-ace tune \
+  --constitution-threshold 0.5 \
+  --search-top-k 15
 
-→ Step 1: Show warning
-⚠️  This will update config for THIS PROJECT ONLY.
-Current project: {project_name}
-Continue? [y/N]
+# Configure deduplication
+ce-ace tune --dedup-similarity-threshold 0.9
 
-→ Step 2: If confirmed, call:
-mcp__plugin_ace_ace-pattern-learning__ace_set_config(
-  scope="project",
-  dedup_similarity_threshold=0.9
-)
+# Configure pruning
+ce-ace tune --pruning-threshold 0.4
 
-→ Step 3: Display result
-✅ Project config updated
-   - dedup_similarity_threshold: 0.9 (project override)
+# Enable token budget
+ce-ace tune --token-budget-enforcement true --max-playbook-tokens 50000
 ```
 
-**What this controls**:
-- When server receives new pattern, checks similarity to existing patterns
-- If similarity > threshold, merges instead of adding duplicate
-- Higher threshold = stricter dedup (more patterns kept)
-- Lower threshold = aggressive dedup (fewer duplicates)
-
-### 5. Adjust Pruning Threshold
-
+**Reset to Defaults**:
 ```bash
-/ace-tune pruning-threshold 0.4
+# Reset project to org/server defaults
+ce-ace tune --reset
 
-→ Step 1: Show warning
-⚠️  This will update config for THIS PROJECT ONLY.
-Current project: {project_name}
-Continue? [y/N]
-
-→ Step 2: If confirmed, call:
-mcp__plugin_ace_ace-pattern-learning__ace_set_config(
-  scope="project",
-  pruning_threshold=0.4
-)
-
-→ Step 3: Display result
-✅ Project config updated
-   - pruning_threshold: 0.4 (project override)
+# Verify reset
+ce-ace tune show
 ```
-
-**What this controls**:
-- Patterns with `(helpful - harmful) < threshold` are candidates for removal
-- Only applies when token budget enforcement is enabled
-- Higher threshold = more aggressive pruning
-- Lower threshold = keeps more patterns
-
-### 6. Reset Project Config (NEW)
-
-```bash
-/ace-tune reset
-
-→ Step 1: Show warning
-⚠️  Reset THIS PROJECT to org/server defaults?
-
-Current project: {project_name}
-
-All project-level overrides will be removed.
-The project will inherit org and server defaults.
-
-Continue? [y/N]
-
-→ Step 2: If confirmed, call:
-mcp__plugin_ace_ace-pattern-learning__ace_reset_config(
-  scope="project"
-)
-
-→ Step 3: Display result
-✅ Project config reset for: {project_name}
-
-All settings now inherit from org/server defaults.
-
-Run `/ace-tune show` to see current effective config.
-```
-
-**What this does**:
-- Removes all project-level configuration overrides
-- Project reverts to organization and server defaults
-- Useful for cleaning up project-specific customizations
 
 ## Configuration Options Reference
 
@@ -292,115 +258,134 @@ Run `/ace-tune show` to see current effective config.
 ```
 **Use when**: You want to remove project-specific customizations and inherit org/server defaults.
 
-## Example Workflow
+## Example Workflows
+
+### Interactive Mode (Recommended for Exploration)
+
+```
+User: "/ace-tune"
+Claude: [Shows current config via ce-ace tune show]
+Claude: [Uses AskUserQuestion with options: Search Threshold, Search Top K, Token Budget, View Only]
+User: Selects "Search Threshold"
+Claude: [Uses AskUserQuestion with threshold options: 0.35, 0.45, 0.60, 0.75]
+User: Selects "0.45"
+Claude: [Runs ce-ace tune --constitution-threshold 0.45]
+Claude: "✅ Search threshold updated to 0.45 for this project"
+```
+
+### Non-Interactive Mode (Fast Direct Changes)
 
 ```bash
-# 1. Check current settings for this project
-/ace-tune show
-→ Project: ce-ai-ace
-→ constitution_threshold=0.7 (from server)
-→ token_budget_enforcement=false (from server)
+# 1. Check current settings
+ce-ace tune show
 
-# 2. Enable token budget for THIS PROJECT
-/ace-tune token-budget 50000
-→ ⚠️  Update THIS PROJECT ONLY? [y/N] y
-→ ✅ Project config updated: token_budget_enforcement=true
+# 2. Adjust search for broader matches
+ce-ace tune --constitution-threshold 0.35
 
-# 3. Adjust search for broader matches in THIS PROJECT
-/ace-tune search-threshold 0.5
-→ ⚠️  Update THIS PROJECT ONLY? [y/N] y
-→ ✅ Project config updated: constitution_threshold=0.5
+# 3. Increase max results
+ce-ace tune --search-top-k 15
 
-# 4. Verify changes
-/ace-tune show
-→ constitution_threshold=0.5 (from project)  ← Project override
-→ max_playbook_tokens=50000 (from project)  ← Project override
-→ token_budget_enforcement=true (from project)  ← Project override
+# 4. Enable token budget
+ce-ace tune --token-budget-enforcement true --max-playbook-tokens 50000
 
-# 5. Later, reset to org/server defaults
-/ace-tune reset
-→ ⚠️  Reset to defaults? [y/N] y
-→ ✅ Project config reset. All settings now inherit from org/server.
+# 5. Verify changes
+ce-ace tune show
+
+# 6. Later, reset to org/server defaults
+ce-ace tune --reset
 ```
 
 ## Output Format
 
-### ace_get_config Response:
+### ce-ace tune show
 
-```json
-{
-  "dedup_similarity_threshold": 0.85,
-  "dedup_enabled": true,
-  "constitution_threshold": 0.7,
-  "pruning_threshold": 0.3,
-  "max_playbook_tokens": null,
-  "token_budget_enforcement": false,
-  "max_batch_size": 50,
-  "auto_learning_enabled": true,
-  "reflector_enabled": true,
-  "curator_enabled": true,
-  "config_sources": {
-    "constitution_threshold": "server",
-    "dedup_similarity_threshold": "org",
-    "token_budget_enforcement": "project"
-  }
-}
+```
+🎛️  ACE Configuration
+
+ℹ Project: prj_d3a244129d62c198
+ℹ Organization: org_34fYIlitYk4nyFuTvtsAzA6uUJF
+
+ℹ Search/Retrieval:
+ℹ   Constitution Threshold: 0.45 (similarity)
+ℹ   Search Top K:           10 (max results)
+
+ℹ Deduplication:
+ℹ   Enabled:                true
+ℹ   Similarity Threshold:   0.85
+
+ℹ Token Budget:
+ℹ   Enforcement:            false
+ℹ   Max Playbook Tokens:    (not set)
+ℹ   Pruning Threshold:      0.3
+
+ℹ Batch Processing:
+ℹ   Max Batch Size:         50
+
+ℹ Learning Pipeline:
+ℹ   Auto Learning:          true
+ℹ   Reflector (Sonnet 4):   true
+ℹ   Curator (Haiku 4.5):    true
 ```
 
-### ace_set_config Response:
+### ce-ace tune --constitution-threshold 0.5
 
-```json
-{
-  "message": "Configuration updated successfully",
-  "scope": "project",
-  "project_id": "prj_xxx",
-  ...updated config
-}
+```
+✅ Configuration updated successfully
+
+🎛️  ACE Configuration
+
+ℹ Project: prj_d3a244129d62c198
+ℹ Organization: org_34fYIlitYk4nyFuTvtsAzA6uUJF
+
+ℹ Search/Retrieval:
+ℹ   Constitution Threshold: 0.5 (similarity)  ← Updated
+ℹ   Search Top K:           10 (max results)
+...
 ```
 
-### ace_reset_config Response:
+### ce-ace tune --reset
 
-```json
-{
-  "message": "Project configuration reset successfully",
-  "scope": "project",
-  "project_id": "prj_xxx"
-}
+```
+✅ Configuration reset successfully
+
+All project-level overrides removed.
+Project now inherits organization and server defaults.
+
+Run 'ce-ace tune show' to see current effective config.
 ```
 
 ## Important Notes
 
-### Scope Behavior
+### Project-Scoped Configuration
 
-- **`scope="project"`** (REQUIRED): All `/ace-tune` commands MUST pass this parameter
-- **Project isolation**: Changes affect ONLY the current project
-- **Org defaults**: Other projects inherit organization or server defaults
-- **Web dashboard**: For org-wide settings, use web interface
+- All `/ace-tune` changes affect **THIS PROJECT ONLY**
+- Changes persist on the server and sync across sessions
+- Other projects maintain their own independent configurations
+- Organization-level defaults can be set via web dashboard
+
+### Environment Context
+
+The `ce-ace` CLI automatically reads context from:
+1. `ACE_ORG_ID` environment variable (passed by slash command)
+2. `ACE_PROJECT_ID` environment variable (passed by slash command)
+3. `~/.config/ace/config.json` for API token
+
+You don't need to manually specify these - the slash command handles it.
 
 ### Multi-Tenant Safety
 
-- `/ace-tune` is **project-scoped** to prevent multi-tenant conflicts
 - Each project maintains independent configuration
-- Organization-level settings require web dashboard access
-
-### Migration from v4.1.x
-
-**Breaking change in v4.2.0:**
-- MCP tool now REQUIRES `scope` parameter
-- Old commands without `scope` will fail with error:
-  ```
-  ⚠️  ACE server update detected.
-  /ace-tune now requires scope parameter.
-  Update to plugin v4.2.0+ to continue.
-  ```
+- Configuration hierarchy: Project > Organization > Server
+- Project overrides take precedence over org defaults
+- Organization-wide settings require web dashboard access
 
 ## Performance Notes
 
 - Configuration changes are **immediate** (no restart required)
-- Config is **cached for 5 minutes** on MCP client (fast subsequent reads)
 - Changes **persist across sessions** (stored on server)
-- Use `/ace-cache-clear` to force config refresh if needed
+- Configuration is fetched fresh on each command (no stale cache issues)
 - Hierarchical config resolved server-side (project → org → server)
+- Average response time: 200-500ms for show, 300-600ms for updates
 
 ## See Also
 

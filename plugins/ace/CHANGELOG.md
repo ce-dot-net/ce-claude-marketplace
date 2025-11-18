@@ -5,6 +5,65 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.3] - 2025-11-18
+
+### 📚 Documentation Improvements & Bug Fixes
+
+**CLAUDE.md Simplification** (71% reduction: 192 → 56 lines):
+- Removed verbose architecture diagrams and example workflows
+- Removed detailed hook implementation explanations
+- Kept only essentials: installation, commands, quick start
+- Makes template more scannable and action-oriented for users
+
+**ace-configure.md - Fixed settings.json Format**:
+- Reverted to correct env wrapper format: `{"env": {"ACE_ORG_ID": "...", "ACE_PROJECT_ID": "..."}}`
+- Added backward compatibility notes
+- Updated all examples to use correct format
+
+**ace-doctor.md - Updated for v5.x Architecture**:
+- Check 1: Removed `skills/` directory, added `scripts/` (hook wrappers)
+- Check 6: "Skills Loaded" → "Hooks Registered" (5 hooks instead of 2 skills)
+- Check 7: Updated version expectations (v5.1.2 instead of v3.3.2)
+- Check 8: "Cache Status" → "CLI Configuration" (checks multi-org format)
+- Check 9: Updated expected versions and added Python hooks check
+- Updated final report format to show hook-based architecture
+
+**ace-search.md - Removed Hardcoded Threshold**:
+- Removed `--threshold 0.85` that was overriding server config
+- Now uses server config by default (respects per-project tuning)
+- Updated documentation to explain threshold is optional override
+
+**ace-tune.md - Enhanced with Interactive Forms**:
+- Added AskUserQuestion examples for interactive configuration
+- Simplified configuration examples
+- Updated to use ce-ace CLI directly (not MCP tools)
+- Better non-interactive mode examples
+
+**Code Improvements**:
+- `ace_after_task.py` - Shows detailed action list, pattern count, affected sections
+- `ace_task_complete.py` - Enhanced output with pattern count and section details
+
+**Release Manager**:
+- Added CLAUDE.md length check (target: 50-70 lines)
+- New Mistake #8: Bloated CLAUDE.md Template
+- Updated success criteria to check line count
+
+**Files Changed**:
+- `plugins/ace/CLAUDE.md` - Massive simplification (192 → 56 lines)
+- `plugins/ace/commands/ace-configure.md` - Fixed settings.json format
+- `plugins/ace/commands/ace-doctor.md` - Updated for v5.x architecture
+- `plugins/ace/commands/ace-search.md` - Removed hardcoded threshold
+- `plugins/ace/commands/ace-tune.md` - Enhanced interactive configuration
+- `shared-hooks/ace_after_task.py` - Enhanced hook output
+- `shared-hooks/ace_task_complete.py` - Enhanced hook output
+- `.claude/agents/release-manager.md` - Added CLAUDE.md length check
+
+**Impact**:
+- Users get a cleaner, more actionable template when running `/ace:ace-claude-init`
+- Documentation is more maintainable and easier to update
+- Configuration commands work reliably with correct settings.json format
+- Better diagnostics for troubleshooting hook and CLI issues
+
 ## [5.1.2] - 2025-11-18
 
 ### 🐛 Bug Fix: Context Passing in Python Hooks
