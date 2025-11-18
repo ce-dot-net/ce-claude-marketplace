@@ -135,14 +135,17 @@ echo ""
    ```bash
    echo "🔍 Validating token with ACE server..."
 
-   VALIDATION_OUTPUT=$(ce-ace config validate \
-     --server-url "$SERVER_URL" \
-     --api-token "$API_TOKEN" \
-     --json 2>&1)
+   # Workaround: ce-ace config validate doesn't accept --server-url flag properly
+   # Use environment variables instead
+   export ACE_SERVER_URL="$SERVER_URL"
+   export ACE_API_TOKEN="$API_TOKEN"
+
+   VALIDATION_OUTPUT=$(ce-ace config validate --json 2>&1)
 
    if [ $? -ne 0 ]; then
      echo "❌ Token validation failed"
      echo "$VALIDATION_OUTPUT"
+     unset ACE_SERVER_URL ACE_API_TOKEN
      exit 1
    fi
 
@@ -153,6 +156,9 @@ echo ""
 
    echo "✅ Verified! Organization: $ORG_NAME ($ORG_ID)"
    echo ""
+
+   # Clean up environment variables
+   unset ACE_SERVER_URL ACE_API_TOKEN
    ```
 
 4. **Ask User to Select Project** (use AskUserQuestion):
@@ -276,21 +282,25 @@ echo ""
    mkdir -p "$PROJECT_ROOT/.claude"
 
    if [ -n "$ORG_ID" ]; then
-     # Multi-org: include orgId
+     # Multi-org: include ACE_ORG_ID in env
      cat > "$PROJECT_CONFIG" <<EOF
 {
-  "orgId": "$ORG_ID",
-  "projectId": "$PROJECT_ID"
+  "env": {
+    "ACE_ORG_ID": "$ORG_ID",
+    "ACE_PROJECT_ID": "$PROJECT_ID"
+  }
 }
 EOF
      echo "✅ Project configuration saved:"
      echo "  Organization ID: $ORG_ID"
      echo "  Project ID: $PROJECT_ID"
    else
-     # Single-org: just projectId
+     # Single-org: just ACE_PROJECT_ID in env
      cat > "$PROJECT_CONFIG" <<EOF
 {
-  "projectId": "$PROJECT_ID"
+  "env": {
+    "ACE_PROJECT_ID": "$PROJECT_ID"
+  }
 }
 EOF
      echo "✅ Project configuration saved:"
@@ -381,15 +391,19 @@ echo ""
 **Multi-Org:**
 ```json
 {
-  "orgId": "org_xxxxx",
-  "projectId": "prj_xxxxx"
+  "env": {
+    "ACE_ORG_ID": "org_xxxxx",
+    "ACE_PROJECT_ID": "prj_xxxxx"
+  }
 }
 ```
 
 **Single-Org:**
 ```json
 {
-  "projectId": "prj_xxxxx"
+  "env": {
+    "ACE_PROJECT_ID": "prj_xxxxx"
+  }
 }
 ```
 
