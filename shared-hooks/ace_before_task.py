@@ -13,6 +13,7 @@ Uses ce-ace search --stdin to avoid shell escaping issues.
 import json
 import sys
 from pathlib import Path
+from typing import Dict, Any
 
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent / 'utils'))
@@ -42,14 +43,14 @@ def main():
             sys.exit(0)
 
         # Call ce-ace search --stdin
-        # Note: Threshold controlled by server config (ce-ace tune --constitution-threshold)
-        patterns = run_search(
+        # Context passed via environment, CLI reads server config for top_k/threshold
+        patterns_response = run_search(
             query=user_prompt,
             org=context['org'],
             project=context['project']
         )
 
-        if not patterns:
+        if not patterns_response:
             # Search failed - show error to user
             output = {
                 "systemMessage": "❌ [ACE] Search failed or returned no results"
@@ -57,26 +58,41 @@ def main():
             print(json.dumps(output))
             sys.exit(0)
 
-        # Build context for Claude (XML format)
-        ace_context = f"<ace-patterns>\n{json.dumps(patterns, indent=2)}\n</ace-patterns>"
+        # Build context for Claude (JSON in XML tags - includes domain metadata)
+        ace_context = f"<ace-patterns>\n{json.dumps(patterns_response, indent=2)}\n</ace-patterns>"
 
         # Build user-visible message
-        pattern_list = patterns.get('similar_patterns', [])
+        pattern_list = patterns_response.get('similar_patterns', [])
         pattern_count = len(pattern_list)
+        domains_summary = patterns_response.get('domains_summary', {})
 
         if pattern_count > 0:
-            # Build summary for user
-            summary_lines = [f"✅ [ACE] Found {pattern_count} relevant patterns:"]
-            for pattern in pattern_list[:5]:
-                content = pattern.get('content', '')
+            # Build summary with domain info
+            summary_lines = [f"✅ [ACE] Found {pattern_count} relevant bullets"]
+
+            # Show domain summary
+            abstract_domains = domains_summary.get('abstract', [])
+            if abstract_domains:
+                domains_str = ', '.join(abstract_domains[:3])
+                if len(abstract_domains) > 3:
+                    domains_str += f' (+{len(abstract_domains) - 3} more)'
+                summary_lines.append(f"   Domains: {domains_str}")
+
+            # Show top 3 bullets with domain tags
+            for bullet in pattern_list[:3]:
+                content = bullet.get('content', '')
                 if len(content) > 80:
                     content = content[:77] + '...'
-                helpful = pattern.get('helpful', 0)
-                summary_lines.append(f"   • {content} (+{helpful} helpful)")
+                domain = bullet.get('domain', 'general')
+                helpful = bullet.get('helpful', 0)
+                summary_lines.append(f"   • [{domain}] {content} (+{helpful})")
+
+            if pattern_count > 3:
+                summary_lines.append(f"   ... and {pattern_count - 3} more bullets")
 
             user_message = "\n".join(summary_lines)
         else:
-            user_message = "ℹ️  [ACE] Playbook is empty - no patterns found (try /ace-bootstrap)"
+            user_message = "ℹ️  [ACE] No bullets found (threshold may be too high)\n   Try: ce-ace tune --constitution-threshold 0.3"
 
         # Output JSON with both user message and Claude context
         output = {

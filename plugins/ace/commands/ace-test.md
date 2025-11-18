@@ -63,27 +63,23 @@ echo ""
 # Test 2: Server Connectivity
 echo "[2/4] Testing ACE server connectivity..."
 
-ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+export ACE_ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+export ACE_PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
 
-# Try env wrapper format
-if [ -z "$ORG_ID" ] || [ -z "$PROJECT_ID" ]; then
-  ORG_ID=$(jq -r '.env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-  PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+# Try env wrapper format if not found
+if [ -z "$ACE_ORG_ID" ] || [ -z "$ACE_PROJECT_ID" ]; then
+  export ACE_ORG_ID=$(jq -r '.env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+  export ACE_PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
 fi
 
-if [ -z "$PROJECT_ID" ]; then
+if [ -z "$ACE_PROJECT_ID" ]; then
   echo "❌ No project configured"
   echo "   Run: /ace:ace-configure"
   exit 1
 fi
 
-# Run doctor command
-if [ -n "$ORG_ID" ]; then
-  DOCTOR_RESULT=$(ce-ace --json --org "$ORG_ID" --project "$PROJECT_ID" doctor 2>&1)
-else
-  DOCTOR_RESULT=$(ce-ace --json --project "$PROJECT_ID" doctor 2>&1)
-fi
+# Run doctor command - CLI reads org/project from env vars automatically
+DOCTOR_RESULT=$(ce-ace doctor --json 2>&1)
 
 # Parse results
 PASSED=$(echo "$DOCTOR_RESULT" | jq -r '.summary.passed // 0')
@@ -137,12 +133,8 @@ echo ""
 # Test 4: Basic Operations
 echo "[4/4] Testing basic ACE operations..."
 
-# Test status command
-if [ -n "$ORG_ID" ]; then
-  STATUS_RESULT=$(ce-ace --json --org "$ORG_ID" --project "$PROJECT_ID" status 2>&1)
-else
-  STATUS_RESULT=$(ce-ace --json --project "$PROJECT_ID" status 2>&1)
-fi
+# Test status command - CLI reads org/project from env vars automatically
+STATUS_RESULT=$(ce-ace status --json 2>&1)
 
 TOTAL_BULLETS=$(echo "$STATUS_RESULT" | jq -r '.total_bullets // 0')
 echo "✅ Status command: Playbook has $TOTAL_BULLETS patterns"

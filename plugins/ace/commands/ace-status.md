@@ -18,15 +18,15 @@ if ! command -v ce-ace >/dev/null 2>&1; then
   exit 1
 fi
 
-ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-
-if [ -z "$ORG_ID" ] || [ -z "$PROJECT_ID" ]; then
-  echo "❌ Run /ace-configure first"
+# Claude Code automatically exports ACE_ORG_ID and ACE_PROJECT_ID from .claude/settings.json
+if [ -z "${ACE_ORG_ID:-}" ] || [ -z "${ACE_PROJECT_ID:-}" ]; then
+  echo "❌ Run /ace-configure first to setup .claude/settings.json"
   exit 1
 fi
 
-ce-ace --org "$ORG_ID" --project "$PROJECT_ID" status
+# Note: ce-ace CLI has bugs with plain text output showing 0 bullets
+# Use --json flag until CLI team fixes it
+ce-ace status --json
 ```
 
 ## What You'll See

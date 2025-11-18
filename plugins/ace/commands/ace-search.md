@@ -28,20 +28,18 @@ if ! command -v ce-ace >/dev/null 2>&1; then
   exit 1
 fi
 
-# Get context from .claude/settings.json
-ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+# Get context from .claude/settings.json and export as env vars
+export ACE_ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+export ACE_PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
 
-if [ -z "$ORG_ID" ] || [ -z "$PROJECT_ID" ]; then
+if [ -z "$ACE_ORG_ID" ] || [ -z "$ACE_PROJECT_ID" ]; then
   echo "❌ No .claude/settings.json found or missing orgId/projectId"
   echo "Run /ace-configure to set up ACE"
   exit 1
 fi
 
-# Call ce-ace search (user query via args, not stdin)
-ce-ace --org "$ORG_ID" --project "$PROJECT_ID" \
-  search "$*" \
-  --threshold 0.85
+# Call ce-ace search - CLI reads org/project from env vars automatically
+ce-ace search "$*" --threshold 0.85
 ```
 
 ### Parameters
@@ -57,10 +55,10 @@ ce-ace --org "$ORG_ID" --project "$PROJECT_ID" \
 
 ```bash
 /ace-search JWT authentication best practices
-→ Calls: ce-ace search "JWT authentication best practices" --org ... --project ...
+→ Calls: ce-ace search "JWT authentication best practices" --threshold 0.85
 
 /ace-search async test failures debugging
-→ Calls: ce-ace search "async test failures debugging" --org ... --project ...
+→ Calls: ce-ace search "async test failures debugging" --threshold 0.85
 ```
 
 ### When to Use This

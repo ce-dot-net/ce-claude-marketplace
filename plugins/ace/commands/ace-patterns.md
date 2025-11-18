@@ -30,11 +30,11 @@ if ! command -v ce-ace >/dev/null 2>&1; then
   exit 1
 fi
 
-# Get context (support both formats: direct fields or env variables)
-ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+# Get context and export as env vars (support both formats)
+export ACE_ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+export ACE_PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
 
-if [ -z "$ORG_ID" ] || [ -z "$PROJECT_ID" ]; then
+if [ -z "$ACE_ORG_ID" ] || [ -z "$ACE_PROJECT_ID" ]; then
   echo "❌ Run /ace-configure first"
   exit 1
 fi
@@ -43,9 +43,8 @@ fi
 SECTION="${1:-}"  # Optional section filter
 MIN_HELPFUL="${2:-0}"  # Optional min helpful score
 
-# Call ce-ace patterns (without --json for formatted output)
-ce-ace --org "$ORG_ID" --project "$PROJECT_ID" \
-  patterns \
+# Call ce-ace patterns - CLI reads org/project from env vars automatically
+ce-ace patterns \
   ${SECTION:+--section "$SECTION"} \
   --min-helpful "$MIN_HELPFUL"
 ```

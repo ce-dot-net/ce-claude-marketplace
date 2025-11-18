@@ -3,38 +3,47 @@
 
 import subprocess
 import json
+import os
 from typing import Optional, Dict, Any
 
 
-def run_search(query: str, org: str, project: str) -> Optional[Dict[str, Any]]:
+def run_search(query: str, org: str = None, project: str = None) -> Optional[Dict[str, Any]]:
     """
     Call ce-ace search --stdin
 
     Args:
         query: Search query text
-        org: Organization ID (org_xxx)
-        project: Project ID (prj_xxx)
+        org: Organization ID (optional, passed via environment)
+        project: Project ID (optional, passed via environment)
 
     Returns:
         Parsed JSON response or None on failure
 
+    Response includes:
+        - similar_patterns: List of matching patterns
+        - domains_summary: {abstract: [...], concrete: [...]} (if available)
+        - count: Number of patterns returned
+        - threshold: Similarity threshold used
+
     Note:
-        Threshold is controlled by server-side config (ce-ace tune --constitution-threshold)
-        No --threshold flag passed to allow server config to take precedence
+        Context passed via environment variables (ACE_ORG_ID, ACE_PROJECT_ID).
+        CLI reads server config (search_top_k, constitution_threshold) automatically.
+        No need to pass --org, --project flags!
     """
     try:
+        # Build environment with context
+        env = os.environ.copy()
+        if org:
+            env['ACE_ORG_ID'] = org
+        if project:
+            env['ACE_PROJECT_ID'] = project
+
         result = subprocess.run(
-            [
-                'ce-ace',
-                '--json',
-                '--org', org,
-                '--project', project,
-                'search',
-                '--stdin'
-            ],
+            ['ce-ace', 'search', '--stdin', '--json'],
             input=query.encode('utf-8'),
             capture_output=True,
-            timeout=10
+            timeout=10,
+            env=env
         )
 
         if result.returncode != 0:
@@ -46,7 +55,7 @@ def run_search(query: str, org: str, project: str) -> Optional[Dict[str, Any]]:
         return None
 
 
-def run_learn(task: str, trajectory: str, success: bool, org: str, project: str, patterns_used: Optional[list] = None) -> bool:
+def run_learn(task: str, trajectory: str, success: bool, org: str = None, project: str = None, patterns_used: Optional[list] = None) -> bool:
     """
     Call ce-ace learn --stdin
 
@@ -54,12 +63,16 @@ def run_learn(task: str, trajectory: str, success: bool, org: str, project: str,
         task: Task description
         trajectory: Execution steps taken
         success: Whether task succeeded
-        org: Organization ID
-        project: Project ID
+        org: Organization ID (optional, passed via environment)
+        project: Project ID (optional, passed via environment)
         patterns_used: Optional list of pattern IDs used
 
     Returns:
         True if learning succeeded, False otherwise
+
+    Note:
+        Context passed via environment variables (ACE_ORG_ID, ACE_PROJECT_ID).
+        No need to pass --org or --project flags!
     """
     try:
         payload = {
@@ -71,17 +84,19 @@ def run_learn(task: str, trajectory: str, success: bool, org: str, project: str,
         if patterns_used:
             payload['patterns_used'] = patterns_used
 
+        # Build environment with context
+        env = os.environ.copy()
+        if org:
+            env['ACE_ORG_ID'] = org
+        if project:
+            env['ACE_PROJECT_ID'] = project
+
         result = subprocess.run(
-            [
-                'ce-ace',
-                '--org', org,
-                '--project', project,
-                'learn',
-                '--stdin'
-            ],
+            ['ce-ace', 'learn', '--stdin'],
             input=json.dumps(payload).encode('utf-8'),
             capture_output=True,
-            timeout=10
+            timeout=10,
+            env=env
         )
 
         return result.returncode == 0
@@ -90,28 +105,34 @@ def run_learn(task: str, trajectory: str, success: bool, org: str, project: str,
         return False
 
 
-def run_status(org: str, project: str) -> Optional[Dict[str, Any]]:
+def run_status(org: str = None, project: str = None) -> Optional[Dict[str, Any]]:
     """
     Call ce-ace status
 
     Args:
-        org: Organization ID
-        project: Project ID
+        org: Organization ID (optional, passed via environment)
+        project: Project ID (optional, passed via environment)
 
     Returns:
         Parsed JSON status or None on failure
+
+    Note:
+        Context passed via environment variables (ACE_ORG_ID, ACE_PROJECT_ID).
+        No need to pass --org or --project flags!
     """
     try:
+        # Build environment with context
+        env = os.environ.copy()
+        if org:
+            env['ACE_ORG_ID'] = org
+        if project:
+            env['ACE_PROJECT_ID'] = project
+
         result = subprocess.run(
-            [
-                'ce-ace',
-                '--json',
-                '--org', org,
-                '--project', project,
-                'status'
-            ],
+            ['ce-ace', 'status', '--json'],
             capture_output=True,
-            timeout=5
+            timeout=5,
+            env=env
         )
 
         if result.returncode != 0:

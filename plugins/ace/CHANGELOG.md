@@ -5,6 +5,51 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.2] - 2025-11-18
+
+### 🐛 Bug Fix: Context Passing in Python Hooks
+
+**Issue**: Python hooks were reading org/project context from `.claude/settings.json` but not passing it to the `ce-ace` CLI subprocess. This caused the CLI to fall back to global config instead of using project-specific configuration.
+
+**Symptoms**:
+- Hooks would show "Playbook is empty" even after running `/ace-configure --project`
+- Pattern retrieval would fail or use wrong project context
+- Learning would be saved to wrong org/project
+
+**Root Cause**:
+The `ace_cli.py` utility was calling `subprocess.run(['ce-ace', ...])` without passing the org/project IDs via environment variables. The subprocess inherited the parent environment, which didn't have `ACE_ORG_ID` or `ACE_PROJECT_ID` set.
+
+**Fix**:
+All subprocess calls in `ace_cli.py` now pass org/project context via environment variables:
+```python
+env = os.environ.copy()
+env['ACE_ORG_ID'] = org
+env['ACE_PROJECT_ID'] = project
+subprocess.run(['ce-ace', 'search', '--stdin'], env=env, ...)
+```
+
+**Files Changed**:
+- `shared-hooks/utils/ace_cli.py` - Added environment variable passing to `run_search()`, `run_learn()`, `run_status()`
+- `shared-hooks/ace_before_task.py` - Restored org/project parameters to `run_search()` call
+- `shared-hooks/ace_after_task.py` - Added environment building for `ce-ace learn` subprocess
+- `shared-hooks/ace_task_complete.py` - Added environment building for `ce-ace learn` subprocess
+- `plugins/ace/tests/test_ace_cli.py` - Updated tests to verify environment passing
+
+**Testing**:
+- ✅ All unit tests pass
+- ✅ End-to-end hook test verified (returns 7 JWT patterns)
+- ✅ Context correctly passed to CLI subprocess
+
+**Impact**:
+- Hooks now correctly use project-specific configuration
+- Pattern retrieval works reliably across different projects
+- Learning is saved to the correct org/project
+
+**Affected Versions**: v5.1.0 and v5.1.1
+
+**Upgrade Notes**:
+No migration needed. After upgrading to v5.1.2, hooks will automatically use the correct project context from `.claude/settings.json`.
+
 ## [5.1.1] - 2025-11-18
 
 ### 🐛 Bug Fixes: /ace-configure Command

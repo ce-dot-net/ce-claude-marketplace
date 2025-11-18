@@ -113,25 +113,24 @@ def main():
         if trace['playbook_used']:
             message_lines.append(f"   Patterns used: {len(trace['playbook_used'])}")
 
-        # Build ce-ace learn command with --stdin
-        cmd = ['ce-ace', '--json']
-
-        # Add org/project context
-        if context['org']:
-            cmd.extend(['--org', context['org']])
-        cmd.extend(['--project', context['project']])
-
-        # Add learn subcommand with --stdin
-        cmd.extend(['learn', '--stdin'])
-
         # Call ce-ace learn --stdin with ExecutionTrace JSON
+        # Context passed via environment variables
         try:
+            # Build environment with context
+            import os
+            env = os.environ.copy()
+            if context['org']:
+                env['ACE_ORG_ID'] = context['org']
+            if context['project']:
+                env['ACE_PROJECT_ID'] = context['project']
+
             result = subprocess.run(
-                cmd,
+                ['ce-ace', 'learn', '--stdin', '--json'],
                 input=json.dumps(trace),
                 text=True,
                 capture_output=True,
-                timeout=30
+                timeout=30,
+                env=env
             )
 
             if result.returncode == 0:
