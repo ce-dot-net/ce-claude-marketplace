@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.1.0",
-  "description": "Code Engine ACE - Intelligent pattern learning with CLI Architecture. v5.1.0: Automatic per-task learning via PostToolUse hook - aligns with ACE Research Paper. Requires ce-ace >= v1.0.4.",
+  "version": "5.1.2",
+  "description": "Code Engine ACE - Intelligent pattern learning with CLI Architecture. v5.1.2: Fix context passing bug in Python hooks. Requires ce-ace >= v1.0.4.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

@@ -20,10 +20,10 @@ if ! command -v ce-ace >/dev/null 2>&1; then
   exit 1
 fi
 
-ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+export ACE_ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+export ACE_PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
 
-if [ -z "$ORG_ID" ] || [ -z "$PROJECT_ID" ]; then
+if [ -z "$ACE_ORG_ID" ] || [ -z "$ACE_PROJECT_ID" ]; then
   echo "❌ Run /ace-configure first"
   exit 1
 fi
@@ -35,8 +35,8 @@ THOROUGHNESS="${2:-medium}"  # Default: medium
 echo "🔄 Bootstrapping ACE playbook (mode=$MODE, thoroughness=$THOROUGHNESS)..."
 echo "This may take 10-30 seconds..."
 
-ce-ace --org "$ORG_ID" --project "$PROJECT_ID" \
-  bootstrap \
+# CLI reads org/project from env vars automatically
+ce-ace bootstrap \
   --mode "$MODE" \
   --thoroughness "$THOROUGHNESS"
 ```
@@ -64,25 +64,23 @@ Use `ce-ace bootstrap` to initialize your playbook from the codebase.
 
 **Basic usage**:
 ```bash
-ce-ace --json --org "$ORG_ID" --project "$PROJECT_ID" bootstrap
-
-# Or in single-org mode:
-ce-ace --json --project "$PROJECT_ID" bootstrap
+# CLI reads org/project from environment variables or config automatically
+ce-ace bootstrap --json
 ```
 
 **With options**:
 ```bash
 # Hybrid mode (recommended) - docs → git → files
-ce-ace --json --project "$PROJECT_ID" bootstrap --mode hybrid --thoroughness deep
+ce-ace bootstrap --json --mode hybrid --thoroughness deep
 
 # Git history only
-ce-ace --json --project "$PROJECT_ID" bootstrap --mode git-history --commit-limit 1000 --days-back 180
+ce-ace bootstrap --json --mode git-history --commit-limit 1000 --days-back 180
 
 # Local files only
-ce-ace --json --project "$PROJECT_ID" bootstrap --mode local-files --max-files 5000
+ce-ace bootstrap --json --mode local-files --max-files 5000
 
 # Docs only
-ce-ace --json --project "$PROJECT_ID" bootstrap --mode docs-only
+ce-ace bootstrap --json --mode docs-only
 ```
 
 **Parameters**:

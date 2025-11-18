@@ -13,7 +13,7 @@ from ace_cli import run_search, run_learn, run_status
 
 
 def test_run_search_success():
-    """Test successful search call"""
+    """Test successful search call with context passed via environment"""
     mock_result = MagicMock()
     mock_result.returncode = 0
     mock_result.stdout = json.dumps({
@@ -23,20 +23,19 @@ def test_run_search_success():
     }).encode('utf-8')
 
     with patch('subprocess.run', return_value=mock_result) as mock_run:
-        result = run_search('test query', 'org_123', 'prj_456')
+        result = run_search('test query', org='org_123', project='prj_456')
 
         assert result is not None
         assert 'patterns' in result
         assert len(result['patterns']) == 1
         assert result['patterns'][0]['content'] == 'Test pattern'
 
-        # Verify subprocess call
+        # Verify subprocess call - no flags, but env vars passed!
         args, kwargs = mock_run.call_args
-        assert args[0][0] == 'ce-ace'
-        assert args[0][1] == 'search'
-        assert args[0][2] == '--stdin'
-        assert '--org' in args[0]
-        assert 'org_123' in args[0]
+        assert args[0] == ['ce-ace', 'search', '--stdin', '--json']
+        assert 'env' in kwargs
+        assert kwargs['env']['ACE_ORG_ID'] == 'org_123'
+        assert kwargs['env']['ACE_PROJECT_ID'] == 'prj_456'
 
         print("✅ test_run_search_success passed")
 
@@ -47,7 +46,7 @@ def test_run_search_failure():
     mock_result.returncode = 1
 
     with patch('subprocess.run', return_value=mock_result):
-        result = run_search('test query', 'org_123', 'prj_456')
+        result = run_search('test query')
 
         assert result is None
         print("✅ test_run_search_failure passed")
@@ -58,7 +57,7 @@ def test_run_search_timeout():
     import subprocess
 
     with patch('subprocess.run', side_effect=subprocess.TimeoutExpired('ce-ace', 10)):
-        result = run_search('test query', 'org_123', 'prj_456')
+        result = run_search('test query')
 
         assert result is None
         print("✅ test_run_search_timeout passed")
@@ -71,14 +70,14 @@ def test_run_search_invalid_json():
     mock_result.stdout = b'{ invalid json }'
 
     with patch('subprocess.run', return_value=mock_result):
-        result = run_search('test query', 'org_123', 'prj_456')
+        result = run_search('test query')
 
         assert result is None
         print("✅ test_run_search_invalid_json passed")
 
 
 def test_run_learn_success():
-    """Test successful learn call"""
+    """Test successful learn call with context passed via environment"""
     mock_result = MagicMock()
     mock_result.returncode = 0
 
@@ -93,11 +92,12 @@ def test_run_learn_success():
 
         assert result is True
 
-        # Verify subprocess call
+        # Verify subprocess call - no flags, but env vars passed!
         args, kwargs = mock_run.call_args
-        assert args[0][0] == 'ce-ace'
-        assert args[0][1] == 'learn'
-        assert args[0][2] == '--stdin'
+        assert args[0] == ['ce-ace', 'learn', '--stdin']
+        assert 'env' in kwargs
+        assert kwargs['env']['ACE_ORG_ID'] == 'org_123'
+        assert kwargs['env']['ACE_PROJECT_ID'] == 'prj_456'
 
         print("✅ test_run_learn_success passed")
 
@@ -111,9 +111,7 @@ def test_run_learn_failure():
         result = run_learn(
             task='Test task',
             trajectory='Steps',
-            success=True,
-            org='org_123',
-            project='prj_456'
+            success=True
         )
 
         assert result is False
@@ -121,7 +119,7 @@ def test_run_learn_failure():
 
 
 def test_run_status_success():
-    """Test successful status call"""
+    """Test successful status call with context passed via environment"""
     mock_result = MagicMock()
     mock_result.returncode = 0
     mock_result.stdout = json.dumps({
@@ -129,11 +127,18 @@ def test_run_status_success():
         'sections': {}
     }).encode('utf-8')
 
-    with patch('subprocess.run', return_value=mock_result):
-        result = run_status('org_123', 'prj_456')
+    with patch('subprocess.run', return_value=mock_result) as mock_run:
+        result = run_status(org='org_123', project='prj_456')
 
         assert result is not None
         assert result['total_patterns'] == 42
+
+        # Verify subprocess call - no flags, but env vars passed!
+        args, kwargs = mock_run.call_args
+        assert args[0] == ['ce-ace', 'status', '--json']
+        assert 'env' in kwargs
+        assert kwargs['env']['ACE_ORG_ID'] == 'org_123'
+        assert kwargs['env']['ACE_PROJECT_ID'] == 'prj_456'
 
         print("✅ test_run_status_success passed")
 
