@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.1.5 -->
+<!-- ACE_SECTION_START v5.1.6 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -46,11 +46,19 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 **Messages you'll see**:
 - `🔍 [ACE] Found 3 relevant patterns` - Before tasks
+- `✅ [ACE] Auto-approved: ce-ace search` - Permission auto-approval
 - `✅ [ACE] Learned from: Implementation task...` - After completion
+
+## New in v5.1.6
+
+**Claude Code v2.0 Integration**:
+- ✅ **PermissionRequest Hook** - Auto-approves safe ACE CLI commands (search, status, patterns)
+- ✅ **Enhanced Trajectory Tracking** - Includes tool_use_id for better execution correlation
+- ✅ **Custom Hook Timeouts** - Improved reliability with per-hook timeout configuration
 
 ---
 
-**Version**: v5.1.5
+**Version**: v5.1.6
 **Requires**: ce-ace CLI v1.0.11+
 
-<!-- ACE_SECTION_END v5.1.5 -->
+<!-- ACE_SECTION_END v5.1.6 -->

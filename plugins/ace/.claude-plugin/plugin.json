@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.1.5",
-  "description": "Code Engine ACE - Intelligent pattern learning with CLI Architecture. v5.1.5: Bug fixes (removed threshold hint, formatted status output, improved configure UX) + architecture improvements (extracted ace-bootstrap.sh and ace-tune.sh). Requires ce-ace >= v1.0.11.",
+  "version": "5.1.6",
+  "description": "Code Engine ACE - Intelligent pattern learning with CLI Architecture. v5.1.6: Claude Code v2.0 enhancements (PermissionRequest hook for auto-approving safe ACE commands, tool_use_id trajectory tracking, custom hook timeouts). Requires ce-ace >= v1.0.11.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

@@ -5,6 +5,50 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.6] - 2025-11-19
+
+### 🚀 Claude Code v2.0 Integration Enhancements
+
+**PermissionRequest Hook (NEW)**:
+- **Auto-approve safe ACE CLI commands** - No more manual approvals for read-only operations
+- Auto-approved commands: `ce-ace search`, `status`, `patterns`, `top`, `get-playbook`, `doctor`, `tune`
+- Auto-denied dangerous commands: `ce-ace clear` (requires explicit user confirmation via `/ace-clear`)
+- Pass-through for data modification: `ce-ace learn`, `bootstrap` (user decides)
+- **Result**: Seamless UX for pattern searches and status checks
+
+**Enhanced Trajectory Tracking**:
+- **tool_use_id field support** (Claude Code v2.0.43+) - Better execution correlation
+- Trajectory entries now include `tool_use_id` when available
+- **Result**: More precise execution traces and debugging capabilities
+
+**Custom Hook Timeouts**:
+- **Per-hook timeout configuration** - Improved reliability when server is slow
+- Timeouts: SessionStart (30s), UserPromptSubmit (15s), PermissionRequest (5s), PostToolUse (10s), PreCompact/Stop (30s)
+- **Result**: Prevents hook blocking, better error handling
+
+**Files Changed**:
+- `shared-hooks/ace_permission_request.py` - NEW (auto-approval logic)
+- `plugins/ace/scripts/ace_permission_request_wrapper.sh` - NEW (hook wrapper)
+- `plugins/ace/hooks/hooks.json` - Added PermissionRequest hook + timeouts for all hooks
+- `shared-hooks/ace_after_task.py` - Added tool_use_id to trajectory tracking (lines 66, 81-82)
+- `plugins/ace/.claude-plugin/plugin.json` - Version bump to v5.1.6
+- `plugins/ace/CLAUDE.md` - Added "New in v5.1.6" section with feature highlights
+
+**Testing**:
+- ✅ PermissionRequest hook auto-approves `ce-ace search`, `status`, `patterns`
+- ✅ PermissionRequest hook auto-denies `ce-ace clear`
+- ✅ tool_use_id field captured in trajectory when available
+- ✅ Hook timeouts prevent blocking on slow operations
+
+**Requirements**:
+- **Minimum CE-ACE CLI**: v1.0.11+ (unchanged)
+- **Claude Code**: v2.0.43+ recommended (for tool_use_id support)
+
+**Impact**:
+- Faster workflow - no permission prompts for safe ACE operations
+- Better debugging - tool_use_id enables precise execution tracking
+- More reliable - custom timeouts prevent hook failures
+
 ## [5.1.5] - 2025-11-19
 
 ### 🐛 Bug Fixes & Architecture Improvements
