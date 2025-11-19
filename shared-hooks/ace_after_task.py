@@ -63,17 +63,25 @@ def extract_execution_trace(event):
     for idx, tool in enumerate(tool_uses, 1):
         tool_name = tool.get('tool_name', 'unknown')
         tool_desc = tool.get('description', '')
+        tool_use_id = tool.get('tool_use_id')  # NEW: Claude Code v2.0.43+
 
         # Track files that were modified
         if tool_name in ['Edit', 'Write'] and tool_desc:
             # Extract file path from description (usually contains path)
             files_modified.add(tool_desc.split()[0] if tool_desc else 'unknown')
 
-        trajectory.append({
+        # Build trajectory entry with tool_use_id for correlation
+        trajectory_entry = {
             "step": idx,
             "action": f"{tool_name} - {tool_desc}",  # NO TRUNCATION - send full description
             "result": tool.get('result', {}).get('summary', 'completed') if isinstance(tool.get('result'), dict) else 'completed'
-        })
+        }
+
+        # Add tool_use_id if available (Claude Code v2.0.43+)
+        if tool_use_id:
+            trajectory_entry["tool_use_id"] = tool_use_id
+
+        trajectory.append(trajectory_entry)
 
     # If no tool uses, create trajectory from message flow
     if not trajectory and messages:
@@ -132,6 +140,9 @@ def main():
         # Read hook event from stdin
         event = json.load(sys.stdin)
 
+        # Extract hook event name (PreCompact or Stop)
+        hook_event_name = event.get('hook_event_name', 'PreCompact')
+
         # Get project context
         context = get_context()
         if not context:
@@ -160,6 +171,22 @@ def main():
 
         # STEP 2: Build ExecutionTrace from event with rich context
         trace = extract_execution_trace(event)
+
+        # STEP 3: Check if there's substantial work to capture
+        # Skip learning if no real work was done (prevents garbage patterns!)
+        has_substantial_work = (
+            trace['trajectory'] and len(trace['trajectory']) > 0 and
+            not trace['task'].startswith("Session work") and
+            len(trace['result']['output']) > len("Auto-captured session learning") + 50
+        )
+
+        if not has_substantial_work:
+            # No substantial work - skip learning capture
+            output = {
+                "systemMessage": ""  # Silent skip - no need to notify user
+            }
+            print(json.dumps(output))
+            sys.exit(0)
 
         # Build user-visible message lines with details
         message_lines = [
@@ -257,7 +284,7 @@ def main():
         if recalled_patterns and recalled_patterns.get('count', 0) > 0:
             ace_context = f"<ace-patterns>\n{json.dumps(recalled_patterns, indent=2)}\n</ace-patterns>"
             output["hookSpecificOutput"] = {
-                "hookEventName": "PreCompact",
+                "hookEventName": hook_event_name,  # Dynamic: "PreCompact" or "Stop"
                 "additionalContext": ace_context
             }
 

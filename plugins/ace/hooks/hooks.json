@@ -6,7 +6,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_install_cli.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_install_cli.sh",
+            "timeout": 30000
           }
         ]
       }
@@ -17,7 +18,20 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_before_task_wrapper.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_before_task_wrapper.sh",
+            "timeout": 15000
+          }
+        ]
+      }
+    ],
+    "PermissionRequest": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_permission_request_wrapper.sh",
+            "timeout": 5000
           }
         ]
       }
@@ -28,7 +42,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_task_complete_wrapper.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_task_complete_wrapper.sh",
+            "timeout": 10000
           }
         ]
       }
@@ -39,7 +54,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_after_task_wrapper.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_after_task_wrapper.sh",
+            "timeout": 30000
           }
         ]
       }
@@ -50,7 +66,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_after_task_wrapper.sh"
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_after_task_wrapper.sh",
+            "timeout": 30000
           }
         ]
       }

@@ -6,7 +6,9 @@
 """
 ACE Task Complete Hook - PostToolUse Event Handler
 
-Automatically captures learning after substantial task completion.
+Monitors for substantial task completion.
+Actual learning capture happens via PreCompact/Stop hooks to avoid duplicates.
+
 Triggers on meaningful work: Task tool completion, multiple edits, implementations.
 Skips trivial operations: single reads, basic Q&A.
 """
@@ -143,83 +145,6 @@ def is_substantial_task(event):
     return False
 
 
-def extract_task_trace(event):
-    """
-    Build ExecutionTrace from PostToolUse event with RICH context.
-
-    Extracts:
-    - What was done (detailed task description)
-    - How it was done (steps and approach)
-    - What changed (file paths, code snippets)
-    - What was learned (outcomes, errors resolved)
-
-    This prevents generic "Edit: " messages and ensures unique, valuable learning.
-    """
-    from datetime import datetime
-
-    tool_name = event.get('tool_name', 'unknown')
-    tool_description = event.get('description', '')
-    tool_result = event.get('result', {})
-
-    # Build RICH task description with context
-    # Include file paths, specific changes, and intent
-    if tool_name == 'Edit' and tool_description:
-        # Extract file path from description (usually first part)
-        task_description = f"Modified code: {tool_description}"
-    elif tool_name == 'Write' and tool_description:
-        task_description = f"Created/wrote file: {tool_description}"
-    elif tool_name == 'Task' and tool_description:
-        task_description = f"Completed subagent task: {tool_description}"
-    elif tool_name == 'Bash' and 'git commit' in tool_description.lower():
-        task_description = f"Committed changes: {tool_description}"
-    else:
-        # Fallback with tool name and description
-        task_description = f"{tool_name}: {tool_description}" if tool_description else tool_name
-
-    # Build detailed trajectory (capture FULL descriptions - server will filter)
-    trajectory = [{
-        "step": 1,
-        "action": f"{tool_name} - {tool_description}",  # NO TRUNCATION - send all
-        "result": str(tool_result.get('summary', 'completed')) if isinstance(tool_result, dict) else 'completed'
-    }]
-
-    # Detect success/failure from result
-    has_error = False
-    error_details = None
-    if isinstance(tool_result, dict):
-        has_error = bool(tool_result.get('error') or tool_result.get('stderr'))
-        if has_error:
-            error_details = tool_result.get('error') or tool_result.get('stderr', '')
-
-    # Extract output/lessons with FULL CONTEXT (no truncation)
-    # Server Reflector/Curator will handle deduplication and filtering
-    output = ""
-    if isinstance(tool_result, dict):
-        # Include ALL fields for maximum context
-        if tool_result.get('output'):
-            output += f"Output: {tool_result['output']}\n"
-        if tool_result.get('summary'):
-            output += f"Summary: {tool_result['summary']}\n"
-        if tool_result.get('details'):
-            output += f"Details: {tool_result['details']}\n"
-        if error_details:
-            output += f"Error resolved: {error_details}\n"
-
-    # Generous limit (5000 chars) - capture comprehensive context
-    lessons = output[:5000] if output.strip() else f"Successfully completed {tool_name} operation: {tool_description}"
-
-    return {
-        "task": task_description[:2000],  # Increased: 300 → 2000 chars for full context
-        "trajectory": trajectory,
-        "result": {
-            "success": not has_error,
-            "output": lessons  # Up to 5000 chars of lessons
-        },
-        "timestamp": datetime.now().isoformat(),
-        "trigger": "PostToolUse"
-    }
-
-
 def main():
     try:
         # Read hook event from stdin
@@ -238,67 +163,12 @@ def main():
             print(json.dumps({}))
             sys.exit(0)
 
-        # Build ExecutionTrace from event
-        trace = extract_task_trace(event)
+        # Substantial work detected - tracking for future learning
+        # NOTE: Actual learning happens via PreCompact/Stop hooks to avoid duplicates
+        # This hook just monitors for substantial work completion
 
-        # Call ce-ace learn --stdin with ExecutionTrace JSON
-        # Context passed via environment variables
-        try:
-            # Build environment with context
-            import os
-            env = os.environ.copy()
-            if context['org']:
-                env['ACE_ORG_ID'] = context['org']
-            if context['project']:
-                env['ACE_PROJECT_ID'] = context['project']
-
-            result = subprocess.run(
-                ['ce-ace', 'learn', '--stdin', '--json'],
-                input=json.dumps(trace),
-                text=True,
-                capture_output=True,
-                timeout=30,
-                env=env
-            )
-
-            if result.returncode == 0:
-                # Learning captured successfully - show details
-                message_lines = [
-                    f"✅ [ACE] Learned from: {trace['task'][:60]}..."
-                ]
-
-                # Parse response to show what was learned
-                try:
-                    response = json.loads(result.stdout)
-
-                    # Show pattern count if available
-                    patterns_count = response.get('patterns_extracted')
-                    if patterns_count:
-                        message_lines.append(f"   📝 {patterns_count} new patterns")
-
-                    # Show sections affected
-                    sections = response.get('sections_affected', [])
-                    if sections:
-                        sections_str = ', '.join(sections[:2])
-                        if len(sections) > 2:
-                            sections_str += f' +{len(sections)-2} more'
-                        message_lines.append(f"   📚 {sections_str}")
-
-                except (json.JSONDecodeError, Exception):
-                    pass  # No extra details available
-
-                output = {
-                    "systemMessage": "\n".join(message_lines)
-                }
-            else:
-                # Failed silently - don't interrupt user
-                output = {}
-
-        except (subprocess.TimeoutExpired, FileNotFoundError, Exception):
-            # Fail silently - don't interrupt workflow
-            output = {}
-
-        print(json.dumps(output))
+        # Silent exit - no learning capture here
+        print(json.dumps({}))
         sys.exit(0)
 
     except Exception as e:
