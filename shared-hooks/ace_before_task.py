@@ -8,17 +8,19 @@ ACE Before Task Hook - UserPromptSubmit Event Handler
 
 Searches ACE playbook for relevant patterns when user starts a task.
 Uses ce-ace search --stdin to avoid shell escaping issues.
+Supports session pinning (v1.0.11+) for pattern persistence across compaction.
 """
 
 import json
 import sys
+import uuid
 from pathlib import Path
 from typing import Dict, Any
 
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 
-from ace_cli import run_search
+from ace_cli import run_search, check_session_pinning_available
 from ace_context import get_context
 
 
@@ -42,12 +44,26 @@ def main():
             print("⚠️ [ACE] No project context found - skipping search")
             sys.exit(0)
 
-        # Call ce-ace search --stdin
+        # Generate unique session ID for pattern pinning
+        session_id = str(uuid.uuid4())
+        use_session_pinning = check_session_pinning_available()
+
+        # Store session ID for PreCompact hook (recall patterns after compaction)
+        if use_session_pinning and context['project']:
+            try:
+                session_file = Path(f"/tmp/ace-session-{context['project']}.txt")
+                session_file.write_text(session_id)
+            except Exception:
+                # Non-fatal: continue without session pinning
+                use_session_pinning = False
+
+        # Call ce-ace search --stdin with optional session pinning
         # Context passed via environment, CLI reads server config for top_k/threshold
         patterns_response = run_search(
             query=user_prompt,
             org=context['org'],
-            project=context['project']
+            project=context['project'],
+            session_id=session_id if use_session_pinning else None
         )
 
         if not patterns_response:
@@ -92,7 +108,7 @@ def main():
 
             user_message = "\n".join(summary_lines)
         else:
-            user_message = "ℹ️  [ACE] No bullets found (threshold may be too high)\n   Try: ce-ace tune --constitution-threshold 0.3"
+            user_message = "ℹ️  [ACE] No patterns found for this query"
 
         # Output JSON with both user message and Claude context
         output = {

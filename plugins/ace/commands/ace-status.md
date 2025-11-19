@@ -24,9 +24,23 @@ if [ -z "${ACE_ORG_ID:-}" ] || [ -z "${ACE_PROJECT_ID:-}" ]; then
   exit 1
 fi
 
-# Note: ce-ace CLI has bugs with plain text output showing 0 bullets
-# Use --json flag until CLI team fixes it
-ce-ace status --json
+# Format output for readability
+ce-ace status --json | jq -r '
+  "📊 ACE Playbook Status",
+  "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+  "Organization: \(.org_id // "Not configured")",
+  "Project: \(.project_id // "Not configured")",
+  "",
+  "📚 Total Patterns: \(.total_bullets // 0)",
+  "",
+  "By Section:",
+  "  • Strategies & Rules: \(.by_section.strategies_and_hard_rules // 0)",
+  "  • Code Snippets: \(.by_section.useful_code_snippets // 0)",
+  "  • Troubleshooting: \(.by_section.troubleshooting_and_pitfalls // 0)",
+  "  • APIs to Use: \(.by_section.apis_to_use // 0)",
+  "",
+  "📈 Average Confidence: \((.avg_confidence // 0) * 100 | floor)%"
+'
 ```
 
 ## What You'll See

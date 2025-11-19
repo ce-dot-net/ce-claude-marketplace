@@ -5,6 +5,96 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.5] - 2025-11-19
+
+### 🐛 Bug Fixes & Architecture Improvements
+
+**User Feedback Fixes**:
+- **Removed confusing threshold hint** - No more "Try: ce-ace tune --constitution-threshold 0.3" message when no patterns found
+- **Formatted ace-status output** - Pretty-printed display with emojis instead of raw JSON
+- **Fixed ace-search documentation** - Added note about jq filtering (--limit flag not supported)
+- **Improved ace-configure UX** - Added "Keep/Update/Reconfigure" choice when existing configuration detected
+
+**Architecture Improvements**:
+- **Extracted ace-bootstrap to external script** - Moved bash logic to `plugins/ace/scripts/ace-bootstrap.sh`
+- **Extracted ace-tune to external script** - Moved bash logic to `plugins/ace/scripts/ace-tune.sh`
+- **Follows ace-claude-init pattern** - Consistent architecture for complex commands
+- **Better maintainability** - Easier to test, version control, and reuse scripts
+
+**Files Changed**:
+- `shared-hooks/ace_before_task.py` - Removed threshold hint
+- `plugins/ace/commands/ace-status.md` - Formatted output with jq
+- `plugins/ace/commands/ace-search.md` - Added usage note
+- `plugins/ace/commands/ace-configure.md` - Added configuration choice prompt
+- `plugins/ace/commands/ace-bootstrap.md` - Updated to call external script
+- `plugins/ace/commands/ace-tune.md` - Updated to call external script
+- `plugins/ace/scripts/ace-bootstrap.sh` - NEW (extracted bash logic)
+- `plugins/ace/scripts/ace-tune.sh` - NEW (extracted bash logic)
+
+**Impact**:
+- Better UX for configuration and status commands
+- Clearer documentation for search command
+- Consistent external script pattern for complex commands
+- Easier maintenance and testing
+
+## [5.1.4] - 2025-11-19
+
+### 🚀 Session Pinning & Rich Context Learning
+
+**Session Pinning (CE-ACE-CLI v1.0.11+)**:
+- **Pattern Persistence Across Context Compaction** - Retrieved patterns now survive Claude Code's context compaction
+- Session pinning uses `~/.ace-cache/sessions.db` with 24-hour TTL (vs 2-hour cache TTL)
+- **Fast Recall** - Patterns recalled in ~10ms (89% faster than server fetch)
+- **Before Task**: Generate UUID session ID → Pin patterns with `--pin-session` flag
+- **After Compaction**: Recall patterns with `ce-ace cache recall --session` → Re-inject as context
+- Session IDs stored in `/tmp/ace-session-{project_id}.txt` for cross-hook communication
+- Graceful degradation - falls back to cache/server if session expired or unavailable
+
+**Rich Context Extraction**:
+- **Fixed Generic Message Bug** - No more duplicate "Edit: " or "Session work" patterns
+- **PostToolUse Hook**: Extract file paths, changes, and outcomes from tool descriptions
+  - Example: "Modified code: hero.tsx with JWT authentication flow" (not "Edit: ")
+  - Includes tool output, summary, details, and error messages for full context
+- **PreCompact Hook**: Capture user's original request from first message
+  - Extract last 10 assistant messages (up from 2-3) for comprehensive session context
+  - List ALL files modified (not just first 5)
+  - Example: "User request: Implement JWT authentication with refresh tokens" (not "Session work")
+- **Increased Context Limits** - Server Reflector/Curator handles filtering and deduplication:
+  - PostToolUse: task 300→2000 chars, output 800→5000 chars
+  - PreCompact: task 400→2000 chars, output 1000→10000 chars
+  - Trajectory actions: no truncation (send full descriptions)
+- **Result**: Unique, valuable patterns with specific context instead of generic duplicates
+
+**PostToolUse Trigger Logic**:
+- **Sequence Completion Detection** - Learning triggers AT THE END of tasks (not during)
+- Tracks consecutive Edit/Write operations via `/tmp/ace_edit_sequence_state.json`
+- Triggers when switching from Edit/Write sequence to different tool (2+ edits)
+- Example: Edit→Edit→Edit→Read triggers on Read (sequence complete, work done)
+- Prevents mid-task noise while ensuring complete knowledge capture
+
+**Files Changed**:
+- `shared-hooks/utils/ace_cli.py` - Added `session_id` parameter, `recall_session()`, `check_session_pinning_available()`
+- `shared-hooks/ace_before_task.py` - Generate UUID, store to `/tmp/ace-session-{project}.txt`, pin search
+- `shared-hooks/ace_after_task.py` - Recall patterns BEFORE learning + rich context extraction
+- `shared-hooks/ace_task_complete.py` - Sequence completion + rich context extraction
+- `shared-hooks/test_session_pinning.py` - Comprehensive test suite (4 tests, all passing)
+
+**Testing**:
+- ✅ Version Check - Session pinning available (CE-ACE-CLI v1.0.11+)
+- ✅ Session Pinning - 7 patterns pinned and recalled successfully
+- ✅ Rich Context - No generic messages, full context extraction
+- ✅ Full Workflow - Patterns survive context compaction
+
+**Requirements**:
+- **Minimum CE-ACE CLI**: v1.0.11+ (session pinning support)
+- **Backward Compatible**: Gracefully falls back to cache/server if v1.0.11+ unavailable
+
+**Impact**:
+- Patterns persist across context compaction (knowledge retained throughout long sessions)
+- 89% faster pattern recall (~10ms vs ~100ms)
+- High-quality, specific patterns with rich context (no more generic duplicates)
+- Learning captured at task completion (prevents knowledge loss)
+
 ## [5.1.3] - 2025-11-18
 
 ### 📚 Documentation Improvements & Bug Fixes

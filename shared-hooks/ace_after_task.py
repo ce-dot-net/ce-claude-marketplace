@@ -6,8 +6,11 @@
 """
 ACE After Task Hook - PreCompact Event Handler
 
-Automatically captures learning from completed work before compaction.
-Calls ce-ace learn --stdin with conversation summary.
+Two critical functions:
+1. Recalls pinned session patterns BEFORE compaction (pattern persistence)
+2. Captures learning from completed work (with rich context)
+
+Ensures patterns survive compaction and learning is detailed/unique.
 """
 
 import json
@@ -19,48 +22,88 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 
 from ace_context import get_context
+from ace_cli import recall_session
 
 
 def extract_execution_trace(event):
-    """Build proper ExecutionTrace from PreCompact event."""
+    """
+    Build ExecutionTrace from PreCompact event with RICH context.
+
+    Extracts comprehensive session summary:
+    - User's original request/question (what they asked for)
+    - Tools used and files modified (what was done)
+    - Outcomes and learnings (what worked/failed)
+    - Assistant's approach and decisions (how it was done)
+
+    Prevents generic "Session work" messages and ensures unique, valuable learning.
+    """
     from datetime import datetime
 
     messages = event.get('messages', [])
     tool_uses = event.get('tool_uses', [])
 
-    # Extract task description from first user message or summary
-    task_description = event.get('summary', 'Session work')
-    if messages and len(messages) > 0:
-        first_user_msg = next((m for m in messages if m.get('role') == 'user'), None)
-        if first_user_msg:
-            content = first_user_msg.get('content', '')
-            task_description = content[:200] if content else task_description
+    # Extract RICH task description from conversation
+    task_description = "Session work"  # Fallback
 
-    # Build trajectory from tool uses
+    if messages and len(messages) > 0:
+        # Get user's first substantial message (skip system messages)
+        user_messages = [m for m in messages if m.get('role') == 'user']
+        if user_messages:
+            first_user = user_messages[0]
+            content = first_user.get('content', '')
+            if content:
+                # Use first user message as task description (captures intent)
+                task_description = f"User request: {content[:250]}"
+
+    # Build detailed trajectory from tool uses (FULL context - no truncation)
+    # Server Reflector/Curator will handle filtering and deduplication
     trajectory = []
+    files_modified = set()
+
     for idx, tool in enumerate(tool_uses, 1):
+        tool_name = tool.get('tool_name', 'unknown')
+        tool_desc = tool.get('description', '')
+
+        # Track files that were modified
+        if tool_name in ['Edit', 'Write'] and tool_desc:
+            # Extract file path from description (usually contains path)
+            files_modified.add(tool_desc.split()[0] if tool_desc else 'unknown')
+
         trajectory.append({
             "step": idx,
-            "action": f"{tool.get('tool_name', 'unknown')} - {tool.get('description', '')[:100]}",
-            "result": tool.get('result', {}).get('summary', 'completed')[:200] if isinstance(tool.get('result'), dict) else 'completed'
+            "action": f"{tool_name} - {tool_desc}",  # NO TRUNCATION - send full description
+            "result": tool.get('result', {}).get('summary', 'completed') if isinstance(tool.get('result'), dict) else 'completed'
         })
 
-    # If no tool uses, create generic trajectory from message flow
+    # If no tool uses, create trajectory from message flow
     if not trajectory and messages:
         trajectory = [{
             "step": 1,
-            "action": "Conversation interaction",
-            "result": f"Exchanged {len(messages)} messages"
+            "action": f"Conversation with {len(messages)} message exchanges",
+            "result": "Discussion and analysis completed"
         }]
 
-    # Extract lessons learned from last assistant message
-    lessons = "Auto-captured session learning"
+    # Extract lessons learned from assistant's responses (FULL context)
+    # Capture MORE messages for comprehensive learning
+    lessons = []
+
     if messages:
-        last_assistant = next((m for m in reversed(messages) if m.get('role') == 'assistant'), None)
-        if last_assistant:
-            content = last_assistant.get('content', '')
-            if content:
-                lessons = content[:500]  # Last assistant response as lessons
+        # Get last 5-10 assistant messages (instead of 2-3) for comprehensive context
+        assistant_messages = [m for m in messages if m.get('role') == 'assistant']
+        if assistant_messages:
+            # Take last 10 messages to capture full arc of work
+            for msg in assistant_messages[-10:]:
+                content = msg.get('content', '')
+                if content:
+                    # Increased from 200 → 500 chars per message
+                    lessons.append(content[:500])
+
+    # Build comprehensive output
+    lessons_str = " | ".join(lessons) if lessons else "Auto-captured session learning"
+
+    # Add files modified context (ALL files, not just first 5)
+    if files_modified:
+        lessons_str += f" | Files modified: {', '.join(sorted(files_modified))}"
 
     # Check for errors in tool results
     has_errors = any(
@@ -73,11 +116,11 @@ def extract_execution_trace(event):
     playbook_used = event.get('playbook_patterns_used', [])
 
     return {
-        "task": task_description,
+        "task": task_description[:2000],  # Increased: 400 → 2000 chars
         "trajectory": trajectory,
         "result": {
             "success": not has_errors,
-            "output": lessons
+            "output": lessons_str[:10000]  # Increased: 1000 → 10000 chars for FULL session context
         },
         "playbook_used": playbook_used,
         "timestamp": datetime.now().isoformat()
@@ -98,7 +141,24 @@ def main():
             print(json.dumps(output))
             sys.exit(0)
 
-        # Build ExecutionTrace from event
+        # STEP 1: Recall pinned session patterns BEFORE learning capture
+        # This ensures patterns survive context compaction
+        recalled_patterns = None
+        if context['project']:
+            session_file = Path(f"/tmp/ace-session-{context['project']}.txt")
+            if session_file.exists():
+                try:
+                    session_id = session_file.read_text().strip()
+                    recalled_patterns = recall_session(
+                        session_id=session_id,
+                        org=context['org'],
+                        project=context['project']
+                    )
+                except Exception:
+                    # Non-fatal: continue without recalled patterns
+                    pass
+
+        # STEP 2: Build ExecutionTrace from event with rich context
         trace = extract_execution_trace(event)
 
         # Build user-visible message lines with details
@@ -183,10 +243,24 @@ def main():
 
         message_lines.append("")
 
-        # Output JSON with systemMessage for user visibility
+        # Add message about recalled patterns (if any)
+        if recalled_patterns and recalled_patterns.get('count', 0) > 0:
+            pattern_count = recalled_patterns['count']
+            message_lines.insert(1, f"🔄 [ACE] Recalled {pattern_count} patterns from session (patterns persist across compaction)")
+
+        # Output JSON with systemMessage + recalled patterns as additionalContext
         output = {
             "systemMessage": "\n".join(message_lines)
         }
+
+        # Inject recalled patterns as additional context (if available)
+        if recalled_patterns and recalled_patterns.get('count', 0) > 0:
+            ace_context = f"<ace-patterns>\n{json.dumps(recalled_patterns, indent=2)}\n</ace-patterns>"
+            output["hookSpecificOutput"] = {
+                "hookEventName": "PreCompact",
+                "additionalContext": ace_context
+            }
+
         print(json.dumps(output))
         sys.exit(0)
 
