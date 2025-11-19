@@ -51,6 +51,6 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 ---
 
 **Version**: v5.1.5
-**Requires**: ce-ace CLI v1.0.4+
+**Requires**: ce-ace CLI v1.0.11+
 
 <!-- ACE_SECTION_END v5.1.5 -->
