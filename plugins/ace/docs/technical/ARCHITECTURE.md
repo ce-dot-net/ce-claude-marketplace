@@ -4,7 +4,99 @@
 
 This document provides a comprehensive analysis of how the ACE (Agentic Context Engineering) plugin implements the ACE framework architecture, including verification of all components.
 
-**Current Version**: 3.3.2 (Dual-Config Architecture, Version Checking, Auto-Migration)
+**Current Version**: 5.1.4 (CLI-Based Architecture, Session Pinning, Rich Context Learning)
+
+---
+
+## 🆕 New in v5.1.4: Session Pinning & Rich Context Learning
+
+### Session Pinning Architecture
+
+**Problem Solved**: Retrieved patterns were lost after Claude Code's context compaction, forcing re-fetching from server or losing knowledge mid-task.
+
+**Solution**: Session pinning with 24-hour TTL in local SQLite database, enabling fast pattern recall across context compaction events.
+
+**Architecture**:
+```
+┌─────────────────────────────────────────────────────────┐
+│ UserPromptSubmit Hook: Pattern Retrieval & Pinning    │
+│ 1. Generate UUID session ID                            │
+│ 2. Store session ID in /tmp/ace-session-{project}.txt │
+│ 3. Call: ce-ace search --stdin --pin-session {uuid}   │
+│ 4. Patterns saved to ~/.ace-cache/sessions.db         │
+│ 5. Inject patterns as <ace-patterns> context           │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ Work Phase: Patterns Persist in Session Storage       │
+│ - Session TTL: 24 hours (vs 2-hour cache TTL)         │
+│ - Survives context compaction events                   │
+│ - No server calls needed for recall                    │
+└─────────────────────────────────────────────────────────┘
+                    ↓
+┌─────────────────────────────────────────────────────────┐
+│ PreCompact Hook: Pattern Recall Before Compaction     │
+│ 1. Read session ID from /tmp/ace-session-{project}.txt│
+│ 2. Call: ce-ace cache recall --session {uuid}         │
+│ 3. Retrieve patterns in ~10ms (89% faster vs server)  │
+│ 4. Re-inject as additionalContext                      │
+│ 5. Continue learning with full pattern context        │
+└─────────────────────────────────────────────────────────┘
+```
+
+**Benefits**:
+- **89% Faster Recall**: ~10ms (session cache) vs ~100ms (server fetch)
+- **Pattern Persistence**: 24-hour TTL ensures patterns survive multiple compaction cycles
+- **Zero Server Load**: Recall operations are fully local (SQLite query)
+- **Graceful Degradation**: Falls back to cache/server if session expired or unavailable
+
+**Implementation Files**:
+- `shared-hooks/utils/ace_cli.py` - Session pinning functions (`run_search`, `recall_session`, `check_session_pinning_available`)
+- `shared-hooks/ace_before_task.py` - UUID generation, session storage, pattern pinning
+- `shared-hooks/ace_after_task.py` - Session recall, pattern re-injection
+
+**Requirements**: CE-ACE CLI v1.0.11+ (introduces session pinning support)
+
+### Rich Context Extraction
+
+**Problem Solved**: Hooks were sending generic messages ("Edit: ", "Session work") creating duplicate, low-value patterns in the playbook.
+
+**Solution**: Extract comprehensive context from events - user requests, file paths, changes, outcomes, error resolutions.
+
+**PostToolUse Hook Improvements**:
+```python
+# Before (v5.1.3):
+task = "Edit: "  # Generic, no context
+
+# After (v5.1.4):
+task = "Modified code: hero.tsx with JWT authentication flow"
+# Includes: file path, specific changes, intent
+```
+
+**Context Extraction Strategy**:
+- Extract file paths from tool descriptions
+- Include tool output, summary, details, error messages
+- Capture 10 assistant messages (up from 2-3) for full session arc
+- List ALL files modified (not just first 5)
+- Increased limits: task 300→2000 chars, output 800→10000 chars
+- No trajectory truncation (send full descriptions to server)
+
+**Server-Side Filtering**:
+- Reflector (Sonnet 4) and Curator (Haiku 4.5) handle deduplication
+- Hooks send FULL context, server extracts valuable patterns
+- Result: Unique, specific patterns with actionable details
+
+**PostToolUse Trigger Logic**:
+- **Sequence Completion Detection**: Learning triggers when work is COMPLETE (not mid-task)
+- Tracks consecutive Edit/Write operations via `/tmp/ace_edit_sequence_state.json`
+- Triggers when switching from Edit/Write to different tool (after 2+ edits)
+- Example: `Edit→Edit→Edit→Read` triggers on Read (sequence complete)
+- Prevents mid-task noise while ensuring complete knowledge capture
+
+**Impact**:
+- No more generic "Edit: " or "Session work" patterns
+- Playbook filled with specific, valuable lessons
+- Learning captured at task completion (prevents knowledge loss)
 
 ---
 

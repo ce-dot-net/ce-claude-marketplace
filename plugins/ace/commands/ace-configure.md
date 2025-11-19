@@ -229,11 +229,53 @@ echo ""
        echo "  Organization ID: $EXISTING_ORG"
        echo "  Project ID: $EXISTING_PROJECT"
        echo ""
+       # Ask user what they want to do - STOP HERE AND PROMPT
+       EXISTING_CONFIG="true"
      fi
    fi
    ```
 
-3. **Read Global Config**:
+3. **Prompt for Action** (if existing config found):
+
+   If existing configuration was detected, use AskUserQuestion:
+   ```javascript
+   {
+     questions: [
+       {
+         question: "Found existing ACE configuration. What would you like to do?",
+         header: "Config Action",
+         multiSelect: false,
+         options: [
+           {
+             label: "Keep existing configuration",
+             description: "No changes - use current org and project settings"
+           },
+           {
+             label: "Update project only",
+             description: "Keep organization, select a different project"
+           },
+           {
+             label: "Reconfigure everything",
+             description: "Fresh setup - change both organization and project"
+           }
+         ]
+       }
+     ]
+   }
+   ```
+
+   Based on user's choice:
+   - **"Keep existing configuration"** → Exit early:
+     ```bash
+     echo "✅ Keeping existing configuration"
+     echo "   Organization: $EXISTING_ORG"
+     echo "   Project: $EXISTING_PROJECT"
+     exit 0
+     ```
+   - **"Update project only"** → Skip to Step 5 (project selection), reuse $EXISTING_ORG
+   - **"Reconfigure everything"** → Continue with Step 4 (full flow)
+
+4. **Read Global Config**:
    ```bash
    GLOBAL_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/ace/config.json"
 

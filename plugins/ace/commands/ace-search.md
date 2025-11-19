@@ -51,8 +51,13 @@ ce-ace search "$*"
   - Default: Uses server config from `ce-ace tune show`
   - Range: 0.0 - 1.0 (higher = stricter matching)
   - Only specify if you want to override project's default
-- **--limit**: Maximum patterns to return (optional, overrides server config)
 - **--json**: Return JSON format for programmatic use
+
+**Note**: To limit number of results, use `jq` for filtering:
+```bash
+ce-ace search "query" --json | jq '.patterns[:5]'  # First 5 results
+```
+The `--limit` flag is not supported by ce-ace CLI. Use `--top-k` via server config (`/ace-tune`) instead.
 
 ### Example Usage
 

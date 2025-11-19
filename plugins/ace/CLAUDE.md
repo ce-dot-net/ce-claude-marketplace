@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.1.3 -->
+<!-- ACE_SECTION_START v5.1.5 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -50,7 +50,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.1.3
+**Version**: v5.1.5
 **Requires**: ce-ace CLI v1.0.4+
 
-<!-- ACE_SECTION_END v5.1.3 -->
+<!-- ACE_SECTION_END v5.1.5 -->

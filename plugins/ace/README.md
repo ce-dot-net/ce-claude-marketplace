@@ -2,15 +2,15 @@
 
 **Agentic Context Engineering** - Self-improving Claude Code plugin using automatic pattern learning.
 
-## 🎯 What's New in v5.0.0
+## 🎯 What's New in v5.1.4
 
-**Complete architecture refactor: MCP → CLI**
+**Session Pinning & Rich Context Learning**
 
-- ✅ **No MCP server** - Direct CLI integration
-- ✅ **No subagents** - Simple hooks + commands
-- ✅ **60% faster** - No Task tool overhead
-- ✅ **Easier debugging** - Direct subprocess calls
-- ✅ **Simpler setup** - Just install ce-ace CLI
+- ✅ **Pattern Persistence** - Patterns survive context compaction (24-hour session TTL)
+- ✅ **89% Faster Recall** - Session cache ~10ms vs ~100ms server fetch
+- ✅ **Rich Context** - No more generic "Edit: " messages, full task descriptions
+- ✅ **Smart Triggers** - Learning at task completion (not mid-work)
+- ✅ **Server-Side Filtering** - Send full context, Reflector/Curator handle deduplication
 
 ## 🚀 Quick Start
 
@@ -20,7 +20,7 @@
 npm install -g @ce-dot-net/ce-ace-cli
 ```
 
-**Requirements:** ce-ace >= v1.0.4 (critical threshold bug fix - ensures server constitution_threshold is applied)
+**Requirements:** ce-ace >= v1.0.11 (session pinning support for pattern persistence across context compaction)
 
 ### 2. Enable Plugin
 
@@ -55,13 +55,19 @@ Hooks automatically:
 
 **Before Implementation:**
 - Hook detects keywords: `implement`, `build`, `create`, `fix`, `debug`, `refactor`, etc.
-- Calls `ce-ace search --stdin` with your prompt
+- Calls `ce-ace search --stdin --pin-session` with your prompt
+- Pins patterns to session (24-hour TTL, survives context compaction)
 - Injects relevant patterns as hidden context
 - Shows summary: `🔍 [ACE] Found 3 relevant patterns`
 
+**During Work:**
+- Patterns persist in session storage (`~/.ace-cache/sessions.db`)
+- Fast recall (~10ms) when context compacts
+
 **After Completion:**
-- Hook reminds: `📚 [ACE] Run /ace-learn to capture patterns`
-- You run `/ace-learn` to save lessons interactively
+- Hook auto-captures learning with rich context (task description, files modified, outcomes)
+- Shows: `✅ [ACE] Learned from: [task description]...`
+- Patterns saved with specific, valuable context (no generic messages)
 
 ### Slash Commands
 
@@ -361,6 +367,7 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Version**: v5.0.0 (MCP → CLI Migration)
+**Version**: v5.1.4 (Session Pinning & Rich Context)
 **Status**: Active Development
 **Maintainer**: CE.NET Team
+**Requires**: CE-ACE CLI v1.0.11+

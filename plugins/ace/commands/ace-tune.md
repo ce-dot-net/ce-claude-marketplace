@@ -37,7 +37,7 @@ Allows you to **fetch and update ACE project configuration** in real-time:
 
 ## Instructions for Claude
 
-When the user runs `/ace-tune [action] [params]`, use ce-ace CLI directly:
+When the user runs `/ace-tune [action] [params]`, execute the tune script:
 
 ### 1. View Current Configuration
 
@@ -45,12 +45,11 @@ When the user runs `/ace-tune [action] [params]`, use ce-ace CLI directly:
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Export context for CLI
-export ACE_ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-export ACE_PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+# Get plugin root directory
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
-# Show current config - CLI fetches from server
-ce-ace tune show
+# Execute tune script - shows current config
+exec "${PLUGIN_ROOT}/scripts/ace-tune.sh" show
 ```
 
 **Display format:**

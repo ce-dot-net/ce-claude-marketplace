@@ -7,14 +7,15 @@ import os
 from typing import Optional, Dict, Any
 
 
-def run_search(query: str, org: str = None, project: str = None) -> Optional[Dict[str, Any]]:
+def run_search(query: str, org: str = None, project: str = None, session_id: str = None) -> Optional[Dict[str, Any]]:
     """
-    Call ce-ace search --stdin
+    Call ce-ace search --stdin with optional session pinning
 
     Args:
         query: Search query text
         org: Organization ID (optional, passed via environment)
         project: Project ID (optional, passed via environment)
+        session_id: Session ID to pin results to (optional, requires ce-ace v1.0.11+)
 
     Returns:
         Parsed JSON response or None on failure
@@ -29,6 +30,10 @@ def run_search(query: str, org: str = None, project: str = None) -> Optional[Dic
         Context passed via environment variables (ACE_ORG_ID, ACE_PROJECT_ID).
         CLI reads server config (search_top_k, constitution_threshold) automatically.
         No need to pass --org, --project flags!
+
+    Session Pinning (v1.0.11+):
+        If session_id provided, patterns are pinned to session storage for 24h.
+        Enables fast recall after context compaction via recall_session().
     """
     try:
         # Build environment with context
@@ -38,8 +43,13 @@ def run_search(query: str, org: str = None, project: str = None) -> Optional[Dic
         if project:
             env['ACE_PROJECT_ID'] = project
 
+        # Build command with optional session pinning
+        cmd = ['ce-ace', 'search', '--stdin', '--json']
+        if session_id:
+            cmd.extend(['--pin-session', session_id])
+
         result = subprocess.run(
-            ['ce-ace', 'search', '--stdin', '--json'],
+            cmd,
             input=query.encode('utf-8'),
             capture_output=True,
             timeout=10,
@@ -142,3 +152,106 @@ def run_status(org: str = None, project: str = None) -> Optional[Dict[str, Any]]
 
     except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
         return None
+
+
+def recall_session(session_id: str, org: str = None, project: str = None) -> Optional[Dict[str, Any]]:
+    """
+    Recall pinned patterns from session storage (v1.0.11+)
+
+    Args:
+        session_id: Session ID to recall
+        org: Organization ID (optional, passed via environment)
+        project: Project ID (optional, passed via environment)
+
+    Returns:
+        Recalled patterns as dict, or None on error
+
+    Note:
+        Session recall is FAST (~10ms) and does NOT make server calls.
+        Sessions expire after 24 hours (configurable TTL).
+        Non-fatal failure - returns None if session not found/expired.
+
+    Response format (same as run_search):
+        {
+            "similar_patterns": [...],
+            "count": N,
+            "threshold": 0.75,
+            "session_id": "uuid",
+            "pinned_at": timestamp,
+            "expires_at": timestamp
+        }
+    """
+    try:
+        # Build environment with context
+        env = os.environ.copy()
+        if org:
+            env['ACE_ORG_ID'] = org
+        if project:
+            env['ACE_PROJECT_ID'] = project
+
+        result = subprocess.run(
+            ['ce-ace', 'cache', 'recall', '--session', session_id, '--json'],
+            capture_output=True,
+            timeout=5,  # Fast recall, should be <10ms
+            env=env
+        )
+
+        if result.returncode != 0:
+            # Session not found or expired - this is non-fatal
+            return None
+
+        return json.loads(result.stdout)
+
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
+        return None
+
+
+def check_session_pinning_available() -> bool:
+    """
+    Check if ce-ace CLI supports session pinning (v1.0.11+)
+
+    Returns:
+        True if session pinning available, False otherwise
+
+    Usage:
+        if check_session_pinning_available():
+            # Use session pinning
+            run_search(query, session_id=session_id)
+        else:
+            # Gracefully degrade
+            run_search(query)
+    """
+    try:
+        result = subprocess.run(
+            ['ce-ace', '--version'],
+            capture_output=True,
+            timeout=5
+        )
+
+        if result.returncode != 0:
+            return False
+
+        version_str = result.stdout.decode('utf-8').strip()
+
+        # Parse version (e.g., "1.0.11" -> [1, 0, 11])
+        parts = version_str.split('.')
+        if len(parts) < 3:
+            return False
+
+        try:
+            major, minor, patch = map(int, parts[:3])
+        except ValueError:
+            return False
+
+        # Session pinning requires v1.0.11+
+        if major > 1:
+            return True
+        if major == 1 and minor > 0:
+            return True
+        if major == 1 and minor == 0 and patch >= 11:
+            return True
+
+        return False
+
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
