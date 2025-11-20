@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.1.7 -->
+<!-- ACE_SECTION_START v5.1.8 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -49,16 +49,15 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 - `✅ [ACE] Auto-approved: ce-ace search` - Permission auto-approval
 - `✅ [ACE] Learned from: Implementation task...` - After completion
 
-## New in v5.1.7
+## New in v5.1.8
 
-**Enhanced Learning & Query Optimization**:
-- ✅ **Learning Feedback** - See detailed statistics (patterns created/updated + quality %)
-- ✅ **Query Optimization** - Abbreviation expansion for better pattern retrieval
-- ✅ **Quality Filtering** - Client-side filtering removes low-confidence noise
+**PostToolUse Learning Capture Fix**:
+- ✅ **Immediate Capture** - Learning captured when task completes (not waiting for PreCompact)
+- ✅ **Reliable Feedback** - See learning statistics immediately after substantial work
 
 ---
 
-**Version**: v5.1.7
-**Requires**: ce-ace CLI v1.0.11+ (v1.0.13+ for learning statistics)
+**Version**: v5.1.8
+**Requires**: ce-ace CLI v1.0.13+
 
-<!-- ACE_SECTION_END v5.1.7 -->
+<!-- ACE_SECTION_END v5.1.8 -->

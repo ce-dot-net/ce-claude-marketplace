@@ -5,6 +5,57 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.8] - 2025-11-20
+
+### 🐛 PostToolUse Learning Capture Fix (CRITICAL)
+
+**The Problem**:
+- PostToolUse hook was **detecting** substantial work but **not capturing learning** - just silent exit
+- Relied on PreCompact firing later (which might never happen!)
+- Result: Learning often missed entirely
+
+**The Solution**:
+- PostToolUse now **captures learning immediately** when substantial work detected
+- No more waiting for unreliable PreCompact hook
+- Users see feedback right away: `✅ [ACE] Task complete - Learning captured!`
+
+**Files Changed**:
+- `shared-hooks/ace_task_complete.py` (lines 148-286):
+  - Added `build_execution_trace_from_posttooluse(event)` - Builds ExecutionTrace from PostToolUse
+  - Added `capture_learning(trace, context)` - Calls ce-ace learn --stdin
+  - Updated `main()` - Captures learning and shows user feedback
+  - Removed silent exit - Now actually does something!
+
+**Triggers**:
+- Edit sequences (2+ edits complete, then switch to different tool)
+- Task tool completion
+- Git commits
+
+**User Impact**:
+- Learning captured **immediately** when task completes
+- **Immediate feedback** with learning statistics
+- **Reliable** - No dependency on PreCompact timing
+- **Context preservation** - Captures while context is fresh
+
+**Documentation**:
+- **NEW**: `docs/POSTTOOLUSE_LEARNING_FIX.md` - Complete fix documentation
+
+**Requirements Update**:
+- **Minimum CE-ACE CLI**: v1.0.13+ (was v1.0.11+)
+- **Reason**: v1.0.13 adds learning_statistics support (already integrated in v5.1.7)
+- **ACE Server**: v3.9.0+ (v3.10.0+ for learning statistics)
+
+**Backward Compatibility**:
+- ✅ Works with old servers (v3.9.x) - graceful degradation
+- ✅ Works with new servers (v3.10.0+) - enhanced statistics
+- ✅ No breaking changes
+
+**Testing**:
+- ✅ Learning captured immediately after edit sequences
+- ✅ User sees feedback with statistics
+- ✅ No more missed learning opportunities
+- ✅ Graceful degradation on old servers
+
 ## [5.1.7] - 2025-11-20
 
 ### 🚀 Enhanced Learning Feedback & Query Optimization

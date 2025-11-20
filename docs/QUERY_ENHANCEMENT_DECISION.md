@@ -17,7 +17,7 @@ def enhance_query_for_search(user_prompt: str) -> str:
 
 **Why This Was Wrong**:
 - ❌ Applied **keyword search optimization** to a **semantic search system**
-- ❌ ACE uses embeddings (all-MiniLM-L6-v2), not keyword matching (BM25)
+- ❌ ACE uses code-specialized embeddings, not keyword matching (BM25)
 - ❌ Generic words like "patterns examples strategies" **DILUTE** the semantic signal
 
 **Evidence** (from server team):
@@ -160,7 +160,7 @@ Return high-quality patterns to Claude
 
 **Server Team Feedback** (the experts who got it right):
 
-> "We use semantic embeddings (all-MiniLM-L6-v2), not keyword search.
+> "We use code-specialized semantic embeddings, not keyword search.
 > Research shows embeddings work better with natural language, not keyword
 > stuffing. Adding generic words like 'patterns examples strategies' actually
 > dilutes the semantic signal and produces worse results."
@@ -171,7 +171,7 @@ Return high-quality patterns to Claude
 
 ## References
 
-- **ACE Server**: Uses `all-MiniLM-L6-v2` embeddings (384 dimensions)
+- **ACE Server**: Uses code-specialized embeddings (384 dimensions, semantic search)
 - **Similarity**: Cosine similarity on embeddings (not keyword matching)
 - **Research**: Embedding models perform better with natural language queries
 - **Evidence**: 0.82 NDCG (natural) vs 0.71 NDCG (keyword-stuffed)

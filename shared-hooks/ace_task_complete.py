@@ -145,6 +145,90 @@ def is_substantial_task(event):
     return False
 
 
+def build_execution_trace_from_posttooluse(event):
+    """
+    Build ExecutionTrace from PostToolUse event.
+
+    Note: PostToolUse has limited context (just recent tool use),
+    but we capture what's available for immediate learning.
+    """
+    from datetime import datetime
+
+    tool_name = event.get('tool_name', 'unknown')
+    tool_description = event.get('description', '')
+
+    # Build task description from recent context
+    task_description = f"Task completed: {tool_description[:200]}" if tool_description else "Task completed"
+
+    # Build trajectory from accumulated edit sequence
+    trajectory = []
+    state = load_sequence_state()
+
+    if state.get('edit_count', 0) >= 2:
+        # We have an edit sequence - this is what we're learning from
+        task_description = f"Code modifications: {state['edit_count']} files edited"
+        for i in range(1, state['edit_count'] + 1):
+            trajectory.append({
+                "step": i,
+                "action": "Edit - File modification",
+                "result": "completed"
+            })
+
+    # Add current tool as final step
+    trajectory.append({
+        "step": len(trajectory) + 1,
+        "action": f"{tool_name} - {tool_description}",
+        "result": "completed"
+    })
+
+    return {
+        "task": task_description,
+        "trajectory": trajectory,
+        "result": {
+            "success": True,
+            "output": f"Completed: {tool_description}"
+        },
+        "playbook_used": [],
+        "timestamp": datetime.now().isoformat()
+    }
+
+
+def capture_learning(trace, context):
+    """
+    Capture learning by calling ce-ace learn --stdin.
+    Returns learning statistics if available.
+    """
+    import os
+
+    # Build environment with context
+    env = os.environ.copy()
+    if context.get('org'):
+        env['ACE_ORG_ID'] = context['org']
+    if context.get('project'):
+        env['ACE_PROJECT_ID'] = context['project']
+
+    try:
+        result = subprocess.run(
+            ['ce-ace', 'learn', '--stdin', '--json'],
+            input=json.dumps(trace),
+            text=True,
+            capture_output=True,
+            timeout=30,
+            env=env
+        )
+
+        if result.returncode == 0:
+            try:
+                response = json.loads(result.stdout)
+                return response.get('learning_statistics')
+            except json.JSONDecodeError:
+                return None
+        return None
+
+    except Exception:
+        return None
+
+
 def main():
     try:
         # Read hook event from stdin
@@ -163,12 +247,37 @@ def main():
             print(json.dumps({}))
             sys.exit(0)
 
-        # Substantial work detected - tracking for future learning
-        # NOTE: Actual learning happens via PreCompact/Stop hooks to avoid duplicates
-        # This hook just monitors for substantial work completion
+        # Substantial work detected - capture learning immediately!
+        trace = build_execution_trace_from_posttooluse(event)
 
-        # Silent exit - no learning capture here
-        print(json.dumps({}))
+        # Capture learning
+        stats = capture_learning(trace, context)
+
+        # Build user feedback
+        message_lines = ["✅ [ACE] Task complete - Learning captured!"]
+
+        if stats:
+            # Display enhanced feedback (v1.0.13+)
+            created = stats.get('patterns_created', 0)
+            updated = stats.get('patterns_updated', 0)
+
+            if created > 0 or updated > 0:
+                message_lines.append("")
+                message_lines.append("📚 ACE Learning:")
+                if created > 0:
+                    message_lines.append(f"   • {created} new pattern{'s' if created != 1 else ''}")
+                if updated > 0:
+                    message_lines.append(f"   • {updated} pattern{'s' if updated != 1 else ''} updated")
+
+                conf = stats.get('average_confidence', 0)
+                if conf > 0:
+                    message_lines.append(f"   • Quality: {int(conf * 100)}%")
+
+        # Return feedback to user
+        output = {
+            "systemMessage": "\n".join(message_lines)
+        }
+        print(json.dumps(output))
         sys.exit(0)
 
     except Exception as e:

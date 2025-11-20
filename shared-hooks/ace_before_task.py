@@ -29,9 +29,9 @@ def expand_abbreviations(prompt: str) -> str:
     Minimal query enhancement: Expand ONLY common abbreviations for clarity.
     DO NOT add generic keywords - embeddings work better with natural language!
 
-    Based on server team feedback: Semantic search uses embeddings (all-MiniLM-L6-v2),
-    not keyword matching. Adding generic words like "patterns examples strategies"
-    actually DILUTES the semantic signal.
+    Based on server team feedback: Semantic search uses embeddings, not keyword
+    matching. Adding generic words like "patterns examples strategies" actually
+    DILUTES the semantic signal.
 
     Research evidence:
     - Natural language queries: 0.82 NDCG
