@@ -173,11 +173,11 @@ def main():
         trace = extract_execution_trace(event)
 
         # STEP 3: Check if there's substantial work to capture
-        # Skip learning if no real work was done (prevents garbage patterns!)
+        # Paper-aligned: Focus on trajectory completeness and execution feedback (arXiv:2510.04618v1)
+        # Skip only if: no trajectory OR auto-learning session work
         has_substantial_work = (
             trace['trajectory'] and len(trace['trajectory']) > 0 and
-            not trace['task'].startswith("Session work") and
-            len(trace['result']['output']) > len("Auto-captured session learning") + 50
+            not trace['task'].startswith("Session work")
         )
 
         if not has_substantial_work:
@@ -233,24 +233,42 @@ def main():
                 # Parse JSON response to show what was learned
                 try:
                     response = json.loads(result.stdout)
-                    if response.get('analysis_triggered'):
-                        message_lines.append("   🧠 Server analysis in progress...")
 
-                    # Show pattern count if available
-                    patterns_count = response.get('patterns_extracted')
-                    if patterns_count:
-                        message_lines.append(f"   📝 {patterns_count} patterns extracted for review")
+                    # NEW: v1.0.13+ enhanced learning statistics
+                    stats = response.get('learning_statistics')
+                    if stats:
+                        # Display enhanced feedback (CLI team recommended format)
+                        message_lines.append("")
+                        message_lines.append("📚 ACE Learning:")
 
-                    # Show sections affected
-                    sections = response.get('sections_affected', [])
-                    if sections:
-                        sections_str = ', '.join(sections)
-                        message_lines.append(f"   📚 Sections: {sections_str}")
+                        # Show what was created/updated
+                        created = stats.get('patterns_created', 0)
+                        updated = stats.get('patterns_updated', 0)
+                        pruned = stats.get('patterns_pruned', 0)
 
-                    # Show summary if available
-                    summary = response.get('summary')
-                    if summary:
-                        message_lines.append(f"   💡 {summary[:100]}")
+                        if created > 0:
+                            message_lines.append(f"   • {created} new pattern{'s' if created != 1 else ''}")
+                        if updated > 0:
+                            message_lines.append(f"   • {updated} pattern{'s' if updated != 1 else ''} updated")
+                        if pruned > 0:
+                            message_lines.append(f"   • {pruned} low-quality pattern{'s' if pruned != 1 else ''} pruned")
+
+                        # Show quality metric
+                        conf = stats.get('average_confidence', 0)
+                        if conf > 0:
+                            message_lines.append(f"   • Quality: {int(conf * 100)}%")
+
+                    else:
+                        # FALLBACK: Old server (v3.9.x and earlier) or analysis skipped
+                        # Try legacy fields for backward compatibility
+                        if response.get('analysis_triggered'):
+                            message_lines.append("   🧠 Server analysis in progress...")
+
+                        # Old format pattern count
+                        patterns_count = response.get('patterns_extracted')
+                        if patterns_count:
+                            message_lines.append(f"   📝 {patterns_count} patterns extracted for review")
+
                 except json.JSONDecodeError:
                     pass  # CLI response wasn't JSON, that's okay
                 except Exception:
