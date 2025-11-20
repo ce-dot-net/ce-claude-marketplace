@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.1.9 -->
+<!-- ACE_SECTION_START v5.1.10 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -49,20 +49,20 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 - `✅ [ACE] Auto-approved: ce-ace search` - Permission auto-approval
 - `📚 [ACE] Automatically capturing learning...` - At session end
 
-## New in v5.1.9
+## New in v5.1.10
 
-**Trash Patterns Fix (CRITICAL)**:
-- ✅ **Quality Improvement** - Disabled learning from tool operations (no more "Edit -", "Write -" patterns)
-- ✅ **Message-Based Learning** - Extracts decisions, gotchas, accomplishments from conversation
-- ✅ **Cleaner Playbooks** - Only meaningful patterns captured (no more trash)
+**Improved Pattern Extraction**:
+- ✅ **Pattern-Based Extraction** - Uses regex for structured content, not keyword matching
+- ✅ **5 Extraction Categories** - Headings, code comments, comparisons, error context, accomplishments
+- ✅ **More Reliable** - Captures structured decisions (**Decision:**, **Gotcha:**, etc.)
 
-**Breaking Change from v5.1.8**:
-- PostToolUse hook disabled (was creating trash patterns)
-- Learning now happens via PreCompact/Stop (once per session, high-quality)
+**Improvements from v5.1.9**:
+- v5.1.9 fixed trash patterns but keyword matching too strict
+- v5.1.10 uses pattern-based extraction for better capture quality
 
 ---
 
-**Version**: v5.1.9
+**Version**: v5.1.10
 **Requires**: ce-ace CLI v1.0.13+
 
-<!-- ACE_SECTION_END v5.1.9 -->
+<!-- ACE_SECTION_END v5.1.10 -->

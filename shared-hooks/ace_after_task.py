@@ -71,6 +71,9 @@ def extract_execution_trace(event):
             files_modified.add(tool_desc.split()[0] if tool_desc else 'unknown')
 
     # Extract high-level insights from conversation messages
+    # Server team guidance: Pattern-based extraction, not keyword matching
+    import re
+
     for msg in messages:
         role = msg.get('role')
         content = msg.get('content', '')
@@ -79,31 +82,88 @@ def extract_execution_trace(event):
         if role != 'assistant':
             continue
 
-        content_lower = content.lower()
+        # 1. Extract structured headings (most reliable)
+        # Look for: "Decision:", "Key decision:", "Strategy:", "Approach:"
+        decision_patterns = [
+            r'(?:^|\n)\*\*Decision \d+[:\-]\s*(.+?)(?:\*\*|\n|$)',  # **Decision 1: ...**
+            r'(?:decision|chose|strategy|approach):\s*(.+?)(?:\n|$)',  # decision: text
+            r'(?:I\'ve|I\'ll|I)\s+(decided|chosen)\s+to\s+(.+?)(?:\.|,|\n)',  # I've decided to...
+            r'using\s+(.+?)\s+(?:to|for|because)',  # using X to/for/because
+        ]
 
-        # Extract decisions (architectural choices, technology selections)
-        if any(word in content_lower for word in ['decided', 'chose', 'using', 'will use', 'approach', 'strategy']):
-            for sentence in content.split('.'):
-                if any(word in sentence.lower() for word in ['decided', 'chose', 'using', 'will use', 'approach']):
-                    clean = sentence.strip()
-                    if len(clean) > 20:  # Meaningful content
-                        decisions.append(clean)
+        for pattern in decision_patterns:
+            matches = re.finditer(pattern, content, re.IGNORECASE | re.MULTILINE)
+            for match in matches:
+                text = match.group(1) if match.lastindex >= 1 else match.group(0)
+                clean = text.strip()
+                if len(clean) > 20 and clean not in decisions:
+                    decisions.append(clean[:200])  # Cap at 200 chars
 
-        # Extract gotchas (errors fixed, pitfalls discovered)
-        if any(word in content_lower for word in ['error', 'issue', 'problem', 'failed', 'fixed', 'solved', 'gotcha']):
-            for sentence in content.split('.'):
-                if any(word in sentence.lower() for word in ['error', 'fixed', 'solved', 'issue', 'problem']):
-                    clean = sentence.strip()
-                    if len(clean) > 20:
-                        gotchas.append(clean)
+        # 2. Extract comparisons and trade-offs (reveal architectural thinking)
+        # Look for: "instead of", "rather than", "prevents", "avoids"
+        comparison_patterns = [
+            r'(.+?)\s+(?:instead of|rather than)\s+(.+?)(?:\.|,|\n)',
+            r'(?:this|that|which)\s+prevents\s+(.+?)(?:\.|,|\n)',
+            r'(?:avoids?|prevent(?:s|ing)?|stop(?:s|ping)?)\s+(.+?)(?:\.|,|\n)',
+        ]
 
-        # Extract accomplishments (what was successfully completed)
-        if any(word in content_lower for word in ['completed', 'working', 'successfully', 'implemented', 'created', 'built']):
-            for sentence in content.split('.'):
-                if any(word in sentence.lower() for word in ['completed', 'working', 'successfully', 'implemented']):
-                    clean = sentence.strip()
-                    if len(clean) > 20:
-                        accomplishments.append(clean)
+        for pattern in comparison_patterns:
+            matches = re.finditer(pattern, content, re.IGNORECASE)
+            for match in matches:
+                full_match = match.group(0).strip()
+                if len(full_match) > 20 and full_match not in decisions:
+                    decisions.append(full_match[:200])
+
+        # 3. Extract from code comments (contain WHY, gotchas, edge cases)
+        # Look for: # comments, // comments, /* comments */
+        comment_patterns = [
+            r'//\s*(.+?)(?:\n|$)',  # // single line
+            r'#\s*(.+?)(?:\n|$)',   # # Python style
+            r'/\*\s*(.+?)\s*\*/',   # /* multi-line */
+        ]
+
+        for pattern in comment_patterns:
+            matches = re.finditer(pattern, content, re.MULTILINE | re.DOTALL)
+            for match in matches:
+                comment = match.group(1).strip()
+                # Comments often explain gotchas or decisions
+                if len(comment) > 20:
+                    if any(word in comment.lower() for word in ['prevent', 'avoid', 'gotcha', 'important', 'note']):
+                        if comment not in gotchas:
+                            gotchas.append(comment[:200])
+                    elif any(word in comment.lower() for word in ['because', 'reason', 'why', 'to']):
+                        if comment not in decisions:
+                            decisions.append(comment[:200])
+
+        # 4. Extract error handling context (not just "error" but explanation)
+        # Look for patterns like: "This prevents X", "Without this, Y happens"
+        error_patterns = [
+            r'(?:this|that)\s+(?:prevents?|fixes?|solves?)\s+(.+?)(?:\.|,|\n)',
+            r'without\s+(?:this|that),?\s+(.+?)(?:\.|,|\n)',
+            r'(?:if we don\'t|must|should|need to)\s+(.+?)\s+(?:to avoid|to prevent|or|otherwise)\s+(.+?)(?:\.|,|\n)',
+        ]
+
+        for pattern in error_patterns:
+            matches = re.finditer(pattern, content, re.IGNORECASE)
+            for match in matches:
+                text = ' '.join([g for g in match.groups() if g]).strip()
+                if len(text) > 20 and text not in gotchas:
+                    gotchas.append(text[:200])
+
+        # 5. Extract accomplishments (completed work with context)
+        # More flexible than keyword matching
+        accomplishment_patterns = [
+            r'(?:I\'ve|I\s+have)\s+(implemented|created|built|added|fixed)\s+(.+?)(?:\.|,|\n)',
+            r'(?:successfully|completed|working)\s+(.+?)(?:\.|,|\n)',
+            r'(?:now|finally)\s+(?:works?|functioning|operational|ready)\s*[:\-]?\s*(.+?)(?:\.|,|\n)',
+        ]
+
+        for pattern in accomplishment_patterns:
+            matches = re.finditer(pattern, content, re.IGNORECASE)
+            for match in matches:
+                text = ' '.join([g for g in match.groups() if g]).strip()
+                if len(text) > 20 and text not in accomplishments:
+                    accomplishments.append(text[:200])
 
     # Build meaningful trajectory from extracted insights
     if decisions:
