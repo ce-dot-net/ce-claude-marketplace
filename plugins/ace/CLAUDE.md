@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.1.8 -->
+<!-- ACE_SECTION_START v5.1.9 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -13,7 +13,7 @@ npm install -g @ce-dot-net/ce-ace-cli
 ## How It Works
 
 **Before tasks**: Hook searches playbook → Injects relevant patterns
-**After tasks**: Hook captures learning → Playbook updates automatically
+**At session end/compact**: Hook captures learning from conversation → Playbook updates automatically
 
 Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
@@ -47,17 +47,22 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 **Messages you'll see**:
 - `🔍 [ACE] Found 3 relevant patterns` - Before tasks
 - `✅ [ACE] Auto-approved: ce-ace search` - Permission auto-approval
-- `✅ [ACE] Learned from: Implementation task...` - After completion
+- `📚 [ACE] Automatically capturing learning...` - At session end
 
-## New in v5.1.8
+## New in v5.1.9
 
-**PostToolUse Learning Capture Fix**:
-- ✅ **Immediate Capture** - Learning captured when task completes (not waiting for PreCompact)
-- ✅ **Reliable Feedback** - See learning statistics immediately after substantial work
+**Trash Patterns Fix (CRITICAL)**:
+- ✅ **Quality Improvement** - Disabled learning from tool operations (no more "Edit -", "Write -" patterns)
+- ✅ **Message-Based Learning** - Extracts decisions, gotchas, accomplishments from conversation
+- ✅ **Cleaner Playbooks** - Only meaningful patterns captured (no more trash)
+
+**Breaking Change from v5.1.8**:
+- PostToolUse hook disabled (was creating trash patterns)
+- Learning now happens via PreCompact/Stop (once per session, high-quality)
 
 ---
 
-**Version**: v5.1.8
+**Version**: v5.1.9
 **Requires**: ce-ace CLI v1.0.13+
 
-<!-- ACE_SECTION_END v5.1.8 -->
+<!-- ACE_SECTION_END v5.1.9 -->

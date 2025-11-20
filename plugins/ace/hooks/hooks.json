@@ -36,18 +36,6 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_task_complete_wrapper.sh",
-            "timeout": 10000
-          }
-        ]
-      }
-    ],
     "PreCompact": [
       {
         "matcher": "",

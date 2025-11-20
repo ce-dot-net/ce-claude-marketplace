@@ -5,6 +5,107 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.9] - 2025-11-20
+
+### 🐛 CRITICAL BUG FIX: Trash Patterns Fix
+
+**FIXED: Hooks creating 700+ trash patterns by learning from tool operations instead of conversation outcomes**
+
+### The Problem
+
+PostToolUse hook was creating 50+ trash patterns per session by learning from tool descriptions:
+- ❌ Pattern: "Edit - Modify file.py" (no value)
+- ❌ Pattern: "Write - Create config.json" (useless)
+- ❌ Pattern: "Bash - Run npm install" (noise)
+- ❌ Result: 3% trash pollution (700/23,000 patterns)
+- ❌ Search quality: Garbage results competing with real patterns
+
+**Root Cause**: PostToolUse hook learned from tool operations, not high-level insights from conversation.
+
+### What Changed
+
+**1. Disabled PostToolUse Hook** (`shared-hooks/ace_task_complete.py`):
+- Added `sys.exit(0)` at line 34 to disable completely
+- Hook was creating 700+ trash patterns
+- Kept code for reference but disabled
+
+**2. Rewrote PreCompact Trajectory Extraction** (`shared-hooks/ace_after_task.py`):
+- Lines 58-128: Replaced tool iteration with message iteration
+- Now extracts from conversation messages, not tool descriptions
+- Captures decisions, gotchas, accomplishments (high-level insights)
+- Example: "JWT 15min access tokens prevent theft" (not "Edit - file.py")
+
+**3. Updated Hook Configuration** (`plugins/ace/hooks/hooks.json`):
+- Removed PostToolUse hook entirely
+- Now only uses: SessionStart, UserPromptSubmit, PermissionRequest, PreCompact, Stop
+- Cleaner, focused learning from conversation outcomes
+
+**4. Updated Plugin Documentation** (`plugins/ace/CLAUDE.md`):
+- Version v5.1.8 → v5.1.9
+- Updated "How It Works" section
+- Added "New in v5.1.9" section explaining trash patterns fix
+- Noted breaking change from v5.1.8
+
+**5. Created Comprehensive Documentation** (`docs/TRASH_PATTERNS_FIX.md`):
+- 350+ line documentation explaining operations vs patterns
+- Testing procedures and validation checklist
+- Examples of good vs bad patterns
+
+### Impact
+
+**Before v5.1.9**:
+- 50+ learning captures per session (PostToolUse)
+- Database: 3% trash (700/23,000 patterns)
+- Search: Polluted with "Edit -", "Write -", "Bash -" garbage
+
+**After v5.1.9**:
+- 1 learning capture per session (PreCompact)
+- Database: No new trash added
+- Search: High-quality patterns only
+
+### Breaking Changes
+
+- **PostToolUse hook disabled** (was enabled in v5.1.8)
+- Users on v5.1.8 should update to v5.1.9 immediately to stop trash creation
+
+### Files Modified
+
+- `shared-hooks/ace_task_complete.py` - Disabled (sys.exit(0) at line 34)
+- `shared-hooks/ace_after_task.py` - Rewritten trajectory extraction (lines 58-128)
+- `plugins/ace/hooks/hooks.json` - Removed PostToolUse hook
+- `plugins/ace/CLAUDE.md` - Updated to v5.1.9, added breaking change notice
+- `docs/TRASH_PATTERNS_FIX.md` - NEW comprehensive documentation
+
+### Server Team Feedback
+
+> "Tool descriptions should NEVER become patterns! Learn from conversation messages (decisions, gotchas), not tool operations."
+
+### Benefits
+
+- ✅ **Stops trash creation immediately** - No more "Edit -", "Write -" patterns
+- ✅ **Improves search quality** - Only meaningful patterns captured
+- ✅ **Better learning** - Extracts high-level insights from conversation
+- ✅ **Cleaner database** - 1-3 patterns per session vs 50+ trash
+- ✅ **Message-based learning** - Captures what Claude decided, not what tools did
+
+### Requirements
+
+- ce-ace CLI v1.0.13+ (unchanged)
+
+### Migration
+
+Update plugin and restart Claude Code. No manual migration needed. Trash patterns already in database will be gradually pruned by server quality algorithms.
+
+### Documentation
+
+See `docs/TRASH_PATTERNS_FIX.md` for comprehensive details on:
+- What are operations vs patterns
+- Why tool descriptions became trash
+- How PreCompact now extracts from messages
+- Testing procedures and validation
+
+---
+
 ## [3.2.39] - 2025-10-30
 
 ### 🔧 TOOLING: Release Manager Agent Path Fix

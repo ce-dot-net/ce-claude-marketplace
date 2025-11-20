@@ -6,15 +6,35 @@
 """
 ACE Task Complete Hook - PostToolUse Event Handler
 
-Monitors for substantial task completion.
-Actual learning capture happens via PreCompact/Stop hooks to avoid duplicates.
+⚠️ DISABLED - This hook creates trash patterns by learning from tool operations.
 
-Triggers on meaningful work: Task tool completion, multiple edits, implementations.
-Skips trivial operations: single reads, basic Q&A.
+Root Cause:
+- Learned from OPERATIONS (what was done): "Edit - Create file", "Write - Update config"
+- NOT from PATTERNS (how to solve problems): "JWT refresh rotation prevents theft"
+
+Impact:
+- 700+ trash patterns in database ("Edit - ", "Write - ", "Bash - ")
+- Polluted playbooks with no valuable knowledge
+- Search returns garbage results
+
+Server Team Decision:
+- Disable PostToolUse learning (too noisy, learns from individual tools)
+- Keep PreCompact learning (once per session, extracts from messages)
+
+See: docs/TRASH_PATTERNS_FIX.md
 """
 
 import json
 import sys
+
+# CRITICAL: Exit immediately - don't run the rest of this hook
+# PostToolUse fires after EVERY tool use (50+ times per session)
+# Learning from individual tool operations creates trash patterns
+# Real patterns come from high-level decisions/outcomes in conversation messages
+sys.exit(0)
+
+# ===== CODE BELOW IS DISABLED =====
+# (Kept for reference - may be removed in future version)
 import subprocess
 import time
 from pathlib import Path
