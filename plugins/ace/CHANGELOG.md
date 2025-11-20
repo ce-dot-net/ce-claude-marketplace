@@ -5,6 +5,61 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.10] - 2025-11-20
+
+### 🔧 Improved Pattern Extraction
+
+**The Problem**:
+- v5.1.9 eliminated trash patterns (✅ success!)
+- But keyword matching was too strict (❌ missed valid patterns)
+- Missed learning opportunities from structured content
+
+**The Solution**:
+- Pattern-based extraction using regex and structured analysis
+- 5 extraction categories for comprehensive capture
+- More reliable than simple keyword matching
+
+**Extraction Categories**:
+
+1. **Structured Headings** (most reliable):
+   - `**Decision 1:** Short-lived tokens`
+   - `**Gotcha:** Token rotation requirement`
+   - `**Important:** Security considerations`
+
+2. **Code Comments** (contain WHY):
+   - `// This prevents XSS attacks`
+   - `# Must validate before using`
+
+3. **Comparisons** (reveal thinking):
+   - "Using X instead of Y"
+   - "This prevents Z"
+   - "Avoids W"
+
+4. **Error Context** (not just "error"):
+   - "This prevents token theft"
+   - "Without this, cookies exposed"
+
+5. **Accomplishments** (with context):
+   - "I've implemented retry logic with jitter"
+   - "Successfully added validation"
+
+**Files Changed**:
+- `shared-hooks/ace_after_task.py` (lines 73-166):
+  - Added regex-based pattern extraction
+  - 5 extraction categories with smart filtering
+  - Extracts from structured headings, comments, comparisons
+  - Captures error handling context and accomplishments
+
+**User Impact**:
+- Better learning capture from structured content
+- No more missed patterns from strict keyword matching
+- Still no trash patterns (quality maintained from v5.1.9)
+- More comprehensive playbook growth
+
+**Requirements**:
+- CE-ACE CLI: v1.0.13+ (unchanged)
+- ACE Server: v3.10.0+ (unchanged)
+
 ## [5.1.8] - 2025-11-20
 
 ### 🐛 PostToolUse Learning Capture Fix (CRITICAL)
