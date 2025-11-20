@@ -55,35 +55,80 @@ def extract_execution_trace(event):
                 # Use first user message as task description (captures intent)
                 task_description = f"User request: {content[:250]}"
 
-    # Build detailed trajectory from tool uses (FULL context - no truncation)
-    # Server Reflector/Curator will handle filtering and deduplication
+    # Build trajectory from CONVERSATION MESSAGES (high-level insights)
+    # Server team guidance: Extract decisions/gotchas/accomplishments, NOT tool operations
     trajectory = []
+    decisions = []
+    gotchas = []
+    accomplishments = []
     files_modified = set()
 
-    for idx, tool in enumerate(tool_uses, 1):
+    # Track files from tool uses (for context only, not trajectory)
+    for tool in tool_uses:
         tool_name = tool.get('tool_name', 'unknown')
         tool_desc = tool.get('description', '')
-        tool_use_id = tool.get('tool_use_id')  # NEW: Claude Code v2.0.43+
-
-        # Track files that were modified
         if tool_name in ['Edit', 'Write'] and tool_desc:
-            # Extract file path from description (usually contains path)
             files_modified.add(tool_desc.split()[0] if tool_desc else 'unknown')
 
-        # Build trajectory entry with tool_use_id for correlation
-        trajectory_entry = {
-            "step": idx,
-            "action": f"{tool_name} - {tool_desc}",  # NO TRUNCATION - send full description
-            "result": tool.get('result', {}).get('summary', 'completed') if isinstance(tool.get('result'), dict) else 'completed'
-        }
+    # Extract high-level insights from conversation messages
+    for msg in messages:
+        role = msg.get('role')
+        content = msg.get('content', '')
 
-        # Add tool_use_id if available (Claude Code v2.0.43+)
-        if tool_use_id:
-            trajectory_entry["tool_use_id"] = tool_use_id
+        # Only process assistant messages (Claude's responses)
+        if role != 'assistant':
+            continue
 
-        trajectory.append(trajectory_entry)
+        content_lower = content.lower()
 
-    # If no tool uses, create trajectory from message flow
+        # Extract decisions (architectural choices, technology selections)
+        if any(word in content_lower for word in ['decided', 'chose', 'using', 'will use', 'approach', 'strategy']):
+            for sentence in content.split('.'):
+                if any(word in sentence.lower() for word in ['decided', 'chose', 'using', 'will use', 'approach']):
+                    clean = sentence.strip()
+                    if len(clean) > 20:  # Meaningful content
+                        decisions.append(clean)
+
+        # Extract gotchas (errors fixed, pitfalls discovered)
+        if any(word in content_lower for word in ['error', 'issue', 'problem', 'failed', 'fixed', 'solved', 'gotcha']):
+            for sentence in content.split('.'):
+                if any(word in sentence.lower() for word in ['error', 'fixed', 'solved', 'issue', 'problem']):
+                    clean = sentence.strip()
+                    if len(clean) > 20:
+                        gotchas.append(clean)
+
+        # Extract accomplishments (what was successfully completed)
+        if any(word in content_lower for word in ['completed', 'working', 'successfully', 'implemented', 'created', 'built']):
+            for sentence in content.split('.'):
+                if any(word in sentence.lower() for word in ['completed', 'working', 'successfully', 'implemented']):
+                    clean = sentence.strip()
+                    if len(clean) > 20:
+                        accomplishments.append(clean)
+
+    # Build meaningful trajectory from extracted insights
+    if decisions:
+        trajectory.append({
+            "step": 1,
+            "action": "Made architectural decisions",
+            "result": " | ".join(decisions[:3])  # Top 3 decisions
+        })
+
+    if gotchas:
+        trajectory.append({
+            "step": len(trajectory) + 1,
+            "action": "Encountered and resolved issues",
+            "result": " | ".join(gotchas[:3])  # Top 3 gotchas
+        })
+
+    if accomplishments:
+        trajectory.append({
+            "step": len(trajectory) + 1,
+            "action": "Completed work items",
+            "result": " | ".join(accomplishments[:3])  # Top 3 completions
+        })
+
+    # Fallback: If no meaningful insights extracted, create minimal trajectory
+    # This ensures we don't skip valuable conversational learning
     if not trajectory and messages:
         trajectory = [{
             "step": 1,
