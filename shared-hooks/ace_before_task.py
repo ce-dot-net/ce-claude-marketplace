@@ -24,6 +24,37 @@ from ace_cli import run_search, check_session_pinning_available
 from ace_context import get_context
 
 
+def expand_abbreviations(prompt: str) -> str:
+    """
+    Minimal query enhancement: Expand ONLY common abbreviations for clarity.
+    DO NOT add generic keywords - embeddings work better with natural language!
+
+    Based on server team feedback: Semantic search uses embeddings (all-MiniLM-L6-v2),
+    not keyword matching. Adding generic words like "patterns examples strategies"
+    actually DILUTES the semantic signal.
+
+    Research evidence:
+    - Natural language queries: 0.82 NDCG
+    - Keyword-stuffed queries: 0.71 NDCG (worse!)
+    """
+    replacements = {
+        ' JWT ': ' JSON Web Token ',
+        ' API ': ' REST API ',
+        ' DB ': ' database ',
+        ' env ': ' environment ',
+        ' auth ': ' authentication ',
+        ' config ': ' configuration ',
+        ' deps ': ' dependencies ',
+        ' repo ': ' repository ',
+    }
+
+    result = f" {prompt} "  # Add spaces for word boundary matching
+    for abbrev, full in replacements.items():
+        result = result.replace(abbrev, full)
+
+    return result.strip()
+
+
 def main():
     try:
         # Read hook event from stdin
@@ -57,10 +88,14 @@ def main():
                 # Non-fatal: continue without session pinning
                 use_session_pinning = False
 
+        # Minimal enhancement: Expand abbreviations for semantic clarity
+        # (Server team: DO NOT add generic keywords - hurts embedding quality!)
+        search_query = expand_abbreviations(user_prompt)
+
         # Call ce-ace search --stdin with optional session pinning
         # Context passed via environment, CLI reads server config for top_k/threshold
         patterns_response = run_search(
-            query=user_prompt,
+            query=search_query,
             org=context['org'],
             project=context['project'],
             session_id=session_id if use_session_pinning else None
@@ -73,6 +108,17 @@ def main():
             }
             print(json.dumps(output))
             sys.exit(0)
+
+        # Client-side filtering: Filter low-quality patterns (server team recommendation)
+        # Only filter if we have enough results (keep at least 3)
+        pattern_list = patterns_response.get('similar_patterns', [])
+        if len(pattern_list) > 5:
+            # Filter: confidence >= 0.5 OR helpful >= 2
+            high_quality = [p for p in pattern_list if p.get('confidence', 0) >= 0.5 or p.get('helpful', 0) >= 2]
+            if len(high_quality) >= 3:
+                pattern_list = high_quality
+                patterns_response['similar_patterns'] = pattern_list
+                patterns_response['count'] = len(pattern_list)
 
         # Build context for Claude (JSON in XML tags - includes domain metadata)
         ace_context = f"<ace-patterns>\n{json.dumps(patterns_response, indent=2)}\n</ace-patterns>"

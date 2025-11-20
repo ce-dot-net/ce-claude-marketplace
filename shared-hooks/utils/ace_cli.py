@@ -65,9 +65,9 @@ def run_search(query: str, org: str = None, project: str = None, session_id: str
         return None
 
 
-def run_learn(task: str, trajectory: str, success: bool, org: str = None, project: str = None, patterns_used: Optional[list] = None) -> bool:
+def run_learn(task: str, trajectory: str, success: bool, org: str = None, project: str = None, patterns_used: Optional[list] = None) -> Optional[Dict[str, Any]]:
     """
-    Call ce-ace learn --stdin
+    Call ce-ace learn --stdin with JSON response parsing (v1.0.13+)
 
     Args:
         task: Task description
@@ -78,11 +78,27 @@ def run_learn(task: str, trajectory: str, success: bool, org: str = None, projec
         patterns_used: Optional list of pattern IDs used
 
     Returns:
-        True if learning succeeded, False otherwise
+        Parsed JSON response or None on failure
+
+    Response includes (v1.0.13+):
+        - success: bool
+        - analysis_performed: bool
+        - learning_statistics: {
+            patterns_created: int,
+            patterns_updated: int,
+            patterns_pruned: int,
+            average_confidence: float,
+            by_section: {...},
+            ...
+          } (optional, only on new servers)
 
     Note:
         Context passed via environment variables (ACE_ORG_ID, ACE_PROJECT_ID).
         No need to pass --org or --project flags!
+
+    Backward Compatibility:
+        Old servers (v3.9.x) won't include learning_statistics field.
+        Always check: response.get('learning_statistics') before accessing.
     """
     try:
         payload = {
@@ -102,17 +118,20 @@ def run_learn(task: str, trajectory: str, success: bool, org: str = None, projec
             env['ACE_PROJECT_ID'] = project
 
         result = subprocess.run(
-            ['ce-ace', 'learn', '--stdin'],
+            ['ce-ace', 'learn', '--stdin', '--json'],
             input=json.dumps(payload).encode('utf-8'),
             capture_output=True,
             timeout=10,
             env=env
         )
 
-        return result.returncode == 0
+        if result.returncode != 0:
+            return None
 
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return False
+        return json.loads(result.stdout)
+
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
+        return None
 
 
 def run_status(org: str = None, project: str = None) -> Optional[Dict[str, Any]]:

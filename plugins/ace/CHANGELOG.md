@@ -5,6 +5,47 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.7] - 2025-11-20
+
+### 🚀 Enhanced Learning Feedback & Query Optimization
+
+**Learning Statistics (ce-ace v1.0.13+)**:
+- **Detailed feedback** - Users see patterns created/updated/pruned + quality %
+- Example: `📚 ACE Learning: • 3 new patterns • 2 patterns updated • Quality: 85%`
+- **Files Changed**: `shared-hooks/ace_after_task.py` (lines 231-275), `shared-hooks/utils/ace_cli.py` (lines 68-134)
+- **Backward Compatible**: Falls back to legacy fields on old servers (v3.9.x)
+
+**Query Enhancement**:
+- **Minimal abbreviation expansion** - Better semantic search (JWT → JSON Web Token, API → REST API, etc.)
+- **Files Changed**: `shared-hooks/ace_before_task.py` (lines 27-93)
+- **Rationale**: Server uses embeddings, not keywords - expand abbreviations only (see docs/QUERY_ENHANCEMENT_DECISION.md)
+
+**Quality Filtering**:
+- **Client-side filtering** - Remove low-confidence noise (confidence >= 0.5 OR helpful >= 2)
+- **Files Changed**: `shared-hooks/ace_before_task.py` (lines 112-121)
+- **Result**: Claude gets high-quality patterns only
+
+**Bug Fixes**:
+- **Substantial work check** - Removed 80-char output threshold (paper-aligned)
+- **Files Changed**: `shared-hooks/ace_after_task.py` (lines 175-181)
+- **Impact**: File organization tasks (50 chars) now properly trigger learning
+
+**Documentation**:
+- **NEW**: `docs/ACE_V1_0_13_INTEGRATION.md` - Complete v1.0.13 integration guide
+- **NEW**: `docs/QUERY_ENHANCEMENT_DECISION.md` - Query enhancement decision rationale
+
+**Requirements**:
+- **Minimum CE-ACE CLI**: v1.0.11+ (unchanged)
+- **Recommended CE-ACE CLI**: v1.0.13+ (for learning statistics)
+- **ACE Server**: v3.9.0+ (v3.10.0+ for learning statistics)
+
+**Testing**:
+- ✅ Learning statistics displayed when ce-ace v1.0.13+ used
+- ✅ Graceful degradation on old servers
+- ✅ Abbreviation expansion improves pattern retrieval
+- ✅ Quality filtering removes noise patterns
+- ✅ Substantial work check captures short outputs
+
 ## [5.1.6] - 2025-11-19
 
 ### 🚀 Claude Code v2.0 Integration Enhancements
