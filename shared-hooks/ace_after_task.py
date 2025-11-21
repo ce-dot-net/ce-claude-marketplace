@@ -373,7 +373,7 @@ def main():
         trace = extract_execution_trace(event)
 
         # STEP 3: Check if there's substantial work to capture
-        # Paper-aligned: Focus on trajectory completeness and execution feedback (arXiv:2510.04618v1)
+        # Paper-aligned: Focus on trajectory completeness and execution feedback
         # Skip only if: no trajectory OR auto-learning session work
         has_substantial_work = (
             trace['trajectory'] and len(trace['trajectory']) > 0 and
