@@ -4,19 +4,35 @@
 # dependencies = []
 # ///
 """
-ACE After Task Hook - PreCompact Event Handler
+ACE After Task Hook - Dual Strategy (PreCompact + Stop)
+
+CRITICAL: We need BOTH hooks for complete learning capture!
+
+PreCompact Hook (Safety Net):
+- Fires BEFORE context compaction
+- Captures learning before knowledge is lost
+- Receives pre-parsed messages/tool_uses from Claude Code
+
+Stop Hook (True End):
+- Fires at TRUE end of task/session
+- Captures learning from work done AFTER last PreCompact
+- Handles short tasks that never trigger PreCompact (e.g., 12 steps)
+- Parses transcript manually since Stop doesn't provide messages/tool_uses
 
 Two critical functions:
-1. Recalls pinned session patterns BEFORE compaction (pattern persistence)
-2. Captures learning from completed work (with rich context)
+1. Recalls pinned session patterns (pattern persistence)
+2. Captures learning from completed work (with rich trajectory context)
 
-Ensures patterns survive compaction and learning is detailed/unique.
+Examples:
+- Long task (100 steps): PreCompact@50 + Stop@100 (captures steps 51-100!)
+- Short task (12 steps): No PreCompact + Stop@12 (captures all learning!)
 """
 
 import json
 import sys
 import subprocess
 from pathlib import Path
+from datetime import datetime
 
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent / 'utils'))
@@ -37,8 +53,6 @@ def extract_execution_trace(event):
 
     Prevents generic "Session work" messages and ensures unique, valuable learning.
     """
-    from datetime import datetime
-
     messages = event.get('messages', [])
     tool_uses = event.get('tool_uses', [])
 
@@ -240,13 +254,94 @@ def extract_execution_trace(event):
     }
 
 
+def parse_transcript(transcript_path):
+    """
+    Parse Claude Code transcript .jsonl file to extract messages and tool_uses.
+
+    Stop hooks provide transcript_path instead of parsed messages/tool_uses.
+    This function reads the .jsonl file and reconstructs the data structure
+    that PreCompact hooks receive natively.
+    """
+    messages = []
+    tool_uses = []
+
+    try:
+        transcript_file = Path(transcript_path).expanduser()
+        if not transcript_file.exists():
+            return messages, tool_uses
+
+        with open(transcript_file, 'r') as f:
+            for line in f:
+                if not line.strip():
+                    continue
+
+                try:
+                    entry = json.loads(line)
+
+                    # Extract message if present
+                    if 'role' in entry and 'content' in entry:
+                        messages.append({
+                            'role': entry['role'],
+                            'content': entry['content']
+                        })
+
+                    # Extract tool uses from assistant messages
+                    if entry.get('role') == 'assistant' and 'content' in entry:
+                        content = entry['content']
+                        # Look for tool use blocks in content
+                        if isinstance(content, list):
+                            for block in content:
+                                if isinstance(block, dict) and block.get('type') == 'tool_use':
+                                    tool_uses.append({
+                                        'tool_name': block.get('name'),
+                                        'tool_input': block.get('input', {}),
+                                        'description': ''  # Not available in transcript
+                                    })
+
+                except json.JSONDecodeError:
+                    continue
+
+    except Exception as e:
+        # Non-fatal: return empty lists
+        pass
+
+    return messages, tool_uses
+
+
 def main():
     try:
         # Read hook event from stdin
         event = json.load(sys.stdin)
 
+        # DEBUG: Log raw event if ACE_DEBUG_HOOKS is set
+        import os
+        if os.environ.get('ACE_DEBUG_HOOKS') == '1':
+            debug_log = Path('/tmp/ace_hook_debug.log')
+            with open(debug_log, 'a') as f:
+                f.write(f"\n\n{'='*80}\n")
+                f.write(f"Hook fired at: {datetime.now().isoformat()}\n")
+                f.write(f"Event data:\n{json.dumps(event, indent=2)}\n")
+                f.write(f"{'='*80}\n")
+
         # Extract hook event name (PreCompact or Stop)
         hook_event_name = event.get('hook_event_name', 'PreCompact')
+
+        # CRITICAL: Handle Stop hook data format
+        # According to Claude Code docs, Stop hooks provide transcript_path instead of parsed messages
+        # PreCompact hooks provide pre-parsed messages/tool_uses directly
+        if hook_event_name == 'Stop':
+            # Check if we already have messages (defensive coding)
+            if 'messages' not in event or not event.get('messages'):
+                # Need to parse transcript
+                if 'transcript_path' in event:
+                    messages, tool_uses = parse_transcript(event['transcript_path'])
+                    event['messages'] = messages
+                    event['tool_uses'] = tool_uses
+                else:
+                    # Fallback: no transcript path and no messages
+                    # This shouldn't happen but handle gracefully
+                    event['messages'] = []
+                    event['tool_uses'] = []
 
         # Get project context
         context = get_context()
@@ -294,9 +389,10 @@ def main():
             sys.exit(0)
 
         # Build user-visible message lines with details
+        hook_label = "PreCompact (safety)" if hook_event_name == "PreCompact" else "Stop (end-of-task)"
         message_lines = [
             "",
-            "📚 [ACE] Automatically capturing learning from this session...",
+            f"📚 [ACE] Automatically capturing learning from this session... ({hook_label})",
             f"   Task: {trace['task'][:80]}...",
             f"   Status: {'✅ Success' if trace['result']['success'] else '❌ Failed'}"
         ]
