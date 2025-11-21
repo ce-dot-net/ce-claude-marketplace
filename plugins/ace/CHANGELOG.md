@@ -5,6 +5,68 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.1] - 2025-11-21
+
+### 🐛 Bug Fix - macOS Timestamp Compatibility
+
+**Critical Hotfix**: Fixed wrapper scripts failing on macOS due to incompatible timestamp format.
+
+**The Problem**:
+- Wrapper scripts used `date +%s%3N` to get millisecond timestamps
+- This format doesn't work on macOS (BSD `date` has no nanosecond support)
+- Error encountered:
+  ```
+  ace_stop_wrapper.sh: line 60: 17637438423N: value too great for base
+  ace_stop_wrapper.sh: line 64: EXECUTION_TIME: unbound variable
+  ```
+
+**Impact**:
+- ❌ Stop hook wrapper failed on macOS
+- ❌ PreCompact hook wrapper failed on macOS
+- ❌ No execution time tracking
+- ❌ Logs incomplete (START logged, but END failed)
+
+**The Solution**:
+Replaced platform-specific `date` command with cross-platform Python solution:
+
+```bash
+# Before
+START_TIME=$(date +%s%3N)
+
+# After
+START_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
+```
+
+**Why Python**:
+- ✅ Cross-platform (macOS, Linux, Windows)
+- ✅ Guaranteed available (already required for ace_event_logger.py)
+- ✅ Millisecond precision
+- ✅ No external dependencies
+
+**Files Changed**:
+- `plugins/ace/scripts/ace_stop_wrapper.sh` (lines 51-52, 58-60)
+- `plugins/ace/scripts/ace_precompact_wrapper.sh` (lines 49-50, 68-70)
+
+**Testing Results**:
+Manual test with mock Stop event:
+```json
+// START event
+{"timestamp":"2025-11-21T17:03:43.625561+00:00","phase":"start",...}
+
+// END event (511ms later)
+{"timestamp":"2025-11-21T17:03:44.410423+00:00","phase":"end","execution_time_ms":511,"exit_code":0}
+```
+
+✅ Execution time correctly calculated (511ms)
+✅ No more errors
+✅ Logs complete with both START and END phases
+
+**Who Should Upgrade**:
+- **All macOS users on v5.2.0** - wrapper logging was completely broken
+- Linux users can upgrade but are not affected by this bug
+
+**Commit**: 740e390
+
 ## [5.2.0] - 2025-11-21
 
 ### 🔍 Comprehensive Wrapper Architecture for Hook Logging
