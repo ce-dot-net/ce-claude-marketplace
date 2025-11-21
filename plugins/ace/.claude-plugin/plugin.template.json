@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.3.3",
-  "description": "Code Engine ACE - Intelligent pattern learning with three-tier capture: PostToolUse (main agent), SubagentStop (Task agents), Stop (session end). v5.3.3: Markdown linting fixes (MD032 compliance). Requires ce-ace >= v1.0.13.",
+  "version": "5.3.4",
+  "description": "Code Engine ACE - Intelligent pattern learning with three-tier capture: PostToolUse (main agent), SubagentStop (Task agents), Stop (session end). v5.3.4: Fixed PostToolUse hook transcript parsing to properly send learning requests to server. Requires ce-ace >= v1.0.13.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
