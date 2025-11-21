@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+# ace_precompact_wrapper.sh - PreCompact hook with comprehensive logging
+set -Eeuo pipefail
+
+# Resolve paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MARKETPLACE_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+LOGGER="${MARKETPLACE_ROOT}/shared-hooks/ace_event_logger.py"
+HOOK_SCRIPT="${MARKETPLACE_ROOT}/shared-hooks/ace_after_task.py"
+
+# Export plugin version for logger
+export ACE_PLUGIN_VERSION="5.2.0"
+
+# Parse arguments
+ENABLE_LOG=true  # Always log by default
+ENABLE_BACKUP=false
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --log) ENABLE_LOG=true; shift ;;
+    --no-log) ENABLE_LOG=false; shift ;;
+    --backup) ENABLE_BACKUP=true; shift ;;
+    *) shift ;;
+  esac
+done
+
+# Check if logger exists
+[[ -f "${LOGGER}" ]] || {
+  echo "[ERROR] ace_event_logger.py not found: ${LOGGER}" >&2
+  exit 1
+}
+
+# Check if hook script exists
+[[ -f "${HOOK_SCRIPT}" ]] || {
+  echo "[ERROR] ace_after_task.py not found: ${HOOK_SCRIPT}" >&2
+  exit 1
+}
+
+# Read stdin
+INPUT_JSON=$(cat)
+
+# Log event START
+if [[ "$ENABLE_LOG" == "true" ]]; then
+  echo "$INPUT_JSON" | uv run "$LOGGER" --event-type PreCompact --phase start >/dev/null 2>&1 || {
+    echo "[WARN] Failed to log start event" >&2
+  }
+fi
+
+# Record start time
+START_TIME=$(date +%s%3N)
+
+# Optional: Backup transcript before compaction
+if [[ "$ENABLE_BACKUP" == "true" ]]; then
+  TRANSCRIPT_PATH=$(echo "$INPUT_JSON" | jq -r '.transcript_path // empty')
+  if [[ -n "$TRANSCRIPT_PATH" ]] && [[ -f "$TRANSCRIPT_PATH" ]]; then
+    BACKUP_FILE=".claude/data/logs/ace-precompact-backup-$(date +%Y%m%d-%H%M%S).json"
+    mkdir -p "$(dirname "$BACKUP_FILE")"
+    cp "$TRANSCRIPT_PATH" "$BACKUP_FILE" 2>/dev/null || {
+      echo "[WARN] Failed to backup transcript" >&2
+    }
+  fi
+fi
+
+# Forward to ace_after_task.py
+RESULT=$(echo "$INPUT_JSON" | uv run "${HOOK_SCRIPT}" 2>&1)
+EXIT_CODE=$?
+
+# Calculate execution time
+END_TIME=$(date +%s%3N)
+EXECUTION_TIME=$((END_TIME - START_TIME))
+
+# Log event END with result
+if [[ "$ENABLE_LOG" == "true" ]]; then
+  echo "$RESULT" | uv run "$LOGGER" \
+    --event-type PreCompact \
+    --phase end \
+    --exit-code "$EXIT_CODE" \
+    --execution-time-ms "$EXECUTION_TIME" \
+    >/dev/null 2>&1 || {
+    echo "[WARN] Failed to log end event" >&2
+  }
+fi
+
+# Output result
+echo "$RESULT"
+exit $EXIT_CODE
