@@ -96,6 +96,17 @@ def extract_execution_trace(event):
         if role != 'assistant':
             continue
 
+        # Normalize content to string (handle both string and list formats)
+        if isinstance(content, list):
+            # Extract text from content blocks
+            text_parts = []
+            for block in content:
+                if isinstance(block, dict) and block.get('type') == 'text':
+                    text_parts.append(block.get('text', ''))
+            content = '\n'.join(text_parts)
+        elif not isinstance(content, str):
+            content = str(content)
+
         # 1. Extract structured headings (most reliable)
         # Look for: "Decision:", "Key decision:", "Strategy:", "Approach:"
         decision_patterns = [
@@ -221,6 +232,17 @@ def extract_execution_trace(event):
             # Take last 10 messages to capture full arc of work
             for msg in assistant_messages[-10:]:
                 content = msg.get('content', '')
+
+                # Normalize content to string (handle both string and list formats)
+                if isinstance(content, list):
+                    text_parts = []
+                    for block in content:
+                        if isinstance(block, dict) and block.get('type') == 'text':
+                            text_parts.append(block.get('text', ''))
+                    content = '\n'.join(text_parts)
+                elif not isinstance(content, str):
+                    content = str(content)
+
                 if content:
                     # Increased from 200 → 500 chars per message
                     lessons.append(content[:500])
@@ -278,25 +300,27 @@ def parse_transcript(transcript_path):
                 try:
                     entry = json.loads(line)
 
+                    # Claude Code transcript format: {type: "user/assistant", message: {role, content}}
                     # Extract message if present
-                    if 'role' in entry and 'content' in entry:
+                    message = entry.get('message', {})
+                    if 'role' in message and 'content' in message:
                         messages.append({
-                            'role': entry['role'],
-                            'content': entry['content']
+                            'role': message['role'],
+                            'content': message['content']
                         })
 
-                    # Extract tool uses from assistant messages
-                    if entry.get('role') == 'assistant' and 'content' in entry:
-                        content = entry['content']
-                        # Look for tool use blocks in content
-                        if isinstance(content, list):
-                            for block in content:
-                                if isinstance(block, dict) and block.get('type') == 'tool_use':
-                                    tool_uses.append({
-                                        'tool_name': block.get('name'),
-                                        'tool_input': block.get('input', {}),
-                                        'description': ''  # Not available in transcript
-                                    })
+                        # Extract tool uses from assistant messages
+                        if message.get('role') == 'assistant':
+                            content = message['content']
+                            # Look for tool use blocks in content
+                            if isinstance(content, list):
+                                for block in content:
+                                    if isinstance(block, dict) and block.get('type') == 'tool_use':
+                                        tool_uses.append({
+                                            'tool_name': block.get('name'),
+                                            'tool_input': block.get('input', {}),
+                                            'description': ''  # Not available in transcript
+                                        })
 
                 except json.JSONDecodeError:
                     continue
