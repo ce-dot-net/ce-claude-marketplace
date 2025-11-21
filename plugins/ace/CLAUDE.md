@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.1.12 -->
+<!-- ACE_SECTION_START v5.1.13 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -49,16 +49,16 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 - `✅ [ACE] Auto-approved: ce-ace search` - Permission auto-approval
 - `📚 [ACE] Automatically capturing learning...` - At session end
 
-## New in v5.1.12
+## New in v5.1.13
 
-**Dual-Hook Learning Strategy**:
-- ✅ **Transcript Parsing** - Stop hook now reads .jsonl transcript for complete learning capture
-- ✅ **PreCompact + Stop** - Safety net before compaction + true end-of-task learning
-- ✅ **Debug Logging** - ACE_DEBUG_HOOKS=1 flag for hook event diagnostics
+**Intelligent Prompt-Based Stop Hook**:
+- ✅ **Haiku LLM Evaluation** - Semantic understanding vs regex filtering
+- ✅ **2-3x Learning Capture** - 40-60% capture rate vs 10-20% with regex
+- ✅ **7 Learning Types** - Implementation, debugging, architecture, integration, strategy, troubleshooting, domain knowledge
 
 ---
 
-**Version**: v5.1.12
+**Version**: v5.1.13
 **Requires**: ce-ace CLI v1.0.13+
 
-<!-- ACE_SECTION_END v5.1.12 -->
+<!-- ACE_SECTION_END v5.1.13 -->

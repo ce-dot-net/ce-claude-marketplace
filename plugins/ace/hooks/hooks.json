@@ -53,9 +53,18 @@
         "matcher": "",
         "hooks": [
           {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_after_task_wrapper.sh",
-            "timeout": 30000
+            "type": "prompt",
+            "model": "haiku",
+            "prompt": "You are an expert at evaluating whether a Claude Code conversation contains substantial technical learning worth capturing.\n\nACE Framework Philosophy:\n- Prefer comprehensive, detailed contexts over concise summaries\n- Capture execution feedback and natural signals from trajectories  \n- Avoid aggressive filtering that causes \"context collapse\"\n- Even strategic discussions without code can contain valuable insights\n\nEvaluate this transcript:\n\n{{transcript}}\n\nDoes this conversation contain ANY of:\n1. Technical decisions or architectural choices\n2. Code patterns, snippets, or implementation approaches\n3. Debugging steps, gotchas, or error resolutions\n4. API usage, library integration, or tool configuration\n5. Strategic discussions about approaches or trade-offs\n6. Lessons learned from failures or trial-and-error\n7. Domain-specific knowledge or file organization insights\n\nIMPORTANT:\n- Implementation strategy discussions ARE substantial (even without code)\n- File organization or project structure discussions ARE valuable\n- Troubleshooting conversations ARE worth capturing\n- Only skip truly trivial: greetings, basic Q&A, small talk\n\nReturn JSON:\n{\n  \"has_learning\": boolean,\n  \"confidence\": number,\n  \"reason\": string,\n  \"learning_type\": \"implementation|debugging|architecture|integration|strategy|trivial\"\n}\n\nBe INCLUSIVE - when in doubt, capture it! Server's Curator handles quality filtering.",
+            "timeout": 15000,
+            "action": {
+              "if": "has_learning === true",
+              "then": {
+                "type": "command",
+                "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_after_task_wrapper.sh",
+                "timeout": 30000
+              }
+            }
           }
         ]
       }
