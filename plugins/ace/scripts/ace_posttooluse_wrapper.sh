@@ -48,7 +48,7 @@ INPUT_JSON=$(cat)
 
 # Log PostToolUse event (for debugging/analysis)
 if [[ "$ENABLE_LOG" == "true" ]]; then
-  echo "$INPUT_JSON" | uv run "$LOGGER" --event-type PostToolUse --phase detected >/dev/null 2>&1 || {
+  echo "$INPUT_JSON" | uv run "$LOGGER" --event-type PostToolUse --phase start >/dev/null 2>&1 || {
     echo "[WARN] Failed to log PostToolUse event" >&2
   }
 fi
@@ -84,7 +84,7 @@ fi
 if [[ "$ENABLE_LOG" == "true" ]]; then
   echo "$INPUT_JSON" | uv run "$LOGGER" \
     --event-type PostToolUse \
-    --phase task_complete \
+    --phase complete \
     >/dev/null 2>&1 || {
     echo "[WARN] Failed to log task completion" >&2
   }
@@ -113,7 +113,7 @@ EXECUTION_TIME=$((END_TIME - START_TIME))
 if [[ "$ENABLE_LOG" == "true" ]]; then
   echo "$RESULT" | uv run "$LOGGER" \
     --event-type PostToolUse \
-    --phase learning_captured \
+    --phase end \
     --exit-code "$EXIT_CODE" \
     --execution-time-ms "$EXECUTION_TIME" \
     >/dev/null 2>&1 || {
