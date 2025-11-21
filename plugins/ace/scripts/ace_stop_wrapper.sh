@@ -48,15 +48,15 @@ if [[ "$ENABLE_LOG" == "true" ]]; then
   }
 fi
 
-# Record start time
-START_TIME=$(date +%s%3N)
+# Record start time (cross-platform milliseconds)
+START_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
 
 # Forward to ace_after_task.py
 RESULT=$(echo "$INPUT_JSON" | uv run "${HOOK_SCRIPT}" 2>&1)
 EXIT_CODE=$?
 
-# Calculate execution time
-END_TIME=$(date +%s%3N)
+# Calculate execution time (cross-platform milliseconds)
+END_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
 EXECUTION_TIME=$((END_TIME - START_TIME))
 
 # Log event END with result
