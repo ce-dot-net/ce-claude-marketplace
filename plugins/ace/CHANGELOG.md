@@ -5,6 +5,142 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.1] - 2025-11-21
+
+### 🎯 PostToolUse Hook for Main Agent Task Detection
+
+**Completes After-Task Learning System**: Detect when main agent completes tasks and capture learning immediately!
+
+**The Problem**:
+- v5.3.0 added SubagentStop for Task agents (subagents spawned via Task tool)
+- But main agent work (direct user requests) still only captured at session end
+- Users wanted immediate learning after main agent completes tasks, just like SubagentStop does for Task agents
+- No way to detect "task complete" for main agent without explicit signals
+
+**The Solution - PostToolUse Hook with Intelligent Detection**:
+Added PostToolUse hook with heuristic-based task completion detection:
+
+**Components Added**:
+
+1. **Task Detector** (`shared-hooks/ace_task_detector.py` - 268 lines):
+   - Heuristic-based task completion detection
+   - 5 detection methods (OR logic - any one triggers):
+     * **Tool Sequence** (confidence: 0.70): 3+ tools in sequence → substantial work
+     * **User Confirmation** (confidence: 0.95): "thanks", "done", "perfect", "good", "ok", "next"
+     * **Time-Based Pause** (confidence: 0.60): 30+ seconds idle after work
+     * **Todo Completion** (confidence: 0.90): All todos marked completed
+     * **Git Commit** (confidence: 0.85): Successful commit made
+   - Confidence scoring per heuristic
+   - Persistent state tracking (`.claude/data/logs/ace-task-state.json`)
+   - Tracks: last_tool_time, tool_count, last_user_message, last_tool_name
+   - Resets tool count after detection
+
+2. **Hook Wrapper** (`plugins/ace/scripts/ace_posttooluse_wrapper.sh` - 126 lines):
+   - PostToolUse hook wrapper
+   - Calls ace_task_detector.py after each tool use
+   - If task complete → forwards to ace_after_task.py → ce-ace learn
+   - Logs to ace-posttooluse.jsonl (3 phases: detected, task_complete, learning_captured)
+   - Silent operation (no user-facing messages)
+   - Options: --log, --detect, --no-log, --no-detect
+   - Uses same ace_after_task.py logic as Stop/SubagentStop
+   - Cross-platform timestamps (Python-based, learned from v5.2.1)
+
+3. **Hook Configuration** (`plugins/ace/hooks/hooks.json`):
+   - Added PostToolUse hook entry
+   - Command: `ace_posttooluse_wrapper.sh --log --detect`
+   - Timeout: 10 seconds (faster than Stop/SubagentStop)
+   - Fires after EVERY tool use (but only captures when task complete detected)
+
+**How It Works**:
+
+**Main Agent Flow** (NEW!):
+```
+User: "Fix authentication bug"
+    ↓
+Main agent: Edit, Write, Bash (3+ tools)
+    ↓
+PostToolUse hook fires after each tool
+    ↓
+ace_task_detector.py checks heuristics
+    ↓
+Heuristic matches (e.g., tool_sequence: 3 tools)
+    ↓
+ace_posttooluse_wrapper.sh → ace_after_task.py → ce-ace learn
+    ↓
+Learning captured immediately! ✅
+```
+
+**Detection Logic** (OR - any one triggers):
+1. **Tool Sequence**: Counts tool uses, triggers at 3+ (substantial work pattern)
+2. **User Confirmation**: Detects keywords indicating satisfaction/completion
+3. **Time-Based**: Natural pause after active work (30s threshold)
+4. **Todo Completion**: TodoWrite marks all todos done
+5. **Git Commit**: Successful commit often marks work unit end
+
+**State Management**:
+- Persistent file: `.claude/data/logs/ace-task-state.json`
+- Survives across hook invocations
+- Resets tool count after each detection
+
+**Three-Tier Learning Architecture Complete**:
+
+| Hook | Captures | When Fires |
+|------|----------|-----------|
+| **PostToolUse** (v5.3.1) | Main agent work | After tool use + heuristics |
+| **SubagentStop** (v5.3.0) | Task agent work | When subagent completes |
+| **Stop** (v5.2.0) | Session work | When session ends |
+
+**All three use same `ace_after_task.py` logic!**
+
+**Benefits**:
+- ✅ **Complete Coverage** - Captures learning from all work types:
+   - Main agent tasks (PostToolUse) ✅
+   - Task agent tasks (SubagentStop) ✅
+   - Session-wide work (Stop) ✅
+- ✅ **Intelligent Detection** - 5 heuristics (OR logic) catch different completion patterns
+- ✅ **Non-Intrusive** - Silent operation, no user-facing messages
+- ✅ **Confidence Tracking** - Each heuristic has confidence score (0.60-0.95)
+- ✅ **Flexible** - Can disable detection with --no-detect flag
+- ✅ **Debuggable** - Comprehensive logging to ace-posttooluse.jsonl
+
+**Logging**:
+- **Event Log**: `.claude/data/logs/ace-posttooluse.jsonl`
+- **State File**: `.claude/data/logs/ace-task-state.json`
+
+**View Logs**:
+```bash
+# View PostToolUse events
+cat .claude/data/logs/ace-posttooluse.jsonl | jq
+
+# View detection state
+cat .claude/data/logs/ace-task-state.json | jq
+
+# Analyze with tool
+uv run shared-hooks/utils/ace_log_analyzer.py --event-type PostToolUse
+```
+
+**When PostToolUse Fires**:
+- ✅ Main agent uses 3+ tools (Edit, Write, Bash, etc.)
+- ✅ User says confirmation keywords
+- ✅ Natural pause after work (30s)
+- ✅ All todos completed
+- ✅ Git commit made
+
+**Inspired By**:
+- ACE pattern retrieved during implementation:
+  > "Claude Code three-tier hook pattern: UserPromptSubmit (pre-task) → PostToolUse (monitor substantial work) → PreCompact (final enforcement)"
+- This confirmed PostToolUse for task detection is a proven pattern!
+
+**Compatibility**:
+- Compatible with Claude Code v2.0.42+ PostToolUse hook
+- Non-breaking (additive feature only)
+- All three hooks (PostToolUse, SubagentStop, Stop) active simultaneously
+
+**Implementation Reference**:
+- Commit: a8f65e6
+- Files: `shared-hooks/ace_task_detector.py`, `plugins/ace/scripts/ace_posttooluse_wrapper.sh`
+- Hook config: `plugins/ace/hooks/hooks.json` (PostToolUse entry)
+
 ## [5.3.0] - 2025-11-21
 
 ### 🎯 SubagentStop Hook for After-Task Learning
