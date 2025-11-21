@@ -5,6 +5,40 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.12] - 2025-11-21
+
+### 🔧 Dual-Hook Learning Strategy
+
+**Major Enhancement**: Complete learning capture at true end of task
+
+**The Problem (Fixed)**:
+- v5.1.11 enabled Stop hook, but it couldn't access tool_uses or messages
+- Stop hook receives transcript_path but wasn't reading it
+- Learning from work done AFTER PreCompact was not being captured
+- Short tasks (12 steps) never triggered PreCompact, so no learning captured
+
+**The Solution**:
+1. **Transcript Parsing** - Added `parse_transcript()` function to read .jsonl files
+2. **Dual-Hook Strategy**:
+   - PreCompact: Safety net before context compaction
+   - Stop: True end-of-task learning (captures work after PreCompact)
+3. **Debug Logging** - ACE_DEBUG_HOOKS=1 environment variable for diagnostics
+
+**How Dual Hooks Work**:
+- **Long Task (100 steps)**: PreCompact@50 + Stop@100 → captures steps 51-100
+- **Short Task (12 steps)**: PreCompact never fires + Stop@12 → captures all steps
+- **Result**: Complete learning capture regardless of task length
+
+**Files Changed**:
+- `shared-hooks/ace_after_task.py`:
+  - Added `parse_transcript(path)` function
+  - Stop hook now extracts messages and tool_uses from transcript
+  - Added debug logging to `/tmp/ace_hook_debug.log`
+  - Enhanced code comments explaining dual-hook strategy
+
+**Requirements**:
+- ce-ace CLI >= v1.0.13
+
 ## [5.1.11] - 2025-11-21
 
 ### 🔧 Stop Hook Enabled
