@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.2.0 -->
+<!-- ACE_SECTION_START v5.2.1 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -86,7 +86,7 @@ uv run shared-hooks/utils/ace_log_analyzer.py --errors --hours 24
 
 ---
 
-**Version**: v5.2.0
+**Version**: v5.2.1
 **Requires**: ce-ace CLI v1.0.13+
 
-<!-- ACE_SECTION_END v5.2.0 -->
+<!-- ACE_SECTION_END v5.2.1 -->
