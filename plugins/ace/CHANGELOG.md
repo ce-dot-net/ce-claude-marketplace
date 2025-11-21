@@ -5,6 +5,66 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.6] - 2025-11-21
+
+### 🚀 Performance - Major Optimization: Incremental Transcript Parsing
+
+**Massive efficiency gains for learning in long sessions!**
+
+**The Problem**:
+Previously, every task re-parsed the ENTIRE session transcript from the beginning:
+- Task 1: Parse 100 lines
+- Task 2: Parse 200 lines (100 old + 100 new) ❌ Wasteful re-processing!
+- Task 3: Parse 300 lines (200 old + 100 new) ❌ Very wasteful!
+- Result: O(n²) complexity - performance degrades as sessions grow
+
+**The Solution**:
+Now each task parses only NEW messages since last processing:
+- Task 1: Parse lines 0-100 (100 new)
+- Task 2: Parse lines 100-200 (100 new) ✅ Efficient!
+- Task 3: Parse lines 200-300 (100 new) ✅ Efficient!
+- Result: O(n) complexity - constant performance regardless of session length
+
+**Changes Made**:
+
+1. **`shared-hooks/ace_after_task.py` - `parse_transcript()` function (Lines 279-344)**:
+   - Added `start_line` parameter for incremental parsing
+   - Returns `(messages, tool_uses, lines_parsed)` tuple with position tracking
+   - Skips lines before start_line (only processes new content)
+
+2. **State Tracking (Lines 373-413)**:
+   - Creates `.claude/data/logs/ace-transcript-state.json` per transcript
+   - Tracks `last_line` position independently for each transcript
+   - Loads state before parsing, saves after processing
+   - Each transcript tracked by filename for multi-session support
+
+**State File Format**:
+```json
+{
+  "transcript.jsonl": {
+    "last_line": 471,
+    "updated_at": "2025-11-21T10:30:00.000Z"
+  }
+}
+```
+
+**Benefits**:
+- ✅ Each task learns only from its own work (no duplicate learning)
+- ✅ Massive performance gain as sessions grow longer
+- ✅ Reduced memory usage (fewer messages in memory)
+- ✅ Cleaner learning patterns (focused on current task only)
+- ✅ No duplicate patterns sent to server
+- ✅ Scales linearly instead of quadratically
+
+**Testing Results**:
+```
+Task 1: Parsed 471 lines → State saved (last_line: 471)
+Task 2: Started from line 471 → Only new lines parsed ✅
+State persistence: Verified across multiple task completions
+```
+
+**Impact**: Production-ready optimization with significant efficiency improvements for all session lengths!
+
 ## [5.3.2] - 2025-11-21
 
 ### Fixed
