@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.1.13 -->
+<!-- ACE_SECTION_START v5.2.0 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -49,16 +49,44 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 - `✅ [ACE] Auto-approved: ce-ace search` - Permission auto-approval
 - `📚 [ACE] Automatically capturing learning...` - At session end
 
-## New in v5.1.13
+## Debugging & Logging
 
-**Intelligent Prompt-Based Stop Hook**:
-- ✅ **Haiku LLM Evaluation** - Semantic understanding vs regex filtering
-- ✅ **2-3x Learning Capture** - 40-60% capture rate vs 10-20% with regex
-- ✅ **7 Learning Types** - Implementation, debugging, architecture, integration, strategy, troubleshooting, domain knowledge
+**Hook Event Logs** (v5.2.0+):
+- Location: `.claude/data/logs/ace-{event}.jsonl`
+- Events: `ace-stop.jsonl`, `ace-precompact.jsonl`, `ace-userpromptsubmit.jsonl`
+- Errors: All errors also logged to `ace-errors.jsonl`
+
+**View Logs**:
+```bash
+# Raw JSONL
+cat .claude/data/logs/ace-stop.jsonl | jq
+
+# With analyzer tool
+uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop
+uv run shared-hooks/utils/ace_log_analyzer.py --stats
+uv run shared-hooks/utils/ace_log_analyzer.py --errors --hours 24
+```
+
+**Log Fields**:
+- `timestamp` - ISO 8601 timestamp
+- `event_type` - Hook name (Stop, PreCompact, UserPromptSubmit)
+- `phase` - START or END
+- `execution_time_ms` - Hook execution time (END phase only)
+- `exit_code` - 0=success, non-zero=failure
+- `error` - Error message (if failure)
+
+## New in v5.2.0
+
+**Comprehensive Wrapper Architecture**:
+- ✅ **Full Hook Logging** - Every hook event logged to JSONL files
+- ✅ **Performance Tracking** - Execution time, exit codes, error rates
+- ✅ **Easy Debugging** - Query logs with jq or built-in analyzer
+- ✅ **Self-Initializing** - Log directory created automatically
+- ✅ **Non-Breaking** - Wrappers preserve existing hook logic
 
 ---
 
-**Version**: v5.1.13
+**Version**: v5.2.0
 **Requires**: ce-ace CLI v1.0.13+
 
-<!-- ACE_SECTION_END v5.1.13 -->
+<!-- ACE_SECTION_END v5.2.0 -->
