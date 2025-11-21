@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.3.5 -->
+<!-- ACE_SECTION_START v5.3.6 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -52,7 +52,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.3.5 (Critical PostToolUse Bug Fixes)
-**New in v5.3.5**: Fixed 4 critical bugs - PostToolUse now parses transcripts, normalizes content, sends learning to server
+**Version**: v5.3.6 (Performance Optimization)
+**New in v5.3.6**: Incremental transcript parsing - each task learns only from its own work (massive efficiency gains)
 
-<!-- ACE_SECTION_END v5.3.5 -->
+<!-- ACE_SECTION_END v5.3.6 -->

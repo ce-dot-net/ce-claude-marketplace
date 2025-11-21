@@ -276,24 +276,36 @@ def extract_execution_trace(event):
     }
 
 
-def parse_transcript(transcript_path):
+def parse_transcript(transcript_path, start_line=0):
     """
     Parse Claude Code transcript .jsonl file to extract messages and tool_uses.
 
-    Stop hooks provide transcript_path instead of parsed messages/tool_uses.
-    This function reads the .jsonl file and reconstructs the data structure
-    that PreCompact hooks receive natively.
+    Supports incremental parsing by accepting a start_line parameter.
+    This enables parsing only NEW messages since last processing.
+
+    Args:
+        transcript_path: Path to the .jsonl transcript file
+        start_line: Line number to start parsing from (0-indexed, default: 0)
+
+    Returns:
+        (messages, tool_uses, lines_parsed): Tuple of messages list, tool_uses list, and number of lines parsed
     """
     messages = []
     tool_uses = []
+    lines_parsed = 0
 
     try:
         transcript_file = Path(transcript_path).expanduser()
         if not transcript_file.exists():
-            return messages, tool_uses
+            return messages, tool_uses, 0
 
         with open(transcript_file, 'r') as f:
-            for line in f:
+            for line_num, line in enumerate(f):
+                # Skip lines before start_line (incremental parsing)
+                if line_num < start_line:
+                    continue
+
+                lines_parsed += 1
                 if not line.strip():
                     continue
 
@@ -329,7 +341,7 @@ def parse_transcript(transcript_path):
         # Non-fatal: return empty lists
         pass
 
-    return messages, tool_uses
+    return messages, tool_uses, lines_parsed
 
 
 def main():
@@ -358,9 +370,47 @@ def main():
             if 'messages' not in event or not event.get('messages'):
                 # Need to parse transcript
                 if 'transcript_path' in event:
-                    messages, tool_uses = parse_transcript(event['transcript_path'])
+                    # INCREMENTAL PARSING: Load state to get last processed line
+                    state_file = Path('.claude/data/logs/ace-transcript-state.json')
+                    start_line = 0
+
+                    if state_file.exists():
+                        try:
+                            with open(state_file, 'r') as f:
+                                state = json.load(f)
+                                # Get last processed line for this transcript
+                                transcript_key = str(Path(event['transcript_path']).name)
+                                start_line = state.get(transcript_key, {}).get('last_line', 0)
+                        except Exception:
+                            pass  # Start from beginning if state load fails
+
+                    # Parse only NEW messages (incremental)
+                    messages, tool_uses, lines_parsed = parse_transcript(event['transcript_path'], start_line)
                     event['messages'] = messages
                     event['tool_uses'] = tool_uses
+
+                    # Save updated state (new last_line position)
+                    if lines_parsed > 0:
+                        state_file.parent.mkdir(parents=True, exist_ok=True)
+                        try:
+                            # Load existing state
+                            existing_state = {}
+                            if state_file.exists():
+                                with open(state_file, 'r') as f:
+                                    existing_state = json.load(f)
+
+                            # Update state for this transcript
+                            transcript_key = str(Path(event['transcript_path']).name)
+                            existing_state[transcript_key] = {
+                                'last_line': start_line + lines_parsed,
+                                'updated_at': datetime.now().isoformat()
+                            }
+
+                            # Save state
+                            with open(state_file, 'w') as f:
+                                json.dump(existing_state, f, indent=2)
+                        except Exception:
+                            pass  # Non-fatal if state save fails
                 else:
                     # Fallback: no transcript path and no messages
                     # This shouldn't happen but handle gracefully
