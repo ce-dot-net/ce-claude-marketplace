@@ -24,6 +24,18 @@
         ]
       }
     ],
+    "PostToolUse": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_posttooluse_wrapper.sh --log --detect",
+            "timeout": 10000
+          }
+        ]
+      }
+    ],
     "PermissionRequest": [
       {
         "matcher": "",
