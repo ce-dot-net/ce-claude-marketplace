@@ -5,6 +5,32 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.11] - 2025-11-21
+
+### 🔧 Stop Hook Enabled
+
+**The Change**:
+- Enabled Stop hook in `hooks/hooks.json` (was `Stop_DISABLED`)
+- Stop hook fires after responses when last action isn't a tool call
+- Automatic learning capture now works on session end
+
+**Documentation Updates**:
+- README.md: Updated hooks comment from "2 events" to "5 events"
+- Listed all 5 hook events: SessionStart, UserPromptSubmit, PermissionRequest, PreCompact, Stop
+
+**Why This Matters**:
+- Stop hook complements PreCompact hook for comprehensive learning capture
+- PreCompact fires on context compaction (conversation getting long)
+- Stop fires on session end (user exits or conversation complete)
+- Together they ensure learning is captured at appropriate completion points
+
+**Files Changed**:
+- `plugins/ace/hooks/hooks.json`: Changed `Stop_DISABLED` → `Stop`
+- `plugins/ace/README.md`: Updated hooks documentation
+
+**Requirements**:
+- ce-ace CLI >= v1.0.13
+
 ## [5.1.10] - 2025-11-20
 
 ### 🔧 Improved Pattern Extraction

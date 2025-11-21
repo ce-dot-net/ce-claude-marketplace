@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.1.10 -->
+<!-- ACE_SECTION_START v5.1.11 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -49,20 +49,16 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 - `✅ [ACE] Auto-approved: ce-ace search` - Permission auto-approval
 - `📚 [ACE] Automatically capturing learning...` - At session end
 
-## New in v5.1.10
+## New in v5.1.11
 
-**Improved Pattern Extraction**:
-- ✅ **Pattern-Based Extraction** - Uses regex for structured content, not keyword matching
-- ✅ **5 Extraction Categories** - Headings, code comments, comparisons, error context, accomplishments
-- ✅ **More Reliable** - Captures structured decisions (**Decision:**, **Gotcha:**, etc.)
-
-**Improvements from v5.1.9**:
-- v5.1.9 fixed trash patterns but keyword matching too strict
-- v5.1.10 uses pattern-based extraction for better capture quality
+**Stop Hook Enabled**:
+- ✅ **Automatic Learning Capture** - Stop hook now fires after responses (was disabled as Stop_DISABLED)
+- ✅ **Updated Documentation** - README.md correctly shows "5 events" instead of "2 events"
+- ✅ **5 Hook Events** - SessionStart, UserPromptSubmit, PermissionRequest, PreCompact, Stop
 
 ---
 
-**Version**: v5.1.10
+**Version**: v5.1.11
 **Requires**: ce-ace CLI v1.0.13+
 
-<!-- ACE_SECTION_END v5.1.10 -->
+<!-- ACE_SECTION_END v5.1.11 -->
