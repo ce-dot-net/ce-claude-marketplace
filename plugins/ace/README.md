@@ -126,7 +126,7 @@ plugins/ace/
 │   ├── ace_before_task_wrapper.sh    # Bash forwarder
 │   └── ace_after_task_wrapper.sh     # Bash forwarder
 ├── hooks/
-│   └── hooks.json                     # 2 events: UserPromptSubmit, PreCompact
+│   └── hooks.json                     # 5 events: SessionStart, UserPromptSubmit, PermissionRequest, PreCompact, Stop
 ├── commands/
 │   ├── ace-search.md                  # CLI wrappers
 │   ├── ace-patterns.md

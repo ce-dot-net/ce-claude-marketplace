@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.1.10",
-  "description": "Code Engine ACE - Intelligent pattern learning with CLI Architecture. v5.1.10: Improved pattern extraction (pattern-based, not keyword matching), ce-ace v1.0.13+ requirement. Requires ce-ace >= v1.0.13.",
+  "version": "5.1.11",
+  "description": "Code Engine ACE - Intelligent pattern learning with CLI Architecture. v5.1.11: Enabled Stop hook for automatic learning capture, updated hooks documentation. Requires ce-ace >= v1.0.13.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
