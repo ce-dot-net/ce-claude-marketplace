@@ -5,6 +5,109 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.0] - 2025-11-21
+
+### 🎯 SubagentStop Hook for After-Task Learning
+
+**Major Feature (User-Requested)**: Capture learning immediately after each Task agent completes, not just at session end!
+
+**The Problem**:
+- Users wanted learning capture **after each task completes**
+- Stop hook only fires at session end (when you close Claude Code)
+- No way to capture learning immediately after substantial subagent work
+- Learning was delayed until entire session ended
+
+**The Solution - SubagentStop Hook**:
+Added SubagentStop hook that fires when Task agents complete, enabling immediate learning capture:
+
+**Components Added**:
+
+1. **SubagentStop Wrapper** (`plugins/ace/scripts/ace_subagent_stop_wrapper.sh` - 100 lines):
+   - Logs START → Forwards to ace_after_task.py → Logs END with metrics
+   - Options: `--log` (enable logging), `--chat` (save subagent transcript), `--notify` (show notification)
+   - Uses cross-platform Python timestamps (learned from v5.2.1 fix!)
+   - Captures subagent type and saves transcript with agent name
+   - Optional notification: "✅ ACE learning captured from {agent_type} agent"
+
+2. **Hook Configuration** (`plugins/ace/hooks/hooks.json` - lines 63-74):
+   - Added SubagentStop hook entry
+   - Command: `ace_subagent_stop_wrapper.sh --log --chat --notify`
+   - Timeout: 30 seconds
+   - Fires when Task agents complete (not every tool use)
+
+**How It Works**:
+
+```
+User spawns Task agent → Subagent performs substantial work → Subagent completes
+    ↓
+SubagentStop hook fires
+    ↓
+Wrapper logs START event
+    ↓
+Forwards to ace_after_task.py (same logic as Stop hook)
+    ↓
+ace_after_task.py:
+  - Extracts trajectory (tool uses, decisions, code changes)
+  - Checks for substantial work (has trajectory, length > 0)
+  - Calls `ce-ace learn --stdin` with subagent's work
+    ↓
+Wrapper logs END event with execution time
+    ↓
+Learning captured to playbook immediately!
+```
+
+**Dual Hook Strategy**:
+- **SubagentStop** (NEW): Fires after each Task agent completes
+- **Stop** (EXISTING): Still fires at session end
+- Both use same `ace_after_task.py` logic
+- Non-conflicting - capture learning at multiple points
+
+**Benefits**:
+- ✅ **Immediate Learning** - Capture after each substantial task (not waiting for session end)
+- ✅ **Non-Intrusive** - Only fires for Task agents (substantial work), not every tool use
+- ✅ **Full Context** - Has complete subagent transcript with all decisions
+- ✅ **Optional Notification** - See "✅ ACE learning captured from X agent" when done
+- ✅ **Comprehensive Logging** - Logs to `ace-subagent-stop.jsonl` for debugging
+- ✅ **Agent Tracking** - Saves transcripts per agent type (e.g., `ace-subagent-general-purpose-20251121.json`)
+
+**Logging**:
+- **Event Log**: `.claude/data/logs/ace-subagent-stop.jsonl`
+- **Transcripts**: `.claude/data/logs/ace-subagent-{agent-type}-{timestamp}.json`
+
+**View Logs**:
+```bash
+# View SubagentStop events
+cat .claude/data/logs/ace-subagent-stop.jsonl | jq
+
+# Analyze with tool
+uv run shared-hooks/utils/ace_log_analyzer.py --event-type SubagentStop --stats
+
+# Find slow subagents
+cat .claude/data/logs/ace-subagent-stop.jsonl | jq 'select(.execution_time_ms > 5000)'
+```
+
+**When SubagentStop Fires**:
+- ✅ Task agent completes (implementation, debugging, refactoring)
+- ✅ Subagent has substantial trajectory (tool uses, decisions)
+- ❌ Not every tool use (only Task agents)
+
+**Compatibility**:
+- Compatible with Claude Code v2.0.42+ SubagentStop enhancements
+- Uses `agent_id` and `agent_transcript_path` fields from v2.0.42+
+- Non-breaking (additive feature only)
+- Both Stop and SubagentStop hooks active
+
+**Inspired By**:
+- cc-boilerplate-v2-main SubagentStop pattern
+- Reviewed reference implementation for best practices
+
+**Who Should Upgrade**:
+- **All users** who spawn Task agents frequently
+- Users who want immediate learning feedback (not waiting for session end)
+- Users building autonomous agent workflows
+
+**Commit**: 9b5f28e
+
 ## [5.2.1] - 2025-11-21
 
 ### 🐛 Bug Fix - macOS Timestamp Compatibility

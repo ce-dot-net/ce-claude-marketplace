@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.2.1 -->
+<!-- ACE_SECTION_START v5.3.0 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -13,7 +13,8 @@ npm install -g @ce-dot-net/ce-ace-cli
 ## How It Works
 
 **Before tasks**: Hook searches playbook → Injects relevant patterns
-**At session end/compact**: Hook captures learning from conversation → Playbook updates automatically
+**After Task agents complete**: SubagentStop captures learning from substantial work (NEW in v5.3.0!)
+**At session end/compact**: Stop hook captures session-wide learning
 
 Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
@@ -53,7 +54,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 **Hook Event Logs** (v5.2.0+):
 - Location: `.claude/data/logs/ace-{event}.jsonl`
-- Events: `ace-stop.jsonl`, `ace-precompact.jsonl`, `ace-userpromptsubmit.jsonl`
+- Events: `ace-stop.jsonl`, `ace-precompact.jsonl`, `ace-userpromptsubmit.jsonl`, `ace-subagent-stop.jsonl`
 - Errors: All errors also logged to `ace-errors.jsonl`
 
 **View Logs**:
@@ -69,24 +70,47 @@ uv run shared-hooks/utils/ace_log_analyzer.py --errors --hours 24
 
 **Log Fields**:
 - `timestamp` - ISO 8601 timestamp
-- `event_type` - Hook name (Stop, PreCompact, UserPromptSubmit)
+- `event_type` - Hook name (Stop, PreCompact, UserPromptSubmit, SubagentStop)
 - `phase` - START or END
 - `execution_time_ms` - Hook execution time (END phase only)
 - `exit_code` - 0=success, non-zero=failure
 - `error` - Error message (if failure)
 
-## New in v5.2.0
+### SubagentStop Events (v5.3.0+)
 
-**Comprehensive Wrapper Architecture**:
-- ✅ **Full Hook Logging** - Every hook event logged to JSONL files
-- ✅ **Performance Tracking** - Execution time, exit codes, error rates
-- ✅ **Easy Debugging** - Query logs with jq or built-in analyzer
-- ✅ **Self-Initializing** - Log directory created automatically
-- ✅ **Non-Breaking** - Wrappers preserve existing hook logic
+**What**: Captures learning after each Task agent completes
+**Log**: `.claude/data/logs/ace-subagent-stop.jsonl`
+**Transcripts**: `.claude/data/logs/ace-subagent-{agent-type}-{timestamp}.json`
+
+**View Logs**:
+```bash
+# View SubagentStop events
+cat .claude/data/logs/ace-subagent-stop.jsonl | jq
+
+# Analyze with tool
+uv run shared-hooks/utils/ace_log_analyzer.py --event-type SubagentStop --stats
+
+# Find slow subagents
+cat .claude/data/logs/ace-subagent-stop.jsonl | jq 'select(.execution_time_ms > 5000)'
+```
+
+**When It Fires**:
+- ✅ Task agent completes (implementation, debugging, refactoring)
+- ✅ Subagent has substantial trajectory (tool uses, decisions)
+- ❌ Not every tool use (only Task agents)
+
+## New in v5.3.0
+
+**SubagentStop Hook for After-Task Learning**:
+- ✅ **Immediate Learning** - Capture patterns after each Task agent completes
+- ✅ **Non-Intrusive** - Only fires for substantial subagent work
+- ✅ **Full Context** - Has complete subagent transcript with all decisions
+- ✅ **Agent Tracking** - Saves transcripts per agent type
+- ✅ **Dual Hook Strategy** - SubagentStop (after tasks) + Stop (session end)
 
 ---
 
-**Version**: v5.2.1
+**Version**: v5.3.0
 **Requires**: ce-ace CLI v1.0.13+
 
-<!-- ACE_SECTION_END v5.2.1 -->
+<!-- ACE_SECTION_END v5.3.0 -->
