@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.3.2 -->
+<!-- ACE_SECTION_START v5.3.3 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -52,7 +52,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.3.2 (Phase Naming Fix)
-**New in v5.3.2**: Fixed PostToolUse hook phase names for consistency (start/complete/end)
+**Version**: v5.3.3 (Markdown Linting)
+**New in v5.3.3**: Markdown linting fixes (MD032 compliance)
 
-<!-- ACE_SECTION_END v5.3.2 -->
+<!-- ACE_SECTION_END v5.3.3 -->
