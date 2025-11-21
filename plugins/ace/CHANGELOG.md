@@ -5,6 +5,28 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.2] - 2025-11-21
+
+### Fixed
+
+**PostToolUse Hook Phase Names**: Standardized phase names in PostToolUse hook for logging consistency.
+
+**What Changed**:
+- Changed phase names from custom values to standard hook phases
+- `detected` → `start`
+- `task_complete` → `complete`
+- `learning_captured` → `end`
+
+**Why This Matters**:
+- Consistent with other ACE hooks (Stop, SubagentStop)
+- Makes log analysis easier across all hook types
+- Follows Claude Code hook phase conventions
+
+**Files Changed**:
+- `plugins/ace/scripts/ace_posttooluse_wrapper.sh` - Updated 3 phase names
+
+**Impact**: No functionality change, only logging phase names for consistency.
+
 ## [5.3.1] - 2025-11-21
 
 ### 🎯 PostToolUse Hook for Main Agent Task Detection
