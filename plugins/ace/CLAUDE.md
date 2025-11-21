@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.3.3 -->
+<!-- ACE_SECTION_START v5.3.4 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -52,7 +52,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.3.3 (Markdown Linting)
-**New in v5.3.3**: Markdown linting fixes (MD032 compliance)
+**Version**: v5.3.4 (PostToolUse Learning Fix)
+**New in v5.3.4**: Fixed PostToolUse hook transcript parsing - learning requests now reach server
 
-<!-- ACE_SECTION_END v5.3.3 -->
+<!-- ACE_SECTION_END v5.3.4 -->

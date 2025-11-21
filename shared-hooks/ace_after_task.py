@@ -326,10 +326,10 @@ def main():
         # Extract hook event name (PreCompact or Stop)
         hook_event_name = event.get('hook_event_name', 'PreCompact')
 
-        # CRITICAL: Handle Stop hook data format
-        # According to Claude Code docs, Stop hooks provide transcript_path instead of parsed messages
+        # CRITICAL: Handle Stop and PostToolUse hook data format
+        # According to Claude Code docs, Stop/PostToolUse hooks provide transcript_path instead of parsed messages
         # PreCompact hooks provide pre-parsed messages/tool_uses directly
-        if hook_event_name == 'Stop':
+        if hook_event_name in ['Stop', 'PostToolUse']:
             # Check if we already have messages (defensive coding)
             if 'messages' not in event or not event.get('messages'):
                 # Need to parse transcript
