@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.1.13",
-  "description": "ACE (Agentic Context Engineering) - CLI-based pattern learning. Direct ce-ace CLI integration via hooks. No MCP server, no subagents. v5.1.13: Intelligent prompt-based Stop hook uses Haiku LLM for semantic evaluation. Captures 2-3x more learning (40-60% vs 10-20%). Requires ce-ace >= v1.0.13. Based on Stanford/SambaNova/UC Berkeley research",
+  "version": "5.1.14",
+  "description": "ACE (Agentic Context Engineering) - CLI-based pattern learning. Direct ce-ace CLI integration via hooks. No MCP server, no subagents. v5.1.14: Complete documentation update for Hooks + CLI architecture. All docs now accurate. Requires ce-ace >= v1.0.13. Based on Stanford/SambaNova/UC Berkeley research",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

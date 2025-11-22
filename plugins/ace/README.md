@@ -2,15 +2,16 @@
 
 **Agentic Context Engineering** - Self-improving Claude Code plugin using automatic pattern learning.
 
-## 🎯 What's New in v5.1.4
+## 🎯 What's New in v5.1.14
 
-**Session Pinning & Rich Context Learning**
+**Complete Documentation Update**
 
-- ✅ **Pattern Persistence** - Patterns survive context compaction (24-hour session TTL)
-- ✅ **89% Faster Recall** - Session cache ~10ms vs ~100ms server fetch
-- ✅ **Rich Context** - No more generic "Edit: " messages, full task descriptions
-- ✅ **Smart Triggers** - Learning at task completion (not mid-work)
-- ✅ **Server-Side Filtering** - Send full context, Reflector/Curator handle deduplication
+- ✅ **Architecture Clarity** - All docs now accurately describe Hooks + CLI architecture
+- ✅ **No MCP Confusion** - Removed outdated MCP references (archived historical docs)
+- ✅ **Installation Guide** - Complete rewrite for ce-ace CLI workflow
+- ✅ **Configuration Guide** - Complete rewrite for /ace-configure workflow
+- ✅ **Command Fixes** - Fixed MCP references in ace-bootstrap.md, ace-test.md, ace-claude-init.md
+- ✅ **Version Consistency** - All documentation now at v5.1.14
 
 ## 🚀 Quick Start
 
@@ -20,7 +21,7 @@
 npm install -g @ce-dot-net/ce-ace-cli
 ```
 
-**Requirements:** ce-ace >= v1.0.11 (session pinning support for pattern persistence across context compaction)
+**Requirements:** ce-ace >= v1.0.13
 
 ### 2. Enable Plugin
 
@@ -367,7 +368,8 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Version**: v5.1.4 (Session Pinning & Rich Context)
+**Version**: v5.1.13 (Intelligent Stop Hook)
 **Status**: Active Development
 **Maintainer**: CE.NET Team
-**Requires**: CE-ACE CLI v1.0.11+
+**Requires**: CE-ACE CLI v1.0.13+
+**Architecture**: Hooks + CLI (no MCP)

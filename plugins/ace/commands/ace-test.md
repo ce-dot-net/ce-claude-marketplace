@@ -360,13 +360,14 @@ Troubleshooting Steps:
 
 ## Common Issues
 
-### Issue: MCP Server Not Responding
-**Symptom**: ace_status tool returns connection error
+### Issue: ACE Server Connection Failed
+**Symptom**: ce-ace commands return connection error or authentication failed
 **Solution**:
 1. Run `/ace:ace-configure` to set up connection
-2. Verify server URL is correct
-3. Check server is running
-4. Verify network connectivity
+2. Verify server URL in `~/.config/ace/config.json` is correct
+3. Check API token is valid (not expired)
+4. Verify server is running and accessible
+5. Check network connectivity
 
 ### Issue: No Bullets in Playbook
 **Symptom**: ace_status shows 0 total bullets

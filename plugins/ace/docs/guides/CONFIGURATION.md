@@ -1,378 +1,395 @@
 # ACE Plugin Configuration Guide
 
-**Important**: The ACE plugin requires configuration before use. You must set up your own server URL, API token, and project ID.
+**Version**: v5.1.14
+**Architecture**: Hooks + ce-ace CLI (no MCP server)
 
 ---
 
-## Security Note ⚠️
+## 🎯 Overview
 
-**NEVER commit** `plugin.json` with real credentials to a public repository!
+The ACE plugin uses **two configuration files**:
 
-- ✅ Use environment variables
-- ✅ Use the template (`plugin.template.json`)
-- ❌ Don't hardcode API tokens
-- ❌ Don't share credentials
+1. **`~/.config/ace/config.json`** - Global ce-ace CLI configuration (server URL, API token, org ID)
+2. **`.claude/settings.json`** - Per-project configuration (project ID)
 
----
-
-## Setup Options
-
-### Option 1: Environment Variables (Recommended)
-
-**Step 1**: Add to your shell profile (`~/.zshrc` or `~/.bashrc`):
-
-```bash
-# ACE Plugin Configuration
-export ACE_SERVER_URL="https://ace-api.code-engine.app"
-export ACE_API_TOKEN="ace_your_api_token_here"
-export ACE_PROJECT_ID="prj_your_project_id"
-```
-
-**Step 2**: Reload your shell:
-
-```bash
-source ~/.zshrc  # or ~/.bashrc
-```
-
-**Step 3**: Copy the template:
-
-```bash
-cd plugins/ace-orchestration
-cp plugin.template.json plugin.json
-```
-
-**Step 4**: Restart Claude Code to pick up environment variables.
-
-**Verification**:
-
-```bash
-echo $ACE_SERVER_URL     # Should show your URL
-echo $ACE_API_TOKEN      # Should show your token
-echo $ACE_PROJECT_ID     # Should show your project ID
-```
+**No MCP configuration needed!** The plugin uses hooks + subprocess calls to `ce-ace`, not MCP tools.
 
 ---
 
-### Option 2: Direct Configuration (Local Testing Only)
+## 🚀 Quick Configuration
 
-**For local testing only** - create `plugin.json` from template:
+### Interactive Wizard (Recommended)
+
+Run the configuration wizard in Claude Code:
 
 ```bash
-cd plugins/ace-orchestration
-cp plugin.template.json plugin.json
+/ace:ace-configure
 ```
 
-Edit `plugin.json` and replace the environment variable references:
+**What it does:**
+1. Prompts for ACE server URL (or uses default)
+2. Requests your API token
+3. Auto-fetches your organization ID from server
+4. Lists available projects for selection
+5. Creates `~/.config/ace/config.json` (global)
+6. Creates `.claude/settings.json` (project-specific)
+
+**Done in 60 seconds!**
+
+---
+
+## 📝 Manual Configuration
+
+If you prefer manual setup or need to troubleshoot:
+
+### Step 1: Global Configuration
+
+Create `~/.config/ace/config.json`:
 
 ```json
 {
-  "mcpServers": {
-    "ace-pattern-learning": {
-      "env": {
-        "ACE_SERVER_URL": "https://ace-api.code-engine.app",
-        "ACE_API_TOKEN": "ace_your_api_token_here",
-        "ACE_PROJECT_ID": "prj_your_project_id"
-      }
-    }
+  "serverUrl": "https://ace-api.code-engine.app",
+  "apiToken": "ace_your_token_here",
+  "orgId": "org_your_org_id_here"
+}
+```
+
+**Fields:**
+- `serverUrl` - Your ACE server endpoint (default: https://ace-api.code-engine.app)
+- `apiToken` - Your personal API token (get from ACE server dashboard)
+- `orgId` - Your organization ID (fetch via `/organizations` API endpoint)
+
+**Permissions:**
+```bash
+chmod 600 ~/.config/ace/config.json  # Protect token
+```
+
+### Step 2: Project Configuration
+
+Create `.claude/settings.json` in your project root:
+
+```json
+{
+  "orgId": "org_your_org_id_here",
+  "projectId": "prj_your_project_id_here"
+}
+```
+
+**Alternative format** (environment variables):
+```json
+{
+  "env": {
+    "ACE_ORG_ID": "org_xxxxx",
+    "ACE_PROJECT_ID": "prj_xxxxx"
   }
 }
 ```
 
-**⚠️ Warning**: This method is **only for local testing**. Never commit this file!
+Both formats work! The plugin supports either.
+
+**Fields:**
+- `orgId` - Same as global config (for context resolution)
+- `projectId` - Specific project ID for this codebase
 
 ---
 
-## Configuration Values
+## 🔐 Security Best Practices
 
-### ACE_SERVER_URL
+### Protect Your API Token
 
-**Purpose**: ACE server endpoint
+**Never commit** `.config/ace/config.json` or tokens to version control!
 
-**Default**: `https://ace-api.code-engine.app`
-
-**How to get**:
-- Use the official Code Engine ACE server: `https://ace-api.code-engine.app`
-- For enterprise/custom installations: Get URL from your administrator
-
-**Test it**:
 ```bash
-curl $ACE_SERVER_URL/health
-# Expected: {"status":"healthy"}
+# Add to .gitignore
+echo ".claude/settings.json" >> .gitignore
+echo "~/.config/ace/config.json" >> .gitignore
 ```
 
----
-
-### ACE_API_TOKEN
-
-**Purpose**: Authentication token for ACE server
-
-**Format**: `ace_` followed by 48 alphanumeric characters
-
-**Example**: `ace_wFIuXzQvaR5IVn2SoizOf-ncOKP6bmHDmocaQ3b5aWU`
-
-**How to get**:
-- For local development: Check your server configuration
-- For production: Generate via ACE server admin interface
-
-**Security**:
-- ⚠️ Treat like a password
-- ❌ Never commit to git
-- ❌ Never share publicly
-- ✅ Rotate regularly
-
-**Test it**:
+**File permissions:**
 ```bash
-curl $ACE_SERVER_URL/playbook \
-  -H "Authorization: Bearer $ACE_API_TOKEN" \
-  -H "X-ACE-Project: $ACE_PROJECT_ID"
+chmod 600 ~/.config/ace/config.json       # User read/write only
+chmod 644 .claude/settings.json           # Can be shared (no secrets)
 ```
 
----
+### Environment Variables (Optional)
 
-### ACE_PROJECT_ID
+For CI/CD or shared environments, use environment variables:
 
-**Purpose**: Multi-tenant project isolation
-
-**Format**: `prj_` followed by 16 hexadecimal characters
-
-**Example**: `prj_5bc0b560221052c1`
-
-**How to get**:
-- For local development: Generate with `uuidgen | head -c 16`
-- For production: Create via ACE server admin interface
-
-**Usage**:
-- Isolates patterns between projects
-- Each project has its own pattern database
-- Prevents pattern leakage
-
-**Generate locally**:
 ```bash
-echo "prj_$(uuidgen | tr '[:upper:]' '[:lower:]' | head -c 16)"
+# Add to ~/.zshrc or ~/.bashrc
+export ACE_SERVER_URL="https://ace-api.code-engine.app"
+export ACE_API_TOKEN="ace_your_token_here"
+export ACE_ORG_ID="org_xxxxx"
+export ACE_PROJECT_ID="prj_xxxxx"
 ```
 
----
-
-## Verification
-
-### Check Environment Variables
-
-```bash
-# Check all required variables are set
-env | grep ACE_
-
-# Expected output:
-# ACE_SERVER_URL=https://ace-api.code-engine.app
-# ACE_API_TOKEN=ace_your_api_token_here
-# ACE_PROJECT_ID=prj_your_project_id
-```
-
-### Test Server Connection
-
-```bash
-# Health check
-curl $ACE_SERVER_URL/health
-
-# Get playbook (with auth)
-curl $ACE_SERVER_URL/playbook \
-  -H "Authorization: Bearer $ACE_API_TOKEN" \
-  -H "X-ACE-Project: $ACE_PROJECT_ID"
-```
-
-### Test Plugin in Claude Code
-
-```bash
-# Start Claude Code
-claude-code
-
-# In Claude Code, run:
-/ace-status
-
-# Expected: Statistics about your pattern database
-```
-
----
-
-## Troubleshooting
-
-### Plugin not loading
-
-**Symptom**: ACE commands not available in Claude Code
-
-**Solutions**:
-1. Check environment variables are set (run `env | grep ACE_`)
-2. Restart Claude Code completely
-3. Check `plugin.json` exists and is valid JSON
-4. Verify MCP client is built (`ls ../../mcp-clients/ce-ai-ace-client/dist/index.js`)
-
-### "Connection refused" error
-
-**Symptom**: Cannot connect to ACE server
-
-**Solutions**:
-1. Check server is running: `curl $ACE_SERVER_URL/health`
-2. Verify `ACE_SERVER_URL` is correct (no trailing slash)
-3. Check firewall/network settings
-4. For localhost: Ensure server is running on port 9000
-
-### "Unauthorized" error
-
-**Symptom**: 401/403 errors from server
-
-**Solutions**:
-1. Verify `ACE_API_TOKEN` is correct
-2. Check token hasn't expired
-3. Ensure token has correct format (`ace_...`)
-4. Check server logs for authentication errors
-
-### "Project not found" error
-
-**Symptom**: Server rejects requests for project ID
-
-**Solutions**:
-1. Verify `ACE_PROJECT_ID` format is correct (`prj_...`)
-2. Create project on server if needed
-3. Check server supports multi-tenant mode
-
----
-
-## Production Deployment
-
-### For Distributed Plugins
-
-If distributing your plugin to others:
-
-1. **Use the template**: Include only `plugin.template.json`
-2. **Documentation**: Provide this CONFIGURATION.md
-3. **Don't include**: Never include `plugin.json` with real credentials
-4. **Add to .gitignore**:
-   ```
-   plugins/ace-orchestration/plugin.json
-   plugins/ace-orchestration/.env
-   ```
-
-### For Production Server
-
-When deploying to production:
-
-1. **Deploy ACE server** to cloud (AWS/GCP/Azure)
-2. **Configure SSL/HTTPS**: Use Let's Encrypt or cloud provider
-3. **Set production URL**: Update `ACE_SERVER_URL` to `https://ace.your-domain.com`
-4. **Generate production tokens**: Use strong random tokens
-5. **Project management**: Set up project creation workflow
-
----
-
-## Example Configurations
-
-### Local Development
-
-```bash
-# ~/.zshrc or ~/.bashrc
-export ACE_SERVER_URL="http://localhost:9000"
-export ACE_API_TOKEN="ace_wFIuXzQvaR5IVn2SoizOf-ncOKP6bmHDmocaQ3b5aWU"
-export ACE_PROJECT_ID="prj_5bc0b560221052c1"
-```
-
-### Production (Team Shared Server)
-
-```bash
-# ~/.zshrc or ~/.bashrc
-export ACE_SERVER_URL="https://ace.yourcompany.com"
-export ACE_API_TOKEN="ace_prod_token_from_admin"
-export ACE_PROJECT_ID="prj_your_project_id"
-```
-
-### Multi-Project Setup
-
-```bash
-# ~/.zshrc or ~/.bashrc
-
-# Default project
-export ACE_SERVER_URL="https://ace.yourcompany.com"
-export ACE_API_TOKEN="ace_your_token"
-export ACE_PROJECT_ID="prj_default_project"
-
-# Function to switch projects
-ace_use_project() {
-  case $1 in
-    frontend)
-      export ACE_PROJECT_ID="prj_frontend_abc123"
-      ;;
-    backend)
-      export ACE_PROJECT_ID="prj_backend_def456"
-      ;;
-    *)
-      echo "Unknown project: $1"
-      return 1
-      ;;
-  esac
-  echo "Switched to project: $1 ($ACE_PROJECT_ID)"
+Then use env format in `.claude/settings.json`:
+```json
+{
+  "env": {
+    "ACE_ORG_ID": "org_xxxxx",
+    "ACE_PROJECT_ID": "prj_xxxxx"
+  }
 }
-
-# Usage: ace_use_project frontend
 ```
 
 ---
 
-## Security Best Practices
+## 🔄 Configuration Hierarchy
 
-1. **Rotate tokens regularly**: Generate new tokens every 90 days
-2. **Use project-specific tokens**: Don't share tokens across projects
-3. **Limit token scope**: If server supports it, use read-only tokens for viewing
-4. **Monitor usage**: Check server logs for suspicious activity
-5. **Revoke compromised tokens**: Immediately revoke if leaked
-6. **Use HTTPS in production**: Always use SSL/TLS for production servers
+The ce-ace CLI uses this priority order:
+
+1. **Environment variables** (highest priority)
+   - `ACE_SERVER_URL`
+   - `ACE_API_TOKEN`
+   - `ACE_ORG_ID`
+   - `ACE_PROJECT_ID`
+
+2. **Global config** (`~/.config/ace/config.json`)
+   - `serverUrl`
+   - `apiToken`
+   - `orgId`
+
+3. **Project config** (`.claude/settings.json`)
+   - `projectId` (required per-project)
+   - `orgId` (fallback if not in global)
 
 ---
 
-## Quick Reference
+## 🧪 Verify Configuration
 
-### Files
-
-- `plugin.template.json` - Template with env vars (safe to commit)
-- `plugin.json` - Your config with real values (DON'T commit)
-- `.env.example` - Example environment file (safe to commit)
-- `CONFIGURATION.md` - This guide
-
-### Environment Variables
-
-| Variable | Required | Format | Example |
-|----------|----------|--------|---------|
-| `ACE_SERVER_URL` | Yes | URL | `https://ace-api.code-engine.app` |
-| `ACE_API_TOKEN` | Yes | `ace_...` | `ace_your_api_token...` |
-| `ACE_PROJECT_ID` | Yes | `prj_...` | `prj_your_project...` |
-| `ACE_CACHE_TTL_MINUTES` | No | Number | `5` |
-
-### Commands
+### Check Global Config
 
 ```bash
-# Set up environment variables
-echo 'export ACE_SERVER_URL="..."' >> ~/.zshrc
-echo 'export ACE_API_TOKEN="..."' >> ~/.zshrc
-echo 'export ACE_PROJECT_ID="..."' >> ~/.zshrc
-source ~/.zshrc
+cat ~/.config/ace/config.json
+```
 
-# Create plugin.json from template
-cp plugin.template.json plugin.json
+**Expected output:**
+```json
+{
+  "serverUrl": "https://ace-api.code-engine.app",
+  "apiToken": "ace_abcd1234...",
+  "orgId": "org_xyz789..."
+}
+```
 
-# Test configuration
-curl $ACE_SERVER_URL/health
-/ace-status  # In Claude Code
+### Check Project Config
+
+```bash
+cat .claude/settings.json
+```
+
+**Expected output:**
+```json
+{
+  "orgId": "org_xyz789...",
+  "projectId": "prj_abc123..."
+}
+```
+
+### Test Connection
+
+```bash
+# In Claude Code:
+/ace:ace-status
+```
+
+**Expected output:**
+```
+✅ Connected to ACE server
+Organization: org_xyz789
+Project: prj_abc123
+Patterns: 42 total
+- strategies_and_hard_rules: 15
+- useful_code_snippets: 12
+- troubleshooting_and_pitfalls: 8
+- apis_to_use: 7
 ```
 
 ---
 
-## Support
+## 🛠️ Troubleshooting
 
-If you have issues:
+### "ACE authentication failed"
 
-1. Check this guide
-2. Verify environment variables are set
-3. Test server connection manually
-4. Check server logs
-5. File an issue on GitHub
+**Problem**: Invalid or expired token.
+
+**Solution:**
+```bash
+# Get new token from ACE server dashboard
+# Update config
+/ace:ace-configure
+
+# Or manually edit
+vim ~/.config/ace/config.json
+```
+
+### "Organization not found"
+
+**Problem**: Invalid `orgId` or no access to organization.
+
+**Solution:**
+```bash
+# Verify org ID from server
+curl -H "Authorization: Bearer ace_your_token" \
+  https://ace-api.code-engine.app/organizations
+
+# Update config with correct orgId
+/ace:ace-configure
+```
+
+### "Project not found"
+
+**Problem**: Invalid `projectId` or project doesn't exist.
+
+**Solution:**
+```bash
+# List available projects
+curl -H "Authorization: Bearer ace_your_token" \
+  https://ace-api.code-engine.app/organizations/org_xxx/projects
+
+# Update .claude/settings.json with correct projectId
+/ace:ace-configure
+```
+
+### "No .claude/settings.json"
+
+**Problem**: Project not configured yet.
+
+**Solution:**
+```bash
+# Run wizard to create settings.json
+/ace:ace-configure
+```
+
+### Hooks receive wrong org/project
+
+**Problem**: Configuration file not in expected location.
+
+**Solution:**
+```bash
+# Check file locations
+ls -la ~/.config/ace/config.json
+ls -la .claude/settings.json
+
+# Verify you're in correct project directory
+pwd
+
+# Re-run configuration
+/ace:ace-configure
+```
 
 ---
 
-**Remember**: Never commit credentials to git! Always use environment variables or configuration management.
+## 📂 Configuration File Locations
+
+### Default Locations
+
+**Global config:**
+- macOS/Linux: `~/.config/ace/config.json`
+- Windows: `%USERPROFILE%\.config\ace\config.json`
+
+**Project config:**
+- All platforms: `<project-root>/.claude/settings.json`
+
+### Custom Locations (Advanced)
+
+Override via environment variables:
+
+```bash
+export ACE_CONFIG_PATH="/custom/path/to/config.json"
+export ACE_SETTINGS_PATH="/custom/path/to/settings.json"
+```
+
+---
+
+## 🔄 Multi-Project Setup
+
+Working with multiple projects? Each gets its own `.claude/settings.json`:
+
+```bash
+# Project 1
+cd ~/projects/website
+cat .claude/settings.json
+# {"orgId": "org_xyz", "projectId": "prj_website"}
+
+# Project 2
+cd ~/projects/api
+cat .claude/settings.json
+# {"orgId": "org_xyz", "projectId": "prj_api"}
+
+# Project 3 (different org)
+cd ~/projects/client-work
+cat .claude/settings.json
+# {"orgId": "org_client", "projectId": "prj_client_app"}
+```
+
+**Global config** stays the same (your personal token), but each project gets its own playbook via `projectId`.
+
+---
+
+## 🔧 Advanced Configuration
+
+### Custom Server URL
+
+Using a self-hosted ACE server?
+
+```json
+{
+  "serverUrl": "https://ace.your-company.com",
+  "apiToken": "ace_your_token",
+  "orgId": "org_your_org"
+}
+```
+
+### Timeout Settings
+
+Hooks have built-in timeouts. To adjust:
+
+Edit `plugins/ace/hooks/hooks.json`:
+```json
+{
+  "UserPromptSubmit": [{
+    "hooks": [{
+      "timeout": 15000  // 15 seconds (default)
+    }]
+  }]
+}
+```
+
+**Recommended timeouts:**
+- SessionStart: 30000ms (CLI check)
+- UserPromptSubmit: 15000ms (pattern retrieval)
+- PostToolUse: 10000ms (learning detection)
+- Stop: 30000ms (session learning)
+
+---
+
+## 📚 Next Steps
+
+After configuration:
+
+1. **Bootstrap playbook**:
+   ```bash
+   /ace:ace-bootstrap
+   ```
+
+2. **Test pattern retrieval**:
+   ```bash
+   /ace:ace-search authentication
+   ```
+
+3. **Start coding** - Hooks auto-trigger on implementation keywords!
+
+---
+
+## 🔗 Related Documentation
+
+- **Installation Guide**: See `INSTALL.md`
+- **Troubleshooting Guide**: See `TROUBLESHOOTING.md`
+- **ACE Server API**: https://github.com/ce-dot-net/ce-ace-server/blob/main/docs/API.md
+- **CE-ACE CLI Docs**: https://github.com/ce-dot-net/ce-ace-cli
+
+---
+
+**Questions?** File an issue on the [marketplace repository](https://github.com/ce-dot-net/ce-claude-marketplace/issues).
