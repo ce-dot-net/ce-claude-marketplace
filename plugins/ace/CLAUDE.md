@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.3.7 -->
+<!-- ACE_SECTION_START v5.1.14 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -52,7 +52,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.3.7 (Critical Bug Fix)
-**New in v5.3.7**: Pattern usage tracking fixed - server can now update 'helpful' scores (completes reinforcement learning loop)
+**Version**: v5.1.14 (Documentation Update)
+**New in v5.1.14**: Complete documentation update - all docs now accurate for Hooks + CLI architecture (no MCP)
 
-<!-- ACE_SECTION_END v5.3.7 -->
+<!-- ACE_SECTION_END v5.1.14 -->

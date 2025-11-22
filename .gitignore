@@ -17,6 +17,10 @@ build/
 # Serena agent memory (internal development notes - not for publication)
 .serena/
 
+# Agent and Antigravity directories
+.agent/
+.antigravity/
+
 # Internal documentation (development notes, implementation steps, research)
 docs-internal/
 

@@ -5,9 +5,7 @@ set -euo pipefail
 
 # Check if ce-ace is already installed
 if command -v ce-ace >/dev/null 2>&1; then
-  # Already installed, show version
-  VERSION=$(ce-ace --version 2>/dev/null || echo "unknown")
-  echo "✅ [ACE] ce-ace CLI installed (v${VERSION})"
+  # Already installed - silent success (no noise!)
   exit 0
 fi
 

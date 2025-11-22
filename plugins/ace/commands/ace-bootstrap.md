@@ -30,11 +30,11 @@ ce-ace CLI
     ↓
 ACE Server: Reflector analyzes code
     ↓
-MCP Tool: returns results
+ce-ace CLI: returns results
     ↓
-Skill: queries ace_status for final counts
+Command: calls ce-ace status for final counts
     ↓
-Skill: generates dynamic report for user
+Command: generates dynamic report for user
 ```
 
 **To invoke**: Simply use the bootstrap-orchestrator skill with the user's parameters.

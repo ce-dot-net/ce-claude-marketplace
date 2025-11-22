@@ -5,6 +5,46 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.14] - 2025-11-22
+
+### 📚 Documentation - Complete Architecture Update
+
+**All documentation updated to reflect Hooks + CLI architecture (no MCP)**
+
+#### Updated Documentation
+- ✅ Project CLAUDE.md ACE section: v5.0.3 → v5.1.14
+- ✅ Plugin README.md: v5.1.4 → v5.1.14
+- ✅ INSTALL.md: Complete rewrite for CLI architecture (was v3.1.9 MCP-based)
+- ✅ CONFIGURATION.md: Complete rewrite for /ace-configure workflow
+- ✅ Fixed MCP references in ace-bootstrap.md, ace-test.md, ace-claude-init.md
+
+#### Archived Historical Docs
+- Moved 5 MCP-related docs to `docs/archive/v4-mcp-architecture/`:
+  - ACE_MCP_SETUP.md
+  - MCP_CLIENT_IMPLEMENTATION.md
+  - MCP_CLIENT_IMPLEMENTATION_NOTES.md
+  - MCP_TEAM_SUMMARY.md
+  - SUBAGENTS.md
+- Created archive README explaining architectural evolution
+
+#### Minor Fixes
+- 🔇 SessionStart hook now silent when ce-ace already installed
+- 📝 Added .agent/ and .antigravity/ to .gitignore
+
+#### Architecture Documented
+All docs now correctly describe:
+- ✅ Hooks: SessionStart, UserPromptSubmit, PostToolUse, PreCompact, Stop, SubagentStop
+- ✅ ce-ace CLI: Subprocess calls via Python wrappers
+- ✅ Configuration: ~/.config/ace/config.json + .claude/settings.json
+- ✅ Commands: Slash commands (/ace:ace-*)
+- ❌ No MCP server
+- ❌ No MCP tools
+- ❌ No subagent invocations
+
+**Files Modified**: 11
+**Files Archived**: 5
+**Version Consistency**: All documentation now at v5.1.14
+
 ## [5.3.7] - 2025-11-22
 
 ### 🔥 Critical Fix - Pattern Usage Tracking (Reinforcement Learning Feedback Loop)

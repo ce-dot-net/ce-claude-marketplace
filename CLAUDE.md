@@ -2,7 +2,7 @@
 
 ## ACE Plugin Instructions
 
-<!-- ACE_SECTION_START v5.0.3 -->
+<!-- ACE_SECTION_START v5.1.14 -->
 # ACE Plugin Instructions
 
 Automatic pattern learning plugin. Hooks inject learned patterns before tasks, capture new patterns after completion.
@@ -24,6 +24,7 @@ Automatic pattern learning plugin. Hooks inject learned patterns before tasks, c
 
 - `/ace:ace-configure` - Interactive setup wizard
 - `/ace:ace-bootstrap` - Initialize playbook from codebase
+- `/ace:ace-install-cli` - Install ce-ace CLI tool interactively
 
 **Management:**
 
@@ -63,13 +64,16 @@ Patterns are organized into:
 
 ## Technical Notes
 
-- All commands use `ce-ace` CLI (subprocess calls)
+- **Architecture**: Hooks + ce-ace CLI (no MCP server)
+- All commands use `ce-ace` CLI subprocess calls
 - Hooks run automatically on trigger keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 - Settings in `.claude/settings.json` - supports both `{orgId, projectId}` and `{env: {ACE_ORG_ID, ACE_PROJECT_ID}}` formats
+- **SessionStart hook**: Auto-checks ce-ace CLI installation (silent when installed)
 
 ---
 
-**Version**: v5.0.3
-**Requires**: ce-ace CLI >= v1.0.3
+**Version**: v5.1.13
+**Requires**: ce-ace CLI >= v1.0.13
+**Architecture**: Hooks + CLI (no MCP)
 
-<!-- ACE_SECTION_END v5.0.3 -->
+<!-- ACE_SECTION_END v5.1.14 -->

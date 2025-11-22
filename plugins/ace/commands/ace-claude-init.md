@@ -246,7 +246,7 @@ The full ACE plugin CLAUDE.md content (~344 lines) is copied inline, which conta
 - 🤖 **How skills work** (retrieval before tasks, learning after tasks)
 - 🎯 **When to trigger** ACE features (implement, debug, refactor, etc.)
 - 📊 **Architecture overview** (Generator → Reflector → Curator → Playbook)
-- 🔧 **MCP tools reference** for manual control
+- 🔧 **Slash commands reference** for manual control
 - 📁 **Playbook structure** (4 sections: strategies, snippets, troubleshooting, APIs)
 
 ## Why This is Needed
