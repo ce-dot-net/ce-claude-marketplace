@@ -120,6 +120,21 @@ def main():
                 patterns_response['similar_patterns'] = pattern_list
                 patterns_response['count'] = len(pattern_list)
 
+        # CRITICAL: Save pattern IDs for reinforcement learning (ACE paper feedback loop)
+        # When task completes, ace_after_task.py will load these IDs and include in ExecutionTrace
+        # Server uses this to update 'helpful' scores for patterns that worked
+        if pattern_list and context['project']:
+            try:
+                pattern_ids = [p.get('id') for p in pattern_list if p.get('id')]
+                if pattern_ids:
+                    state_dir = Path('.claude/data/logs')
+                    state_dir.mkdir(parents=True, exist_ok=True)
+                    state_file = state_dir / f"ace-patterns-used-{session_id}.json"
+                    state_file.write_text(json.dumps(pattern_ids))
+            except Exception:
+                # Non-fatal: continue without pattern tracking
+                pass
+
         # Build context for Claude (JSON in XML tags - includes domain metadata)
         ace_context = f"<ace-patterns>\n{json.dumps(patterns_response, indent=2)}\n</ace-patterns>"
 

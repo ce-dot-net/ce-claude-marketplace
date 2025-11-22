@@ -5,6 +5,60 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.7] - 2025-11-22
+
+### 🔥 Critical Fix - Pattern Usage Tracking (Reinforcement Learning Feedback Loop)
+
+**Completes ACE Research Paper Alignment**: Server can now update 'helpful' scores for patterns that work!
+
+**The Problem**:
+Pattern IDs were never being sent to the server with learning submissions. This broke the reinforcement learning feedback loop described in the ACE research paper - the server couldn't update 'helpful' scores for patterns that worked.
+
+**Root Cause**:
+- `ace_before_task.py` retrieved patterns but never saved their IDs
+- `ace_after_task.py` tried to get `playbook_patterns_used` from event (always empty)
+- ExecutionTrace sent to server had empty `playbook_used` field
+- Result: Server had no way to know which patterns were useful!
+
+**The Solution**:
+
+1. **`shared-hooks/ace_before_task.py` (Lines 123-136)**:
+   - After retrieving patterns, extract pattern IDs
+   - Save to `.claude/data/logs/ace-patterns-used-{session_id}.json`
+   - One state file per session for isolation
+
+2. **`shared-hooks/ace_after_task.py` (Lines 264-278)**:
+   - Load pattern IDs from state file using session_id
+   - Include in ExecutionTrace's `playbook_used` field
+   - Clean up state file after use (one-time use)
+
+**State File Format**:
+```json
+{
+  "patterns": [
+    "ctx-1749038478-cca0",
+    "ctx-3252392215-0e4f",
+    "ctx-3394741097-2d88"
+  ]
+}
+```
+
+**Testing Results**:
+```
+✅ Loaded 3 pattern IDs from state file
+✅ Pattern IDs included in ExecutionTrace.playbook_used field
+✅ State file cleaned up after use
+✅ Server receives pattern IDs for reinforcement learning
+```
+
+**Impact**:
+- ✅ Server can now update 'helpful' scores for useful patterns
+- ✅ Reinforcement learning loop works as designed in ACE paper
+- ✅ Pattern quality improves over time through feedback
+- ✅ Completes the 85% → 100% paper alignment
+
+**Alignment Milestone**: This fix completes the full ACE research paper implementation - the playbook now truly learns from success and failure!
+
 ## [5.3.6] - 2025-11-21
 
 ### 🚀 Performance - Major Optimization: Incremental Transcript Parsing

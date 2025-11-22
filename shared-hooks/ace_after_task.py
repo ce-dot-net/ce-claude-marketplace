@@ -261,8 +261,21 @@ def extract_execution_trace(event):
         if isinstance(tool.get('result'), dict)
     )
 
-    # Extract playbook patterns used (from ACE retrieval context)
-    playbook_used = event.get('playbook_patterns_used', [])
+    # CRITICAL: Load pattern IDs for reinforcement learning (ACE paper feedback loop)
+    # ace_before_task.py saved which patterns were retrieved at task start
+    # We load those IDs and send to server so it can update 'helpful' scores
+    playbook_used = []
+    session_id = event.get('session_id')
+    if session_id:
+        try:
+            state_file = Path(f'.claude/data/logs/ace-patterns-used-{session_id}.json')
+            if state_file.exists():
+                playbook_used = json.loads(state_file.read_text())
+                # Clean up state file after loading (one-time use)
+                state_file.unlink()
+        except Exception:
+            # Non-fatal: continue without pattern tracking
+            playbook_used = []
 
     return {
         "task": task_description[:2000],  # Increased: 400 → 2000 chars
