@@ -1,6 +1,6 @@
 # ACE Plugin Installation Guide
 
-**Version**: v5.1.14
+**Version**: v5.1.15
 **Architecture**: Hooks + ce-ace CLI (no MCP server)
 
 ---
@@ -33,7 +33,7 @@ npm install -g @ce-dot-net/ce-ace-cli
 **Verify installation:**
 ```bash
 ce-ace --version
-# Should show: v1.0.13 or higher
+# Should show: v1.0.14 or higher
 ```
 
 **Alternative**: Use the interactive installer:
@@ -94,7 +94,7 @@ This will:
 - Git (for marketplace installation)
 
 **ACE Requirements:**
-- ce-ace CLI >= v1.0.13
+- ce-ace CLI >= v1.0.14
 - ACE server access (API token)
 - Organization and project on ACE server
 
@@ -240,7 +240,7 @@ cat .claude/settings.json
 ```
 
 **Expected behavior:**
-- ✅ ce-ace shows version >= v1.0.13
+- ✅ ce-ace shows version >= v1.0.14
 - ✅ `/ace:ace-status` shows playbook stats
 - ✅ `/ace:ace-search` returns results
 - ✅ Config files exist with valid credentials

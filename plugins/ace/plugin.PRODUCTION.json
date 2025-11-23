@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.1.14",
-  "description": "ACE (Agentic Context Engineering) - CLI-based pattern learning. Direct ce-ace CLI integration via hooks. No MCP server, no subagents. v5.1.14: Complete documentation update for Hooks + CLI architecture. All docs now accurate. Requires ce-ace >= v1.0.13. Based on Stanford/SambaNova/UC Berkeley research",
+  "version": "5.1.15",
+  "description": "ACE (Agentic Context Engineering) - CLI-based pattern learning. Direct ce-ace CLI integration via hooks. No MCP server, no subagents. v5.1.15: Marketplace version sync + CLI requirement update (now v1.0.14). Requires ce-ace >= v1.0.14. Based on Stanford/SambaNova/UC Berkeley research",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

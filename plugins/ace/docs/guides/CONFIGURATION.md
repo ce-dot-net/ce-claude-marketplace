@@ -1,6 +1,6 @@
 # ACE Plugin Configuration Guide
 
-**Version**: v5.1.14
+**Version**: v5.1.15
 **Architecture**: Hooks + ce-ace CLI (no MCP server)
 
 ---
