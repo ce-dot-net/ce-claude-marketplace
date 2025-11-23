@@ -2,16 +2,14 @@
 
 **Agentic Context Engineering** - Self-improving Claude Code plugin using automatic pattern learning.
 
-## 🎯 What's New in v5.1.14
+## 🎯 What's New in v5.1.15
 
-**Complete Documentation Update**
+**Marketplace Version Sync + CLI Requirement Update**
 
-- ✅ **Architecture Clarity** - All docs now accurately describe Hooks + CLI architecture
-- ✅ **No MCP Confusion** - Removed outdated MCP references (archived historical docs)
-- ✅ **Installation Guide** - Complete rewrite for ce-ace CLI workflow
-- ✅ **Configuration Guide** - Complete rewrite for /ace-configure workflow
-- ✅ **Command Fixes** - Fixed MCP references in ace-bootstrap.md, ace-test.md, ace-claude-init.md
-- ✅ **Version Consistency** - All documentation now at v5.1.14
+- ✅ **Marketplace Version Fix** - Fixed `.claude-plugin/marketplace.json` version display (was v5.1.14, now v5.1.15)
+- ✅ **CLI Requirement Update** - Updated ce-ace requirement from v1.0.13 → v1.0.14
+- ✅ **Version Consistency** - All 9 version files now synchronized at v5.1.15
+- ✅ **Documentation Accuracy** - All docs updated to reference ce-ace v1.0.14+
 
 ## 🚀 Quick Start
 
@@ -21,7 +19,7 @@
 npm install -g @ce-dot-net/ce-ace-cli
 ```
 
-**Requirements:** ce-ace >= v1.0.13
+**Requirements:** ce-ace >= v1.0.14
 
 ### 2. Enable Plugin
 
@@ -368,8 +366,8 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Version**: v5.1.13 (Intelligent Stop Hook)
+**Version**: v5.1.15 (Marketplace Version Sync + CLI Update)
 **Status**: Active Development
 **Maintainer**: CE.NET Team
-**Requires**: CE-ACE CLI v1.0.13+
+**Requires**: CE-ACE CLI v1.0.14+
 **Architecture**: Hooks + CLI (no MCP)

@@ -5,6 +5,35 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.15] - 2025-11-23
+
+### 🔧 Hotfix - Marketplace Version Sync + CLI Requirement Update
+
+**Fixed Critical Issue from v5.1.14 Release**
+
+#### What Was Fixed
+- ✅ `.claude-plugin/marketplace.json` now correctly shows v5.1.15
+- ✅ Fixed version display in Claude Code plugin listing
+- ✅ All 9 version files now synchronized (plugin.json, CLAUDE.md, README.md, docs, marketplace.json)
+- ✅ Updated CLI requirement: ce-ace >= v1.0.13 → v1.0.14
+
+#### CLI Requirement Update
+- **Updated requirement**: ce-ace >= v1.0.14 (was v1.0.13)
+- **Reason**: User confirmed ce-ace CLI is now at v1.0.14
+- **Files updated**: plugin.PRODUCTION.json, plugin.local.json, CLAUDE.md (root), README.md, INSTALL.md, marketplace.json
+
+#### Technical Details
+The v5.1.14 release correctly updated all plugin version files but the marketplace.json
+description field still referenced v5.1.14 functionality. This hotfix ensures:
+
+1. Marketplace displays current version (v5.1.15)
+2. CLI requirement reflects current ce-ace version (v1.0.14)
+3. All version markers are synchronized across the codebase
+
+**Files Updated**: 9 (all version-containing files + marketplace.json)
+**Version Consistency**: ✅ All files now at v5.1.15
+**CLI Requirement**: ✅ All docs reference ce-ace >= v1.0.14
+
 ## [5.1.14] - 2025-11-22
 
 ### 📚 Documentation - Complete Architecture Update
