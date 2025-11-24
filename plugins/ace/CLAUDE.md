@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.1.15 -->
+<!-- ACE_SECTION_START v5.1.16 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -52,7 +52,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.1.15 (Marketplace Version Sync + CLI Update)
-**New in v5.1.15**: Marketplace version sync (fixed marketplace.json) + CLI requirement updated to v1.0.14
+**Version**: v5.1.16 (Learning Timeout Fix)
+**New in v5.1.16**: Hook timeout increases (10s/30s → 60s) fix learning capture errors + version file consistency
 
-<!-- ACE_SECTION_END v5.1.15 -->
+<!-- ACE_SECTION_END v5.1.16 -->

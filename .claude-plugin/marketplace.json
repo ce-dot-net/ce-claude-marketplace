@@ -13,8 +13,8 @@
     {
       "name": "ace",
       "source": "./plugins/ace",
-      "description": "Code Engine ACE - Intelligent pattern learning with hooks-based architecture. v5.1.15: Marketplace version sync + CLI requirement update (now v1.0.14). All version files synchronized. Requires ce-ace >= v1.0.14.",
-      "version": "5.1.15",
+      "description": "Code Engine ACE - Intelligent pattern learning with hooks-based architecture. v5.1.16: Learning timeout fix + version file consistency. Hook timeouts increased to fix learning capture errors. Requires ce-ace >= v1.0.14.",
+      "version": "5.1.16",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"

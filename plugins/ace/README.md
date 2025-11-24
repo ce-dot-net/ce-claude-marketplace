@@ -2,14 +2,14 @@
 
 **Agentic Context Engineering** - Self-improving Claude Code plugin using automatic pattern learning.
 
-## 🎯 What's New in v5.1.15
+## 🎯 What's New in v5.1.16
 
-**Marketplace Version Sync + CLI Requirement Update**
+**Learning Timeout Fix + Version File Consistency**
 
-- ✅ **Marketplace Version Fix** - Fixed `.claude-plugin/marketplace.json` version display (was v5.1.14, now v5.1.15)
-- ✅ **CLI Requirement Update** - Updated ce-ace requirement from v1.0.13 → v1.0.14
-- ✅ **Version Consistency** - All 9 version files now synchronized at v5.1.15
-- ✅ **Documentation Accuracy** - All docs updated to reference ce-ace v1.0.14+
+- ✅ **Learning Capture Fixed** - Hook timeouts increased (10s/30s → 60s) to fix "⚠️ [ACE] Learning capture timed out" errors
+- ✅ **Version File Sync** - Fixed `.claude-plugin/plugin.json` and `plugin.template.json` (were showing 5.3.7, now 5.1.16)
+- ✅ **All Files Updated** - All 11 version files now synchronized at v5.1.16
+- ✅ **Root Cause Addressed** - ce-ace learn subprocess needs >30s for large transcripts + network + server processing
 
 ## 🚀 Quick Start
 
@@ -366,7 +366,7 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Version**: v5.1.15 (Marketplace Version Sync + CLI Update)
+**Version**: v5.1.16 (Learning Timeout Fix)
 **Status**: Active Development
 **Maintainer**: CE.NET Team
 **Requires**: CE-ACE CLI v1.0.14+
