@@ -367,7 +367,7 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Version**: v5.1.16 (Learning Timeout Fix)
+**Version**: v5.1.19 (Critical Learning Hook Fix)
 **Status**: Active Development
 **Maintainer**: CE.NET Team
 **Requires**: CE-ACE CLI v1.0.14+

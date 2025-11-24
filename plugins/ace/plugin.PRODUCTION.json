@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.1.16",
-  "description": "ACE (Agentic Context Engineering) - CLI-based pattern learning. Direct ce-ace CLI integration via hooks. No MCP server, no subagents. v5.1.16: Learning timeout fix + version file consistency. Requires ce-ace >= v1.0.14. Based on Stanford/SambaNova/UC Berkeley research",
+  "version": "5.1.19",
+  "description": "ACE (Agentic Context Engineering) - CLI-based pattern learning. Direct ce-ace CLI integration via hooks. No MCP server, no subagents. v5.1.19: Critical fix - resolved learning hook failure (working directory resolution). Requires ce-ace >= v1.0.14. Based on Stanford/SambaNova/UC Berkeley research",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

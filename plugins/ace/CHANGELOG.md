@@ -5,6 +5,60 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.19] - 2025-11-24
+
+### 🐛 Critical Fix - Learning Hooks Not Working
+
+**Problem**: Stop hook showed `⚠️ [ACE] No project context found - skipping automatic learning`
+
+**Root Cause**: Wrapper scripts extracted wrong field name from event JSON
+- Looked for: `.working_directory` or `.workingDirectory`
+- Claude Code provides: `.cwd`
+- Result: Hooks couldn't find project root → couldn't read `.claude/settings.json` → learning failed
+
+#### Solution 1: Fix All Wrapper Scripts
+
+Updated field extraction in 5 wrapper scripts:
+
+```bash
+# Before
+WORKING_DIR=$(echo "$INPUT_JSON" | jq -r '.working_directory // .workingDirectory // empty')
+
+# After
+WORKING_DIR=$(echo "$INPUT_JSON" | jq -r '.cwd // .working_directory // .workingDirectory // empty')
+```
+
+**Files updated**:
+- `plugins/ace/scripts/ace_stop_wrapper.sh`
+- `plugins/ace/scripts/ace_precompact_wrapper.sh`
+- `plugins/ace/scripts/ace_subagent_stop_wrapper.sh`
+- `plugins/ace/scripts/ace_posttooluse_wrapper.sh`
+- `plugins/ace/scripts/ace_before_task_wrapper.sh`
+
+#### Solution 2: Environment Variable Fallback
+
+Updated `shared-hooks/utils/ace_context.py` to fallback to environment variables:
+- Claude Code loads `ACE_ORG_ID` and `ACE_PROJECT_ID` from `.claude/settings.json`
+- `get_context()` now checks `os.environ` if file not found
+- Double-layer safety: works even if working directory resolution fails
+
+**Testing**: Both fixes verified working ✅
+
+#### Impact
+
+- ✅ Learning hooks now correctly capture patterns at session end
+- ✅ PostToolUse, SubagentStop, and Stop hooks all functional
+- ✅ Patterns will be saved to server after each session
+- ✅ Automatic learning cycle complete
+
+**Files Modified**: 6
+- `shared-hooks/utils/ace_context.py`
+- `plugins/ace/scripts/ace_stop_wrapper.sh`
+- `plugins/ace/scripts/ace_precompact_wrapper.sh`
+- `plugins/ace/scripts/ace_subagent_stop_wrapper.sh`
+- `plugins/ace/scripts/ace_posttooluse_wrapper.sh`
+- `plugins/ace/scripts/ace_before_task_wrapper.sh`
+
 ## [5.1.16] - 2025-11-24
 
 ### 🔧 Bug Fixes
