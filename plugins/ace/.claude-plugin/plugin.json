@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.3.7",
-  "description": "Code Engine ACE - Intelligent pattern learning with three-tier capture: PostToolUse (main agent), SubagentStop (Task agents), Stop (session end). v5.3.7: Critical fix - pattern usage tracking now sends pattern IDs to server, enabling reinforcement learning feedback loop for 'helpful' scores (completes ACE research paper alignment). Requires ce-ace >= v1.0.13.",
+  "version": "5.1.15",
+  "description": "Code Engine ACE - Intelligent pattern learning with hooks-based architecture. v5.1.15: Marketplace version sync + CLI requirement update to v1.0.14. Complete documentation update - all docs accurately describe Hooks + CLI (no MCP). Requires ce-ace >= v1.0.14.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
