@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.1.16",
-  "description": "ACE (Agentic Context Engineering) - LOCAL DEVELOPMENT MODE - v5.1.16: Learning timeout fix + version file consistency - Uses local build instead of npm package",
+  "version": "5.1.19",
+  "description": "ACE (Agentic Context Engineering) - LOCAL DEVELOPMENT MODE - v5.1.19: Critical fix - resolved learning hook failure (working directory resolution) - Uses local build instead of npm package",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

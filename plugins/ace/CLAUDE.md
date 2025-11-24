@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.1.18 -->
+<!-- ACE_SECTION_START v5.1.19 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -52,7 +52,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.1.18 (Critical Timeout & Context Fixes)
-**New in v5.1.18**: Resolved persistent timeout errors (130s hook/120s subprocess), fixed working directory resolution in all wrapper scripts
+**Version**: v5.1.19 (Critical Learning Hook Fix)
+**New in v5.1.19**: Fixed learning hook failure - updated wrapper scripts to use correct .cwd field, added environment variable fallback
 
-<!-- ACE_SECTION_END v5.1.18 -->
+<!-- ACE_SECTION_END v5.1.19 -->
