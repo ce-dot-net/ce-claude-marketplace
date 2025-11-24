@@ -13,19 +13,52 @@ Call ce-ace CLI to get current statistics:
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Check ce-ace CLI is installed
 if ! command -v ce-ace >/dev/null 2>&1; then
   echo "❌ ce-ace not found - Install: npm install -g @ce-dot-net/ce-ace-cli"
   exit 1
 fi
 
-# Claude Code automatically exports ACE_ORG_ID and ACE_PROJECT_ID from .claude/settings.json
-if [ -z "${ACE_ORG_ID:-}" ] || [ -z "${ACE_PROJECT_ID:-}" ]; then
-  echo "❌ Run /ace-configure first to setup .claude/settings.json"
+# Check for jq (required for JSON formatting)
+if ! command -v jq >/dev/null 2>&1; then
+  echo "❌ jq not found - Install: brew install jq (macOS) or apt-get install jq (Linux)"
+  exit 1
+fi
+
+# Optional: Export environment variables if available from .claude/settings.json
+# ce-ace will use these if provided, otherwise fallback to global config
+export ACE_ORG_ID="${ACE_ORG_ID:-}"
+export ACE_PROJECT_ID="${ACE_PROJECT_ID:-}"
+
+# Run ce-ace status and capture output
+STATUS_OUTPUT=$(ce-ace status --json 2>&1)
+EXIT_CODE=$?
+
+# Check if command succeeded
+if [ $EXIT_CODE -ne 0 ]; then
+  echo "❌ Failed to get ACE status"
+  echo ""
+  echo "Error details:"
+  echo "$STATUS_OUTPUT"
+  echo ""
+  echo "Common fixes:"
+  echo "  1. Run: /ace-configure to setup configuration"
+  echo "  2. Verify global config exists: cat ~/.config/ace/config.json"
+  echo "  3. Check API token is valid at: https://ace.code-engine.app/settings"
+  exit 1
+fi
+
+# Verify we got valid JSON
+if ! echo "$STATUS_OUTPUT" | jq empty 2>/dev/null; then
+  echo "❌ Invalid response from ce-ace (not valid JSON)"
+  echo ""
+  echo "Response:"
+  echo "$STATUS_OUTPUT"
   exit 1
 fi
 
 # Format output for readability
-ce-ace status --json | jq -r '
+echo "$STATUS_OUTPUT" | jq -r '
   "📊 ACE Playbook Status",
   "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
   "Organization: \(.org_id // "Not configured")",

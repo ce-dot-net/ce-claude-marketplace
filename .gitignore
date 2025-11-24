@@ -11,6 +11,9 @@ build/
 # ACE configuration with credentials and project settings
 .ace/
 
+# Claude Code data and logs
+.claude/data/
+
 # Swarm configuration (if applicable)
 .swarm/
 

@@ -17,12 +17,25 @@ Interactive configuration wizard using ce-ace CLI v1.0.2+ features with Claude C
 
 When the user runs `/ace:configure`, follow these steps:
 
-### Step 1: Check ce-ace CLI Version
+### Step 1: Check ce-ace CLI Version and Dependencies
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Check for jq (required for JSON parsing)
+if ! command -v jq >/dev/null 2>&1; then
+  echo "❌ jq not found (required for JSON parsing)"
+  echo ""
+  echo "Installation instructions:"
+  echo "  macOS:   brew install jq"
+  echo "  Linux:   apt-get install jq  or  yum install jq"
+  echo "  Windows: Download from https://stedolan.github.io/jq/download/"
+  echo ""
+  exit 1
+fi
+
+# Check for ce-ace CLI
 if ! command -v ce-ace >/dev/null 2>&1; then
   echo "❌ ce-ace CLI not found"
   echo ""
@@ -134,31 +147,69 @@ echo ""
 3. **Validate Token and Get Org/Project Info**:
    ```bash
    echo "🔍 Validating token with ACE server..."
+   echo "   Server: $SERVER_URL"
+   echo ""
 
+   # Use subshell to avoid polluting parent environment
    # Workaround: ce-ace config validate doesn't accept --server-url flag properly
    # Use environment variables instead
-   export ACE_SERVER_URL="$SERVER_URL"
-   export ACE_API_TOKEN="$API_TOKEN"
+   VALIDATION_OUTPUT=$(
+     ACE_SERVER_URL="$SERVER_URL" \
+     ACE_API_TOKEN="$API_TOKEN" \
+     ce-ace config validate --json 2>&1
+   )
+   VALIDATION_EXIT_CODE=$?
 
-   VALIDATION_OUTPUT=$(ce-ace config validate --json 2>&1)
-
-   if [ $? -ne 0 ]; then
+   if [ $VALIDATION_EXIT_CODE -ne 0 ]; then
      echo "❌ Token validation failed"
+     echo ""
+     echo "Error details:"
      echo "$VALIDATION_OUTPUT"
-     unset ACE_SERVER_URL ACE_API_TOKEN
+     echo ""
+     echo "Common issues:"
+     echo "  - Invalid or expired token"
+     echo "  - Network connectivity problems"
+     echo "  - Server URL incorrect"
+     echo ""
+     echo "Please verify your token at: https://ace.code-engine.app/settings"
+     exit 1
+   fi
+
+   # Verify we got valid JSON back
+   if ! echo "$VALIDATION_OUTPUT" | jq empty 2>/dev/null; then
+     echo "❌ Invalid response from ACE server (not valid JSON)"
+     echo ""
+     echo "Response:"
+     echo "$VALIDATION_OUTPUT"
      exit 1
    fi
 
    # Parse validation response
-   ORG_ID=$(echo "$VALIDATION_OUTPUT" | jq -r '.org_id')
-   ORG_NAME=$(echo "$VALIDATION_OUTPUT" | jq -r '.org_name')
-   PROJECTS_JSON=$(echo "$VALIDATION_OUTPUT" | jq -c '.projects')
+   ORG_ID=$(echo "$VALIDATION_OUTPUT" | jq -r '.org_id // empty')
+   ORG_NAME=$(echo "$VALIDATION_OUTPUT" | jq -r '.org_name // empty')
+   PROJECTS_JSON=$(echo "$VALIDATION_OUTPUT" | jq -c '.projects // []')
 
-   echo "✅ Verified! Organization: $ORG_NAME ($ORG_ID)"
+   # Verify required fields
+   if [ -z "$ORG_ID" ] || [ -z "$ORG_NAME" ]; then
+     echo "❌ Validation response missing required fields (org_id, org_name)"
+     echo ""
+     echo "Response:"
+     echo "$VALIDATION_OUTPUT"
+     exit 1
+   fi
+
+   # Check if user has any projects
+   PROJECT_COUNT=$(echo "$PROJECTS_JSON" | jq 'length')
+   if [ "$PROJECT_COUNT" -eq 0 ]; then
+     echo "⚠️  No projects found for organization: $ORG_NAME"
+     echo ""
+     echo "Please create a project first at: https://ace.code-engine.app/projects"
+     exit 1
+   fi
+
+   echo "✅ Validated! Organization: $ORG_NAME ($ORG_ID)"
+   echo "   Projects available: $PROJECT_COUNT"
    echo ""
-
-   # Clean up environment variables
-   unset ACE_SERVER_URL ACE_API_TOKEN
    ```
 
 4. **Ask User to Select Project** (use AskUserQuestion):
@@ -190,19 +241,60 @@ echo ""
    ```bash
    echo "💾 Saving global configuration..."
 
+   # Determine config location (respect XDG_CONFIG_HOME)
+   GLOBAL_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/ace/config.json"
+   GLOBAL_CONFIG_DIR=$(dirname "$GLOBAL_CONFIG")
+
+   # Ensure config directory exists
+   if [ ! -d "$GLOBAL_CONFIG_DIR" ]; then
+     echo "📁 Creating config directory: $GLOBAL_CONFIG_DIR"
+     mkdir -p "$GLOBAL_CONFIG_DIR"
+     if [ $? -ne 0 ]; then
+       echo "❌ Failed to create config directory: $GLOBAL_CONFIG_DIR"
+       exit 1
+     fi
+   fi
+
+   # Save configuration
    ce-ace config \
      --server-url "$SERVER_URL" \
      --api-token "$API_TOKEN" \
      --project-id "$PROJECT_ID" \
      --json
 
-   if [ $? -eq 0 ]; then
-     echo "✅ Global configuration saved to ~/.config/ace/config.json"
-     echo ""
-   else
-     echo "❌ Failed to save global configuration"
+   if [ $? -ne 0 ]; then
+     echo "❌ Failed to save global configuration (ce-ace config command failed)"
      exit 1
    fi
+
+   # Verify config file was created
+   if [ ! -f "$GLOBAL_CONFIG" ]; then
+     echo "❌ Global config was not created at expected location"
+     echo "   Expected: $GLOBAL_CONFIG"
+     echo "   Please check ce-ace CLI logs for details"
+     exit 1
+   fi
+
+   # Verify config is valid JSON
+   if ! jq empty "$GLOBAL_CONFIG" 2>/dev/null; then
+     echo "❌ Global config is not valid JSON"
+     echo "   Location: $GLOBAL_CONFIG"
+     echo "   Please check file contents"
+     exit 1
+   fi
+
+   # Verify required fields are present
+   if ! jq -e '.serverUrl and .apiToken' "$GLOBAL_CONFIG" >/dev/null 2>&1; then
+     echo "❌ Global config is missing required fields (serverUrl, apiToken)"
+     echo "   Location: $GLOBAL_CONFIG"
+     exit 1
+   fi
+
+   echo "✅ Global configuration saved and verified:"
+   echo "   Location: $GLOBAL_CONFIG"
+   echo "   Server: $SERVER_URL"
+   echo "   Project: $PROJECT_ID"
+   echo ""
    ```
 
 ### Step 4: Project Configuration (if needed)
@@ -363,11 +455,13 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 if [ "$SCOPE" = "global" ] || [ "$SCOPE" = "both" ]; then
-  echo "Global Config: ~/.config/ace/config.json ✓"
+  GLOBAL_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/ace/config.json"
+  echo "Global Config: $GLOBAL_CONFIG ✓"
 fi
 
 if [ "$SCOPE" = "project" ] || [ "$SCOPE" = "both" ]; then
-  echo "Project Config: .claude/settings.json ✓"
+  PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+  echo "Project Config: $PROJECT_ROOT/.claude/settings.json ✓"
 fi
 
 echo ""
@@ -388,10 +482,14 @@ echo ""
 5. **Handle both single-org and multi-org modes** based on global config
 
 **Error Handling:**
+- Check jq availability (required for JSON parsing)
 - Check ce-ace version >= 1.0.2
-- Validate token before saving
-- Check for jq availability
+- Validate token before saving (with detailed error messages)
+- Verify global config file was created and is valid JSON
+- Verify global config has required fields (serverUrl, apiToken)
+- Check user has at least one project in organization
 - Handle missing global config for project-only mode
+- Use subshell for environment variables (avoid pollution)
 
 **User Experience:**
 - Show progress messages at each step
