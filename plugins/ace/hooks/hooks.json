@@ -31,7 +31,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_posttooluse_wrapper.sh --log --detect",
-            "timeout": 10000
+            "timeout": 60000
           }
         ]
       }
@@ -67,7 +67,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_stop_wrapper.sh --log --chat",
-            "timeout": 30000
+            "timeout": 60000
           }
         ]
       }
@@ -79,7 +79,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_subagent_stop_wrapper.sh --log --chat --notify",
-            "timeout": 30000
+            "timeout": 60000
           }
         ]
       }
