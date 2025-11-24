@@ -41,7 +41,7 @@ INPUT_JSON=$(cat)
 
 # Extract working directory from event and cd to it
 # This ensures ace_after_task.py can find .claude/settings.json
-WORKING_DIR=$(echo "$INPUT_JSON" | jq -r '.working_directory // .workingDirectory // empty')
+WORKING_DIR=$(echo "$INPUT_JSON" | jq -r '.cwd // .working_directory // .workingDirectory // empty')
 if [[ -z "$WORKING_DIR" ]]; then
   # Fallback: Infer from transcript_path (.claude/data/transcript-*.jsonl -> project root)
   TRANSCRIPT_PATH=$(echo "$INPUT_JSON" | jq -r '.transcript_path // empty')

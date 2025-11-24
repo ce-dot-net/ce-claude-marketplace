@@ -2,6 +2,7 @@
 """ACE Context Resolution - Reads .claude/settings.json for orgId/projectId"""
 
 import json
+import os
 from pathlib import Path
 from typing import Optional, Dict
 
@@ -9,6 +10,8 @@ from typing import Optional, Dict
 def get_context() -> Optional[Dict[str, str]]:
     """
     Read orgId and projectId from .claude/settings.json
+
+    Falls back to environment variables if file not found.
 
     Supports two formats:
     1. Direct: {"orgId": "...", "projectId": "..."}
@@ -19,7 +22,18 @@ def get_context() -> Optional[Dict[str, str]]:
     """
     settings_file = Path('.claude/settings.json')
 
+    # Try reading from file first
     if not settings_file.exists():
+        # Fallback: Check environment variables (Claude Code loads these from settings.json)
+        env_org_id = os.environ.get('ACE_ORG_ID')
+        env_project_id = os.environ.get('ACE_PROJECT_ID')
+
+        if env_project_id:
+            return {
+                'org': env_org_id,  # May be None for single-org mode
+                'project': env_project_id
+            }
+
         return None
 
     try:
