@@ -26,6 +26,21 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# PRE-CHECK: Verify ce-ace CLI is installed
+if ! command -v ce-ace >/dev/null 2>&1; then
+  echo "⚠️  [ACE] ce-ace CLI not found - install with: npm install -g @ce-dot-net/ce-ace-cli"
+  # Fail gracefully - don't block session from closing
+  exit 0
+fi
+
+# PRE-CHECK: Verify configuration exists
+GLOBAL_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/ace/config.json"
+if [[ ! -f "$GLOBAL_CONFIG" ]]; then
+  # No global config - skip learning capture gracefully
+  # Don't show error, just exit silently (user can configure later)
+  exit 0
+fi
+
 # Check if logger exists
 [[ -f "${LOGGER}" ]] || {
   echo "[ERROR] ace_event_logger.py not found: ${LOGGER}" >&2

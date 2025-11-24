@@ -21,76 +21,55 @@ When the user invokes this command, follow these steps in order:
 
 ### Phase 1: Detection (Always Run, But Silent If OK)
 
-Use the Bash tool to check current installation status:
+Use the Bash tool to check current installation status. **IMPORTANT**: Break this into simple, single-purpose commands to avoid eval parse errors.
 
+**Step 1.1**: Check if ce-ace command exists:
 ```bash
-# Check if ce-ace is installed
-if command -v ce-ace >/dev/null 2>&1; then
-  VERSION=$(ce-ace --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-  echo "INSTALLED:${VERSION:-unknown}"
-else
-  echo "NOT_INSTALLED"
-fi
+command -v ce-ace && echo "FOUND" || echo "NOT_INSTALLED"
+```
+
+**Step 1.2**: If FOUND, get version:
+```bash
+ce-ace --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
 ```
 
 **Handle results**:
 
-- **If output contains `INSTALLED:` and version >= 1.0.0**:
-  - Show: `✅ ce-ace v{VERSION} installed and working`
-  - EXIT immediately (silent success - no noise!)
+- **If Step 1.1 output contains `FOUND`** and Step 1.2 returns a version:
+  - Check if version >= 1.0.0
+  - If yes: Show `✅ ce-ace v{VERSION} installed and working` and EXIT (silent success!)
+  - If no: Show `⚠️ ce-ace v{VERSION} installed (outdated)` and ask `Would you like to upgrade? (Y/n)`
+    - If yes → proceed to Phase 2 (Installation)
+    - If no → EXIT
 
-- **If output contains `INSTALLED:` but version < 1.0.0**:
-  - Show: `⚠️ ce-ace v{VERSION} installed (outdated, latest: check npm)`
-  - Ask user: `Would you like to upgrade? (Y/n)`
-  - If yes → proceed to Phase 2 (Installation)
-  - If no → EXIT
-
-- **If output contains `NOT_INSTALLED`**:
+- **If Step 1.1 output contains `NOT_INSTALLED`**:
   - Show: `❌ ce-ace CLI not found`
   - Proceed to Phase 2 (Installation)
 
 ### Phase 2: Package Manager Detection
 
-Use the Bash tool to detect available package managers:
+Use the Bash tool to detect available package managers. **IMPORTANT**: Use simple, separate commands to avoid parse errors.
 
+**Step 2.1**: Check for npm:
 ```bash
-# Detect available package managers
-echo "=== Available Package Managers ==="
-managers=""
-counter=1
-
-if command -v npm >/dev/null 2>&1; then
-  npm_version=$(npm --version 2>/dev/null || echo "unknown")
-  echo "${counter}. npm (v${npm_version})"
-  managers="${managers}npm,"
-  counter=$((counter + 1))
-fi
-
-if command -v pnpm >/dev/null 2>&1; then
-  pnpm_version=$(pnpm --version 2>/dev/null || echo "unknown")
-  echo "${counter}. pnpm (v${pnpm_version})"
-  managers="${managers}pnpm,"
-  counter=$((counter + 1))
-fi
-
-if command -v yarn >/dev/null 2>&1; then
-  yarn_version=$(yarn --version 2>/dev/null || echo "unknown")
-  echo "${counter}. yarn (v${yarn_version})"
-  managers="${managers}yarn,"
-  counter=$((counter + 1))
-fi
-
-# If no package managers found
-if [ -z "$managers" ]; then
-  echo "ERROR:NO_PACKAGE_MANAGERS"
-else
-  echo "MANAGERS:${managers%,}"
-fi
+command -v npm >/dev/null 2>&1 && npm --version 2>/dev/null || echo "NOT_FOUND"
 ```
+
+**Step 2.2**: Check for pnpm:
+```bash
+command -v pnpm >/dev/null 2>&1 && pnpm --version 2>/dev/null || echo "NOT_FOUND"
+```
+
+**Step 2.3**: Check for yarn:
+```bash
+command -v yarn >/dev/null 2>&1 && yarn --version 2>/dev/null || echo "NOT_FOUND"
+```
+
+**Build list of available managers** from the results above. For each manager that didn't return "NOT_FOUND", add it to a list with its version number.
 
 **Handle results**:
 
-- **If `ERROR:NO_PACKAGE_MANAGERS`**:
+- **If ALL managers returned `NOT_FOUND`**:
   - Show error message:
     ```
     ❌ No package managers found (npm, pnpm, or yarn required)
@@ -102,9 +81,9 @@ fi
     ```
   - EXIT with error
 
-- **If `MANAGERS:` found**:
-  - Parse the list (e.g., `npm,pnpm`)
-  - Proceed to Phase 3
+- **If at least ONE manager was found**:
+  - Display numbered list with versions (e.g., "1. npm (v11.1.0)")
+  - Proceed to Phase 3 with the list of available managers
 
 ### Phase 3: User Selection
 
@@ -194,44 +173,28 @@ Use the Bash tool to run the installation command:
 
 ### Phase 6: Verify Installation
 
-Use the Bash tool to verify the installation worked:
+Use the Bash tool to verify the installation worked. **IMPORTANT**: Use simple, separate commands.
 
+**Step 6.1**: Check if command exists:
 ```bash
-echo "=== Verification ==="
-
-# Check 1: Command exists
-if command -v ce-ace >/dev/null 2>&1; then
-  echo "✅ ce-ace command found in PATH"
-else
-  echo "❌ ce-ace command not found in PATH"
-  echo "   PATH issue - may need to restart terminal or update PATH"
-  exit 1
-fi
-
-# Check 2: Get version
-VERSION=$(ce-ace --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-if [ -n "$VERSION" ]; then
-  echo "✅ Version: ${VERSION}"
-else
-  echo "⚠️ Could not detect version"
-fi
-
-# Check 3: Basic OS check
-OS=$(uname -s)
-case "$OS" in
-  Linux|Darwin)
-    echo "✅ OS: ${OS} (supported)"
-    ;;
-  MINGW*|MSYS*|CYGWIN*)
-    echo "⚠️ OS: Windows detected - consider using WSL for better compatibility"
-    ;;
-  *)
-    echo "⚠️ OS: ${OS} (untested, may have issues)"
-    ;;
-esac
-
-echo "VERIFICATION_COMPLETE"
+command -v ce-ace
 ```
+
+**Step 6.2**: Get version (if Step 6.1 succeeded):
+```bash
+ce-ace --version
+```
+
+**Step 6.3**: Get OS info:
+```bash
+uname -s
+```
+
+**Process results**:
+- If Step 6.1 returns a path: ✅ ce-ace found
+- If Step 6.1 fails: ❌ Not found (PATH issue, may need to restart terminal)
+- Extract version number from Step 6.2 output
+- Check OS from Step 6.3: Linux/Darwin = supported, Windows = suggest WSL
 
 **Show verification results** to the user with a summary:
 ```
@@ -253,30 +216,27 @@ Next steps:
 Would you like to test connection to the ACE server? (Y/n):
 ```
 
-**If yes**, use the Bash tool:
+**If yes**, use simple Bash commands:
 
+**Step 7.1**: Check if global config exists:
 ```bash
-# Test server connectivity
-# Try to ping ACE server or use curl to test endpoint
-echo "Testing server connectivity..."
-
-# Check if config exists
-if [ -f ~/.config/ace/config.json ]; then
-  SERVER_URL=$(jq -r '.serverUrl // "https://ace.ce.dev"' ~/.config/ace/config.json 2>/dev/null)
-
-  # Test connectivity with curl
-  if curl -s --connect-timeout 5 "${SERVER_URL}/health" >/dev/null 2>&1; then
-    echo "✅ Server connectivity: OK (${SERVER_URL})"
-  else
-    echo "⚠️ Server connectivity: Could not reach ${SERVER_URL}"
-    echo "   This is normal if you haven't configured ACE yet"
-    echo "   Run /ace:ace-configure to set up server connection"
-  fi
-else
-  echo "ℹ️  No ACE configuration found"
-  echo "   Run /ace:ace-configure to set up server connection"
-fi
+test -f ~/.config/ace/config.json && echo "CONFIG_EXISTS" || echo "NO_CONFIG"
 ```
+
+**Step 7.2**: If config exists, get server URL:
+```bash
+jq -r '.serverUrl // "https://ace-api.code-engine.app"' ~/.config/ace/config.json
+```
+
+**Step 7.3**: Test connectivity (using URL from Step 7.2):
+```bash
+curl -s --connect-timeout 5 {SERVER_URL}/health
+```
+
+**Process results**:
+- If NO_CONFIG: Show "ℹ️  No ACE configuration found - Run /ace-configure"
+- If Step 7.3 succeeds: ✅ Server connectivity OK
+- If Step 7.3 fails: ⚠️ Could not reach server (normal if not configured)
 
 **Show connectivity results** and exit with success.
 

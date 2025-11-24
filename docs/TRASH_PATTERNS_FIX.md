@@ -320,7 +320,7 @@ From ACE Server Team:
 ## References
 
 - **Server Team Analysis**: Provided in user message (2024-11-20)
-- **ACE Research Paper**: arXiv:2510.04618v1
+- **ACE Research Paper**: Published October 2025
 - **Related Issues**: #3523 (Hook Storm Bug)
 - **Related Docs**:
   - `QUERY_ENHANCEMENT_DECISION.md` (semantic search vs keyword stuffing)
