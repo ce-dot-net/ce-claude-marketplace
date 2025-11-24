@@ -2,14 +2,15 @@
 
 **Agentic Context Engineering** - Self-improving Claude Code plugin using automatic pattern learning.
 
-## 🎯 What's New in v5.1.16
+## 🎯 What's New in v5.1.17
 
-**Learning Timeout Fix + Version File Consistency**
+**Critical Bug Fixes - User-Reported Issues**
 
-- ✅ **Learning Capture Fixed** - Hook timeouts increased (10s/30s → 60s) to fix "⚠️ [ACE] Learning capture timed out" errors
-- ✅ **Version File Sync** - Fixed `.claude-plugin/plugin.json` and `plugin.template.json` (were showing 5.3.7, now 5.1.16)
-- ✅ **All Files Updated** - All 11 version files now synchronized at v5.1.16
-- ✅ **Root Cause Addressed** - ce-ace learn subprocess needs >30s for large transcripts + network + server processing
+- ✅ **ace-configure** - Added global config verification (7 bugs fixed: env pollution, directory creation, validation errors, project count check, jq dependency)
+- ✅ **ace-status** - Fixed "empty 0 playbooks" bug, now works with global config, better error messages
+- ✅ **SessionStart Hook** - Fixed bash eval parse errors, removed interactive prompts blocking sessions
+- ✅ **Stop Hook** - Fixed organization configuration errors, added pre-checks for CLI and config
+- ✅ **ace-install-cli** - Fixed complex bash eval errors, simplified all multi-line commands
 
 ## 🚀 Quick Start
 
