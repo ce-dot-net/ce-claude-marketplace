@@ -507,12 +507,19 @@ def main():
             if context['project']:
                 env['ACE_PROJECT_ID'] = context['project']
 
+            # IMPORTANT: Timeout must be less than hook timeout (130s in hooks.json)
+            # For long sessions with lots of work, ce-ace needs time to:
+            # 1. Analyze large execution traces (can be very large for long sessions)
+            # 2. Call ACE API server
+            # 3. Wait for Reflector + Curator processing (server-side analysis)
+            # 4. Return results
+            # Set to 120s to leave 10s for wrapper overhead
             result = subprocess.run(
                 ['ce-ace', 'learn', '--stdin', '--json'],
                 input=json.dumps(trace),
                 text=True,
                 capture_output=True,
-                timeout=30,
+                timeout=120,  # Increased from 30s to 120s (hooks have 130s total)
                 env=env
             )
 
