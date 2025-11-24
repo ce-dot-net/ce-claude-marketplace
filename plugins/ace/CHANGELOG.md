@@ -5,6 +5,46 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.16] - 2025-11-24
+
+### 🔧 Bug Fixes
+
+**Fixed Learning Capture Timeouts**
+
+#### Hook Timeout Increases
+- ✅ PostToolUse hook: 10s → 60s
+- ✅ Stop hook: 30s → 60s
+- ✅ SubagentStop hook: 30s → 60s
+
+**Problem Solved**: `⚠️ [ACE] Learning capture timed out` errors
+
+**Root Cause**:
+- `ce-ace learn` subprocess takes >30s for:
+  - Large transcript parsing
+  - Network latency to ACE server
+  - Server-side Reflector + Curator processing
+- Old timeouts (10s/30s) were insufficient
+
+**Solution**: 60s timeout provides adequate buffer for subprocess (30s) + overhead (30s)
+
+#### Version File Consistency
+- ✅ Fixed `.claude-plugin/plugin.json` version (was showing 5.3.7)
+- ✅ Fixed `.claude-plugin/plugin.template.json` version (was showing 5.3.7)
+- ✅ All version files now synchronized at v5.1.16
+
+These files were missed by the v5.1.15 release manager run.
+
+#### Other Fixes
+- ✅ Added `.claude/data/` to .gitignore (excludes Claude Code logs)
+
+**Files Modified**: 4
+- `plugins/ace/hooks/hooks.json` - Timeout increases
+- `plugins/ace/.claude-plugin/plugin.json` - Version sync
+- `plugins/ace/.claude-plugin/plugin.template.json` - Version sync
+- `.gitignore` - Added .claude/data/
+
+**Impact**: Users will no longer see learning timeout errors on complex sessions
+
 ## [5.1.15] - 2025-11-23
 
 ### 🔧 Hotfix - Marketplace Version Sync + CLI Requirement Update
