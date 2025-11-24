@@ -56,6 +56,25 @@ fi
 # Read stdin
 INPUT_JSON=$(cat)
 
+# Extract working directory from event and cd to it
+# This ensures ace_after_task.py can find .claude/settings.json
+WORKING_DIR=$(echo "$INPUT_JSON" | jq -r '.working_directory // .workingDirectory // empty')
+if [[ -z "$WORKING_DIR" ]]; then
+  # Fallback: Infer from transcript_path (.claude/data/transcript-*.jsonl -> project root)
+  TRANSCRIPT_PATH=$(echo "$INPUT_JSON" | jq -r '.transcript_path // empty')
+  if [[ -n "$TRANSCRIPT_PATH" ]]; then
+    # transcript_path is .claude/data/transcript-*.jsonl, so go up 2 levels
+    WORKING_DIR=$(cd "$(dirname "$TRANSCRIPT_PATH")/../.." && pwd)
+  fi
+fi
+
+if [[ -n "$WORKING_DIR" ]] && [[ -d "$WORKING_DIR" ]]; then
+  cd "$WORKING_DIR" || {
+    echo "[ERROR] Failed to change to working directory: $WORKING_DIR" >&2
+    exit 1
+  }
+fi
+
 # Log event START
 if [[ "$ENABLE_LOG" == "true" ]]; then
   echo "$INPUT_JSON" | uv run "$LOGGER" --event-type Stop --phase start >/dev/null 2>&1 || {

@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.1.17 -->
+<!-- ACE_SECTION_START v5.1.18 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -52,7 +52,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.1.17 (Critical Bug Fixes)
-**New in v5.1.17**: Fixed configure verification, status empty playbook, SessionStart parse errors, Stop hook failures, install-cli bash eval errors
+**Version**: v5.1.18 (Critical Timeout & Context Fixes)
+**New in v5.1.18**: Resolved persistent timeout errors (130s hook/120s subprocess), fixed working directory resolution in all wrapper scripts
 
-<!-- ACE_SECTION_END v5.1.17 -->
+<!-- ACE_SECTION_END v5.1.18 -->
