@@ -5,6 +5,64 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.20] - 2025-11-25
+
+### 🧹 Quality Gate Filters - Fix Garbage Data
+
+**Problem**: Learning hooks were sending GARBAGE data to the server:
+- `/ace:ace-status` commands were being learned as patterns
+- 3 Read operations triggered PostToolUse learning (not substantial work!)
+- Generic conversations ("Conversation with X message exchanges") were captured
+- Meta-garbage patterns reinforced garbage (39 observations of "minimal trajectory is valid")
+
+**Root Cause**:
+1. `ace_after_task.py` had weak filtering (any trajectory with 1+ items passed)
+2. `ace_task_detector.py` used broken heuristics:
+   - 3 tools = substantial work (WRONG)
+   - 30s idle = task complete (WRONG)
+   - OR logic (any single heuristic triggered learning)
+
+#### Solution 1: Quality Gates in `ace_after_task.py`
+
+Added two new filtering functions:
+
+**`is_trivial_task(task_description)`** - Filters:
+- ACE commands (`/ace-status`, `/ace-patterns`, etc.)
+- Simple queries (`what is...?`, `how does...?`)
+- Read-only commands (`git status`, `ls`, `cat`)
+- Greetings (`thanks`, `hello`)
+
+**`has_substantial_work(trace)`** - Requires:
+- 2+ trajectory steps (not just 1)
+- No generic conversations
+- State-changing tools (Edit, Write, Bash) OR 200+ char output
+
+#### Solution 2: Fixed Heuristics in `ace_task_detector.py`
+
+**Threshold increases**:
+- `IDLE_THRESHOLD`: 30 → 120 seconds
+- `TOOL_THRESHOLD`: 3 → 10 tools
+
+**Logic changes**:
+- Changed from OR to AND logic (require MULTIPLE signals)
+- Added `is_trivial_context()` - skips ACE commands
+- Added `has_state_changing_tools()` - read-only ops don't count
+- High-confidence signals (git_commit, todo_completion) work with state change
+
+#### Impact
+
+- ✅ ACE commands no longer learned
+- ✅ Generic conversations filtered out
+- ✅ Read-only operations ignored
+- ✅ Only substantial work with state changes triggers learning
+- ✅ All hooks retained (PostToolUse, Stop, SubagentStop, PreCompact)
+
+**Files Modified**: 2
+- `shared-hooks/ace_after_task.py` - Added ~130 lines (quality gates)
+- `shared-hooks/ace_task_detector.py` - Modified ~100 lines (fixed heuristics)
+
+**NOT a Breaking Change**: Only filtering improved, users don't need to take any action
+
 ## [5.1.19] - 2025-11-24
 
 ### 🐛 Critical Fix - Learning Hooks Not Working

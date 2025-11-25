@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.1.19 -->
+<!-- ACE_SECTION_START v5.1.20 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -52,7 +52,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.1.19 (Critical Learning Hook Fix)
-**New in v5.1.19**: Fixed learning hook failure - updated wrapper scripts to use correct .cwd field, added environment variable fallback
+**Version**: v5.1.20 (Quality Gate Filters)
+**New in v5.1.20**: Filters garbage data - ACE commands, generic conversations, read-only operations no longer sent to server
 
-<!-- ACE_SECTION_END v5.1.19 -->
+<!-- ACE_SECTION_END v5.1.20 -->

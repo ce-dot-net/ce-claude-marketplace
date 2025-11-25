@@ -7,10 +7,20 @@
 """
 ACE Task Detector - Heuristic-based task completion detection for main agent work.
 
+v5.2.0 CHANGES (CRITICAL - Fix Garbage Data):
+- Changed from OR logic to AND logic (require MULTIPLE signals)
+- Increased IDLE_THRESHOLD: 30 → 120 seconds
+- Increased TOOL_THRESHOLD: 3 → 10 tools
+- Added STATE-CHANGE verification (Read-only ops don't count!)
+- Added trivial task filtering (ACE commands don't trigger)
+
+Per ACE Research Paper: Learning should only occur with "meaningful execution feedback"
+The old heuristics (3 tools = substantial work) were producing GARBAGE patterns.
+
 Detects when the main agent has completed a substantial task by analyzing:
-- Tool usage patterns
+- Tool usage patterns (state-changing tools only!)
 - User message signals
-- Time-based heuristics
+- Time-based heuristics (longer threshold)
 - Context signals (todos, commits)
 """
 
@@ -23,17 +33,38 @@ from pathlib import Path
 from typing import Dict, Any, Optional
 
 class ACETaskDetector:
-    """Detects task completion using multiple heuristics (OR logic)."""
+    """
+    Detects task completion using multiple heuristics.
 
-    # User confirmation keywords
+    v5.2.0: Changed to AND logic - require MULTIPLE signals to prevent garbage.
+    Old OR logic produced 835+ false positives per session!
+    """
+
+    # User confirmation keywords (must be combined with OTHER signals)
     CONFIRMATION_KEYWORDS = [
         "thanks", "thank you", "perfect", "great", "good", "excellent",
         "done", "complete", "finished", "ok", "okay", "nice",
         "next", "moving on", "that's all", "all set"
     ]
 
-    # Time threshold for idle detection (seconds)
-    IDLE_THRESHOLD = 30
+    # v5.2.0: Time threshold increased from 30 → 120 seconds
+    # 30 seconds was triggering while user reads output (garbage!)
+    IDLE_THRESHOLD = 120
+
+    # v5.2.0: Tool threshold increased from 3 → 10 tools
+    # 3 Read operations is NOT substantial work!
+    TOOL_THRESHOLD = 10
+
+    # State-changing tools (vs read-only)
+    # Only these count toward "substantial work"
+    STATE_CHANGING_TOOLS = ['Edit', 'Write', 'Bash', 'NotebookEdit', 'mcp__']
+    READ_ONLY_TOOLS = ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch', 'TodoWrite']
+
+    # Trivial task patterns (should NEVER trigger learning)
+    TRIVIAL_PATTERNS = [
+        'ace:ace-', '/ace-', 'ace-status', 'ace-patterns', 'ace-search',
+        'ace-learn', 'ace-configure', 'ace-bootstrap', 'ace-clear'
+    ]
 
     def __init__(self, state_file: str = ".claude/data/logs/ace-task-state.json"):
         self.state_file = Path(state_file)
@@ -52,6 +83,8 @@ class ACETaskDetector:
         return {
             "last_tool_time": None,
             "tool_count": 0,
+            "state_change_count": 0,  # v5.2.0: Track state-changing tools separately
+            "recent_tools": [],       # v5.2.0: Track recent tool names for analysis
             "last_user_message": None,
             "last_tool_name": None
         }
@@ -67,15 +100,35 @@ class ACETaskDetector:
     def check_tool_sequence(self, tool_name: str) -> bool:
         """
         Heuristic 1: Tool sequence pattern.
-        Detect 3+ tool uses in sequence (substantial work pattern).
+
+        v5.2.0 CHANGES:
+        - Threshold increased from 3 → TOOL_THRESHOLD (10)
+        - Now tracks state-changing vs read-only tools separately
+        - Requires STATE-CHANGING tools, not just any tools
+
+        Read-only operations (Read, Glob, Grep) don't count as substantial work!
         """
         self.state["tool_count"] = self.state.get("tool_count", 0) + 1
         self.state["last_tool_name"] = tool_name
         self.state["last_tool_time"] = datetime.now(timezone.utc).isoformat()
+
+        # Track recent tools (keep last 20)
+        recent = self.state.get("recent_tools", [])
+        recent.append(tool_name)
+        self.state["recent_tools"] = recent[-20:]  # Keep last 20
+
+        # v5.2.0: Count state-changing tools separately
+        is_state_change = any(sc in tool_name for sc in self.STATE_CHANGING_TOOLS)
+        if is_state_change:
+            self.state["state_change_count"] = self.state.get("state_change_count", 0) + 1
+
         self._save_state()
 
-        # If we've seen 3+ tools, this indicates substantial work
-        return self.state["tool_count"] >= 3
+        # v5.2.0: Require TOOL_THRESHOLD (10) tools AND at least 1 state change
+        has_enough_tools = self.state["tool_count"] >= self.TOOL_THRESHOLD
+        has_state_change = self.state.get("state_change_count", 0) >= 1
+
+        return has_enough_tools and has_state_change
 
     def check_user_confirmation(self, user_message: Optional[str]) -> bool:
         """
@@ -146,54 +199,154 @@ class ACETaskDetector:
         # Check if it's a git commit command
         return "git commit" in command.lower()
 
+    def is_trivial_context(self, event_data: Dict[str, Any], user_message: Optional[str] = None) -> bool:
+        """
+        v5.2.0: Check if current context is trivial (should never trigger learning).
+
+        Prevents learning from ACE commands like /ace-status, /ace-patterns, etc.
+        """
+        # Check tool input for ACE command patterns
+        tool_input = event_data.get("tool_input", {})
+        command = tool_input.get("command", "")
+
+        for pattern in self.TRIVIAL_PATTERNS:
+            if pattern.lower() in command.lower():
+                return True
+
+        # Check user message for ACE command patterns
+        if user_message:
+            for pattern in self.TRIVIAL_PATTERNS:
+                if pattern.lower() in user_message.lower():
+                    return True
+
+        return False
+
+    def has_state_changing_tools(self) -> bool:
+        """
+        v5.2.0: Check if recent tools include state-changing operations.
+
+        Reading files is NOT substantial work - need actual modifications!
+        """
+        recent_tools = self.state.get("recent_tools", [])
+
+        for tool in recent_tools:
+            if any(sc in tool for sc in self.STATE_CHANGING_TOOLS):
+                return True
+        return False
+
     def detect_task_complete(
         self,
         event_data: Dict[str, Any],
         user_message: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Main detection logic - OR all heuristics.
+        Main detection logic.
+
+        v5.2.0 CRITICAL CHANGE: Changed from OR to AND logic!
+
+        OLD (broken): Any single heuristic triggers learning (835+ false positives!)
+        NEW (fixed): Require MULTIPLE signals to trigger learning
 
         Returns:
             {
                 "task_complete": bool,
-                "triggered_by": str,  # Which heuristic triggered
+                "triggered_by": str,  # Which heuristics triggered
                 "confidence": float,  # 0.0 - 1.0
                 "details": str
             }
         """
         tool_name = event_data.get("tool_name", "unknown")
 
-        # Check all heuristics (OR logic)
-        heuristics = [
-            ("tool_sequence", self.check_tool_sequence(tool_name)),
-            ("user_confirmation", self.check_user_confirmation(user_message)),
-            ("time_based_pause", self.check_time_based_pause()),
-            ("todo_completion", self.check_todo_completion(event_data)),
-            ("git_commit", self.check_git_commit(event_data))
-        ]
+        # v5.2.0: FIRST CHECK - Is this a trivial context? (ACE commands, etc.)
+        if self.is_trivial_context(event_data, user_message):
+            return {
+                "task_complete": False,
+                "triggered_by": None,
+                "confidence": 0.0,
+                "details": "Trivial context (ACE command) - skipped"
+            }
 
-        # Find first matching heuristic
-        for name, matches in heuristics:
-            if matches:
-                # Reset tool count after detection
-                self.state["tool_count"] = 0
-                self._save_state()
+        # Check all heuristics
+        heuristics = {
+            "tool_sequence": self.check_tool_sequence(tool_name),
+            "user_confirmation": self.check_user_confirmation(user_message),
+            "time_based_pause": self.check_time_based_pause(),
+            "todo_completion": self.check_todo_completion(event_data),
+            "git_commit": self.check_git_commit(event_data)
+        }
 
-                return {
-                    "task_complete": True,
-                    "triggered_by": name,
-                    "confidence": self._get_confidence(name),
-                    "details": self._get_details(name, event_data, user_message)
-                }
+        # v5.2.0: Count how many heuristics match
+        matching = [name for name, matches in heuristics.items() if matches]
+        signal_count = len(matching)
 
-        # No heuristics matched
+        # v5.2.0: CRITICAL - Require at least 2 signals (AND logic, not OR!)
+        # Exception: High-confidence signals (git_commit, todo_completion) can stand alone
+        #            but ONLY if there are state-changing tools
+        high_confidence_signals = ["git_commit", "todo_completion"]
+        has_high_confidence = any(s in matching for s in high_confidence_signals)
+        has_state_change = self.has_state_changing_tools()
+
+        task_complete = False
+        triggered_by = None
+
+        if signal_count >= 2 and has_state_change:
+            # Multiple signals + state change = real task completion
+            task_complete = True
+            triggered_by = ", ".join(matching)
+        elif has_high_confidence and has_state_change:
+            # High-confidence single signal + state change = real task completion
+            task_complete = True
+            triggered_by = matching[0] if matching else "unknown"
+
+        if task_complete:
+            # Reset state after detection
+            self.state["tool_count"] = 0
+            self.state["state_change_count"] = 0
+            self.state["recent_tools"] = []
+            self._save_state()
+
+            # Calculate confidence based on signal count and type
+            confidence = self._calculate_confidence(matching, signal_count)
+
+            return {
+                "task_complete": True,
+                "triggered_by": triggered_by,
+                "confidence": confidence,
+                "details": self._get_multi_details(matching, event_data, user_message)
+            }
+
+        # Not enough signals
         return {
             "task_complete": False,
             "triggered_by": None,
             "confidence": 0.0,
-            "details": f"Tool count: {self.state['tool_count']}"
+            "details": f"Tool count: {self.state['tool_count']}, State changes: {self.state.get('state_change_count', 0)}, Signals: {signal_count}/2 required"
         }
+
+    def _calculate_confidence(self, matching: list, signal_count: int) -> float:
+        """v5.2.0: Calculate confidence based on signal count and types."""
+        # Base confidence from signal count
+        base = min(0.5 + (signal_count * 0.15), 0.95)
+
+        # Boost for high-confidence signals
+        if "git_commit" in matching:
+            base = min(base + 0.10, 0.98)
+        if "todo_completion" in matching:
+            base = min(base + 0.10, 0.98)
+
+        return base
+
+    def _get_multi_details(
+        self,
+        matching: list,
+        event_data: Dict[str, Any],
+        user_message: Optional[str]
+    ) -> str:
+        """v5.2.0: Get details for multiple matching heuristics."""
+        details = []
+        for name in matching:
+            details.append(self._get_details(name, event_data, user_message))
+        return " | ".join(details)
 
     def _get_confidence(self, heuristic: str) -> float:
         """Get confidence level for each heuristic."""
