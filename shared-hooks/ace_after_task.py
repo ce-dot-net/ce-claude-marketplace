@@ -40,6 +40,133 @@ sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 from ace_context import get_context
 from ace_cli import recall_session
 
+# Import re at module level for quality filters
+import re as regex_module
+
+
+def is_trivial_task(task_description: str) -> bool:
+    """
+    Filter out trivial tasks that shouldn't trigger learning.
+
+    Per ACE Research Paper: Learning should only occur with "meaningful execution feedback"
+    Trivial tasks like status checks, simple queries, or ACE commands don't qualify.
+
+    Returns True if task is trivial (should be SKIPPED).
+    """
+    trivial_patterns = [
+        # ACE commands - CRITICAL: These were being learned as garbage!
+        r'<command-message>ace[:\-]',  # /ace:ace-status, /ace-learn, etc.
+        r'ace:ace-',
+        r'/ace-',
+        r'ace-status',
+        r'ace-patterns',
+        r'ace-search',
+        r'ace-learn',
+        r'ace-configure',
+        r'ace-bootstrap',
+        r'ace-clear',
+        r'ace-doctor',
+        r'ace-export',
+        r'ace-import',
+        r'ace-top',
+
+        # Simple queries (not implementation work)
+        r'^(what|how|why|where|when|can you|could you|would you)\s.*\?$',  # Questions ending with ?
+        r'^(list|show|display|print|view|see)\s',  # Display commands
+        r'^(check|status|version|help|info)\s*$',  # Status checks
+
+        # Git status checks (read-only, no learning value)
+        r'git\s+(status|log|diff|branch|show)\s*$',
+
+        # File listing (read-only)
+        r'^ls\s',
+        r'^cat\s',
+        r'^head\s',
+        r'^tail\s',
+
+        # Other trivial patterns
+        r'^(hi|hello|hey|thanks|thank you|ok|okay|yes|no|sure)\s*$',  # Greetings
+    ]
+
+    task_lower = task_description.lower()
+    for pattern in trivial_patterns:
+        if regex_module.search(pattern, task_lower, regex_module.IGNORECASE):
+            return True
+    return False
+
+
+def has_substantial_work(trace: dict) -> bool:
+    """
+    Determine if trace contains substantial work worth learning.
+
+    Per ACE Research Paper: Requires "meaningful execution feedback"
+
+    Returns True if ALL of these conditions are met:
+    - Task is not a generic fallback ("Session work")
+    - Trajectory has 2+ meaningful steps
+    - Trajectory is not generic conversation-only
+    - Has state-changing tools OR substantial output (200+ chars)
+    """
+    trajectory = trace.get('trajectory', [])
+    task = trace.get('task', '')
+    result_output = trace.get('result', {}).get('output', '')
+
+    # Reject generic fallback tasks
+    if task.startswith("Session work"):
+        return False
+
+    # Reject empty or single-step trajectories
+    if len(trajectory) < 2:
+        return False
+
+    # Reject generic conversation-only trajectories
+    # These were being captured as garbage patterns!
+    generic_actions = [
+        "Conversation with",
+        "Discussion and analysis",
+        "Message exchanges",
+        "Single-step conversation",
+        "completed",  # Generic fallback
+    ]
+    for step in trajectory:
+        action = step.get('action', '')
+        result = step.get('result', '')
+
+        # Check if action is generic
+        if any(g.lower() in action.lower() for g in generic_actions):
+            # Check if result is also generic (double-check)
+            if 'completed' in result.lower() or 'discussion' in result.lower():
+                return False  # Generic conversation is not substantial
+
+    # Check for state-changing tools (positive signal per ACE paper)
+    # Reading files is NOT substantial - need actual modifications
+    state_changing_tools = ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit']
+    read_only_tools = ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch']
+
+    has_state_change = False
+    tool_count = 0
+    state_change_count = 0
+
+    for step in trajectory:
+        action = step.get('action', '')
+        tool = step.get('tool', '')
+        result = step.get('result', '')
+
+        # Count state-changing operations
+        if any(t in tool or t in action for t in state_changing_tools):
+            has_state_change = True
+            state_change_count += 1
+
+        tool_count += 1
+
+    # Require either:
+    # 1. State-changing tools present, OR
+    # 2. Substantial output (200+ chars) indicating meaningful analysis
+    if not has_state_change and len(result_output) < 200:
+        return False
+
+    return True
+
 
 def extract_execution_trace(event):
     """
@@ -459,15 +586,19 @@ def main():
         # STEP 2: Build ExecutionTrace from event with rich context
         trace = extract_execution_trace(event)
 
-        # STEP 3: Check if there's substantial work to capture
-        # Paper-aligned: Focus on trajectory completeness and execution feedback
-        # Skip only if: no trajectory OR auto-learning session work
-        has_substantial_work = (
-            trace['trajectory'] and len(trace['trajectory']) > 0 and
-            not trace['task'].startswith("Session work")
-        )
+        # STEP 3a: QUALITY GATE - Filter trivial tasks (v5.2.0)
+        # Per ACE Research Paper: Only learn from "meaningful execution feedback"
+        # This prevents garbage patterns from ACE commands, status checks, etc.
+        if is_trivial_task(trace['task']):
+            # Trivial task detected - skip silently (no garbage to server!)
+            output = {"systemMessage": ""}  # Silent skip
+            print(json.dumps(output))
+            sys.exit(0)
 
-        if not has_substantial_work:
+        # STEP 3b: QUALITY GATE - Check for substantial work (v5.2.0)
+        # Use the new robust has_substantial_work() function
+        # This prevents generic conversations and read-only operations from being learned
+        if not has_substantial_work(trace):
             # No substantial work - skip learning capture
             output = {
                 "systemMessage": ""  # Silent skip - no need to notify user

@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.1.19",
-  "description": "Code Engine ACE - Intelligent pattern learning with hooks-based architecture. v5.1.19: Critical fix - resolved learning hook failure (working directory resolution in wrapper scripts). Requires ce-ace >= v1.0.14.",
+  "version": "5.1.20",
+  "description": "Code Engine ACE - Intelligent pattern learning with hooks-based architecture. v5.1.20: Quality gate filters - fixes garbage data being sent to server (ACE commands, generic conversations, read-only operations now filtered). Requires ce-ace >= v1.0.14.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
