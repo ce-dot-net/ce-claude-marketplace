@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.1.21",
-  "description": "Code Engine ACE - Intelligent pattern learning with hooks-based architecture. v5.1.21: Extended quality filters for Claude Code system messages. Requires ce-ace >= v1.0.14.",
+  "version": "5.1.22",
+  "description": "Code Engine ACE - Intelligent pattern learning with hooks-based architecture. v5.1.22: Fixed PostToolUse hook jq syntax error. Requires ce-ace >= v1.0.14.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
