@@ -532,23 +532,24 @@ def main():
                     response = json.loads(result.stdout)
                     stats = response.get('learning_statistics')
                     if stats:
-                        message_lines.append("")
-                        message_lines.append("📚 ACE Learning:")
-
                         created = stats.get('patterns_created', 0)
                         updated = stats.get('patterns_updated', 0)
                         pruned = stats.get('patterns_pruned', 0)
-
-                        if created > 0:
-                            message_lines.append(f"   • {created} new pattern{'s' if created != 1 else ''}")
-                        if updated > 0:
-                            message_lines.append(f"   • {updated} pattern{'s' if updated != 1 else ''} updated")
-                        if pruned > 0:
-                            message_lines.append(f"   • {pruned} low-quality pattern{'s' if pruned != 1 else ''} pruned")
-
                         conf = stats.get('average_confidence', 0)
-                        if conf > 0:
-                            message_lines.append(f"   • Quality: {int(conf * 100)}%")
+
+                        # Only show header if there's something to report
+                        if created > 0 or updated > 0 or pruned > 0 or conf > 0:
+                            message_lines.append("")
+                            message_lines.append("📚 ACE Learning:")
+
+                            if created > 0:
+                                message_lines.append(f"   • {created} new pattern{'s' if created != 1 else ''}")
+                            if updated > 0:
+                                message_lines.append(f"   • {updated} pattern{'s' if updated != 1 else ''} updated")
+                            if pruned > 0:
+                                message_lines.append(f"   • {pruned} low-quality pattern{'s' if pruned != 1 else ''} pruned")
+                            if conf > 0:
+                                message_lines.append(f"   • Quality: {int(conf * 100)}%")
                 except json.JSONDecodeError:
                     pass
             else:

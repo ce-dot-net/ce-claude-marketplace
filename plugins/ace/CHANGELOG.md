@@ -5,6 +5,20 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.4] - 2025-11-27
+
+### 🐛 Bugfix: Empty Learning Stats Header
+
+**Problem**: The "📚 ACE Learning:" header was shown even when there were no stats to display.
+
+**Fix**: Added conditional check in `shared-hooks/ace_after_task.py` (lines 540-543) to only show the header when there are actual patterns created, updated, pruned, or confidence scores to report.
+
+**Files Changed**:
+- `shared-hooks/ace_after_task.py` - Add condition: only show header if `created > 0 or updated > 0 or pruned > 0 or conf > 0`
+- Version bumped to 5.2.4 across all plugin files
+
+**Impact**: Cleaner output when learning is captured but no new patterns are created.
+
 ## [5.2.3] - 2025-11-26
 
 ### 🚀 SSE Streaming + New Package Name

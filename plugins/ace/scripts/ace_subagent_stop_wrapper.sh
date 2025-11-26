@@ -10,7 +10,7 @@ LOGGER="${MARKETPLACE_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${MARKETPLACE_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="5.2.3"
+export ACE_PLUGIN_VERSION="5.2.4"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
