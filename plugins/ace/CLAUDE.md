@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.2.0 -->
+<!-- ACE_SECTION_START v5.2.1 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -17,18 +17,13 @@ npm install -g @ce-dot-net/ce-ace-cli
 
 Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
-## v5.2.0: Per-Task + Delta Learning Architecture
+## v5.2.1: Tool-Based Substantial Work Detection
 
-**Key Improvements**:
-- **Per-Task Learning**: Captures learning per-task (not per-session)
-- **Delta Tracking**: Stop hook captures NEW work since PreCompact
-- **Client-Side Filtering**: Garbage trajectories filtered before server
-- **User Feedback**: Skip reasons always shown (not silent)
+**Critical Fix**: Learning was being skipped even for substantial work (Edit, Write, Bash).
+Root cause: Semantic trajectory extraction missed actual tool information.
 
-**How Delta Works**:
-1. PreCompact captures full task work → records position
-2. Stop checks position → captures only NEW steps (delta)
-3. Result: No duplicate learning, complete coverage
+**Fix**: Now checks `tool_uses` directly as ground truth for substantial work detection.
+If any state-changing tool (Edit, Write, Bash, mcp__, NotebookEdit) was used → learning triggers.
 
 ## Playbook Sections
 
@@ -65,7 +60,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.2.0 (Per-Task + Delta Learning)
-**New in v5.2.0**: Complete architectural refactoring - per-task parsing from last user prompt, position-based delta tracking, client-side garbage filtering, user feedback on skip
+**Version**: v5.2.1 (Tool-Based Work Detection)
+**New in v5.2.1**: Ground truth tool_uses detection fixes learning skip bug
 
-<!-- ACE_SECTION_END v5.2.0 -->
+<!-- ACE_SECTION_END v5.2.1 -->

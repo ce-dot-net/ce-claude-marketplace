@@ -100,86 +100,85 @@ def is_trivial_task(task_description: str) -> bool:
     return False
 
 
-def has_substantial_work(trace: dict, min_steps: int = 2) -> bool:
+def has_substantial_work(trace: dict, min_steps: int = 2, tool_uses: list = None) -> bool:
     """
     Determine if trace contains substantial work worth learning.
 
     Per ACE Research Paper: Requires "meaningful execution feedback"
 
     v5.2.0: Added min_steps parameter for delta captures.
-    Delta captures (from Stop after PreCompact) can have fewer steps
-    but still be valuable - we use min_steps=1 for those.
+    v5.2.1: Added tool_uses parameter - CRITICAL FIX!
+            Trajectory from semantic extraction often misses actual tool work.
+            We now check tool_uses directly for state-changing operations.
 
     Args:
         trace: ExecutionTrace dict with 'task', 'trajectory', 'result' keys
         min_steps: Minimum trajectory steps required (default: 2, use 1 for delta)
+        tool_uses: List of tool uses from event (optional but recommended)
 
-    Returns True if ALL of these conditions are met:
-    - Task is not a generic fallback ("Session work")
-    - Trajectory has min_steps+ meaningful steps
-    - Trajectory is not generic conversation-only
-    - Has state-changing tools OR substantial output (200+ chars)
+    Returns True if ANY of these conditions are met:
+    - Has state-changing tools in tool_uses (Edit, Write, Bash, mcp__, NotebookEdit)
+    - Trajectory has substantial semantic content (decisions, gotchas)
+    - Has substantial output (200+ chars)
     """
     trajectory = trace.get('trajectory', [])
     task = trace.get('task', '')
     result_output = trace.get('result', {}).get('output', '')
+    tool_uses = tool_uses or []
 
     # Reject generic fallback tasks
     if task.startswith("Session work"):
         return False
 
+    # v5.2.1: CHECK TOOL_USES FIRST - This is the GROUND TRUTH!
+    # Semantic trajectory extraction can fail, but tool_uses never lies
+    state_changing_tools = ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit']
+
+    state_change_count = 0
+    for tool in tool_uses:
+        tool_name = tool.get('tool_name', '')
+        if any(t in tool_name for t in state_changing_tools):
+            state_change_count += 1
+
+    # If we have state-changing tools, this IS substantial work!
+    if state_change_count >= 1:
+        return True
+
+    # FALLBACK: Check trajectory for semantic signals
+    # Only used when tool_uses is empty (e.g., Stop hook without pre-parsed data)
+
     # Reject trajectories below minimum steps threshold
-    # v5.2.0: Use min_steps=1 for delta captures
     if len(trajectory) < min_steps:
         return False
 
-    # Reject generic conversation-only trajectories
-    # These were being captured as garbage patterns!
-    generic_actions = [
-        "Conversation with",
-        "Discussion and analysis",
-        "Message exchanges",
-        "Single-step conversation",
-        "completed",  # Generic fallback
+    # Check if trajectory has meaningful semantic content
+    # (not just generic "Conversation completed" fallback)
+    has_meaningful_trajectory = False
+    meaningful_actions = [
+        "Made architectural decisions",
+        "Encountered and resolved issues",
+        "Completed work items",
     ]
+
     for step in trajectory:
         action = step.get('action', '')
         result = step.get('result', '')
 
-        # Check if action is generic
-        if any(g.lower() in action.lower() for g in generic_actions):
-            # Check if result is also generic (double-check)
-            if 'completed' in result.lower() or 'discussion' in result.lower():
-                return False  # Generic conversation is not substantial
+        # Check for meaningful semantic content
+        if any(m in action for m in meaningful_actions):
+            # Ensure result is not generic
+            if result and len(result) > 30 and 'Discussion and analysis completed' not in result:
+                has_meaningful_trajectory = True
+                break
 
-    # Check for state-changing tools (positive signal per ACE paper)
-    # Reading files is NOT substantial - need actual modifications
-    state_changing_tools = ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit']
-    read_only_tools = ['Read', 'Glob', 'Grep', 'WebFetch', 'WebSearch']
+    if has_meaningful_trajectory:
+        return True
 
-    has_state_change = False
-    tool_count = 0
-    state_change_count = 0
+    # Final fallback: substantial output indicates meaningful analysis
+    if len(result_output) >= 200:
+        return True
 
-    for step in trajectory:
-        action = step.get('action', '')
-        tool = step.get('tool', '')
-        result = step.get('result', '')
-
-        # Count state-changing operations
-        if any(t in tool or t in action for t in state_changing_tools):
-            has_state_change = True
-            state_change_count += 1
-
-        tool_count += 1
-
-    # Require either:
-    # 1. State-changing tools present, OR
-    # 2. Substantial output (200+ chars) indicating meaningful analysis
-    if not has_state_change and len(result_output) < 200:
-        return False
-
-    return True
+    return False
 
 
 def filter_garbage_trajectory(trajectory):
@@ -261,6 +260,41 @@ def skip_learning(reason, event=None):
         "continue": True,
         "systemMessage": f"[ACE] Learning skipped: {reason}"
     }
+
+
+def extract_tool_uses_from_messages(messages):
+    """
+    Extract tool_uses from messages.
+
+    v5.2.1: CRITICAL FIX - Extract actual tool uses for substantial work detection.
+    The semantic trajectory extraction can miss tool information, but this
+    function provides ground truth about what tools were actually used.
+
+    Args:
+        messages: List of message dicts with 'role' and 'content' keys
+
+    Returns:
+        List of tool use dicts with 'tool_name', 'tool_input', 'description' keys
+    """
+    tool_uses = []
+
+    for message in messages:
+        if message.get('role') != 'assistant':
+            continue
+
+        content = message.get('content', '')
+
+        # Handle list format content (Claude's structured response)
+        if isinstance(content, list):
+            for block in content:
+                if isinstance(block, dict) and block.get('type') == 'tool_use':
+                    tool_uses.append({
+                        'tool_name': block.get('name', ''),
+                        'tool_input': block.get('input', {}),
+                        'description': ''  # Not available in this format
+                    })
+
+    return tool_uses
 
 
 # Position tracking state files for delta learning (v5.2.0)
@@ -867,9 +901,15 @@ def main():
             clear_captured_position(session_id)
 
         # STEP 3: Build event with task messages for extract_execution_trace
-        # (Backward compatible with existing extract_execution_trace function)
+        # v5.2.1: CRITICAL FIX - Extract tool_uses for substantial work detection
         event['messages'] = task_messages
-        event['tool_uses'] = []  # Will be extracted from messages
+        tool_uses = extract_tool_uses_from_messages(task_messages)
+        event['tool_uses'] = tool_uses
+
+        if os.environ.get('ACE_DEBUG_HOOKS') == '1':
+            with open('/tmp/ace_hook_debug.log', 'a') as f:
+                tool_names = [t.get('tool_name', '') for t in tool_uses]
+                f.write(f"Extracted tool_uses: {len(tool_uses)} tools - {tool_names}\n")
 
         # STEP 4: Recall pinned session patterns BEFORE learning capture
         # This ensures patterns survive context compaction
@@ -904,7 +944,8 @@ def main():
 
         # STEP 6b: QUALITY GATE - Check for substantial work
         # v5.2.0: Use min_steps=1 for delta captures
-        if not has_substantial_work(trace, min_steps=min_steps):
+        # v5.2.1: Pass tool_uses for ground truth detection
+        if not has_substantial_work(trace, min_steps=min_steps, tool_uses=tool_uses):
             reason = "No substantial work" if not is_delta_capture else f"Delta too small ({len(task_messages)} messages)"
             output = skip_learning(reason, event)
             print(json.dumps(output))
