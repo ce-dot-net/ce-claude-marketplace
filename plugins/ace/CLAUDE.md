@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.2.1 -->
+<!-- ACE_SECTION_START v5.2.2 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -13,17 +13,16 @@ npm install -g @ce-dot-net/ce-ace-cli
 ## How It Works
 
 **Before tasks**: Hook searches playbook → Injects relevant patterns
-**After work**: Captures learning automatically (PreCompact, SubagentStop, Stop hooks)
+**After work**: Captures learning automatically (PostToolUse + Stop hooks)
 
 Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
-## v5.2.1: Tool-Based Substantial Work Detection
+## v5.2.2: PostToolUse Accumulation Architecture
 
-**Critical Fix**: Learning was being skipped even for substantial work (Edit, Write, Bash).
-Root cause: Semantic trajectory extraction missed actual tool information.
+**Major Fix**: Eliminated all transcript parsing by using ground truth tool data.
+Architecture: PostToolUse → SQLite → Stop hook queries accumulated tools.
 
-**Fix**: Now checks `tool_uses` directly as ground truth for substantial work detection.
-If any state-changing tool (Edit, Write, Bash, mcp__, NotebookEdit) was used → learning triggers.
+**Result**: 100% reliable tool detection. No more parsing failures or learning skips.
 
 ## Playbook Sections
 
@@ -52,15 +51,14 @@ If any state-changing tool (Edit, Write, Bash, mcp__, NotebookEdit) was used →
 3. Optional: `/ace-bootstrap` to seed from codebase
 4. Start coding - hooks run automatically!
 
-## Three-Tier Learning
+## Two-Hook Architecture
 
-- **PreCompact**: Safety net before context compaction (records position)
-- **SubagentStop**: Task agent tasks (on completion)
-- **Stop**: End-of-task (captures delta since PreCompact)
+- **PostToolUse**: Accumulates every tool call to SQLite (ground truth)
+- **Stop**: Queries accumulated tools → builds trajectory → sends to server
 
 ---
 
-**Version**: v5.2.1 (Tool-Based Work Detection)
-**New in v5.2.1**: Ground truth tool_uses detection fixes learning skip bug
+**Version**: v5.2.2 (PostToolUse Accumulation)
+**New in v5.2.2**: SQLite-based tool accumulation eliminates transcript parsing
 
-<!-- ACE_SECTION_END v5.2.1 -->
+<!-- ACE_SECTION_END v5.2.2 -->

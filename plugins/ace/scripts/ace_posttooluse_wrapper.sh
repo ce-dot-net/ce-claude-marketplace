@@ -1,146 +1,85 @@
 #!/usr/bin/env bash
-# ace_posttooluse_wrapper.sh - PostToolUse hook with task completion detection
-# Detects when main agent completes substantial work and captures learning
+# ace_posttooluse_wrapper.sh - PostToolUse hook with tool accumulation
+# v5.3.0: Appends tool data to SQLite accumulator for Stop hook processing
 set -Eeuo pipefail
 
 # Resolve paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MARKETPLACE_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+ACCUMULATOR="${MARKETPLACE_ROOT}/shared-hooks/ace_tool_accumulator.py"
 LOGGER="${MARKETPLACE_ROOT}/shared-hooks/ace_event_logger.py"
-TASK_DETECTOR="${MARKETPLACE_ROOT}/shared-hooks/ace_task_detector.py"
-HOOK_SCRIPT="${MARKETPLACE_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
 export ACE_PLUGIN_VERSION="5.2.0"
 
 # Parse arguments
-ENABLE_LOG=true  # Always log by default
-ENABLE_DETECTION=true  # Always detect by default
+ENABLE_LOG=true
 
 while [[ $# -gt 0 ]]; do
   case $1 in
     --log) ENABLE_LOG=true; shift ;;
     --no-log) ENABLE_LOG=false; shift ;;
-    --detect) ENABLE_DETECTION=true; shift ;;
-    --no-detect) ENABLE_DETECTION=false; shift ;;
     *) shift ;;
   esac
 done
 
-# Check if required scripts exist
-[[ -f "${LOGGER}" ]] || {
-  echo "[ERROR] ace_event_logger.py not found: ${LOGGER}" >&2
+# Check if accumulator exists
+[[ -f "${ACCUMULATOR}" ]] || {
+  echo "[ERROR] ace_tool_accumulator.py not found: ${ACCUMULATOR}" >&2
   exit 1
 }
 
-[[ -f "${TASK_DETECTOR}" ]] || {
-  echo "[ERROR] ace_task_detector.py not found: ${TASK_DETECTOR}" >&2
-  exit 1
-}
-
-[[ -f "${HOOK_SCRIPT}" ]] || {
-  echo "[ERROR] ace_after_task.py not found: ${HOOK_SCRIPT}" >&2
-  exit 1
-}
-
-# Read stdin
+# Read stdin (PostToolUse event JSON)
 INPUT_JSON=$(cat)
 
-# Extract working directory from event and cd to it
-# This ensures ace_after_task.py can find .claude/settings.json
+# Extract working directory from event
 WORKING_DIR=$(echo "$INPUT_JSON" | jq -r '.cwd // .working_directory // .workingDirectory // empty')
 if [[ -z "$WORKING_DIR" ]]; then
-  # Fallback: Infer from transcript_path (.claude/data/transcript-*.jsonl -> project root)
+  # Fallback: Infer from transcript_path
   TRANSCRIPT_PATH=$(echo "$INPUT_JSON" | jq -r '.transcript_path // empty')
   if [[ -n "$TRANSCRIPT_PATH" ]]; then
-    # transcript_path is .claude/data/transcript-*.jsonl, so go up 2 levels
-    WORKING_DIR=$(cd "$(dirname "$TRANSCRIPT_PATH")/../.." && pwd)
+    WORKING_DIR=$(cd "$(dirname "$TRANSCRIPT_PATH")/../.." 2>/dev/null && pwd) || WORKING_DIR=""
   fi
 fi
 
 if [[ -n "$WORKING_DIR" ]] && [[ -d "$WORKING_DIR" ]]; then
-  cd "$WORKING_DIR" || {
-    echo "[ERROR] Failed to change to working directory: $WORKING_DIR" >&2
-    exit 1
-  }
+  cd "$WORKING_DIR" || true
+fi
+
+# Extract tool data from PostToolUse event
+# Per Claude Code docs: PostToolUse provides tool_name, tool_input, tool_response, tool_use_id
+TOOL_NAME=$(echo "$INPUT_JSON" | jq -r '.tool_name // empty')
+TOOL_INPUT=$(echo "$INPUT_JSON" | jq -c '.tool_input // {}')
+TOOL_RESPONSE=$(echo "$INPUT_JSON" | jq -c '.tool_response // {}')
+TOOL_USE_ID=$(echo "$INPUT_JSON" | jq -r '.tool_use_id // empty')
+SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // empty')
+
+# Skip if missing required fields
+if [[ -z "$SESSION_ID" ]] || [[ -z "$TOOL_NAME" ]] || [[ -z "$TOOL_USE_ID" ]]; then
+  echo "{\"systemMessage\": \"\"}"
+  exit 0
 fi
 
 # Log PostToolUse event (for debugging/analysis)
-if [[ "$ENABLE_LOG" == "true" ]]; then
-  echo "$INPUT_JSON" | uv run "$LOGGER" --event-type PostToolUse --phase start >/dev/null 2>&1 || {
-    echo "[WARN] Failed to log PostToolUse event" >&2
-  }
+if [[ "$ENABLE_LOG" == "true" ]] && [[ -f "${LOGGER}" ]]; then
+  echo "$INPUT_JSON" | uv run "$LOGGER" --event-type PostToolUse --phase start >/dev/null 2>&1 || true
 fi
 
-# Skip detection if disabled
-if [[ "$ENABLE_DETECTION" == "false" ]]; then
-  echo "{\"systemMessage\": \"\"}"
-  exit 0
+# Append tool to SQLite accumulator (fast, silent)
+# This is the ONLY job of PostToolUse hook in v5.3.0
+APPEND_RESULT=$(uv run "$ACCUMULATOR" append \
+  --session-id "$SESSION_ID" \
+  --tool-name "$TOOL_NAME" \
+  --tool-input "$TOOL_INPUT" \
+  --tool-response "$TOOL_RESPONSE" \
+  --tool-use-id "$TOOL_USE_ID" \
+  --working-dir "${WORKING_DIR:-$(pwd)}" 2>&1) || true
+
+# Debug logging
+if [[ "${ACE_DEBUG_HOOKS:-0}" == "1" ]]; then
+  echo "[PostToolUse] Appended: $TOOL_NAME ($TOOL_USE_ID) -> $APPEND_RESULT" >> /tmp/ace_hook_debug.log
 fi
 
-# Run task completion detection
-DETECTION_RESULT=$(echo "$INPUT_JSON" | uv run "${TASK_DETECTOR}" 2>&1)
-DETECTOR_EXIT=$?
-
-if [[ $DETECTOR_EXIT -ne 0 ]]; then
-  echo "[WARN] Task detector failed: ${DETECTION_RESULT}" >&2
-  echo "{\"systemMessage\": \"\"}"
-  exit 0
-fi
-
-# Parse detection result
-TASK_COMPLETE=$(echo "$DETECTION_RESULT" | jq -r '.task_complete // false')
-TRIGGERED_BY=$(echo "$DETECTION_RESULT" | jq -r '.triggered_by // "none"')
-CONFIDENCE=$(echo "$DETECTION_RESULT" | jq -r '.confidence // 0')
-
-# If no task completion detected, exit early
-if [[ "$TASK_COMPLETE" != "true" ]]; then
-  echo "{\"systemMessage\": \"\"}"
-  exit 0
-fi
-
-# Task completion detected! Log it
-if [[ "$ENABLE_LOG" == "true" ]]; then
-  echo "$INPUT_JSON" | uv run "$LOGGER" \
-    --event-type PostToolUse \
-    --phase complete \
-    >/dev/null 2>&1 || {
-    echo "[WARN] Failed to log task completion" >&2
-  }
-fi
-
-# Convert PostToolUse event to Stop event format for ace_after_task.py
-# ace_after_task.py expects Stop/SubagentStop format
-# v5.1.22: Use --arg for safe variable injection (fixes comma in triggered_by)
-STOP_EVENT=$(echo "$INPUT_JSON" | jq --arg triggered "$TRIGGERED_BY" --argjson confidence "$CONFIDENCE" '. + {
-  "hook_event_name": "PostToolUse",
-  "task_detector_triggered_by": $triggered,
-  "task_detector_confidence": $confidence
-}')
-
-# Record start time (cross-platform milliseconds)
-START_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
-
-# Forward to ace_after_task.py (captures learning)
-RESULT=$(echo "$STOP_EVENT" | uv run "${HOOK_SCRIPT}" 2>&1)
-EXIT_CODE=$?
-
-# Calculate execution time (cross-platform milliseconds)
-END_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
-EXECUTION_TIME=$((END_TIME - START_TIME))
-
-# Log learning capture result
-if [[ "$ENABLE_LOG" == "true" ]]; then
-  echo "$RESULT" | uv run "$LOGGER" \
-    --event-type PostToolUse \
-    --phase end \
-    --exit-code "$EXIT_CODE" \
-    --execution-time-ms "$EXECUTION_TIME" \
-    >/dev/null 2>&1 || {
-    echo "[WARN] Failed to log learning capture result" >&2
-  }
-fi
-
-# Output result (silent - no user-facing message)
+# Output empty response (no user-facing message)
 echo "{\"systemMessage\": \"\"}"
 exit 0

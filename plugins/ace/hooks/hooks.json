@@ -48,18 +48,6 @@
         ]
       }
     ],
-    "PreCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_precompact_wrapper.sh --log --backup",
-            "timeout": 130000
-          }
-        ]
-      }
-    ],
     "Stop": [
       {
         "matcher": "",
