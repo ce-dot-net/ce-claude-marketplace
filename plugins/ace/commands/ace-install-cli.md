@@ -107,17 +107,17 @@ Based on the selected package manager, construct the installation command:
 
 **npm**:
 ```bash
-npm install -g @ce-dot-net/ce-ace-cli
+npm install -g @ace-sdk/cli
 ```
 
 **pnpm**:
 ```bash
-pnpm add -g @ce-dot-net/ce-ace-cli
+pnpm add -g @ace-sdk/cli
 ```
 
 **yarn**:
 ```bash
-yarn global add @ce-dot-net/ce-ace-cli
+yarn global add @ace-sdk/cli
 ```
 
 **Show the command to the user**:
@@ -156,7 +156,7 @@ Use the Bash tool to run the installation command:
 
     1. Permission errors:
        - Try: sudo {INSTALL_COMMAND}
-       - Or use: npx @ce-dot-net/ce-ace-cli (run without install)
+       - Or use: npx @ace-sdk/cli (run without install)
 
     2. Network errors:
        - Check internet connection

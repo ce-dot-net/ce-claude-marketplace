@@ -29,7 +29,7 @@ pytest tests/
 Integration tests require the `ce-ace` CLI to be installed and configured:
 
 ```bash
-npm install -g @ce-dot-net/ce-ace-cli
+npm install -g @ace-sdk/cli
 ce-ace config  # Setup connection
 ```
 
@@ -127,7 +127,7 @@ Make sure you're running tests from the project root or the imports adjust `sys.
 
 ### subprocess.FileNotFoundError: ce-ace
 
-Install ce-ace CLI: `npm install -g @ce-dot-net/ce-ace-cli`
+Install ce-ace CLI: `npm install -g @ace-sdk/cli`
 
 ### Tests pass but hooks don't work
 

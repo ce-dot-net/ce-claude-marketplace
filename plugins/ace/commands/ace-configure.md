@@ -40,7 +40,7 @@ if ! command -v ce-ace >/dev/null 2>&1; then
   echo "❌ ce-ace CLI not found"
   echo ""
   echo "Installation required:"
-  echo "  npm install -g @ce-dot-net/ce-ace-cli"
+  echo "  npm install -g @ace-sdk/cli"
   echo ""
   exit 1
 fi
@@ -54,7 +54,7 @@ if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$VERSION" | sort -V | head -n1)" != "
   echo "⚠️  ce-ace v$VERSION found, but v1.0.2+ required for non-interactive config"
   echo ""
   echo "Please upgrade:"
-  echo "  npm install -g @ce-dot-net/ce-ace-cli@latest"
+  echo "  npm install -g @ace-sdk/cli@latest"
   echo ""
   exit 1
 fi

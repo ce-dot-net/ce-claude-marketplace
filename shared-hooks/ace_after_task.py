@@ -517,11 +517,11 @@ def main():
                 env['ACE_PROJECT_ID'] = context['project']
 
             result = subprocess.run(
-                ['ce-ace', 'learn', '--stdin', '--json'],
+                ['ce-ace', 'learn', '--stdin', '--json', '--timeout', '300000'],
                 input=json.dumps(trace),
                 text=True,
                 capture_output=True,
-                timeout=120,
+                timeout=300,  # 5 min safety margin for SSE streaming
                 env=env
             )
 
@@ -559,7 +559,7 @@ def main():
             message_lines.append("⚠️ [ACE] Learning capture timed out")
             message_lines.append("   You can manually capture with: /ace-learn")
         except FileNotFoundError:
-            message_lines.append("⚠️ [ACE] ce-ace CLI not found - install with: npm install -g @ce-dot-net/ce-ace-cli")
+            message_lines.append("⚠️ [ACE] ce-ace CLI not found - install with: npm install -g @ace-sdk/cli")
         except Exception as e:
             message_lines.append(f"⚠️ [ACE] Learning capture error: {e}")
             message_lines.append("   You can manually capture with: /ace-learn")

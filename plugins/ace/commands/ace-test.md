@@ -51,7 +51,7 @@ if command -v ce-ace >/dev/null 2>&1; then
   echo "✅ ce-ace CLI found: $VERSION"
 else
   echo "❌ ce-ace CLI not found"
-  echo "   Install: npm install -g @ce-dot-net/ce-ace-cli"
+  echo "   Install: npm install -g @ace-sdk/cli"
   exit 1
 fi
 echo ""
@@ -154,7 +154,7 @@ echo "  - Capture learning: /ace:ace-learn"
 1. **CLI Not Found**
    ```
    ❌ ce-ace CLI not found
-   → Install: npm install -g @ce-dot-net/ce-ace-cli
+   → Install: npm install -g @ace-sdk/cli
    ```
 
 2. **Server Connection Failed**
@@ -235,7 +235,7 @@ All ACE operations use ce-ace CLI:
    ```
    Error: ce-ace command not found
    → ce-ace CLI not installed
-   → Action: npm install -g @ce-dot-net/ce-ace-cli
+   → Action: npm install -g @ace-sdk/cli
    → Fallback: Check npm global bin is in PATH
    ```
 

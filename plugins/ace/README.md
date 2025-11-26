@@ -17,7 +17,7 @@
 ### 1. Install CE-ACE CLI
 
 ```bash
-npm install -g @ce-dot-net/ce-ace-cli
+npm install -g @ace-sdk/cli
 ```
 
 **Requirements:** ce-ace >= v1.0.14
@@ -207,7 +207,7 @@ Created automatically by `/ace-configure`.
 
 Install the CLI:
 ```bash
-npm install -g @ce-dot-net/ce-ace-cli
+npm install -g @ace-sdk/cli
 ```
 
 ### "No .claude/settings.json"
@@ -238,7 +238,7 @@ chmod +x plugins/ace/scripts/*.sh
 
 1. **Install ce-ace CLI:**
    ```bash
-   npm install -g @ce-dot-net/ce-ace-cli
+   npm install -g @ace-sdk/cli
    ```
 
 2. **Update plugin:**

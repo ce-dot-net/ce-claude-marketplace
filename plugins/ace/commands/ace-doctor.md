@@ -191,7 +191,7 @@ Possible Causes:
 2. npm global bin path not in PATH
 
 Recommended Actions:
-1. Install: npm install -g @ce-dot-net/ce-ace-cli
+1. Install: npm install -g @ace-sdk/cli
 2. Check version: ce-ace --version
 3. Verify PATH includes npm global bin: npm bin -g
 ```
@@ -411,7 +411,7 @@ Current: Single-org format (ce-ace v0.x)
 Expected: Multi-org format (ce-ace v1.x+)
 
 Recommended Actions:
-1. Update ce-ace CLI: npm install -g @ce-dot-net/ce-ace-cli@latest
+1. Update ce-ace CLI: npm install -g @ace-sdk/cli@latest
 2. Run: ce-ace configure
 3. Or run: /ace:ace-configure
 ```
@@ -468,7 +468,7 @@ Changes in v5.1.2:
 - Improved error handling in Python hooks
 
 Recommended Actions:
-1. Update ce-ace CLI: npm install -g @ce-dot-net/ce-ace-cli@latest
+1. Update ce-ace CLI: npm install -g @ace-sdk/cli@latest
 2. Update plugin from marketplace (if available)
 3. Run: /ace:ace-claude-init to update CLAUDE.md
 4. Restart Claude Code
@@ -579,7 +579,7 @@ Overall Health: 🟡 NEEDS ATTENTION (4 warnings)
 Run these commands in order:
 1. /ace:ace-configure
 2. /ace:ace-claude-init
-3. npm install -g @ce-dot-net/ce-ace-cli@latest
+3. npm install -g @ace-sdk/cli@latest
 4. Restart Claude Code
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
