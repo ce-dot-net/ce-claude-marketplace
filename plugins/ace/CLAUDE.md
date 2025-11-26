@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.2.3 -->
+<!-- ACE_SECTION_START v5.2.4 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -17,12 +17,11 @@ npm install -g @ace-sdk/cli
 
 Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
-## v5.2.3: SSE Streaming + New Package Name
+## v5.2.4: Learning Stats Display Fix
 
 **Updates**:
-- Package renamed: `@ce-dot-net/ce-ace-cli` → `@ace-sdk/cli`
-- SSE streaming support with 5-minute timeout (from 2 minutes)
-- CLI v3.0.0 with `--timeout` and `--no-stream` flags
+- Fix: Only show "📚 ACE Learning:" header when stats are available
+- Prevents empty header when no patterns created/updated/pruned
 
 **Architecture**: PostToolUse → SQLite → Stop hook queries accumulated tools.
 
@@ -60,7 +59,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.2.3 (SSE Streaming)
-**New in v5.2.3**: Package renamed to @ace-sdk/cli, 5-min timeout for streaming
+**Version**: v5.2.4 (Stats Display Fix)
+**New in v5.2.4**: Only show stats header when patterns are created/updated
 
-<!-- ACE_SECTION_END v5.2.3 -->
+<!-- ACE_SECTION_END v5.2.4 -->
