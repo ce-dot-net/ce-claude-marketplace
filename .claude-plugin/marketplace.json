@@ -14,7 +14,7 @@
       "name": "ace",
       "source": "./plugins/ace",
       "description": "Code Engine ACE - Intelligent pattern learning with hooks-based architecture. v5.2.0: Per-task + delta learning architecture - captures per-task learning with position-based delta tracking. Requires ce-ace >= v1.0.14.",
-      "version": "5.2.0",
+      "version": "5.2.1",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"

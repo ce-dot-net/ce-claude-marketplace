@@ -5,6 +5,30 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.1] - 2025-11-26
+
+### 🐛 Critical Fix: Tool-Based Substantial Work Detection
+
+**Problem**: Learning was STILL being skipped even for substantial work (8 tool calls with Edit, Write, etc.).
+
+**Root Cause Analysis** (Soviet-style brutal honesty):
+
+1. **Bug #1**: `has_substantial_work()` checked trajectory `step.get('tool', '')` but trajectory steps from `extract_execution_trace()` **never included a 'tool' key** - only semantic descriptions like "Made architectural decisions"
+
+2. **Bug #2**: Generic action check triggered on "completed" in result text, causing "Discussion and analysis completed" fallback to be rejected as "generic conversation"
+
+3. **Bug #3**: Fallback trajectory "Conversation with X message exchanges | Discussion and analysis completed" triggered the generic check because "completed" matched
+
+4. **Bug #4**: State-changing tool detection looked for "Edit", "Write" in action text, but actions were semantic ("Made architectural decisions") not tool names
+
+**Fix**:
+- Added `extract_tool_uses_from_messages()` - extracts actual tool uses from message content
+- Modified `has_substantial_work(trace, min_steps, tool_uses)` - checks tool_uses FIRST as ground truth
+- If ANY state-changing tool (Edit, Write, Bash, mcp__, NotebookEdit) found → learning triggers
+- Semantic trajectory is now a FALLBACK, not primary
+
+**Result**: 1 Edit + 2 Write = learning captured (instead of skipped)
+
 ## [5.2.0] - 2025-11-26
 
 ### 🚀 Per-Task + Delta Learning Architecture
