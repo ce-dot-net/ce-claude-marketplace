@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.1.20",
-  "description": "ACE (Agentic Context Engineering) - CLI-based pattern learning. Direct ce-ace CLI integration via hooks. No MCP server, no subagents. v5.1.20: Quality gate filters - fixes garbage data being sent to server (ACE commands, generic conversations, read-only operations now filtered). Requires ce-ace >= v1.0.14. Based on Stanford/SambaNova/UC Berkeley research",
+  "version": "5.1.21",
+  "description": "ACE (Agentic Context Engineering) - CLI-based pattern learning. Direct ce-ace CLI integration via hooks. No MCP server, no subagents. v5.1.21: Extended quality filters for Claude Code system messages. Requires ce-ace >= v1.0.14. Based on Stanford/SambaNova/UC Berkeley research",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

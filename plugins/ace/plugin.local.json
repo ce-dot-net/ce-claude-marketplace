@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.1.20",
-  "description": "ACE (Agentic Context Engineering) - LOCAL DEVELOPMENT MODE - v5.1.20: Quality gate filters - fixes garbage data being sent to server - Uses local build instead of npm package",
+  "version": "5.1.21",
+  "description": "ACE (Agentic Context Engineering) - LOCAL DEVELOPMENT MODE - v5.1.21: Extended quality filters for Claude Code system messages - Uses local build instead of npm package",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

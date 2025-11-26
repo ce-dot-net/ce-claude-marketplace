@@ -86,6 +86,11 @@ def is_trivial_task(task_description: str) -> bool:
 
         # Other trivial patterns
         r'^(hi|hello|hey|thanks|thank you|ok|okay|yes|no|sure)\s*$',  # Greetings
+
+        # Claude Code system messages (not user work)
+        r'caveat:.*messages below were generated',  # System caveat wrapper
+        r'^plugin\s*$',  # /plugin command
+        r'/plugin',  # Plugin management
     ]
 
     task_lower = task_description.lower()
