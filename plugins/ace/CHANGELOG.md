@@ -5,6 +5,99 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.0] - 2025-11-26
+
+### 🚀 Per-Task + Delta Learning Architecture
+
+**BREAKING CHANGE (Minor Version Bump)**: Complete architectural refactoring of the learning hook chain.
+
+**Problem**: PostToolUse and SubagentStop hooks WERE firing correctly and detecting task completion, but learning was **silently skipped** because:
+1. **Incremental parsing lost context** - After PreCompact advanced `last_line`, subsequent hooks only saw recent messages (1-2 steps instead of full task work)
+2. **Quality filters too strict** - Single-step trajectories rejected as "trivial"
+3. **Fallback self-defeating** - "Session work" description matched generic trivial patterns
+
+**Root Cause Discovery**: Claude Code provides NO per-task context in hooks:
+```json
+{
+  "session_id": "abc123",
+  "transcript_path": "~/.claude/projects/.../session.jsonl",
+  "hook_event_name": "Stop"
+}
+```
+**NO task_id, NO turn_id, NO messages_since_prompt, NO work_summary!**
+
+**Solution: Per-Task + Delta Architecture**:
+
+1. **Per-Task Parsing**: Define task boundary as last `role: "user"` message in transcript
+   - `get_task_messages(transcript_path)` - New function to parse from last user prompt
+   - Returns all messages AFTER the user prompt = THIS TASK's work
+
+2. **Position-Based Delta Tracking**:
+   - PreCompact records position after capturing learning
+   - Stop checks position → captures only NEW steps since PreCompact
+   - Never skip! Capture the delta work!
+
+3. **Client-Side Garbage Filtering**:
+   - `filter_garbage_trajectory()` - Filter empty tool descriptions before server
+   - Prevents trash patterns from reaching ACE Server
+
+4. **User Feedback on Skip**:
+   - `skip_learning()` - Never skip silently, always show reason
+   - Example: `[ACE] Learning skipped: Delta too small (1 messages)`
+
+5. **Relaxed Quality Filters**:
+   - `has_substantial_work(trace, min_steps=2)` - Added min_steps parameter
+   - Delta captures use `min_steps=1` (lower threshold for incremental learning)
+
+**New Per-Task Flow**:
+```
+User prompt: "Implement JWT authentication"
+↓
+Claude works... (20 steps: tool calls, edits, etc.)
+↓
+IF context full → PreCompact fires
+→ Parse from LAST user prompt (steps 1-20)
+→ Capture learning for steps 1-20
+→ Record position = 20
+↓
+Claude continues... (5 MORE steps)
+↓
+Agent finishes → Stop hook fires
+→ Check position: was 20, now 25
+→ Capture DELTA: steps 21-25 (5 new steps!)
+→ NOT skip! Capture the NEW work!
+```
+
+**Impact**:
+- ✅ Per-task learning (not per-session) - Task boundary = last user message
+- ✅ Stop hook captures full task work (not empty trajectory)
+- ✅ Delta tracking ensures no duplicate or missed learning
+- ✅ Client-side filtering prevents garbage patterns
+- ✅ User sees feedback when learning is skipped
+
+**Files Added/Modified**:
+- `shared-hooks/ace_after_task.py`:
+  - NEW: `get_task_messages()` - Per-task parsing from last user prompt
+  - NEW: `filter_garbage_trajectory()` - Client-side garbage filtering
+  - NEW: `skip_learning()` - User feedback on skip
+  - NEW: `record_captured_position()` / `get_captured_position()` / `clear_captured_position()` - Delta tracking
+  - MODIFIED: `has_substantial_work()` - Added `min_steps` parameter
+  - MODIFIED: `main()` - Complete refactoring for per-task + delta architecture
+- `plugins/ace/CLAUDE.md` - Updated documentation for v5.2.0
+- `plugins/ace/.claude-plugin/plugin.json` - Version bump
+- `plugins/ace/plugin.PRODUCTION.json` - Version bump
+- `plugins/ace/plugin.local.json` - Version bump
+- `plugins/ace/.claude-plugin/plugin.template.json` - Version bump
+
+**Server Alignment**: Verified actual server code at `/ce-ai-ace/server/ace_server/`:
+- Reflector (Sonnet 4): Extracts CONCRETE code patterns, NOT abstract meta-patterns
+- Curator (Two-Phase): ChromaDB embedding (0.70) → strict embedding (0.85) OR Haiku 4.5
+- Server accepts ANY trajectory format - it's JSON passed to Reflector prompt
+
+**Migration**: No user action required. The new architecture is backward compatible.
+
+---
+
 ## [5.1.23] - 2025-11-26
 
 ### 🐛 Critical Fix - SubagentStop Hook Not Capturing Task Agent Learning

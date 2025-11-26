@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.1.23",
-  "description": "Code Engine ACE - Intelligent pattern learning with hooks-based architecture. v5.1.23: Fixed SubagentStop hook - captures learning from Task agents. Requires ce-ace >= v1.0.14.",
+  "version": "5.2.0",
+  "description": "Code Engine ACE - Intelligent pattern learning with hooks-based architecture. v5.2.0: Per-task + delta learning architecture - captures learning per-task (not per-session), with delta tracking between PreCompact and Stop hooks. Requires ce-ace >= v1.0.14.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

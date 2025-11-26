@@ -85,6 +85,10 @@ fi
 # Record start time (cross-platform milliseconds)
 START_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
 
+# CRITICAL: Inject hook_event_name into event JSON
+# v5.2.0: ace_after_task.py uses this to determine per-task vs delta parsing
+INPUT_JSON=$(echo "$INPUT_JSON" | jq '. + {"hook_event_name": "Stop"}')
+
 # Forward to ace_after_task.py
 RESULT=$(echo "$INPUT_JSON" | uv run "${HOOK_SCRIPT}" 2>&1)
 EXIT_CODE=$?
