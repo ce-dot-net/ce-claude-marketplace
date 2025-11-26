@@ -23,7 +23,7 @@ if ! command -v ce-ace >/dev/null 2>&1; then
   echo "❌ ce-ace CLI not found in PATH"
   echo ""
   echo "Installation:"
-  echo "  npm install -g @ce-dot-net/ce-ace-cli"
+  echo "  npm install -g @ace-sdk/cli"
   echo ""
   exit 1
 fi

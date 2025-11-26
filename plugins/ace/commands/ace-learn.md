@@ -103,7 +103,7 @@ User will provide detailed lessons in the "Other" text input.
 set -euo pipefail
 
 if ! command -v ce-ace >/dev/null 2>&1; then
-  echo "❌ ce-ace not found - Install: npm install -g @ce-dot-net/ce-ace-cli"
+  echo "❌ ce-ace not found - Install: npm install -g @ace-sdk/cli"
   exit 1
 fi
 

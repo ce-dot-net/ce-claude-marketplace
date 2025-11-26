@@ -16,7 +16,7 @@ When the user runs `/ace:import-patterns <file>`, use ce-ace CLI to import the p
 set -euo pipefail
 
 if ! command -v ce-ace >/dev/null 2>&1; then
-  echo "❌ ce-ace not found - Install: npm install -g @ce-dot-net/ce-ace-cli"
+  echo "❌ ce-ace not found - Install: npm install -g @ace-sdk/cli"
   exit 1
 fi
 

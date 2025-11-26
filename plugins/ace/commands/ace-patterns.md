@@ -26,7 +26,7 @@ set -euo pipefail
 
 # Check ce-ace CLI available
 if ! command -v ce-ace >/dev/null 2>&1; then
-  echo "❌ ce-ace CLI not found - Install: npm install -g @ce-dot-net/ce-ace-cli"
+  echo "❌ ce-ace CLI not found - Install: npm install -g @ace-sdk/cli"
   exit 1
 fi
 

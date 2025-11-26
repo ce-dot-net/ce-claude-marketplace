@@ -30,14 +30,14 @@ else
   echo -e "${YELLOW}⚠️  ce-ace CLI not found${NC}"
   echo ""
   echo "Installation required:"
-  echo "  npm install -g @ce-dot-net/ce-ace-cli"
+  echo "  npm install -g @ace-sdk/cli"
   echo ""
   read -p "Install ce-ace CLI now? (y/n) " -n 1 -r
   echo
 
   if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo "Installing ce-ace CLI..."
-    npm install -g @ce-dot-net/ce-ace-cli || {
+    npm install -g @ace-sdk/cli || {
       echo -e "${RED}❌ Failed to install ce-ace CLI${NC}"
       echo "Please install manually and run this script again."
       exit 1

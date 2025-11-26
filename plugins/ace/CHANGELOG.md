@@ -5,6 +5,30 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.3] - 2025-11-26
+
+### 🚀 SSE Streaming + New Package Name
+
+**Updates**:
+- **Package Renamed**: `@ce-dot-net/ce-ace-cli` → `@ace-sdk/cli`
+- **SSE Streaming**: Server now supports `/traces/stream` endpoint with real-time progress
+- **Timeout Extended**: 120s → 300s (5 minutes) to accommodate streaming responses
+- **CLI v3.0.0**: New flags `--timeout`, `--no-stream`, `--verbosity`
+
+**Why the rename?**
+- Cleaner package name aligned with SDK branding
+- Old package still works, but new installs should use `@ace-sdk/cli`
+
+**Install**: `npm install -g @ace-sdk/cli`
+
+**Files Changed**:
+- ~50 files updated with new package name
+- `shared-hooks/ace_after_task.py` - timeout 120→300, added `--timeout 300000` CLI flag
+- `plugins/ace/scripts/*.sh` - version bumped to 5.2.3
+- `plugins/ace/CLAUDE.md` - updated to v5.2.3
+
+**Requires**: ce-ace CLI >= v3.0.0
+
 ## [5.2.2] - 2025-11-26
 
 ### 🚀 Major Architecture: PostToolUse Accumulation
@@ -1781,7 +1805,7 @@ The threshold bug meant hooks were filtering patterns too strictly (0.75 vs 0.45
 
 **Auto-Install CLI via Hook**
 
-- ✅ **SessionStart hook auto-installs ce-ace CLI**: First-time users get automatic `npm install -g @ce-dot-net/ce-ace-cli` on session start
+- ✅ **SessionStart hook auto-installs ce-ace CLI**: First-time users get automatic `npm install -g @ace-sdk/cli` on session start
 - ✅ **Smart detection**: Hook checks if CLI already installed before attempting install
 - ✅ **Non-blocking**: Install happens asynchronously, doesn't slow down session start
 - ✅ **Clear feedback**: Users see installation progress and completion status
@@ -1884,7 +1908,7 @@ This is a complete architectural refactoring that removes all MCP dependencies a
 #### Migration Required
 
 **Before upgrading:**
-1. Install ce-ace CLI: `npm install -g @ce-dot-net/ce-ace-cli`
+1. Install ce-ace CLI: `npm install -g @ace-sdk/cli`
 2. Update plugin: `/plugin update ace-orchestration`
 3. Configure: `/ace-configure`
 4. Verify: `/ace-status`

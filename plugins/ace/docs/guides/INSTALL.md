@@ -27,7 +27,7 @@ Claude Code → Hooks → ce-ace CLI → ACE Server
 ### Step 1: Install ce-ace CLI
 
 ```bash
-npm install -g @ce-dot-net/ce-ace-cli
+npm install -g @ace-sdk/cli
 ```
 
 **Verify installation:**
@@ -120,7 +120,7 @@ If you're upgrading from the old MCP-based architecture:
 
 2. **Install ce-ace CLI**:
    ```bash
-   npm install -g @ce-dot-net/ce-ace-cli
+   npm install -g @ace-sdk/cli
    ```
 
 3. **Update plugin**:
@@ -156,7 +156,7 @@ Your playbook data is preserved on the server - no data loss during migration!
 **Solution**:
 ```bash
 # Reinstall globally
-npm install -g @ce-dot-net/ce-ace-cli
+npm install -g @ace-sdk/cli
 
 # Verify installation
 which ce-ace
@@ -212,7 +212,7 @@ chmod +x ~/.config/claude-code/marketplaces/ce-dot-net-marketplace/plugins/ace/s
 
 **Solution**:
 ```bash
-npm install -g @ce-dot-net/ce-ace-cli
+npm install -g @ace-sdk/cli
 
 # Or use interactive installer
 /ace:ace-install-cli

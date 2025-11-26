@@ -12,7 +12,7 @@ fi
 
 # Not installed - show helpful message (non-interactive)
 # User can run /ace-install-cli command to install interactively
-echo "⚠️  [ACE] ce-ace CLI not found - install with: npm install -g @ce-dot-net/ce-ace-cli"
+echo "⚠️  [ACE] ce-ace CLI not found - install with: npm install -g @ace-sdk/cli"
 
 # Exit successfully (don't block the session from starting)
 exit 0

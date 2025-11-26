@@ -9,7 +9,7 @@ LOGGER="${MARKETPLACE_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${MARKETPLACE_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="5.2.2"
+export ACE_PLUGIN_VERSION="5.2.3"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -28,7 +28,7 @@ done
 
 # PRE-CHECK: Verify ce-ace CLI is installed
 if ! command -v ce-ace >/dev/null 2>&1; then
-  echo "⚠️  [ACE] ce-ace CLI not found - install with: npm install -g @ce-dot-net/ce-ace-cli"
+  echo "⚠️  [ACE] ce-ace CLI not found - install with: npm install -g @ace-sdk/cli"
   # Fail gracefully - don't block session from closing
   exit 0
 fi

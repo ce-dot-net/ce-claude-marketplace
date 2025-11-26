@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.2.2 -->
+<!-- ACE_SECTION_START v5.2.3 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -6,7 +6,7 @@ Automatic pattern learning - captures what works, retrieves it when needed.
 ## Installation
 
 ```bash
-npm install -g @ce-dot-net/ce-ace-cli
+npm install -g @ace-sdk/cli
 /ace-configure
 ```
 
@@ -17,12 +17,14 @@ npm install -g @ce-dot-net/ce-ace-cli
 
 Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
-## v5.2.2: PostToolUse Accumulation Architecture
+## v5.2.3: SSE Streaming + New Package Name
 
-**Major Fix**: Eliminated all transcript parsing by using ground truth tool data.
-Architecture: PostToolUse → SQLite → Stop hook queries accumulated tools.
+**Updates**:
+- Package renamed: `@ce-dot-net/ce-ace-cli` → `@ace-sdk/cli`
+- SSE streaming support with 5-minute timeout (from 2 minutes)
+- CLI v3.0.0 with `--timeout` and `--no-stream` flags
 
-**Result**: 100% reliable tool detection. No more parsing failures or learning skips.
+**Architecture**: PostToolUse → SQLite → Stop hook queries accumulated tools.
 
 ## Playbook Sections
 
@@ -46,7 +48,7 @@ Architecture: PostToolUse → SQLite → Stop hook queries accumulated tools.
 
 ## Quick Start
 
-1. Install: `npm install -g @ce-dot-net/ce-ace-cli`
+1. Install: `npm install -g @ace-sdk/cli`
 2. Configure: `/ace-configure`
 3. Optional: `/ace-bootstrap` to seed from codebase
 4. Start coding - hooks run automatically!
@@ -58,7 +60,7 @@ Architecture: PostToolUse → SQLite → Stop hook queries accumulated tools.
 
 ---
 
-**Version**: v5.2.2 (PostToolUse Accumulation)
-**New in v5.2.2**: SQLite-based tool accumulation eliminates transcript parsing
+**Version**: v5.2.3 (SSE Streaming)
+**New in v5.2.3**: Package renamed to @ace-sdk/cli, 5-min timeout for streaming
 
-<!-- ACE_SECTION_END v5.2.2 -->
+<!-- ACE_SECTION_END v5.2.3 -->
