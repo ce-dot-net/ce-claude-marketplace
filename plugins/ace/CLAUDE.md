@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.1.22 -->
+<!-- ACE_SECTION_START v5.1.23 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -52,7 +52,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.1.22 (PostToolUse Hook Fix)
-**New in v5.1.22**: Fixed jq syntax error when task detector returns comma-separated triggers
+**Version**: v5.1.23 (SubagentStop Hook Fix)
+**New in v5.1.23**: Fixed SubagentStop hook to correctly parse agent_transcript_path for Task agent learning
 
-<!-- ACE_SECTION_END v5.1.22 -->
+<!-- ACE_SECTION_END v5.1.23 -->

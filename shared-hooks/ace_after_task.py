@@ -507,14 +507,23 @@ def main():
         # Extract hook event name (PreCompact or Stop)
         hook_event_name = event.get('hook_event_name', 'PreCompact')
 
-        # CRITICAL: Handle Stop and PostToolUse hook data format
-        # According to Claude Code docs, Stop/PostToolUse hooks provide transcript_path instead of parsed messages
+        # CRITICAL: Handle Stop, PostToolUse, and SubagentStop hook data format
+        # According to Claude Code docs, these hooks provide transcript_path instead of parsed messages
         # PreCompact hooks provide pre-parsed messages/tool_uses directly
-        if hook_event_name in ['Stop', 'PostToolUse']:
+        # v5.1.23: SubagentStop uses agent_transcript_path for the subagent's own work
+        if hook_event_name in ['Stop', 'PostToolUse', 'SubagentStop']:
             # Check if we already have messages (defensive coding)
             if 'messages' not in event or not event.get('messages'):
-                # Need to parse transcript
-                if 'transcript_path' in event:
+                # Determine which transcript path to use
+                # SubagentStop has BOTH transcript_path (parent) AND agent_transcript_path (subagent)
+                # We need agent_transcript_path to capture the SUBAGENT's work, not the parent session
+                if hook_event_name == 'SubagentStop' and 'agent_transcript_path' in event:
+                    transcript_to_parse = event['agent_transcript_path']
+                    # SubagentStop: Parse FULL transcript (no incremental - fresh context)
+                    messages, tool_uses, _ = parse_transcript(transcript_to_parse, start_line=0)
+                    event['messages'] = messages
+                    event['tool_uses'] = tool_uses
+                elif 'transcript_path' in event:
                     # INCREMENTAL PARSING: Load state to get last processed line
                     state_file = Path('.claude/data/logs/ace-transcript-state.json')
                     start_line = 0
