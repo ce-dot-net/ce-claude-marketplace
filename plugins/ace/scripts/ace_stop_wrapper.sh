@@ -9,7 +9,7 @@ LOGGER="${MARKETPLACE_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${MARKETPLACE_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="5.2.0"
+export ACE_PLUGIN_VERSION="5.2.2"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -86,7 +86,7 @@ fi
 START_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
 
 # CRITICAL: Inject hook_event_name into event JSON
-# v5.2.0: ace_after_task.py uses this to determine per-task vs delta parsing
+# v5.3.0: ace_after_task.py queries accumulated tools from SQLite
 INPUT_JSON=$(echo "$INPUT_JSON" | jq '. + {"hook_event_name": "Stop"}')
 
 # Forward to ace_after_task.py
