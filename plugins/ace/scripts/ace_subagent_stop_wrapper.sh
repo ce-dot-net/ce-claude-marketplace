@@ -10,7 +10,7 @@ LOGGER="${MARKETPLACE_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${MARKETPLACE_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="5.2.1"
+export ACE_PLUGIN_VERSION="5.2.0"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -70,6 +70,10 @@ fi
 
 # Record start time (cross-platform milliseconds)
 START_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
+
+# CRITICAL: Inject hook_event_name into event JSON
+# v5.2.0: ace_after_task.py uses this to select agent_transcript_path
+INPUT_JSON=$(echo "$INPUT_JSON" | jq '. + {"hook_event_name": "SubagentStop"}')
 
 # Forward to ace_after_task.py (captures learning from subagent work)
 RESULT=$(echo "$INPUT_JSON" | uv run "${HOOK_SCRIPT}" 2>&1)

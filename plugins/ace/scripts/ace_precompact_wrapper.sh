@@ -80,6 +80,10 @@ if [[ "$ENABLE_BACKUP" == "true" ]]; then
   fi
 fi
 
+# CRITICAL: Inject hook_event_name into event JSON
+# v5.2.0: ace_after_task.py uses this to record position for delta tracking
+INPUT_JSON=$(echo "$INPUT_JSON" | jq '. + {"hook_event_name": "PreCompact"}')
+
 # Forward to ace_after_task.py
 RESULT=$(echo "$INPUT_JSON" | uv run "${HOOK_SCRIPT}" 2>&1)
 EXIT_CODE=$?

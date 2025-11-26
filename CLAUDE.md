@@ -2,10 +2,18 @@
 
 ## ACE Plugin Instructions
 
-<!-- ACE_SECTION_START v5.1.22 -->
+<!-- ACE_SECTION_START v5.2.0 -->
 # ACE Plugin Instructions
 
 Automatic pattern learning plugin. Hooks inject learned patterns before tasks, capture new patterns after completion.
+
+## v5.2.0: Per-Task + Delta Learning
+
+**Key Changes**:
+- Per-task parsing from last user prompt (not incremental session)
+- Position-based delta tracking between PreCompact and Stop
+- Client-side garbage filtering before server
+- User feedback on learning skip reasons
 
 ## Commands Available
 
@@ -72,8 +80,8 @@ Patterns are organized into:
 
 ---
 
-**Version**: v5.1.22
+**Version**: v5.2.0 (Per-Task + Delta Learning)
 **Requires**: ce-ace CLI >= v1.0.14
 **Architecture**: Hooks + CLI (no MCP)
 
-<!-- ACE_SECTION_END v5.1.22 -->
+<!-- ACE_SECTION_END v5.2.0 -->

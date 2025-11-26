@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.1.23 -->
+<!-- ACE_SECTION_START v5.2.0 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -13,9 +13,22 @@ npm install -g @ce-dot-net/ce-ace-cli
 ## How It Works
 
 **Before tasks**: Hook searches playbook → Injects relevant patterns
-**After work**: Captures learning automatically (PostToolUse, SubagentStop, Stop hooks)
+**After work**: Captures learning automatically (PreCompact, SubagentStop, Stop hooks)
 
 Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
+
+## v5.2.0: Per-Task + Delta Learning Architecture
+
+**Key Improvements**:
+- **Per-Task Learning**: Captures learning per-task (not per-session)
+- **Delta Tracking**: Stop hook captures NEW work since PreCompact
+- **Client-Side Filtering**: Garbage trajectories filtered before server
+- **User Feedback**: Skip reasons always shown (not silent)
+
+**How Delta Works**:
+1. PreCompact captures full task work → records position
+2. Stop checks position → captures only NEW steps (delta)
+3. Result: No duplicate learning, complete coverage
 
 ## Playbook Sections
 
@@ -46,13 +59,13 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ## Three-Tier Learning
 
-- **PostToolUse**: Main agent tasks (heuristic-based detection)
+- **PreCompact**: Safety net before context compaction (records position)
 - **SubagentStop**: Task agent tasks (on completion)
-- **Stop**: Session work (on close)
+- **Stop**: End-of-task (captures delta since PreCompact)
 
 ---
 
-**Version**: v5.1.23 (SubagentStop Hook Fix)
-**New in v5.1.23**: Fixed SubagentStop hook to correctly parse agent_transcript_path for Task agent learning
+**Version**: v5.2.0 (Per-Task + Delta Learning)
+**New in v5.2.0**: Complete architectural refactoring - per-task parsing from last user prompt, position-based delta tracking, client-side garbage filtering, user feedback on skip
 
-<!-- ACE_SECTION_END v5.1.23 -->
+<!-- ACE_SECTION_END v5.2.0 -->

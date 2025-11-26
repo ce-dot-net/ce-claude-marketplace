@@ -11,7 +11,7 @@ TASK_DETECTOR="${MARKETPLACE_ROOT}/shared-hooks/ace_task_detector.py"
 HOOK_SCRIPT="${MARKETPLACE_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="5.3.0"
+export ACE_PLUGIN_VERSION="5.2.0"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default

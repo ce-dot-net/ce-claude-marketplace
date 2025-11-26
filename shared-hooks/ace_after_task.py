@@ -100,15 +100,23 @@ def is_trivial_task(task_description: str) -> bool:
     return False
 
 
-def has_substantial_work(trace: dict) -> bool:
+def has_substantial_work(trace: dict, min_steps: int = 2) -> bool:
     """
     Determine if trace contains substantial work worth learning.
 
     Per ACE Research Paper: Requires "meaningful execution feedback"
 
+    v5.2.0: Added min_steps parameter for delta captures.
+    Delta captures (from Stop after PreCompact) can have fewer steps
+    but still be valuable - we use min_steps=1 for those.
+
+    Args:
+        trace: ExecutionTrace dict with 'task', 'trajectory', 'result' keys
+        min_steps: Minimum trajectory steps required (default: 2, use 1 for delta)
+
     Returns True if ALL of these conditions are met:
     - Task is not a generic fallback ("Session work")
-    - Trajectory has 2+ meaningful steps
+    - Trajectory has min_steps+ meaningful steps
     - Trajectory is not generic conversation-only
     - Has state-changing tools OR substantial output (200+ chars)
     """
@@ -120,8 +128,9 @@ def has_substantial_work(trace: dict) -> bool:
     if task.startswith("Session work"):
         return False
 
-    # Reject empty or single-step trajectories
-    if len(trajectory) < 2:
+    # Reject trajectories below minimum steps threshold
+    # v5.2.0: Use min_steps=1 for delta captures
+    if len(trajectory) < min_steps:
         return False
 
     # Reject generic conversation-only trajectories
@@ -171,6 +180,180 @@ def has_substantial_work(trace: dict) -> bool:
         return False
 
     return True
+
+
+def filter_garbage_trajectory(trajectory):
+    """
+    Filter empty/garbage tool descriptions BEFORE sending to server.
+
+    v5.2.0: Client-side garbage filtering (CRITICAL)
+
+    Per ACE Research Paper: Reflector expects CONCRETE code patterns.
+    Empty or minimal descriptions create trash patterns on the server.
+
+    Examples of garbage to filter:
+    - "Edit - " (empty description)
+    - "Write - " (empty description)
+    - "Bash - ls" (trivial command)
+
+    Args:
+        trajectory: List of trajectory step dicts with 'action', 'result' keys
+
+    Returns:
+        Filtered trajectory with only meaningful steps
+    """
+    filtered = []
+
+    for step in trajectory:
+        action = step.get('action', '')
+        result = step.get('result', '')
+
+        # Skip empty tool descriptions: "Edit - " or "Write - "
+        if ' - ' in action:
+            parts = action.split(' - ', 1)
+            if len(parts) == 2:
+                tool_name, description = parts
+                # Require non-empty description with at least 5 chars
+                if description.strip() and len(description.strip()) >= 5:
+                    filtered.append(step)
+                else:
+                    # Log filtered garbage in debug mode
+                    import os
+                    if os.environ.get('ACE_DEBUG_HOOKS') == '1':
+                        with open('/tmp/ace_hook_debug.log', 'a') as f:
+                            f.write(f"Filtered garbage action: '{action}'\n")
+                    continue
+            else:
+                filtered.append(step)
+        else:
+            # Keep non-tool actions (decisions, accomplishments, etc.)
+            # But filter very short/empty ones
+            if action.strip() and len(action.strip()) >= 10:
+                filtered.append(step)
+
+    return filtered
+
+
+def skip_learning(reason, event=None):
+    """
+    Never skip silently - always provide feedback to user.
+
+    v5.2.0: User feedback on skip
+
+    Per ACE Research Paper: Users should understand when learning
+    is skipped and why, to help them improve their workflow.
+
+    Args:
+        reason: Human-readable reason for skipping
+        event: Optional event dict for additional context
+
+    Returns:
+        JSON-serializable dict with continue=True and systemMessage
+    """
+    import os
+    if os.environ.get('ACE_DEBUG_HOOKS') == '1':
+        with open('/tmp/ace_hook_debug.log', 'a') as f:
+            f.write(f"ACE: Skipping learning - {reason}\n")
+            if event:
+                f.write(f"  Event: {json.dumps(event, default=str)[:500]}\n")
+
+    return {
+        "continue": True,
+        "systemMessage": f"[ACE] Learning skipped: {reason}"
+    }
+
+
+# Position tracking state files for delta learning (v5.2.0)
+POSITION_STATE_FILE = Path('.claude/data/logs/ace-position-state.json')
+
+
+def record_captured_position(session_id, position, hook_type='precompact'):
+    """
+    Record the position (message count) at which learning was captured.
+
+    v5.2.0: Position-based delta tracking
+
+    This enables Stop hook to capture ONLY NEW work since PreCompact,
+    instead of skipping entirely (which loses delta learning).
+
+    Args:
+        session_id: Claude Code session ID
+        position: Number of task messages captured
+        hook_type: Which hook recorded this ('precompact', 'posttooluse')
+    """
+    try:
+        POSITION_STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+
+        # Load existing state
+        state = {}
+        if POSITION_STATE_FILE.exists():
+            with open(POSITION_STATE_FILE, 'r') as f:
+                state = json.load(f)
+
+        # Record position for this session
+        state[session_id] = {
+            'position': position,
+            'hook_type': hook_type,
+            'timestamp': datetime.now().isoformat()
+        }
+
+        # Save state
+        with open(POSITION_STATE_FILE, 'w') as f:
+            json.dump(state, f, indent=2)
+
+    except Exception as e:
+        import os
+        if os.environ.get('ACE_DEBUG_HOOKS') == '1':
+            with open('/tmp/ace_hook_debug.log', 'a') as f:
+                f.write(f"record_captured_position error: {e}\n")
+
+
+def get_captured_position(session_id):
+    """
+    Get the last captured position for delta learning.
+
+    v5.2.0: Position-based delta tracking
+
+    Returns:
+        Position (int) if found, 0 otherwise
+    """
+    try:
+        if not POSITION_STATE_FILE.exists():
+            return 0
+
+        with open(POSITION_STATE_FILE, 'r') as f:
+            state = json.load(f)
+
+        session_state = state.get(session_id, {})
+        return session_state.get('position', 0)
+
+    except Exception:
+        return 0
+
+
+def clear_captured_position(session_id):
+    """
+    Clear position state after Stop hook completes (cleanup).
+
+    v5.2.0: Position-based delta tracking
+
+    Called at end of Stop hook to clean up state for next task.
+    """
+    try:
+        if not POSITION_STATE_FILE.exists():
+            return
+
+        with open(POSITION_STATE_FILE, 'r') as f:
+            state = json.load(f)
+
+        if session_id in state:
+            del state[session_id]
+
+            with open(POSITION_STATE_FILE, 'w') as f:
+                json.dump(state, f, indent=2)
+
+    except Exception:
+        pass
 
 
 def extract_execution_trace(event):
@@ -421,12 +604,106 @@ def extract_execution_trace(event):
     }
 
 
+def get_task_messages(transcript_path):
+    """
+    Get all messages since the LAST user prompt = THIS TASK's work.
+
+    v5.2.0: Per-task parsing instead of incremental session parsing.
+
+    Claude Code provides NO per-task identifier, so we define:
+    - Task Start = Last `role: "user"` message in transcript
+    - Task Work = All messages AFTER that user message
+    - Task End = Stop/SubagentStop hook fires
+
+    This ensures we capture the FULL context of the current task,
+    not just messages since last PreCompact (which loses context).
+
+    Returns:
+        (task_messages, user_prompt, last_user_idx): Tuple of:
+            - task_messages: List of message dicts since last user prompt
+            - user_prompt: The user's prompt text that started this task
+            - last_user_idx: Index of last user message (for position tracking)
+    """
+    all_entries = []
+    task_messages = []
+    user_prompt = "No user prompt found"
+
+    try:
+        transcript_file = Path(transcript_path).expanduser()
+        if not transcript_file.exists():
+            return [], user_prompt, -1
+
+        # Read ALL entries from transcript
+        with open(transcript_file, 'r') as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                try:
+                    entry = json.loads(line)
+                    all_entries.append(entry)
+                except json.JSONDecodeError:
+                    continue
+
+        if not all_entries:
+            return [], user_prompt, -1
+
+        # Find LAST user message (task start) - search backwards
+        last_user_idx = -1
+        for i in range(len(all_entries) - 1, -1, -1):
+            message = all_entries[i].get('message', {})
+            if message.get('role') == 'user':
+                last_user_idx = i
+
+                # Extract user prompt text
+                content = message.get('content', '')
+                if isinstance(content, list):
+                    # Handle content blocks format
+                    text_parts = []
+                    for block in content:
+                        if isinstance(block, dict) and block.get('type') == 'text':
+                            text_parts.append(block.get('text', ''))
+                    user_prompt = '\n'.join(text_parts)
+                elif isinstance(content, str):
+                    user_prompt = content
+                else:
+                    user_prompt = str(content)
+
+                break
+
+        if last_user_idx == -1:
+            return [], "No user prompt found", -1
+
+        # Everything AFTER = THIS TASK's work
+        task_entries = all_entries[last_user_idx + 1:]
+
+        # Convert entries to messages format (matching parse_transcript output)
+        for entry in task_entries:
+            message = entry.get('message', {})
+            if 'role' in message and 'content' in message:
+                task_messages.append({
+                    'role': message['role'],
+                    'content': message['content']
+                })
+
+    except Exception as e:
+        # Non-fatal: return empty
+        import os
+        if os.environ.get('ACE_DEBUG_HOOKS') == '1':
+            with open('/tmp/ace_hook_debug.log', 'a') as f:
+                f.write(f"get_task_messages error: {e}\n")
+
+    return task_messages, user_prompt, last_user_idx
+
+
 def parse_transcript(transcript_path, start_line=0):
     """
     Parse Claude Code transcript .jsonl file to extract messages and tool_uses.
 
     Supports incremental parsing by accepting a start_line parameter.
     This enables parsing only NEW messages since last processing.
+
+    NOTE: v5.2.0 - This function is kept for backward compatibility.
+    For per-task parsing, use get_task_messages() instead.
 
     Args:
         transcript_path: Path to the .jsonl transcript file
@@ -490,6 +767,24 @@ def parse_transcript(transcript_path, start_line=0):
 
 
 def main():
+    """
+    ACE After Task Hook - Per-Task + Delta Learning Architecture (v5.2.0)
+
+    This hook captures learning from completed work using a per-task approach:
+
+    1. PreCompact: Captures FULL task work before context compaction
+       - Records position for delta tracking
+       - Ensures learning survives compaction
+
+    2. Stop: Captures DELTA work (new steps since PreCompact)
+       - If PreCompact ran: capture only NEW steps
+       - If PreCompact never ran: capture FULL task
+
+    3. SubagentStop: Captures subagent work (separate transcript)
+       - Uses agent_transcript_path for subagent's own work
+
+    Task Boundary: Last `role: "user"` message in transcript
+    """
     try:
         # Read hook event from stdin
         event = json.load(sys.stdin)
@@ -504,92 +799,88 @@ def main():
                 f.write(f"Event data:\n{json.dumps(event, indent=2)}\n")
                 f.write(f"{'='*80}\n")
 
-        # Extract hook event name (PreCompact or Stop)
+        # Extract hook event name (PreCompact, Stop, PostToolUse, SubagentStop)
         hook_event_name = event.get('hook_event_name', 'PreCompact')
+        session_id = event.get('session_id', 'unknown')
 
-        # CRITICAL: Handle Stop, PostToolUse, and SubagentStop hook data format
-        # According to Claude Code docs, these hooks provide transcript_path instead of parsed messages
-        # PreCompact hooks provide pre-parsed messages/tool_uses directly
-        # v5.1.23: SubagentStop uses agent_transcript_path for the subagent's own work
-        if hook_event_name in ['Stop', 'PostToolUse', 'SubagentStop']:
-            # Check if we already have messages (defensive coding)
-            if 'messages' not in event or not event.get('messages'):
-                # Determine which transcript path to use
-                # SubagentStop has BOTH transcript_path (parent) AND agent_transcript_path (subagent)
-                # We need agent_transcript_path to capture the SUBAGENT's work, not the parent session
-                if hook_event_name == 'SubagentStop' and 'agent_transcript_path' in event:
-                    transcript_to_parse = event['agent_transcript_path']
-                    # SubagentStop: Parse FULL transcript (no incremental - fresh context)
-                    messages, tool_uses, _ = parse_transcript(transcript_to_parse, start_line=0)
-                    event['messages'] = messages
-                    event['tool_uses'] = tool_uses
-                elif 'transcript_path' in event:
-                    # INCREMENTAL PARSING: Load state to get last processed line
-                    state_file = Path('.claude/data/logs/ace-transcript-state.json')
-                    start_line = 0
-
-                    if state_file.exists():
-                        try:
-                            with open(state_file, 'r') as f:
-                                state = json.load(f)
-                                # Get last processed line for this transcript
-                                transcript_key = str(Path(event['transcript_path']).name)
-                                start_line = state.get(transcript_key, {}).get('last_line', 0)
-                        except Exception:
-                            pass  # Start from beginning if state load fails
-
-                    # Parse only NEW messages (incremental)
-                    messages, tool_uses, lines_parsed = parse_transcript(event['transcript_path'], start_line)
-                    event['messages'] = messages
-                    event['tool_uses'] = tool_uses
-
-                    # Save updated state (new last_line position)
-                    if lines_parsed > 0:
-                        state_file.parent.mkdir(parents=True, exist_ok=True)
-                        try:
-                            # Load existing state
-                            existing_state = {}
-                            if state_file.exists():
-                                with open(state_file, 'r') as f:
-                                    existing_state = json.load(f)
-
-                            # Update state for this transcript
-                            transcript_key = str(Path(event['transcript_path']).name)
-                            existing_state[transcript_key] = {
-                                'last_line': start_line + lines_parsed,
-                                'updated_at': datetime.now().isoformat()
-                            }
-
-                            # Save state
-                            with open(state_file, 'w') as f:
-                                json.dump(existing_state, f, indent=2)
-                        except Exception:
-                            pass  # Non-fatal if state save fails
-                else:
-                    # Fallback: no transcript path and no messages
-                    # This shouldn't happen but handle gracefully
-                    event['messages'] = []
-                    event['tool_uses'] = []
-
-        # Get project context
+        # Get project context EARLY (needed for all paths)
         context = get_context()
         if not context:
-            output = {
-                "systemMessage": "⚠️ [ACE] No project context found - skipping automatic learning"
-            }
+            output = skip_learning("No project context found", event)
             print(json.dumps(output))
             sys.exit(0)
 
-        # STEP 1: Recall pinned session patterns BEFORE learning capture
+        # =======================================================================
+        # v5.2.0: PER-TASK + DELTA LEARNING ARCHITECTURE
+        # =======================================================================
+
+        # Determine transcript path
+        transcript_path = None
+        if hook_event_name == 'SubagentStop' and 'agent_transcript_path' in event:
+            # SubagentStop: Use subagent's transcript (not parent session)
+            transcript_path = event['agent_transcript_path']
+        elif 'transcript_path' in event:
+            transcript_path = event['transcript_path']
+
+        # STEP 1: Get task messages using per-task parsing (v5.2.0)
+        # Parse from LAST user prompt = THIS TASK's work
+        task_messages = []
+        user_prompt = "No user prompt found"
+        task_position = 0
+        is_delta_capture = False
+        min_steps = 2  # Default: require 2+ steps
+
+        if transcript_path:
+            task_messages, user_prompt, _ = get_task_messages(transcript_path)
+            task_position = len(task_messages)
+
+            if os.environ.get('ACE_DEBUG_HOOKS') == '1':
+                with open('/tmp/ace_hook_debug.log', 'a') as f:
+                    f.write(f"Per-task parsing: {task_position} messages since last user prompt\n")
+                    f.write(f"User prompt: {user_prompt[:100]}...\n")
+
+        # STEP 2: Delta tracking for Stop hook (v5.2.0)
+        # Check if PreCompact already captured some work
+        if hook_event_name == 'Stop':
+            last_captured_position = get_captured_position(session_id)
+
+            if last_captured_position > 0 and last_captured_position < task_position:
+                # PreCompact ran - capture ONLY NEW messages (delta)
+                delta_count = task_position - last_captured_position
+                task_messages = task_messages[last_captured_position:]
+                is_delta_capture = True
+                min_steps = 1  # Lower threshold for delta captures
+
+                if os.environ.get('ACE_DEBUG_HOOKS') == '1':
+                    with open('/tmp/ace_hook_debug.log', 'a') as f:
+                        f.write(f"DELTA capture: {delta_count} new steps since PreCompact (position {last_captured_position})\n")
+
+            elif last_captured_position >= task_position:
+                # PreCompact captured everything - no new work
+                output = skip_learning("No new work since PreCompact", event)
+                print(json.dumps(output))
+                # Clean up position state
+                clear_captured_position(session_id)
+                sys.exit(0)
+
+            # Clean up position state after Stop
+            clear_captured_position(session_id)
+
+        # STEP 3: Build event with task messages for extract_execution_trace
+        # (Backward compatible with existing extract_execution_trace function)
+        event['messages'] = task_messages
+        event['tool_uses'] = []  # Will be extracted from messages
+
+        # STEP 4: Recall pinned session patterns BEFORE learning capture
         # This ensures patterns survive context compaction
         recalled_patterns = None
         if context['project']:
             session_file = Path(f"/tmp/ace-session-{context['project']}.txt")
             if session_file.exists():
                 try:
-                    session_id = session_file.read_text().strip()
+                    session_id_from_file = session_file.read_text().strip()
                     recalled_patterns = recall_session(
-                        session_id=session_id,
+                        session_id=session_id_from_file,
                         org=context['org'],
                         project=context['project']
                     )
@@ -597,34 +888,58 @@ def main():
                     # Non-fatal: continue without recalled patterns
                     pass
 
-        # STEP 2: Build ExecutionTrace from event with rich context
+        # STEP 5: Build ExecutionTrace from task messages with rich context
         trace = extract_execution_trace(event)
 
-        # STEP 3a: QUALITY GATE - Filter trivial tasks (v5.2.0)
+        # Override task description with actual user prompt (not generic fallback)
+        if user_prompt and user_prompt != "No user prompt found":
+            trace['task'] = f"User request: {user_prompt[:2000]}"
+
+        # STEP 6a: QUALITY GATE - Filter trivial tasks
         # Per ACE Research Paper: Only learn from "meaningful execution feedback"
-        # This prevents garbage patterns from ACE commands, status checks, etc.
         if is_trivial_task(trace['task']):
-            # Trivial task detected - skip silently (no garbage to server!)
-            output = {"systemMessage": ""}  # Silent skip
+            output = skip_learning("Trivial task (ACE command or simple query)", event)
             print(json.dumps(output))
             sys.exit(0)
 
-        # STEP 3b: QUALITY GATE - Check for substantial work (v5.2.0)
-        # Use the new robust has_substantial_work() function
-        # This prevents generic conversations and read-only operations from being learned
-        if not has_substantial_work(trace):
-            # No substantial work - skip learning capture
-            output = {
-                "systemMessage": ""  # Silent skip - no need to notify user
-            }
+        # STEP 6b: QUALITY GATE - Check for substantial work
+        # v5.2.0: Use min_steps=1 for delta captures
+        if not has_substantial_work(trace, min_steps=min_steps):
+            reason = "No substantial work" if not is_delta_capture else f"Delta too small ({len(task_messages)} messages)"
+            output = skip_learning(reason, event)
             print(json.dumps(output))
             sys.exit(0)
+
+        # STEP 6c: GARBAGE FILTER - Filter empty/trivial trajectory steps
+        # v5.2.0: Client-side garbage filtering BEFORE sending to server
+        clean_trajectory = filter_garbage_trajectory(trace['trajectory'])
+        if len(clean_trajectory) == 0:
+            output = skip_learning("No meaningful actions in trajectory", event)
+            print(json.dumps(output))
+            sys.exit(0)
+        trace['trajectory'] = clean_trajectory
+
+        # STEP 7: PreCompact records position for delta tracking
+        # Stop will use this to capture only NEW work
+        if hook_event_name == 'PreCompact' and task_position > 0:
+            record_captured_position(session_id, task_position, 'precompact')
+            if os.environ.get('ACE_DEBUG_HOOKS') == '1':
+                with open('/tmp/ace_hook_debug.log', 'a') as f:
+                    f.write(f"PreCompact: Recorded position {task_position} for delta tracking\n")
 
         # Build user-visible message lines with details
-        hook_label = "PreCompact (safety)" if hook_event_name == "PreCompact" else "Stop (end-of-task)"
+        if is_delta_capture:
+            hook_label = f"Stop (delta: {len(task_messages)} new steps)"
+        elif hook_event_name == "PreCompact":
+            hook_label = "PreCompact (safety net)"
+        elif hook_event_name == "SubagentStop":
+            hook_label = "SubagentStop (Task agent)"
+        else:
+            hook_label = f"{hook_event_name} (end-of-task)"
+
         message_lines = [
             "",
-            f"📚 [ACE] Automatically capturing learning from this session... ({hook_label})",
+            f"📚 [ACE] Automatically capturing learning... ({hook_label})",
             f"   Task: {trace['task'][:80]}...",
             f"   Status: {'✅ Success' if trace['result']['success'] else '❌ Failed'}"
         ]
@@ -644,8 +959,6 @@ def main():
         # Call ce-ace learn --stdin with ExecutionTrace JSON
         # Context passed via environment variables
         try:
-            # Build environment with context
-            import os
             env = os.environ.copy()
             if context['org']:
                 env['ACE_ORG_ID'] = context['org']
@@ -653,18 +966,12 @@ def main():
                 env['ACE_PROJECT_ID'] = context['project']
 
             # IMPORTANT: Timeout must be less than hook timeout (130s in hooks.json)
-            # For long sessions with lots of work, ce-ace needs time to:
-            # 1. Analyze large execution traces (can be very large for long sessions)
-            # 2. Call ACE API server
-            # 3. Wait for Reflector + Curator processing (server-side analysis)
-            # 4. Return results
-            # Set to 120s to leave 10s for wrapper overhead
             result = subprocess.run(
                 ['ce-ace', 'learn', '--stdin', '--json'],
                 input=json.dumps(trace),
                 text=True,
                 capture_output=True,
-                timeout=120,  # Increased from 30s to 120s (hooks have 130s total)
+                timeout=120,
                 env=env
             )
 
@@ -674,14 +981,12 @@ def main():
                 try:
                     response = json.loads(result.stdout)
 
-                    # NEW: v1.0.13+ enhanced learning statistics
+                    # v1.0.13+ enhanced learning statistics
                     stats = response.get('learning_statistics')
                     if stats:
-                        # Display enhanced feedback (CLI team recommended format)
                         message_lines.append("")
                         message_lines.append("📚 ACE Learning:")
 
-                        # Show what was created/updated
                         created = stats.get('patterns_created', 0)
                         updated = stats.get('patterns_updated', 0)
                         pruned = stats.get('patterns_pruned', 0)
@@ -693,26 +998,22 @@ def main():
                         if pruned > 0:
                             message_lines.append(f"   • {pruned} low-quality pattern{'s' if pruned != 1 else ''} pruned")
 
-                        # Show quality metric
                         conf = stats.get('average_confidence', 0)
                         if conf > 0:
                             message_lines.append(f"   • Quality: {int(conf * 100)}%")
 
                     else:
-                        # FALLBACK: Old server (v3.9.x and earlier) or analysis skipped
-                        # Try legacy fields for backward compatibility
+                        # FALLBACK: Old server format
                         if response.get('analysis_triggered'):
                             message_lines.append("   🧠 Server analysis in progress...")
-
-                        # Old format pattern count
                         patterns_count = response.get('patterns_extracted')
                         if patterns_count:
                             message_lines.append(f"   📝 {patterns_count} patterns extracted for review")
 
                 except json.JSONDecodeError:
-                    pass  # CLI response wasn't JSON, that's okay
+                    pass
                 except Exception:
-                    pass  # Don't fail on response parsing
+                    pass
             else:
                 message_lines.append(f"⚠️ [ACE] Learning capture failed: {result.stderr}")
                 message_lines.append("   You can manually capture with: /ace-learn")
@@ -742,7 +1043,7 @@ def main():
         if recalled_patterns and recalled_patterns.get('count', 0) > 0:
             ace_context = f"<ace-patterns>\n{json.dumps(recalled_patterns, indent=2)}\n</ace-patterns>"
             output["hookSpecificOutput"] = {
-                "hookEventName": hook_event_name,  # Dynamic: "PreCompact" or "Stop"
+                "hookEventName": hook_event_name,
                 "additionalContext": ace_context
             }
 
@@ -751,6 +1052,12 @@ def main():
 
     except Exception as e:
         # Log error but don't block compaction
+        import os
+        if os.environ.get('ACE_DEBUG_HOOKS') == '1':
+            with open('/tmp/ace_hook_debug.log', 'a') as f:
+                f.write(f"FATAL ERROR: {e}\n")
+                import traceback
+                f.write(traceback.format_exc())
         print(f"[ERROR] ACE after-task hook failed: {e}", file=sys.stderr)
         sys.exit(0)
 
