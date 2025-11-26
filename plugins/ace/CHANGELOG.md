@@ -5,6 +5,48 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.23] - 2025-11-26
+
+### 🐛 Critical Fix - SubagentStop Hook Not Capturing Task Agent Learning
+
+**Problem**: SubagentStop hook was firing when Task agents completed, but learning was never captured. The hook returned empty `systemMessage` every time.
+
+**Root Cause**: TWO bugs in `shared-hooks/ace_after_task.py`:
+
+1. **Missing SubagentStop in hook_event_name check (line 513)**:
+   ```python
+   # BROKEN - SubagentStop not included
+   if hook_event_name in ['Stop', 'PostToolUse']:
+   ```
+
+2. **Wrong transcript path for SubagentStop**:
+   - SubagentStop events have TWO transcript paths:
+     - `transcript_path` → Parent session (2000+ lines)
+     - `agent_transcript_path` → Subagent's own work (6-50 lines)
+   - Code was using `transcript_path` which contains the PARENT's context, not the subagent's work
+
+**Solution**:
+```python
+# FIXED - SubagentStop now included and uses correct transcript path
+if hook_event_name in ['Stop', 'PostToolUse', 'SubagentStop']:
+    if hook_event_name == 'SubagentStop' and 'agent_transcript_path' in event:
+        transcript_to_parse = event['agent_transcript_path']
+        # SubagentStop: Parse FULL transcript (no incremental - fresh context)
+        messages, tool_uses, _ = parse_transcript(transcript_to_parse, start_line=0)
+```
+
+**Impact**:
+- ✅ SubagentStop now correctly parses `agent_transcript_path`
+- ✅ Task agent learning now captured (Write, Edit, Bash tools)
+- ✅ Three-tier learning now complete: PostToolUse + SubagentStop + Stop
+
+**Files Modified**: 1
+- `shared-hooks/ace_after_task.py` - Added SubagentStop support with correct transcript path
+
+**NOT a Breaking Change**: Internal fix, users don't need to take any action
+
+---
+
 ## [5.1.22] - 2025-11-26
 
 ### 🐛 Bug Fix - PostToolUse Hook jq Syntax Error
