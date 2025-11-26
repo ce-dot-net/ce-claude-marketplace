@@ -5,6 +5,40 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.1.22] - 2025-11-26
+
+### 🐛 Bug Fix - PostToolUse Hook jq Syntax Error
+
+**Problem**: The v5.1.20 task detector returns comma-separated triggers like `"tool_sequence, user_confirmation"`. When bash shell expansion injected this into jq, the JSON parsing failed due to unquoted commas.
+
+**Root Cause**: The PostToolUse wrapper (`ace_posttooluse_wrapper.sh`) used direct bash variable interpolation for jq JSON construction:
+```bash
+# BROKEN - bash expansion breaks JSON when $TRIGGERED_BY contains commas
+STOP_EVENT=$(echo "$INPUT_JSON" | jq '. + {
+  "task_detector_triggered_by": "'$TRIGGERED_BY'",
+  "task_detector_confidence": '$CONFIDENCE'
+}')
+```
+
+**Solution**: Use `jq --arg` and `jq --argjson` for safe variable injection:
+```bash
+# FIXED - jq safely handles comma-separated values
+STOP_EVENT=$(echo "$INPUT_JSON" | jq --arg triggered "$TRIGGERED_BY" --argjson confidence "$CONFIDENCE" '. + {
+  "task_detector_triggered_by": $triggered,
+  "task_detector_confidence": $confidence
+}')
+```
+
+**Impact**:
+- ✅ PostToolUse hook now works with comma-separated task detector triggers
+- ✅ All learning data properly passed to ace_after_task.py
+- ✅ No more jq syntax errors in hook logs
+
+**Files Modified**: 1
+- `plugins/ace/scripts/ace_posttooluse_wrapper.sh` - Fixed jq variable injection
+
+**NOT a Breaking Change**: Internal fix, users don't need to take any action
+
 ## [5.1.21] - 2025-11-26
 
 ### 🧹 Extended Quality Filters - Claude Code System Messages

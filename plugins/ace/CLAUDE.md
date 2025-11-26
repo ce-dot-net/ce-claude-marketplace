@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.1.21 -->
+<!-- ACE_SECTION_START v5.1.22 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -52,7 +52,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.1.21 (Extended Quality Filters)
-**New in v5.1.21**: Added filters for Claude Code system messages (Caveat wrapper, /plugin commands)
+**Version**: v5.1.22 (PostToolUse Hook Fix)
+**New in v5.1.22**: Fixed jq syntax error when task detector returns comma-separated triggers
 
-<!-- ACE_SECTION_END v5.1.21 -->
+<!-- ACE_SECTION_END v5.1.22 -->

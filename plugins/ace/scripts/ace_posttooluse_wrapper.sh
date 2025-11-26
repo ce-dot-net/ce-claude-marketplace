@@ -111,10 +111,11 @@ fi
 
 # Convert PostToolUse event to Stop event format for ace_after_task.py
 # ace_after_task.py expects Stop/SubagentStop format
-STOP_EVENT=$(echo "$INPUT_JSON" | jq '. + {
+# v5.1.22: Use --arg for safe variable injection (fixes comma in triggered_by)
+STOP_EVENT=$(echo "$INPUT_JSON" | jq --arg triggered "$TRIGGERED_BY" --argjson confidence "$CONFIDENCE" '. + {
   "hook_event_name": "PostToolUse",
-  "task_detector_triggered_by": "'$TRIGGERED_BY'",
-  "task_detector_confidence": '$CONFIDENCE'
+  "task_detector_triggered_by": $triggered,
+  "task_detector_confidence": $confidence
 }')
 
 # Record start time (cross-platform milliseconds)
