@@ -5,6 +5,29 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.7] - 2025-11-28
+
+### 🐛 Bugfix: Learning Stats Display Logic
+
+**Problem**: Learning statistics weren't displaying correctly due to nested JSON structure from CLI v3.0.0+ and missing conditions for empty stats.
+
+**Fixes**:
+1. **Nested JSON parsing**: Handle both flat and nested `learning_statistics` structure from CLI v3.0.0+
+   - Response can be: `{learning_statistics: {patterns_created: ...}}`
+   - Or nested: `{learning_statistics: {learning_statistics: {patterns_created: ...}}}`
+2. **Empty stats condition**: Added `analysis_time > 0` check to prevent showing stats block when there's nothing to report
+3. **Clean output format**: Removed verbose header comments - shows ONLY the agreed output format
+
+**Output Formats**:
+- **Compact**: `✅ [ACE] 📚 +2 patterns 🔄 1 merged ⭐ 85% quality`
+- **Detailed**: `✅ [ACE] Learning captured!` + `📚 ACE Learning:` block with icons
+
+**Files Changed**:
+- `shared-hooks/ace_after_task.py` - Lines 517-524 (nested JSON parsing), Line 552 (stats condition)
+- Version bumped to 5.2.7 across all plugin files
+
+**Impact**: Learning statistics now display reliably with CLI v3.0.0+ and produce cleaner output.
+
 ## [5.2.6] - 2025-11-28
 
 ### ✨ Enhancement: Verbosity Preference in Configure Wizard
