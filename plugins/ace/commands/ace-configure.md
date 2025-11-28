@@ -533,7 +533,8 @@ echo ""
 {
   "env": {
     "ACE_ORG_ID": "org_xxxxx",
-    "ACE_PROJECT_ID": "prj_xxxxx"
+    "ACE_PROJECT_ID": "prj_xxxxx",
+    "ACE_VERBOSITY": "detailed"
   }
 }
 ```
@@ -542,10 +543,20 @@ echo ""
 ```json
 {
   "env": {
-    "ACE_PROJECT_ID": "prj_xxxxx"
+    "ACE_PROJECT_ID": "prj_xxxxx",
+    "ACE_VERBOSITY": "detailed"
   }
 }
 ```
+
+### Verbosity Levels
+
+| Level | Output |
+|-------|--------|
+| `compact` | Single line: `✅ [ACE] 📚 +2 patterns 🔄 1 merged ⭐ 85% quality` |
+| `detailed` | Full breakdown with sections, timing, helpful delta (default) |
+
+Set via `ACE_VERBOSITY` in settings.json env block.
 
 ## Usage Examples
 
