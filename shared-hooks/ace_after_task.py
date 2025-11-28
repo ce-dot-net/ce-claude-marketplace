@@ -487,26 +487,8 @@ def main():
                 except Exception:
                     pass
 
-        # STEP 7: Build user-visible message
-        hook_label = f"{hook_event_name} (end-of-task)"
-        message_lines = [
-            "",
-            f"📚 [ACE] Automatically capturing learning... ({hook_label})",
-            f"   Task: {trace['task'][:80]}...",
-            f"   Status: {'✅ Success' if trace['result']['success'] else '❌ Failed'}"
-        ]
-
-        # Show trajectory details (up to 5 key actions)
-        if trajectory:
-            message_lines.append(f"   Actions performed ({len(trajectory)} total):")
-            for step in trajectory[:5]:
-                action_summary = step['action'][:80]
-                message_lines.append(f"     {step['step']}. {action_summary}")
-            if len(trajectory) > 5:
-                message_lines.append(f"     ... and {len(trajectory) - 5} more actions")
-
-        if playbook_used:
-            message_lines.append(f"   Patterns used: {len(playbook_used)}")
+        # STEP 7: Build user-visible message (output depends on verbosity setting)
+        message_lines = []
 
         # STEP 8: Send to ce-ace learn --stdin
         try:
@@ -531,7 +513,13 @@ def main():
             if result.returncode == 0:
                 try:
                     response = json.loads(result.stdout)
-                    stats = response.get('learning_statistics')
+                    stats = response.get('learning_statistics', {})
+
+                    # Handle nested learning_statistics structure from CLI v3.0.0+
+                    # Response can be: {learning_statistics: {patterns_created: ...}}
+                    # Or nested: {learning_statistics: {learning_statistics: {patterns_created: ...}}}
+                    if 'learning_statistics' in stats:
+                        stats = stats.get('learning_statistics', {})
 
                     if stats:
                         created = stats.get('patterns_created', 0)
@@ -561,7 +549,7 @@ def main():
                             message_lines.append("✅ [ACE] Learning captured!")
 
                             # Only show stats if there's something to report
-                            if created > 0 or updated > 0 or pruned > 0 or conf > 0:
+                            if created > 0 or updated > 0 or pruned > 0 or conf > 0 or analysis_time > 0:
                                 message_lines.append("")
                                 message_lines.append("📚 ACE Learning:")
 

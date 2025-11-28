@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.2.6 -->
+<!-- ACE_SECTION_START v5.2.7 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -17,13 +17,12 @@ npm install -g @ace-sdk/cli
 
 Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
-## v5.2.6: Verbosity Preference in Configure Wizard
+## v5.2.7: Learning Stats Display Logic Fix
 
-**Updates**:
-- Added Step 6 to `/ace-configure`: Verbosity preference selection
-- Uses AskUserQuestion for user-friendly choice between Detailed (recommended) and Compact modes
-- Automatically updates settings.json with ACE_VERBOSITY setting
-- Completes v5.2.5 verbosity feature with wizard integration
+**Fixes**:
+- Fixed nested `learning_statistics` JSON parsing for CLI v3.0.0+
+- Added `analysis_time > 0` condition for showing stats block
+- Removed verbose header - now shows ONLY the agreed output format
 
 **Architecture**: PostToolUse → SQLite → Stop hook queries accumulated tools.
 
@@ -61,7 +60,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.2.6
-**New in v5.2.6**: Configure wizard adds verbosity preference step with interactive selection
+**Version**: v5.2.7
+**New in v5.2.7**: Fixed learning stats display logic with proper JSON parsing
 
-<!-- ACE_SECTION_END v5.2.6 -->
+<!-- ACE_SECTION_END v5.2.7 -->
