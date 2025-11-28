@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.2.5 -->
+<!-- ACE_SECTION_START v5.2.6 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -17,13 +17,13 @@ npm install -g @ace-sdk/cli
 
 Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
-## v5.2.5: Verbosity Control
+## v5.2.6: Verbosity Preference in Configure Wizard
 
 **Updates**:
-- New: `ACE_VERBOSITY` environment variable support
-- **compact** mode: `✅ [ACE] 📚 +2 patterns 🔄 1 merged ⭐ 85% quality`
-- **detailed** mode (default): Multi-line with full breakdown
-- Passes `--verbosity` flag to `ce-ace learn` CLI
+- Added Step 6 to `/ace-configure`: Verbosity preference selection
+- Uses AskUserQuestion for user-friendly choice between Detailed (recommended) and Compact modes
+- Automatically updates settings.json with ACE_VERBOSITY setting
+- Completes v5.2.5 verbosity feature with wizard integration
 
 **Architecture**: PostToolUse → SQLite → Stop hook queries accumulated tools.
 
@@ -61,7 +61,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.2.5 (Verbosity Control)
-**New in v5.2.5**: ACE_VERBOSITY support for compact/detailed display modes
+**Version**: v5.2.6
+**New in v5.2.6**: Configure wizard adds verbosity preference step with interactive selection
 
-<!-- ACE_SECTION_END v5.2.5 -->
+<!-- ACE_SECTION_END v5.2.6 -->

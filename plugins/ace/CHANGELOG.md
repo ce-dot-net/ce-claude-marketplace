@@ -5,6 +5,28 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.6] - 2025-11-28
+
+### ✨ Enhancement: Verbosity Preference in Configure Wizard
+
+**What Changed**: Added Step 6 to the `/ace-configure` command to let users choose their preferred verbosity mode during setup.
+
+**User Experience Improvement**:
+- Interactive preference selection using AskUserQuestion tool
+- Choice between "Detailed" (recommended, default) or "Compact" modes
+- Wizard automatically updates `settings.json` with `ACE_VERBOSITY` setting
+- Clear descriptions of each mode's output format
+
+**Implementation**:
+- `plugins/ace/commands/ace-configure.md` - Added Step 6: "Ask for Verbosity Preference"
+- Updated `settings.json` templates to include ACE_VERBOSITY environment variable
+- Updated wizard summary to display chosen verbosity setting
+
+**Impact**: Completes the v5.2.5 verbosity feature by making it discoverable and configurable through the setup wizard, improving user onboarding experience.
+
+**Files Changed**:
+- `plugins/ace/commands/ace-configure.md` - Added verbosity preference step to wizard
+
 ## [5.2.5] - 2025-11-28
 
 ### ✨ Feature: Verbosity Control for Learning Stats

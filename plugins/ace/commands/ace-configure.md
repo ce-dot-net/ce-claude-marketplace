@@ -411,7 +411,36 @@ echo ""
 
    Just ask for project ID directly using AskUserQuestion.
 
-6. **Write .claude/settings.json**:
+6. **Ask for Verbosity Preference**:
+
+   Use AskUserQuestion to let user choose display mode:
+   ```javascript
+   {
+     questions: [
+       {
+         question: "How should ACE display learning results?",
+         header: "Verbosity",
+         multiSelect: false,
+         options: [
+           {
+             label: "Detailed (recommended)",
+             description: "Multi-line with full stats: 📝 new 🔄 updated ⭐ quality 📂 sections ⏱️ timing"
+           },
+           {
+             label: "Compact",
+             description: "Single line: ✅ [ACE] 📚 +2 patterns 🔄 1 merged ⭐ 85% quality"
+           }
+         ]
+       }
+     ]
+   }
+   ```
+
+   Map selection:
+   - "Detailed" → `VERBOSITY="detailed"`
+   - "Compact" → `VERBOSITY="compact"`
+
+7. **Write .claude/settings.json**:
    ```bash
    mkdir -p "$PROJECT_ROOT/.claude"
 
@@ -421,24 +450,28 @@ echo ""
 {
   "env": {
     "ACE_ORG_ID": "$ORG_ID",
-    "ACE_PROJECT_ID": "$PROJECT_ID"
+    "ACE_PROJECT_ID": "$PROJECT_ID",
+    "ACE_VERBOSITY": "$VERBOSITY"
   }
 }
 EOF
      echo "✅ Project configuration saved:"
      echo "  Organization ID: $ORG_ID"
      echo "  Project ID: $PROJECT_ID"
+     echo "  Verbosity: $VERBOSITY"
    else
      # Single-org: just ACE_PROJECT_ID in env
      cat > "$PROJECT_CONFIG" <<EOF
 {
   "env": {
-    "ACE_PROJECT_ID": "$PROJECT_ID"
+    "ACE_PROJECT_ID": "$PROJECT_ID",
+    "ACE_VERBOSITY": "$VERBOSITY"
   }
 }
 EOF
      echo "✅ Project configuration saved:"
      echo "  Project ID: $PROJECT_ID"
+     echo "  Verbosity: $VERBOSITY"
    fi
 
    echo "  Location: $PROJECT_CONFIG"
@@ -462,6 +495,7 @@ fi
 if [ "$SCOPE" = "project" ] || [ "$SCOPE" = "both" ]; then
   PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
   echo "Project Config: $PROJECT_ROOT/.claude/settings.json ✓"
+  echo "  Verbosity: $VERBOSITY"
 fi
 
 echo ""
