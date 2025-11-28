@@ -5,6 +5,41 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.5] - 2025-11-28
+
+### ✨ Feature: Verbosity Control for Learning Stats
+
+**New**: `ACE_VERBOSITY` environment variable support for controlling learning stats display format.
+
+**Two Display Modes**:
+1. **compact**: One-line summary with emojis
+   - Example: `✅ [ACE] 📚 +2 patterns 🔄 1 merged ⭐ 85% quality`
+   - Ideal for quick feedback without cluttering output
+2. **detailed** (default): Multi-line breakdown with full stats
+   - Shows patterns created/updated, quality score, sections affected, timing
+   - Provides meaningful feedback for understanding what was learned
+
+**Implementation**:
+- `shared-hooks/ace_after_task.py` - Added verbosity detection from environment
+- Passes `--verbosity` flag to `ce-ace learn` CLI command
+- Default changed to `detailed` for more informative user feedback
+
+**Usage**:
+```bash
+# Set compact mode
+export ACE_VERBOSITY=compact
+
+# Set detailed mode (default)
+export ACE_VERBOSITY=detailed
+```
+
+**Files Changed**:
+- `shared-hooks/ace_after_task.py` - Added verbosity support with two display formats
+- `plugins/ace/commands/ace-configure.md` - Documented ACE_VERBOSITY environment variable
+- Version bumped to 5.2.5 across all plugin files
+
+**Impact**: Users can now choose between minimal (compact) or informative (detailed) learning stats display.
+
 ## [5.2.4] - 2025-11-27
 
 ### 🐛 Bugfix: Empty Learning Stats Header

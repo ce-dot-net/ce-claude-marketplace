@@ -516,8 +516,11 @@ def main():
             if context['project']:
                 env['ACE_PROJECT_ID'] = context['project']
 
+            # Get verbosity from env, default to 'detailed' for meaningful feedback
+            verbosity = os.environ.get('ACE_VERBOSITY', 'detailed')
+
             result = subprocess.run(
-                ['ce-ace', 'learn', '--stdin', '--json', '--timeout', '300000'],
+                ['ce-ace', 'learn', '--stdin', '--json', '--timeout', '300000', '--verbosity', verbosity],
                 input=json.dumps(trace),
                 text=True,
                 capture_output=True,
@@ -526,32 +529,77 @@ def main():
             )
 
             if result.returncode == 0:
-                message_lines.append("✅ [ACE] Learning captured and sent to server!")
-
                 try:
                     response = json.loads(result.stdout)
                     stats = response.get('learning_statistics')
+
                     if stats:
                         created = stats.get('patterns_created', 0)
                         updated = stats.get('patterns_updated', 0)
+                        merged = stats.get('patterns_merged', 0)
                         pruned = stats.get('patterns_pruned', 0)
                         conf = stats.get('average_confidence', 0)
+                        helpful_delta = stats.get('helpful_delta', 0)
+                        by_section = stats.get('by_section', {})
+                        analysis_time = stats.get('analysis_time_seconds', 0)
 
-                        # Only show header if there's something to report
-                        if created > 0 or updated > 0 or pruned > 0 or conf > 0:
-                            message_lines.append("")
-                            message_lines.append("📚 ACE Learning:")
-
+                        if verbosity == 'compact':
+                            # Single line: ✅ [ACE] 📚 +2 patterns 🔄 1 merged ⭐ 85% quality
+                            parts = []
                             if created > 0:
-                                message_lines.append(f"   • {created} new pattern{'s' if created != 1 else ''}")
-                            if updated > 0:
-                                message_lines.append(f"   • {updated} pattern{'s' if updated != 1 else ''} updated")
-                            if pruned > 0:
-                                message_lines.append(f"   • {pruned} low-quality pattern{'s' if pruned != 1 else ''} pruned")
+                                parts.append(f"📚 +{created} patterns")
+                            if merged > 0 or updated > 0:
+                                parts.append(f"🔄 {merged + updated} merged")
                             if conf > 0:
-                                message_lines.append(f"   • Quality: {int(conf * 100)}%")
+                                parts.append(f"⭐ {int(conf * 100)}% quality")
+                            if parts:
+                                message_lines.append(f"✅ [ACE] {' '.join(parts)}")
+                            else:
+                                message_lines.append("✅ [ACE] Learning captured!")
+                        else:
+                            # Detailed mode with full breakdown
+                            message_lines.append("✅ [ACE] Learning captured!")
+
+                            # Only show stats if there's something to report
+                            if created > 0 or updated > 0 or pruned > 0 or conf > 0:
+                                message_lines.append("")
+                                message_lines.append("📚 ACE Learning:")
+
+                                # Line 1: patterns
+                                line1_parts = []
+                                if created > 0:
+                                    line1_parts.append(f"📝 +{created} new")
+                                if updated > 0:
+                                    line1_parts.append(f"🔄 {updated} updated")
+                                if pruned > 0:
+                                    line1_parts.append(f"🧹 {pruned} pruned")
+                                if line1_parts:
+                                    message_lines.append(f"   {'  '.join(line1_parts)}")
+
+                                # Line 2: quality & helpful
+                                line2_parts = []
+                                if conf > 0:
+                                    line2_parts.append(f"⭐ {int(conf * 100)}% quality")
+                                if helpful_delta != 0:
+                                    sign = '+' if helpful_delta > 0 else ''
+                                    line2_parts.append(f"👍 {sign}{helpful_delta} helpful")
+                                if line2_parts:
+                                    message_lines.append(f"   {'  '.join(line2_parts)}")
+
+                                # Line 3: sections
+                                if by_section:
+                                    sections = [k.split('_')[0].title() for k, v in by_section.items() if v > 0]
+                                    if sections:
+                                        message_lines.append(f"   📂 {', '.join(sections)}")
+
+                                # Line 4: timing
+                                if analysis_time > 0:
+                                    message_lines.append(f"   ⏱️ {analysis_time:.1f}s analysis")
+                    else:
+                        # No stats returned (compact mode from CLI or old CLI version)
+                        message_lines.append("✅ [ACE] Learning captured!")
                 except json.JSONDecodeError:
-                    pass
+                    message_lines.append("✅ [ACE] Learning captured!")
             else:
                 message_lines.append(f"⚠️ [ACE] Learning capture failed: {result.stderr}")
                 message_lines.append("   You can manually capture with: /ace-learn")

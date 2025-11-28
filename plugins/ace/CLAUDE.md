@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.2.4 -->
+<!-- ACE_SECTION_START v5.2.5 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -17,11 +17,13 @@ npm install -g @ace-sdk/cli
 
 Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
-## v5.2.4: Learning Stats Display Fix
+## v5.2.5: Verbosity Control
 
 **Updates**:
-- Fix: Only show "📚 ACE Learning:" header when stats are available
-- Prevents empty header when no patterns created/updated/pruned
+- New: `ACE_VERBOSITY` environment variable support
+- **compact** mode: `✅ [ACE] 📚 +2 patterns 🔄 1 merged ⭐ 85% quality`
+- **detailed** mode (default): Multi-line with full breakdown
+- Passes `--verbosity` flag to `ce-ace learn` CLI
 
 **Architecture**: PostToolUse → SQLite → Stop hook queries accumulated tools.
 
@@ -59,7 +61,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.2.4 (Stats Display Fix)
-**New in v5.2.4**: Only show stats header when patterns are created/updated
+**Version**: v5.2.5 (Verbosity Control)
+**New in v5.2.5**: ACE_VERBOSITY support for compact/detailed display modes
 
-<!-- ACE_SECTION_END v5.2.4 -->
+<!-- ACE_SECTION_END v5.2.5 -->
