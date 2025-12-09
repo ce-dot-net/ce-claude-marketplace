@@ -21,7 +21,7 @@ build/
 .serena/
 
 # Agent and Antigravity directories
-.agent/
+# .agent/
 .antigravity/
 
 # Internal documentation (development notes, implementation steps, research)
@@ -58,4 +58,7 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
-shared-hooks/utils/__pycache__/
+# Python cache files (ACE plugin shared-hooks)
+plugins/ace/shared-hooks/__pycache__/
+plugins/ace/shared-hooks/utils/__pycache__/
+plugins/ace/shared-hooks/*.pyc

@@ -4,12 +4,12 @@ set -Eeuo pipefail
 
 # Resolve paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MARKETPLACE_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-LOGGER="${MARKETPLACE_ROOT}/shared-hooks/ace_event_logger.py"
-HOOK_SCRIPT="${MARKETPLACE_ROOT}/shared-hooks/ace_after_task.py"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
+HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="5.2.7"
+export ACE_PLUGIN_VERSION="5.2.8"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default

@@ -5,6 +5,98 @@ All notable changes to the CE Claude Marketplace project will be documented in t
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.8] - 2025-12-09
+
+### 🔧 BUG FIX: Claude Code 2.0.62 Compatibility
+
+**FIXED: "ace_before_task.py not found" error caused by plugin caching changes**
+
+### The Problem
+
+Claude Code 2.0.62 changed how plugins are cached:
+- Only the individual plugin directory (`plugins/ace/`) is cached
+- Files at marketplace root level (`shared-hooks/`) are NOT included in cache
+- Wrapper scripts navigated 3 levels up (`../../..`) to reach marketplace root
+- Result: Hooks couldn't find Python scripts in cached plugin
+
+**Error:**
+```
+[ERROR] ace_before_task.py not found: /Users/.../.claude/plugins/cache/ce-dot-net-marketplace/shared-hooks/ace_before_task.py
+```
+
+### What Changed
+
+**1. Moved `shared-hooks/` inside plugin directory:**
+```
+# Before (BROKEN - not in cache):
+ce-claude-marketplace/
+├── shared-hooks/                 ← ORPHANED
+└── plugins/ace/
+
+# After (WORKS - inside plugin):
+ce-claude-marketplace/
+└── plugins/ace/
+    └── shared-hooks/             ← INCLUDED IN CACHE
+```
+
+**2. Updated 6 wrapper scripts:**
+```bash
+# OLD (navigated 3 levels up to marketplace root):
+MARKETPLACE_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+HOOK_SCRIPT="${MARKETPLACE_ROOT}/shared-hooks/ace_*.py"
+
+# NEW (navigates 1 level up to plugin root):
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_*.py"
+```
+
+**Scripts updated:**
+- `ace_after_task_wrapper.sh`
+- `ace_before_task_wrapper.sh`
+- `ace_permission_request_wrapper.sh`
+- `ace_posttooluse_wrapper.sh`
+- `ace_stop_wrapper.sh`
+- `ace_subagent_stop_wrapper.sh`
+
+### Files Changed
+
+- `shared-hooks/` → `plugins/ace/shared-hooks/` (moved via git mv)
+- `plugins/ace/scripts/*.sh` (6 files - path resolution fix)
+- `plugins/ace/.claude-plugin/plugin.json` (version 5.2.7 → 5.2.8)
+- `plugins/ace/.claude-plugin/plugin.template.json` (version 5.2.7 → 5.2.8)
+- `.claude-plugin/marketplace.json` (version 5.2.7 → 5.2.8)
+- `plugins/ace/CLAUDE.md` (version and changelog updated)
+- `.gitignore` (updated pycache paths)
+
+### Benefits
+
+- ✅ **Plugin is now fully self-contained** - No dependencies on marketplace root
+- ✅ **Works with Claude Code 2.0.62+** - Compatible with new caching system
+- ✅ **No user action required** - Just update/re-enable the plugin
+
+### Migration
+
+**For existing users:**
+```bash
+# Disable old version
+/plugin disable ace
+
+# Update marketplace
+cd ~/.claude/plugins/marketplaces/ce-dot-net-marketplace && git pull
+
+# Re-enable plugin
+/plugin enable ace
+
+# Verify hooks work
+# Start new session, hooks should run without errors
+```
+
+### Technical Note
+
+This is the same bug that affected Anthropic's official `hookify` plugin (GitHub issue #13470). The workaround for hookify was to create a symlink; our solution is cleaner - we simply made the plugin self-contained.
+
+---
+
 ## [5.1.9] - 2025-11-20
 
 ### 🐛 CRITICAL BUG FIX: Trash Patterns Fix

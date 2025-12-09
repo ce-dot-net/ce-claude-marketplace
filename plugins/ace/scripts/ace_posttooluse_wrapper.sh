@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # ace_posttooluse_wrapper.sh - PostToolUse hook with tool accumulation
-# v5.3.0: Appends tool data to SQLite accumulator for Stop hook processing
+# v5.2.8: Appends tool data to SQLite accumulator for Stop hook processing
 set -Eeuo pipefail
 
 # Resolve paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MARKETPLACE_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-ACCUMULATOR="${MARKETPLACE_ROOT}/shared-hooks/ace_tool_accumulator.py"
-LOGGER="${MARKETPLACE_ROOT}/shared-hooks/ace_event_logger.py"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+ACCUMULATOR="${PLUGIN_ROOT}/shared-hooks/ace_tool_accumulator.py"
+LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="5.2.7"
+export ACE_PLUGIN_VERSION="5.2.8"
 
 # Parse arguments
 ENABLE_LOG=true

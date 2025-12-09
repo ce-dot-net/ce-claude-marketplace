@@ -3,8 +3,8 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MARKETPLACE_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
-HOOK_SCRIPT="${MARKETPLACE_ROOT}/shared-hooks/ace_after_task.py"
+PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 [[ -f "${HOOK_SCRIPT}" ]] || {
   echo "[ERROR] ace_after_task.py not found: ${HOOK_SCRIPT}" >&2
