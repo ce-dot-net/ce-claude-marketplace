@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.2.7 -->
+<!-- ACE_SECTION_START v5.2.8 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -17,12 +17,12 @@ npm install -g @ace-sdk/cli
 
 Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
-## v5.2.7: Learning Stats Display Logic Fix
+## v5.2.8: Claude Code 2.0.62 Compatibility Fix
 
 **Fixes**:
-- Fixed nested `learning_statistics` JSON parsing for CLI v3.0.0+
-- Added `analysis_time > 0` condition for showing stats block
-- Removed verbose header - now shows ONLY the agreed output format
+- Moved `shared-hooks/` inside plugin directory for Claude Code 2.0.62 compatibility
+- Fixed "ace_before_task.py not found" error caused by cache path resolution
+- Plugin is now fully self-contained (no external dependencies on marketplace root)
 
 **Architecture**: PostToolUse → SQLite → Stop hook queries accumulated tools.
 
@@ -60,7 +60,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.2.7
-**New in v5.2.7**: Fixed learning stats display logic with proper JSON parsing
+**Version**: v5.2.8
+**New in v5.2.8**: Fixed Claude Code 2.0.62 compatibility (moved shared-hooks inside plugin)
 
-<!-- ACE_SECTION_END v5.2.7 -->
+<!-- ACE_SECTION_END v5.2.8 -->
