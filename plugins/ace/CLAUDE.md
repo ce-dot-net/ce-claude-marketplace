@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.2.8 -->
+<!-- ACE_SECTION_START v5.2.9 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -17,14 +17,14 @@ npm install -g @ace-sdk/cli
 
 Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
-## v5.2.8: Claude Code 2.0.62 Compatibility Fix
+## v5.2.9: Async Learning Execution
 
-**Fixes**:
-- Moved `shared-hooks/` inside plugin directory for Claude Code 2.0.62 compatibility
-- Fixed "ace_before_task.py not found" error caused by cache path resolution
-- Plugin is now fully self-contained (no external dependencies on marketplace root)
+**Performance Fix**:
+- Learning now runs in background (330x faster hook execution)
+- Fixed "Learning capture timed out" errors during server analysis
+- Hook returns immediately (0.2s instead of 66s)
 
-**Architecture**: PostToolUse → SQLite → Stop hook queries accumulated tools.
+**Configuration**: `ACE_ASYNC_LEARNING=1` (default enabled). Set to `0` for sync mode.
 
 ## Playbook Sections
 
@@ -60,7 +60,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.2.8
-**New in v5.2.8**: Fixed Claude Code 2.0.62 compatibility (moved shared-hooks inside plugin)
+**Version**: v5.2.9
+**New in v5.2.9**: Async learning execution prevents timeout errors (330x faster)
 
-<!-- ACE_SECTION_END v5.2.8 -->
+<!-- ACE_SECTION_END v5.2.9 -->
