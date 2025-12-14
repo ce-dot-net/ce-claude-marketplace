@@ -89,13 +89,39 @@ START_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
 # v5.3.0: ace_after_task.py queries accumulated tools from SQLite
 INPUT_JSON=$(echo "$INPUT_JSON" | jq '. + {"hook_event_name": "Stop"}')
 
-# Forward to ace_after_task.py
-RESULT=$(echo "$INPUT_JSON" | uv run "${HOOK_SCRIPT}" 2>&1)
-EXIT_CODE=$?
+# Check if async mode is enabled (Issue #3 fix)
+ACE_ASYNC_LEARNING="${ACE_ASYNC_LEARNING:-1}"  # Default: enabled
 
-# Calculate execution time (cross-platform milliseconds)
-END_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
-EXECUTION_TIME=$((END_TIME - START_TIME))
+if [[ "$ACE_ASYNC_LEARNING" == "1" ]]; then
+  # === ASYNC MODE (Issue #3 fix) ===
+  # Launch ace_after_task.py in background and return immediately
+
+  # Create temp file for background process result
+  TEMP_RESULT=$(mktemp)
+
+  # Launch in background (nohup + detached session)
+  nohup bash -c "
+    echo '$INPUT_JSON' | uv run '${HOOK_SCRIPT}' 2>&1 > '$TEMP_RESULT'
+  " >/dev/null 2>&1 &
+
+  # Return immediate feedback
+  RESULT='{"continue": true, "systemMessage": "✅ [ACE] Learning started in background\n   Check progress with: /ace-status"}'
+  EXIT_CODE=0
+
+  # Calculate execution time (should be <1s)
+  END_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
+  EXECUTION_TIME=$((END_TIME - START_TIME))
+
+else
+  # === SYNC MODE (original behavior) ===
+  # Forward to ace_after_task.py and wait for completion
+  RESULT=$(echo "$INPUT_JSON" | uv run "${HOOK_SCRIPT}" 2>&1)
+  EXIT_CODE=$?
+
+  # Calculate execution time (cross-platform milliseconds)
+  END_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
+  EXECUTION_TIME=$((END_TIME - START_TIME))
+fi
 
 # Log event END with result
 if [[ "$ENABLE_LOG" == "true" ]]; then
