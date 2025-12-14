@@ -120,7 +120,7 @@ if [[ "$ACE_ASYNC_LEARNING" == "1" ]]; then
   ) &
 
   # Return immediate feedback
-  RESULT='{"continue": true, "systemMessage": "✅ [ACE] Learning started in background\n   Check progress with: /ace-status"}'
+  RESULT='{"continue": true, "systemMessage": "✅ [ACE] Learning started in background"}'
   EXIT_CODE=0
 
   # Calculate execution time (should be <1s)
