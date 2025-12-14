@@ -27,6 +27,7 @@ Run the configuration wizard in Claude Code:
 ```
 
 **What it does:**
+
 1. Prompts for ACE server URL (or uses default)
 2. Requests your API token
 3. Auto-fetches your organization ID from server
@@ -55,11 +56,13 @@ Create `~/.config/ace/config.json`:
 ```
 
 **Fields:**
-- `serverUrl` - Your ACE server endpoint (default: https://ace-api.code-engine.app)
+
+- `serverUrl` - Your ACE server endpoint (default: <https://ace-api.code-engine.app>)
 - `apiToken` - Your personal API token (get from ACE server dashboard)
 - `orgId` - Your organization ID (fetch via `/organizations` API endpoint)
 
 **Permissions:**
+
 ```bash
 chmod 600 ~/.config/ace/config.json  # Protect token
 ```
@@ -76,6 +79,7 @@ Create `.claude/settings.json` in your project root:
 ```
 
 **Alternative format** (environment variables):
+
 ```json
 {
   "env": {
@@ -88,6 +92,7 @@ Create `.claude/settings.json` in your project root:
 Both formats work! The plugin supports either.
 
 **Fields:**
+
 - `orgId` - Same as global config (for context resolution)
 - `projectId` - Specific project ID for this codebase
 
@@ -106,6 +111,7 @@ echo "~/.config/ace/config.json" >> .gitignore
 ```
 
 **File permissions:**
+
 ```bash
 chmod 600 ~/.config/ace/config.json       # User read/write only
 chmod 644 .claude/settings.json           # Can be shared (no secrets)
@@ -124,6 +130,7 @@ export ACE_PROJECT_ID="prj_xxxxx"
 ```
 
 Then use env format in `.claude/settings.json`:
+
 ```json
 {
   "env": {
@@ -144,6 +151,7 @@ The ce-ace CLI uses this priority order:
    - `ACE_API_TOKEN`
    - `ACE_ORG_ID`
    - `ACE_PROJECT_ID`
+   - `ACE_ASYNC_LEARNING` - Set to `0` to disable async learning (default: `1`)
 
 2. **Global config** (`~/.config/ace/config.json`)
    - `serverUrl`
@@ -165,6 +173,7 @@ cat ~/.config/ace/config.json
 ```
 
 **Expected output:**
+
 ```json
 {
   "serverUrl": "https://ace-api.code-engine.app",
@@ -180,6 +189,7 @@ cat .claude/settings.json
 ```
 
 **Expected output:**
+
 ```json
 {
   "orgId": "org_xyz789...",
@@ -195,6 +205,7 @@ cat .claude/settings.json
 ```
 
 **Expected output:**
+
 ```
 ✅ Connected to ACE server
 Organization: org_xyz789
@@ -215,6 +226,7 @@ Patterns: 42 total
 **Problem**: Invalid or expired token.
 
 **Solution:**
+
 ```bash
 # Get new token from ACE server dashboard
 # Update config
@@ -229,6 +241,7 @@ vim ~/.config/ace/config.json
 **Problem**: Invalid `orgId` or no access to organization.
 
 **Solution:**
+
 ```bash
 # Verify org ID from server
 curl -H "Authorization: Bearer ace_your_token" \
@@ -243,6 +256,7 @@ curl -H "Authorization: Bearer ace_your_token" \
 **Problem**: Invalid `projectId` or project doesn't exist.
 
 **Solution:**
+
 ```bash
 # List available projects
 curl -H "Authorization: Bearer ace_your_token" \
@@ -257,6 +271,7 @@ curl -H "Authorization: Bearer ace_your_token" \
 **Problem**: Project not configured yet.
 
 **Solution:**
+
 ```bash
 # Run wizard to create settings.json
 /ace:ace-configure
@@ -267,6 +282,7 @@ curl -H "Authorization: Bearer ace_your_token" \
 **Problem**: Configuration file not in expected location.
 
 **Solution:**
+
 ```bash
 # Check file locations
 ls -la ~/.config/ace/config.json
@@ -286,10 +302,12 @@ pwd
 ### Default Locations
 
 **Global config:**
+
 - macOS/Linux: `~/.config/ace/config.json`
 - Windows: `%USERPROFILE%\.config\ace\config.json`
 
 **Project config:**
+
 - All platforms: `<project-root>/.claude/settings.json`
 
 ### Custom Locations (Advanced)
@@ -347,6 +365,7 @@ Using a self-hosted ACE server?
 Hooks have built-in timeouts. To adjust:
 
 Edit `plugins/ace/hooks/hooks.json`:
+
 ```json
 {
   "UserPromptSubmit": [{
@@ -358,6 +377,7 @@ Edit `plugins/ace/hooks/hooks.json`:
 ```
 
 **Recommended timeouts:**
+
 - SessionStart: 30000ms (CLI check)
 - UserPromptSubmit: 15000ms (pattern retrieval)
 - PostToolUse: 10000ms (learning detection)
@@ -370,11 +390,13 @@ Edit `plugins/ace/hooks/hooks.json`:
 After configuration:
 
 1. **Bootstrap playbook**:
+
    ```bash
    /ace:ace-bootstrap
    ```
 
 2. **Test pattern retrieval**:
+
    ```bash
    /ace:ace-search authentication
    ```
@@ -387,8 +409,8 @@ After configuration:
 
 - **Installation Guide**: See `INSTALL.md`
 - **Troubleshooting Guide**: See `TROUBLESHOOTING.md`
-- **ACE Server API**: https://github.com/ce-dot-net/ce-ace-server/blob/main/docs/API.md
-- **CE-ACE CLI Docs**: https://github.com/ce-dot-net/ce-ace-cli
+- **ACE Server API**: <https://github.com/ce-dot-net/ce-ace-server/blob/main/docs/API.md>
+- **CE-ACE CLI Docs**: <https://github.com/ce-dot-net/ce-ace-cli>
 
 ---
 
