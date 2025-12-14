@@ -5,6 +5,33 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.2.9] - 2025-12-14
+
+### 🔧 Performance: Async Learning Execution
+
+**Problem**: ACE learning could take 66+ seconds during server analysis, blocking the Claude Code UI and causing "Learning capture timed out" errors.
+
+**Solution**: Changed to asynchronous background execution in the Stop hook wrapper script.
+
+**Performance Improvement**:
+- Hook execution time: 66s → 0.2s (330x faster)
+- Learning runs in background subshell
+- No UI blocking during analysis
+- Error logging to `~/.claude/logs/ace-background-*.log`
+
+**Configuration**:
+- `ACE_ASYNC_LEARNING=1` (default) - Background execution, fast return
+- `ACE_ASYNC_LEARNING=0` - Original synchronous behavior for debugging
+
+**Files Changed**:
+- `plugins/ace/scripts/ace_stop_wrapper.sh` - Added async execution mode (+48 lines)
+- `plugins/ace/docs/guides/CONFIGURATION.md` - Documentation for ACE_ASYNC_LEARNING
+- Version bumped to 5.2.9 across all plugin files
+
+**Impact**: Eliminates timeout errors and provides instant hook response while learning happens in the background.
+
+**Closes**: Issue #3 (Learning timeout errors)
+
 ## [5.2.7] - 2025-11-28
 
 ### 🐛 Bugfix: Learning Stats Display Logic
