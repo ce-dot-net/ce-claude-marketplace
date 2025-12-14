@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.2.9 -->
+<!-- ACE_SECTION_START v5.2.10 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -17,14 +17,15 @@ npm install -g @ace-sdk/cli
 
 Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
-## v5.2.9: Async Learning Execution
+## v5.2.10: Git Context Capture
 
-**Performance Fix**:
-- Learning now runs in background (330x faster hook execution)
-- Fixed "Learning capture timed out" errors during server analysis
-- Hook returns immediately (0.2s instead of 66s)
+**New Feature** (Issue #6):
+- Captures git context with each learning trace
+- Includes: commit hash, message, author, branch, diff stats
+- Detects commits made during session for AI-Trail correlation
+- Graceful fallback when not in git repo
 
-**Configuration**: `ACE_ASYNC_LEARNING=1` (default enabled). Set to `0` for sync mode.
+**Previous v5.2.9**: Async learning execution (330x faster hook execution)
 
 ## Playbook Sections
 
@@ -60,7 +61,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.2.9
-**New in v5.2.9**: Async learning execution prevents timeout errors (330x faster)
+**Version**: v5.2.10
+**New in v5.2.10**: Git context capture for AI-Trail correlation (Issue #6)
 
-<!-- ACE_SECTION_END v5.2.9 -->
+<!-- ACE_SECTION_END v5.2.10 -->

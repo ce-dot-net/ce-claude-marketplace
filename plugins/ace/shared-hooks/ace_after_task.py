@@ -41,6 +41,7 @@ sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 
 from ace_context import get_context
 from ace_cli import recall_session
+from utils.git_utils import get_git_context, detect_commits_in_session
 
 # Import re at module level for quality filters
 import re as regex_module
@@ -471,6 +472,22 @@ def main():
             "playbook_used": playbook_used,
             "timestamp": datetime.now().isoformat()
         }
+
+        # STEP 5.5: Git context capture (Issue #6)
+        # Extract git context for AI-Trail correlation
+        git_context = None
+        try:
+            git_context = get_git_context(working_dir)
+            session_commits = detect_commits_in_session(tools)
+            if session_commits and git_context:
+                git_context['session_commits'] = session_commits
+        except Exception as e:
+            if os.environ.get('ACE_DEBUG_HOOKS') == '1':
+                with open('/tmp/ace_hook_debug.log', 'a') as f:
+                    f.write(f"Git context extraction failed: {e}\n")
+
+        if git_context:
+            trace["git"] = git_context
 
         # STEP 6: Recall pinned session patterns
         recalled_patterns = None
