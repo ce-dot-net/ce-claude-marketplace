@@ -96,22 +96,21 @@ if [[ "$ACE_ASYNC_LEARNING" == "1" ]]; then
   # === ASYNC MODE (Issue #3 fix) ===
   # Launch ace_after_task.py in background and return immediately
 
-  # Create temp files with proper cleanup
+  # Create temp files (cleanup handled by subshell)
   TEMP_INPUT=$(mktemp)
   TEMP_OUTPUT=$(mktemp)
-  trap "rm -f '$TEMP_INPUT' '$TEMP_OUTPUT'" EXIT INT TERM
 
   # Write INPUT_JSON to temp file (prevents injection)
-  echo "$INPUT_JSON" > "$TEMP_INPUT"
+  printf '%s\n' "$INPUT_JSON" > "$TEMP_INPUT"
 
   # Create log directory for background errors
   LOG_DIR="${HOME}/.claude/logs"
   mkdir -p "$LOG_DIR"
-  LOG_FILE="$LOG_DIR/ace-background-$(date +%Y%m%d-%H%M%S).log"
+  LOG_FILE="$LOG_DIR/ace-background-$(date +%Y%m%d-%H%M%S)-$$.log"
 
   # Launch in background with proper error logging
   (
-    cat "$TEMP_INPUT" | uv run "${HOOK_SCRIPT}" 2>&1 > "$TEMP_OUTPUT"
+    uv run "${HOOK_SCRIPT}" < "$TEMP_INPUT" 2>&1 > "$TEMP_OUTPUT"
     LEARN_EXIT=$?
     if [[ $LEARN_EXIT -ne 0 ]]; then
       echo "[ERROR] Background learning failed with exit code $LEARN_EXIT" >> "$LOG_FILE"
