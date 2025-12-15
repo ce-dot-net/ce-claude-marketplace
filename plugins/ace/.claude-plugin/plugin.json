@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.2.10",
-  "description": "Code Engine ACE - Intelligent pattern learning with hooks-based architecture. v5.2.10: Git context capture for AI-Trail correlation. Requires ce-ace >= v3.0.0.",
+  "version": "5.2.11",
+  "description": "Code Engine ACE - Intelligent pattern learning with hooks-based architecture. v5.2.11: Fix files_changed to return file paths list. Requires ce-ace >= v3.0.0.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

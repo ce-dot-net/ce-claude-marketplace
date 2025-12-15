@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.2.10 -->
+<!-- ACE_SECTION_START v5.2.11 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -17,15 +17,14 @@ npm install -g @ace-sdk/cli
 
 Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
-## v5.2.10: Git Context Capture
+## v5.2.11: Fix files_changed Type (Issue #7)
 
-**New Feature** (Issue #6):
-- Captures git context with each learning trace
-- Includes: commit hash, message, author, branch, diff stats
-- Detects commits made during session for AI-Trail correlation
-- Graceful fallback when not in git repo
+**Bug Fix**:
+- `files_changed` now returns `List[str]` (file paths) instead of `int` (count)
+- Server expects: `["src/foo.ts", "tests/bar.test.ts"]` not `4`
+- Fixes 422 validation error when git context is provided
 
-**Previous v5.2.9**: Async learning execution (330x faster hook execution)
+**Previous v5.2.10**: Git context capture for AI-Trail correlation (Issue #6)
 
 ## Playbook Sections
 
@@ -61,7 +60,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.2.10
-**New in v5.2.10**: Git context capture for AI-Trail correlation (Issue #6)
+**Version**: v5.2.11
+**New in v5.2.11**: Fix files_changed to return List[str] (Issue #7)
 
-<!-- ACE_SECTION_END v5.2.10 -->
+<!-- ACE_SECTION_END v5.2.11 -->
