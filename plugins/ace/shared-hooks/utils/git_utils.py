@@ -6,6 +6,7 @@ Per Issue #6: Add git context to ExecutionTrace for AI-Trail correlation.
 This allows correlating learning patterns with specific commits and changes.
 
 v5.2.10: Initial implementation
+v5.2.11: Fix files_changed to return List[str] instead of int (Issue #7)
 """
 
 import subprocess
@@ -60,7 +61,7 @@ def get_git_context(repo_path: str) -> Optional[Dict]:
             'author_email': str,
             'timestamp': str (ISO format),
             'branch': str,
-            'files_changed': int,
+            'files_changed': List[str],  # List of changed file paths
             'insertions': int,
             'deletions': int
         }
@@ -137,7 +138,7 @@ def get_git_context(repo_path: str) -> Optional[Dict]:
         if result.returncode == 0:
             context['branch'] = result.stdout.strip()
 
-        # Get diff stats (files changed, insertions, deletions)
+        # Get diff stats (insertions, deletions)
         result = subprocess.run(
             ['git', 'diff', '--stat', 'HEAD~1..HEAD'],
             cwd=repo_path,
@@ -147,12 +148,16 @@ def get_git_context(repo_path: str) -> Optional[Dict]:
         )
         if result.returncode == 0:
             stats = parse_diff_stat(result.stdout)
-            context.update(stats)
+            context['insertions'] = stats['insertions']
+            context['deletions'] = stats['deletions']
         else:
             # Fallback: first commit has no parent
-            context['files_changed'] = 0
             context['insertions'] = 0
             context['deletions'] = 0
+
+        # Get files changed as list of paths (Issue #7 fix)
+        commit_hash = context.get('commit_hash', 'HEAD')
+        context['files_changed'] = get_changed_file_paths(repo_path, commit_hash)
 
         return context if context.get('commit_hash') else None
 
@@ -207,6 +212,53 @@ def parse_diff_stat(diff_output: str) -> Dict[str, int]:
         stats['deletions'] = int(del_match.group(1))
 
     return stats
+
+
+def get_changed_file_paths(repo_path: str, commit: str = "HEAD") -> List[str]:
+    """
+    Get list of files changed in a commit.
+
+    Per Issue #7: Return actual file paths instead of integer count.
+    Server expects files_changed as List[str], not int.
+
+    Args:
+        repo_path: Path to git repository
+        commit: Commit hash to check (default: HEAD)
+
+    Returns:
+        List of file paths changed in the commit
+    """
+    if not repo_path or not is_git_repo(repo_path):
+        return []
+
+    try:
+        result = subprocess.run(
+            ['git', 'diff', '--name-only', f'{commit}~1', commit],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            return [f for f in result.stdout.strip().split('\n') if f]
+
+        # Fallback: first commit has no parent, use show instead
+        result = subprocess.run(
+            ['git', 'show', '--name-only', '--format=', commit],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            return [f for f in result.stdout.strip().split('\n') if f]
+
+        return []
+
+    except subprocess.TimeoutExpired:
+        return []
+    except Exception:
+        return []
 
 
 def detect_commits_in_session(tools: List) -> List[str]:
