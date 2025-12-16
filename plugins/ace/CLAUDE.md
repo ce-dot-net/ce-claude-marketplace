@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.2.12 -->
+<!-- ACE_SECTION_START v5.2.13 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -17,14 +17,14 @@ npm install -g @ace-sdk/cli
 
 Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
-## v5.2.12: Fix CLI Notification JSON Parsing (Issue #8)
+## v5.2.13: Version Synchronization
 
-**Bug Fix**:
-- Filter `💡 Update available` CLI notifications before JSON parsing
-- Fixes jq parse errors in ace-status, ace-test, ace-configure commands
-- CLI outputs notification lines that break `| jq` piping
+**Maintenance**:
+- Synchronized version numbers across all plugin configuration files
+- Ensures consistent v5.2.13 references in plugin.json, plugin.template.json, marketplace.json, and CLAUDE.md
 
-**Previous versions**:
+**Recent fixes**:
+- v5.2.12: Filter CLI notifications before JSON parsing (Issue #8)
 - v5.2.11: Fix files_changed to return List[str] (Issue #7)
 - v5.2.10: Git context capture for AI-Trail correlation (Issue #6)
 
@@ -62,7 +62,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.2.12
-**New in v5.2.12**: Fix CLI notification JSON parsing (Issue #8)
+**Version**: v5.2.13
+**New in v5.2.13**: Version synchronization across all plugin files
 
-<!-- ACE_SECTION_END v5.2.12 -->
+<!-- ACE_SECTION_END v5.2.13 -->
