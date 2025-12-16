@@ -153,12 +153,14 @@ echo ""
    # Use subshell to avoid polluting parent environment
    # Workaround: ce-ace config validate doesn't accept --server-url flag properly
    # Use environment variables instead
-   VALIDATION_OUTPUT=$(
+   # Filter out CLI update notifications (💡 lines) that break JSON parsing
+   RAW_VALIDATION=$(
      ACE_SERVER_URL="$SERVER_URL" \
      ACE_API_TOKEN="$API_TOKEN" \
      ce-ace config validate --json 2>&1
    )
    VALIDATION_EXIT_CODE=$?
+   VALIDATION_OUTPUT=$(echo "$RAW_VALIDATION" | grep -v '^💡' | grep -v '^$')
 
    if [ $VALIDATION_EXIT_CODE -ne 0 ]; then
      echo "❌ Token validation failed"

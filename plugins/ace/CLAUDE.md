@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.2.11 -->
+<!-- ACE_SECTION_START v5.2.12 -->
 # ACE Plugin
 
 Automatic pattern learning - captures what works, retrieves it when needed.
@@ -17,14 +17,16 @@ npm install -g @ace-sdk/cli
 
 Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
-## v5.2.11: Fix files_changed Type (Issue #7)
+## v5.2.12: Fix CLI Notification JSON Parsing (Issue #8)
 
 **Bug Fix**:
-- `files_changed` now returns `List[str]` (file paths) instead of `int` (count)
-- Server expects: `["src/foo.ts", "tests/bar.test.ts"]` not `4`
-- Fixes 422 validation error when git context is provided
+- Filter `💡 Update available` CLI notifications before JSON parsing
+- Fixes jq parse errors in ace-status, ace-test, ace-configure commands
+- CLI outputs notification lines that break `| jq` piping
 
-**Previous v5.2.10**: Git context capture for AI-Trail correlation (Issue #6)
+**Previous versions**:
+- v5.2.11: Fix files_changed to return List[str] (Issue #7)
+- v5.2.10: Git context capture for AI-Trail correlation (Issue #6)
 
 ## Playbook Sections
 
@@ -60,7 +62,7 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 
 ---
 
-**Version**: v5.2.11
-**New in v5.2.11**: Fix files_changed to return List[str] (Issue #7)
+**Version**: v5.2.12
+**New in v5.2.12**: Fix CLI notification JSON parsing (Issue #8)
 
-<!-- ACE_SECTION_END v5.2.11 -->
+<!-- ACE_SECTION_END v5.2.12 -->

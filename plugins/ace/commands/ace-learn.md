@@ -96,12 +96,46 @@ Then ask for task description in "Other" field or follow-up question.
 
 User will provide detailed lessons in the "Other" text input.
 
-### Step 4: Call ce-ace CLI with Flags
+### Step 4: Gather Git Context (Optional)
+
+If in a git repository, capture git context for AI-Trail correlation (Issue #6):
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Check if in a git repository
+GIT_CONTEXT=""
+if git rev-parse --git-dir >/dev/null 2>&1; then
+  echo "📂 Gathering git context..."
+
+  # Get current branch
+  BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+
+  # Get recent commit info
+  COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "")
+  COMMIT_MSG=$(git log -1 --format=%s 2>/dev/null || echo "")
+
+  # Get changed files (staged + unstaged) - returns List[str] per Issue #7
+  CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | head -20 | jq -R -s -c 'split("\n") | map(select(length > 0))' || echo "[]")
+
+  # Build git context JSON
+  GIT_CONTEXT=$(jq -n \
+    --arg branch "$BRANCH" \
+    --arg commit "$COMMIT_HASH" \
+    --arg message "$COMMIT_MSG" \
+    --argjson files "$CHANGED_FILES" \
+    '{branch: $branch, commit_hash: $commit, commit_message: $message, files_changed: $files}')
+
+  echo "   Branch: $BRANCH"
+  echo "   Commit: $COMMIT_HASH"
+  echo ""
+fi
+```
+
+### Step 5: Call ce-ace CLI with Flags
+
+```bash
 if ! command -v ce-ace >/dev/null 2>&1; then
   echo "❌ ce-ace not found - Install: npm install -g @ace-sdk/cli"
   exit 1
@@ -136,20 +170,22 @@ else
   LESSONS_LEARNED="Partial success: $LESSONS_LEARNED"
 fi
 
-# Call ce-ace learn with flags
+# Build JSON payload for --stdin (includes optional git context)
+LEARN_PAYLOAD=$(jq -n \
+  --arg task "$TASK_DESCRIPTION" \
+  --arg output "$LESSONS_LEARNED" \
+  --argjson success "$([ "$SUCCESS_FLAG" = "--success" ] && echo true || echo false)" \
+  --argjson git "${GIT_CONTEXT:-null}" \
+  '{task: $task, output: $output, success: $success, git: $git}')
+
+# Call ce-ace learn with --stdin for richer payload
 if [ -n "$ORG_ID" ]; then
-  ce-ace --json --org "$ORG_ID" --project "$PROJECT_ID" \
-    learn \
-    --task "$TASK_DESCRIPTION" \
-    $SUCCESS_FLAG \
-    --output "$LESSONS_LEARNED"
+  echo "$LEARN_PAYLOAD" | ce-ace --json --org "$ORG_ID" --project "$PROJECT_ID" \
+    learn --stdin
 else
   # Single-org mode (no --org flag)
-  ce-ace --json --project "$PROJECT_ID" \
-    learn \
-    --task "$TASK_DESCRIPTION" \
-    $SUCCESS_FLAG \
-    --output "$LESSONS_LEARNED"
+  echo "$LEARN_PAYLOAD" | ce-ace --json --project "$PROJECT_ID" \
+    learn --stdin
 fi
 
 if [ $? -eq 0 ]; then
@@ -231,6 +267,11 @@ The learning event sent to ACE includes:
 - **Lessons learned**: Key insights, gotchas, solutions, best practices
 - **Timestamp**: When the learning was captured
 - **Project context**: Organization and project IDs
+- **Git context** (if in repo - Issue #6):
+  - `branch`: Current git branch name
+  - `commit_hash`: Current commit SHA
+  - `commit_message`: Latest commit message
+  - `files_changed`: List of modified file paths (Issue #7)
 
 The ACE server's Reflector analyzes this and the Curator updates the playbook with new patterns.
 
