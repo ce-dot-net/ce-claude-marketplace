@@ -79,7 +79,15 @@ if [ -z "$ACE_PROJECT_ID" ]; then
 fi
 
 # Run doctor command - CLI reads org/project from env vars automatically
-DOCTOR_RESULT=$(ce-ace doctor --json 2>&1)
+# Filter out CLI update notifications (💡 lines) that break JSON parsing
+RAW_DOCTOR=$(ce-ace doctor --json 2>&1)
+DOCTOR_EXIT_CODE=$?
+DOCTOR_RESULT=$(echo "$RAW_DOCTOR" | grep -v '^💡' | grep -v '^$')
+
+if [ $DOCTOR_EXIT_CODE -ne 0 ]; then
+  echo "⚠️  Doctor command failed"
+  echo "$DOCTOR_RESULT"
+fi
 
 # Parse results
 PASSED=$(echo "$DOCTOR_RESULT" | jq -r '.summary.passed // 0')
@@ -134,7 +142,15 @@ echo ""
 echo "[4/4] Testing basic ACE operations..."
 
 # Test status command - CLI reads org/project from env vars automatically
-STATUS_RESULT=$(ce-ace status --json 2>&1)
+# Filter out CLI update notifications (💡 lines) that break JSON parsing
+RAW_STATUS=$(ce-ace status --json 2>&1)
+STATUS_EXIT_CODE=$?
+STATUS_RESULT=$(echo "$RAW_STATUS" | grep -v '^💡' | grep -v '^$')
+
+if [ $STATUS_EXIT_CODE -ne 0 ]; then
+  echo "⚠️  Status command failed"
+  echo "$STATUS_RESULT"
+fi
 
 TOTAL_BULLETS=$(echo "$STATUS_RESULT" | jq -r '.total_bullets // 0')
 echo "✅ Status command: Playbook has $TOTAL_BULLETS patterns"

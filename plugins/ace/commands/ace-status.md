@@ -25,14 +25,28 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
+# Version check: Query npm registry directly (Issue #8 - CLI version check broken)
+INSTALLED_VERSION=$(ce-ace --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
+LATEST_VERSION=$(curl -s "https://registry.npmjs.org/@ace-sdk/cli/latest" 2>/dev/null | jq -r '.version // "unknown"' || echo "unknown")
+
+if [ "$INSTALLED_VERSION" != "unknown" ] && [ "$LATEST_VERSION" != "unknown" ]; then
+  if [ "$INSTALLED_VERSION" != "$LATEST_VERSION" ]; then
+    echo "💡 Update available: ce-ace v$INSTALLED_VERSION → v$LATEST_VERSION"
+    echo "   Run: npm install -g @ace-sdk/cli@latest"
+    echo ""
+  fi
+fi
+
 # Optional: Export environment variables if available from .claude/settings.json
 # ce-ace will use these if provided, otherwise fallback to global config
 export ACE_ORG_ID="${ACE_ORG_ID:-}"
 export ACE_PROJECT_ID="${ACE_PROJECT_ID:-}"
 
 # Run ce-ace status and capture output
-STATUS_OUTPUT=$(ce-ace status --json 2>&1)
+# Filter out CLI update notifications (💡 lines) that break JSON parsing
+RAW_OUTPUT=$(ce-ace status --json 2>&1)
 EXIT_CODE=$?
+STATUS_OUTPUT=$(echo "$RAW_OUTPUT" | grep -v '^💡' | grep -v '^$')
 
 # Check if command succeeded
 if [ $EXIT_CODE -ne 0 ]; then
