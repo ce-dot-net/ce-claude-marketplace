@@ -5,6 +5,45 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.0] - 2025-12-20
+
+### ✨ Feature: Continuous Search Architecture
+
+**Problem**: Claude would forget to search ACE patterns when entering new code domains (e.g., moving from auth to caching), leading to reinventing solutions.
+
+**Solution**: Added domain-aware reminders and pattern preservation across three new hooks.
+
+**New Features**:
+
+1. **Domain-Aware Reminders (PreToolUse Hook)**
+   - Detects domain shifts from file paths (e.g., `auth/` → `cache/`)
+   - Shows: `💡 [ACE] Domain shift: auth → cache. Consider: /ace-search cache patterns`
+   - Stores accessed domains in shared state for shift detection
+   - Non-cascading reminder (shows once per domain shift)
+
+2. **Pattern Preservation (PreCompact Hook)**
+   - Recalls relevant patterns before context compaction
+   - Ensures learned patterns survive long sessions
+   - Automatic pattern reinjection when context is pruned
+
+3. **Domain Filtering (ace-search Command)**
+   - New flags: `--allowed-domains` and `--blocked-domains`
+   - Target specific domains: `/ace-search caching --allowed-domains cache,performance`
+   - Exclude patterns: `/ace-search patterns --blocked-domains test,debug`
+
+**Files Changed**:
+- `plugins/ace/shared-hooks/ace_before_task.py` - Domain storage for PreToolUse hook
+- `plugins/ace/scripts/ace_precompact_wrapper.sh` - NEW: Pattern preservation before compaction
+- `plugins/ace/scripts/ace_pretooluse_wrapper.sh` - NEW: Domain shift detection and reminders
+- `plugins/ace/hooks/hooks.json` - Added PreToolUse and PreCompact hook events
+- `plugins/ace/commands/ace-search.md` - Domain filtering documentation
+- `plugins/ace/CLAUDE.md` - Simplified to educational-only (no MANDATORY language)
+
+**Requirements**:
+- ce-ace CLI >= v3.3.0 (for domain filtering support)
+
+**Impact**: Keeps patterns fresh in long sessions and reminds Claude to search when entering new code areas.
+
 ## [5.2.9] - 2025-12-14
 
 ### 🔧 Performance: Async Learning Execution
