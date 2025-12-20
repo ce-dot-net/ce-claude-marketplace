@@ -51,6 +51,12 @@ ce-ace search "$*"
   - Default: Uses server config from `ce-ace tune show`
   - Range: 0.0 - 1.0 (higher = stricter matching)
   - Only specify if you want to override project's default
+- **--allowed-domains**: Whitelist domains (comma-separated, v5.3.0+)
+  - Example: `--allowed-domains auth,security` returns only patterns from those domains
+  - Use when entering a new domain to get targeted patterns
+- **--blocked-domains**: Blacklist domains (comma-separated, v5.3.0+)
+  - Example: `--blocked-domains test,debug` excludes patterns from those domains
+  - Cannot use with `--allowed-domains` (mutually exclusive)
 - **--json**: Return JSON format for programmatic use
 
 **Note**: To limit number of results, use `jq` for filtering:
@@ -72,6 +78,13 @@ The `--limit` flag is not supported by ce-ace CLI. Use `--top-k` via server conf
 # Override threshold if needed:
 /ace-search "JWT auth" --threshold 0.7
 → Calls: ce-ace search "JWT auth" --threshold 0.7
+
+# Domain filtering (v5.3.0+):
+/ace-search caching patterns --allowed-domains cache,performance
+→ Returns ONLY patterns from cache or performance domains
+
+/ace-search patterns --blocked-domains test,debug
+→ Excludes test and debug patterns
 ```
 
 ### When to Use This
@@ -81,6 +94,7 @@ The `--limit` flag is not supported by ce-ace CLI. Use `--top-k` via server conf
 - You're debugging a specific type of problem
 - You know what domain/topic you need help with
 - You want to minimize context usage
+- **After domain shift reminder**: When you see "💡 [ACE] Domain shift: X → Y", use `--allowed-domains Y` to get targeted patterns
 
 ❌ **Don't use when**:
 - You need comprehensive architectural overview

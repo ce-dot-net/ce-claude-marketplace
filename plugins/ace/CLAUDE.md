@@ -1,45 +1,38 @@
-<!-- ACE_SECTION_START v5.2.13 -->
+<!-- ACE_SECTION_START v5.3.0 -->
 # ACE Plugin
 
-Automatic pattern learning - captures what works, retrieves it when needed.
+Automatic pattern learning - hooks handle everything.
 
-## Installation
+## How It Works (Automatic)
 
+**Before tasks**: UserPromptSubmit hook searches playbook, injects relevant patterns
+**During tasks**: PostToolUse hook accumulates tool calls for learning
+**After tasks**: Stop hook captures learning, sends to server
+
+All hooks run automatically. No manual invocation needed.
+
+## v5.3.0: Continuous Search Architecture
+
+**New Features**:
+- **Domain-Aware Reminders**: PreToolUse hook detects domain shifts from file paths
+  - Shows: "💡 [ACE] Domain shift: auth → cache. Consider: /ace-search cache patterns"
+- **Pattern Preservation**: PreCompact hook recalls patterns before context compaction
+- **Domain Filtering**: `/ace-search` now supports `--allowed-domains` and `--blocked-domains`
+
+**Domain Filtering Examples**:
 ```bash
-npm install -g @ace-sdk/cli
-/ace-configure
+# When entering a new domain, get targeted patterns:
+/ace-search caching strategies --allowed-domains cache,performance
+
+# Exclude test patterns:
+/ace-search patterns --blocked-domains test,debug
 ```
 
-## How It Works
-
-**Before tasks**: Hook searches playbook → Injects relevant patterns
-**After work**: Captures learning automatically (PostToolUse + Stop hooks)
-
-Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
-
-## v5.2.13: Version Synchronization
-
-**Maintenance**:
-- Synchronized version numbers across all plugin configuration files
-- Ensures consistent v5.2.13 references in plugin.json, plugin.template.json, marketplace.json, and CLAUDE.md
-
-**Recent fixes**:
-- v5.2.12: Filter CLI notifications before JSON parsing (Issue #8)
-- v5.2.11: Fix files_changed to return List[str] (Issue #7)
-- v5.2.10: Git context capture for AI-Trail correlation (Issue #6)
-
-## Playbook Sections
-
-1. **strategies_and_hard_rules** - Architectural patterns, coding principles
-2. **useful_code_snippets** - Reusable code patterns
-3. **troubleshooting_and_pitfalls** - Known issues, solutions
-4. **apis_to_use** - Recommended libraries, frameworks
-
-## Commands
+## Commands (Manual Override)
 
 **Search & View**:
-- `/ace-search <query>` - Find relevant patterns
-- `/ace-patterns [section]` - View playbook
+- `/ace-search <query>` - Semantic pattern search (supports domain filtering)
+- `/ace-patterns [section]` - View full playbook
 - `/ace-status` - Statistics
 
 **Setup & Manage**:
@@ -48,21 +41,29 @@ Triggers on keywords: `implement`, `build`, `fix`, `debug`, `refactor`, etc.
 - `/ace-learn` - Manual learning capture
 - `/ace-clear` - Reset playbook
 
-## Quick Start
+## Playbook Sections
 
-1. Install: `npm install -g @ace-sdk/cli`
-2. Configure: `/ace-configure`
-3. Optional: `/ace-bootstrap` to seed from codebase
-4. Start coding - hooks run automatically!
+1. **strategies_and_hard_rules** - Architectural patterns, coding principles
+2. **useful_code_snippets** - Reusable code patterns
+3. **troubleshooting_and_pitfalls** - Known issues, solutions
+4. **apis_to_use** - Recommended libraries, frameworks
 
-## Two-Hook Architecture
+## Hook Architecture (8 Hooks)
 
-- **PostToolUse**: Accumulates every tool call to SQLite (ground truth)
-- **Stop**: Queries accumulated tools → builds trajectory → sends to server
+| Event | Hook | Purpose |
+|-------|------|---------|
+| SessionStart | ace_install_cli.sh | Check CLI installation |
+| UserPromptSubmit | ace_before_task.py | Search + inject patterns |
+| PreToolUse | ace_pretooluse_wrapper.sh | Domain shift reminders |
+| PostToolUse | ace_posttooluse_wrapper.sh | Accumulate tool calls |
+| PermissionRequest | ace_permission_request.sh | Auto-approve safe commands |
+| PreCompact | ace_precompact_wrapper.sh | Pattern preservation |
+| Stop | ace_stop_wrapper.sh | Capture learning |
+| SubagentStop | ace_subagent_stop_wrapper.sh | Learn from subagents |
 
 ---
 
-**Version**: v5.2.13
-**New in v5.2.13**: Version synchronization across all plugin files
+**Version**: v5.3.0 (Continuous Search Architecture)
+**Requires**: ce-ace CLI >= v3.3.0
 
-<!-- ACE_SECTION_END v5.2.13 -->
+<!-- ACE_SECTION_END v5.3.0 -->

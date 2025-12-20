@@ -135,6 +135,17 @@ def main():
                 # Non-fatal: continue without pattern tracking
                 pass
 
+        # v5.3.0: Store domains for PreToolUse hook (domain-aware reminders)
+        # When Claude enters a new domain, hook can suggest targeted search
+        domains_summary = patterns_response.get('domains_summary', {})
+        if context['project'] and domains_summary:
+            try:
+                domains_file = Path(f"/tmp/ace-domains-{context['project']}.json")
+                domains_file.write_text(json.dumps(domains_summary))
+            except Exception:
+                # Non-fatal: continue without domain tracking
+                pass
+
         # Build context for Claude (JSON in XML tags - includes domain metadata)
         ace_context = f"<ace-patterns>\n{json.dumps(patterns_response, indent=2)}\n</ace-patterns>"
 

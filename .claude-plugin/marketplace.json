@@ -13,8 +13,8 @@
     {
       "name": "ace",
       "source": "./plugins/ace",
-      "description": "Code Engine ACE - Intelligent pattern learning with hooks-based architecture. v5.2.13: Version synchronization. Requires ce-ace >= v3.0.0.",
-      "version": "5.2.13",
+      "description": "Code Engine ACE - Intelligent pattern learning with hooks-based architecture. v5.3.0: Continuous Search Architecture with domain-aware reminders. Requires ce-ace >= v3.3.0.",
+      "version": "5.3.0",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"

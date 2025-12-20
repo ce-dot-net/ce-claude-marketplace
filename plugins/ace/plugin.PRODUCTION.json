@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.2.0",
-  "description": "ACE (Agentic Context Engineering) - CLI-based pattern learning. Direct ce-ace CLI integration via hooks. No MCP server, no subagents. v5.2.0: Per-task + delta learning architecture - captures per-task learning with position-based delta tracking. Requires ce-ace >= v1.0.14. Based on Stanford/SambaNova/UC Berkeley research",
+  "version": "5.3.0",
+  "description": "ACE (Agentic Context Engineering) - CLI-based pattern learning with continuous search. v5.3.0: Domain-aware reminders, pattern preservation, domain filtering. Requires ce-ace >= v3.3.0.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
@@ -16,8 +16,6 @@
     "self-improving",
     "context-engineering",
     "agentic",
-    "research",
-    "stanford",
     "autonomous",
     "cli-integration"
   ],
