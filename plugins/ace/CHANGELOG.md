@@ -5,6 +5,19 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.2] - 2025-12-20
+
+### 🐛 Bug Fix: Domain Extraction Fallback
+
+**Problem**: UserPromptSubmit hook wasn't storing domains for PreToolUse because `domains_summary` from server was often empty, even though individual patterns had domain fields.
+
+**Solution**: Added fallback logic to extract domains from pattern list when `domains_summary` is empty.
+
+**Files Changed**:
+- `plugins/ace/shared-hooks/ace_before_task.py` - Extract domains from patterns as fallback
+
+**Impact**: Domain shift detection now works reliably. PreToolUse hook correctly detects domain changes and shows reminders.
+
 ## [5.3.0] - 2025-12-20
 
 ### ✨ Feature: Continuous Search Architecture

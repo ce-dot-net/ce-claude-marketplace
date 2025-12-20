@@ -137,7 +137,17 @@ def main():
 
         # v5.3.0: Store domains for PreToolUse hook (domain-aware reminders)
         # When Claude enters a new domain, hook can suggest targeted search
+        # Extract domains from patterns if domains_summary is empty
         domains_summary = patterns_response.get('domains_summary', {})
+        if not domains_summary:
+            # Build domains from pattern list
+            pattern_domains = {}
+            for p in patterns_response.get('similar_patterns', []):
+                domain = p.get('domain', '')
+                if domain:
+                    pattern_domains[domain] = pattern_domains.get(domain, 0) + 1
+            domains_summary = pattern_domains
+
         if context['project'] and domains_summary:
             try:
                 domains_file = Path(f"/tmp/ace-domains-{context['project']}.json")
