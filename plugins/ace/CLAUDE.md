@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.3.4 -->
+<!-- ACE_SECTION_START v5.3.5 -->
 # ACE Plugin
 
 Automatic pattern learning - hooks handle everything.
@@ -63,7 +63,7 @@ All hooks run automatically. No manual invocation needed.
 
 ---
 
-**Version**: v5.3.4 (Bug Fix: PostToolUse Unicode Parsing)
+**Version**: v5.3.5 (Bug Fix: UserPromptSubmit Unicode Sanitization)
 **Requires**: ce-ace CLI >= v3.3.0
 
-<!-- ACE_SECTION_END v5.3.4 -->
+<!-- ACE_SECTION_END v5.3.5 -->
