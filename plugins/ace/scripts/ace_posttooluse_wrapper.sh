@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ace_posttooluse_wrapper.sh - PostToolUse hook with tool accumulation
-# v5.2.8: Appends tool data to SQLite accumulator for Stop hook processing
+# v5.3.4: Fixes jq parse errors from invalid Unicode surrogate pairs
 set -Eeuo pipefail
 
 # Resolve paths
@@ -10,7 +10,7 @@ ACCUMULATOR="${PLUGIN_ROOT}/shared-hooks/ace_tool_accumulator.py"
 LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="5.2.10"
+export ACE_PLUGIN_VERSION="5.3.4"
 
 # Parse arguments
 ENABLE_LOG=true
@@ -30,13 +30,15 @@ done
 }
 
 # Read stdin (PostToolUse event JSON)
-INPUT_JSON=$(cat)
+# Sanitize invalid UTF-8 sequences (e.g., unpaired surrogates) to prevent jq parse errors
+# iconv with -c silently discards invalid characters
+INPUT_JSON=$(cat | iconv -f UTF-8 -t UTF-8 -c 2>/dev/null || cat)
 
-# Extract working directory from event
-WORKING_DIR=$(echo "$INPUT_JSON" | jq -r '.cwd // .working_directory // .workingDirectory // empty')
+# Extract working directory from event (with error handling for malformed JSON)
+WORKING_DIR=$(echo "$INPUT_JSON" | jq -r '.cwd // .working_directory // .workingDirectory // empty' 2>/dev/null || echo "")
 if [[ -z "$WORKING_DIR" ]]; then
   # Fallback: Infer from transcript_path
-  TRANSCRIPT_PATH=$(echo "$INPUT_JSON" | jq -r '.transcript_path // empty')
+  TRANSCRIPT_PATH=$(echo "$INPUT_JSON" | jq -r '.transcript_path // empty' 2>/dev/null || echo "")
   if [[ -n "$TRANSCRIPT_PATH" ]]; then
     WORKING_DIR=$(cd "$(dirname "$TRANSCRIPT_PATH")/../.." 2>/dev/null && pwd) || WORKING_DIR=""
   fi
@@ -46,13 +48,13 @@ if [[ -n "$WORKING_DIR" ]] && [[ -d "$WORKING_DIR" ]]; then
   cd "$WORKING_DIR" || true
 fi
 
-# Extract tool data from PostToolUse event
+# Extract tool data from PostToolUse event (with error handling)
 # Per Claude Code docs: PostToolUse provides tool_name, tool_input, tool_response, tool_use_id
-TOOL_NAME=$(echo "$INPUT_JSON" | jq -r '.tool_name // empty')
-TOOL_INPUT=$(echo "$INPUT_JSON" | jq -c '.tool_input // {}')
-TOOL_RESPONSE=$(echo "$INPUT_JSON" | jq -c '.tool_response // {}')
-TOOL_USE_ID=$(echo "$INPUT_JSON" | jq -r '.tool_use_id // empty')
-SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // empty')
+TOOL_NAME=$(echo "$INPUT_JSON" | jq -r '.tool_name // empty' 2>/dev/null || echo "")
+TOOL_INPUT=$(echo "$INPUT_JSON" | jq -c '.tool_input // {}' 2>/dev/null || echo "{}")
+TOOL_RESPONSE=$(echo "$INPUT_JSON" | jq -c '.tool_response // {}' 2>/dev/null || echo "{}")
+TOOL_USE_ID=$(echo "$INPUT_JSON" | jq -r '.tool_use_id // empty' 2>/dev/null || echo "")
+SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // empty' 2>/dev/null || echo "")
 
 # Skip if missing required fields
 if [[ -z "$SESSION_ID" ]] || [[ -z "$TOOL_NAME" ]] || [[ -z "$TOOL_USE_ID" ]]; then
