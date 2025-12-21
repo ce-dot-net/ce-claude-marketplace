@@ -12,6 +12,7 @@ Supports session pinning (v1.0.11+) for pattern persistence across compaction.
 """
 
 import json
+import re
 import sys
 import uuid
 from pathlib import Path
@@ -19,6 +20,31 @@ from typing import Dict, Any
 
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent / 'utils'))
+
+
+def sanitize_unicode(text: str) -> str:
+    """
+    Remove invalid Unicode surrogate pairs that break JSON parsing.
+    Surrogates are UTF-16 encoding artifacts (U+D800 to U+DFFF) that
+    shouldn't appear in valid UTF-8 strings.
+    """
+    if not isinstance(text, str):
+        return text
+    # Remove lone surrogates (high surrogate not followed by low, or lone low)
+    # This regex matches surrogate code points
+    return text.encode('utf-8', errors='surrogatepass').decode('utf-8', errors='replace')
+
+
+def sanitize_response(obj: Any) -> Any:
+    """Recursively sanitize all strings in a dict/list structure."""
+    if isinstance(obj, str):
+        return sanitize_unicode(obj)
+    elif isinstance(obj, dict):
+        return {k: sanitize_response(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [sanitize_response(item) for item in obj]
+    else:
+        return obj
 
 from ace_cli import run_search, check_session_pinning_available
 from ace_context import get_context
@@ -100,6 +126,11 @@ def main():
             project=context['project'],
             session_id=session_id if use_session_pinning else None
         )
+
+        # v5.3.5: Sanitize response to remove invalid Unicode surrogates
+        # These can break the Claude API's JSON parser
+        if patterns_response:
+            patterns_response = sanitize_response(patterns_response)
 
         if not patterns_response:
             # Search failed - show error to user

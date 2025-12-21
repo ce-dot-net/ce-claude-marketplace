@@ -5,6 +5,26 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.5] - 2025-12-21
+
+### 🐛 Bug Fix: UserPromptSubmit Unicode Surrogate Sanitization
+
+**Problem**: UserPromptSubmit hook (ace_before_task.py) was crashing with API Error 400 "no low surrogate in string" when patterns retrieved from the server contained invalid Unicode surrogate pairs.
+
+**Root Cause**: The server can return patterns containing legacy Unicode that's malformed (e.g., single high surrogates without corresponding low surrogates). Python's `json.loads()` is permissive and allows these through, but the API client is strict and rejects them when sending context messages.
+
+**Solution**: Added comprehensive Unicode sanitization to ace_before_task.py:
+- `sanitize_unicode(s)` - Recursively sanitizes strings using `surrogatepass` error handler
+- `sanitize_response(obj)` - Recursively walks all dicts/lists to sanitize every string
+- Applied to patterns response before adding to context
+
+**Files Changed**:
+- `plugins/ace/shared-hooks/ace_before_task.py` - Added sanitization functions
+
+**Impact**: UserPromptSubmit hook now handles all pattern data gracefully, even legacy patterns with corrupted Unicode. No more API 400 errors disrupting pattern injection.
+
+**Testing**: Verified with patterns containing single high surrogates (U+D800-U+DBFF without low pairs) - sanitization strips invalid sequences while preserving valid content.
+
 ## [5.3.4] - 2025-12-21
 
 ### 🐛 Bug Fix: PostToolUse jq Parse Errors from Invalid Unicode
