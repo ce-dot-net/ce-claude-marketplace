@@ -5,6 +5,26 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.3] - 2025-12-21
+
+### 🐛 Bug Fix: PreToolUse Domain Matching
+
+**Problem**: PreToolUse hook's domain shift detection was broken because server sends full domain names (e.g., "authentication", "caching") but file paths contain abbreviated forms (e.g., "auth/", "cache/"). The exact string matching never succeeded, so domain shift reminders never appeared.
+
+**Root Cause**: The domain matching logic used exact string matching between server domains and file path segments, which failed for abbreviated path names.
+
+**Solution**: Implemented dynamic common-prefix matching with 4-character minimum:
+- Compares first 4 characters of server domain with file path segments
+- Example: "cache" matches "caching" via shared "cach" prefix
+- Preserves intent while handling real-world naming variations
+
+**Files Changed**:
+- `plugins/ace/scripts/ace_pretooluse_wrapper.sh` - Fixed domain matching logic
+
+**Impact**: Domain shift detection now works correctly. Users see reminders when moving between code domains (e.g., "💡 [ACE] Domain shift: auth → cache. Consider: /ace:ace-search cache patterns").
+
+**Testing**: Verified with test case where server returns "authentication" and file path is "auth/login.ts" - match succeeds via "auth" common prefix.
+
 ## [5.3.2] - 2025-12-20
 
 ### 🐛 Bug Fix: Domain Extraction Fallback

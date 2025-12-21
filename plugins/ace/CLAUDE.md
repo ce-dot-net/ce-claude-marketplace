@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.3.2 -->
+<!-- ACE_SECTION_START v5.3.3 -->
 # ACE Plugin
 
 Automatic pattern learning - hooks handle everything.
@@ -63,7 +63,7 @@ All hooks run automatically. No manual invocation needed.
 
 ---
 
-**Version**: v5.3.2 (Bug Fix: Domain Extraction Fallback)
+**Version**: v5.3.3 (Bug Fix: PreToolUse Domain Matching)
 **Requires**: ce-ace CLI >= v3.3.0
 
-<!-- ACE_SECTION_END v5.3.2 -->
+<!-- ACE_SECTION_END v5.3.3 -->
