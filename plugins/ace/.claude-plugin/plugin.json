@@ -1,7 +1,7 @@
 {
   "name": "ace",
   "version": "5.3.5",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous search architecture. v5.3.0: Domain-aware reminders, pattern preservation, domain filtering. Requires ce-ace >= v3.3.0.",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous search architecture. v5.3.5: Unicode sanitization, domain-aware reminders, pattern preservation. Requires ce-ace >= v3.3.0.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
