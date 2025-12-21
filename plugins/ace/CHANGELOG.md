@@ -5,6 +5,26 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.3.4] - 2025-12-21
+
+### 🐛 Bug Fix: PostToolUse jq Parse Errors from Invalid Unicode
+
+**Problem**: PostToolUse hook was failing with "Invalid surrogate pair" errors when parsing tool execution data containing invalid UTF-8 sequences (e.g., Unicode surrogate pairs from binary file content, malformed JSON strings).
+
+**Root Cause**: The `jq` JSON parser is strict about UTF-8 encoding and rejects invalid surrogate pairs (U+D800 to U+DFFF), which can appear when tools read binary files or receive malformed input.
+
+**Solution**: Added UTF-8 sanitization with `iconv -c` to strip invalid Unicode characters before jq parsing:
+- Filters out invalid surrogate pairs and other malformed UTF-8 sequences
+- Added error handling (`2>/dev/null || echo ""`) to all jq calls for robustness
+- Preserves valid tool execution data while safely handling edge cases
+
+**Files Changed**:
+- `plugins/ace/scripts/ace_posttooluse_wrapper.sh` - Added iconv sanitization and error handling
+
+**Impact**: PostToolUse hook now handles all tool execution scenarios gracefully, including binary file operations and malformed input. No more jq parse errors disrupting the learning flow.
+
+**Testing**: Verified with scenarios involving binary files, malformed JSON strings, and mixed encoding inputs.
+
 ## [5.3.3] - 2025-12-21
 
 ### 🐛 Bug Fix: PreToolUse Domain Matching
