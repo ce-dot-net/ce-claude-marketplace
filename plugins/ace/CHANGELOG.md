@@ -5,6 +5,36 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.0] - 2025-12-21
+
+### ✨ Feature: Continuous Auto-Search on Domain Shifts
+
+**What's New**: PreToolUse hook now automatically searches for patterns when Claude enters a new domain, instead of just showing a reminder.
+
+**Before (v5.3.x)**:
+- PreToolUse detected domain shifts (e.g., auth → cache)
+- Showed reminder: "💡 Consider: /ace-search cache patterns"
+- User had to manually run search
+
+**After (v5.4.0)**:
+- PreToolUse detects domain shift
+- **Automatically runs `ce-ace search`** with domain filtering
+- **Injects patterns via `hookSpecificOutput.additionalContext`**
+- Shows: "🔄 Auto-loaded 11 patterns."
+
+**Technical Details**:
+- Uses `hookSpecificOutput.additionalContext` (now supported by PreToolUse hooks)
+- Domain filtering: `--allowed-domains $MATCHED_DOMAIN`
+- Query optimization: Uses first word of domain + "patterns" for best semantic match
+- Fallback: Shows reminder if search fails or returns 0 results
+
+**Files Changed**:
+- `plugins/ace/scripts/ace_pretooluse_wrapper.sh` - Complete rewrite of domain shift handling
+
+**Impact**: Claude now gets domain-specific patterns automatically injected when entering new domains, without user intervention. This completes the "Continuous Search Architecture" vision from v5.3.0.
+
+---
+
 ## [5.3.5] - 2025-12-21
 
 ### 🐛 Bug Fix: UserPromptSubmit Unicode Surrogate Sanitization

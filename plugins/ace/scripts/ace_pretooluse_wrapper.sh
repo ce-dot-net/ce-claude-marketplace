@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# ACE PreToolUse Hook - Domain-Aware Reminders
-# v5.3.0: Detects domain shifts and reminds Claude to search for relevant patterns
+# ACE PreToolUse Hook - Continuous Auto-Search
+# v5.4.0: Auto-searches on domain shifts and injects patterns into context
 #
 # When Claude enters a new domain (e.g., reading cache files after working on auth),
-# this hook shows a reminder BEFORE the file read to suggest searching for patterns.
+# this hook automatically searches for domain-specific patterns and injects them.
 #
-# Key insight: PreToolUse fires BEFORE the tool runs, giving Claude a chance to
-# search for domain-specific patterns before diving into unfamiliar code.
+# Key insight: PreToolUse fires BEFORE the tool runs, allowing Claude to have
+# domain-specific patterns available BEFORE reading unfamiliar code.
 
 set -eo pipefail
 
-ACE_PLUGIN_VERSION="5.3.2"
+ACE_PLUGIN_VERSION="5.4.0"
 
 # Dynamic domain matching - no hardcoded lists!
 # Uses common prefix matching with minimum 4-char overlap
@@ -124,14 +124,70 @@ fi
 # Update current domain
 echo "$MATCHED_DOMAIN" > "$DOMAIN_FILE"
 
-# Only show reminder on domain SHIFT (not first time or same domain)
+# Only take action on domain SHIFT (not first time or same domain)
 if [ "$MATCHED_DOMAIN" != "$LAST_DOMAIN" ] && [ -n "$LAST_DOMAIN" ]; then
-  # Domain shift detected! Show reminder to Claude
-  jq -n \
-    --arg domain "$MATCHED_DOMAIN" \
-    --arg prev "$LAST_DOMAIN" \
-    --arg path "$FILE_PATH" \
-    '{
-      "systemMessage": "💡 [ACE] Domain shift: \($prev) → \($domain). Consider: /ace-search \($domain) patterns --allowed-domains \($domain)"
-    }'
+  # Domain shift detected! AUTO-SEARCH and inject patterns
+
+  # 0. Get org context for search
+  ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+  if [ -z "$ORG_ID" ]; then
+    # No org context - fallback to reminder
+    jq -n --arg d "$MATCHED_DOMAIN" --arg p "$LAST_DOMAIN" \
+      '{"systemMessage": "💡 [ACE] Domain shift: \($p) → \($d). Consider: /ace:ace-search \($d)"}'
+    exit 0
+  fi
+
+  # 1. Build search query for the new domain
+  # Use first word of domain + "patterns" for best semantic match
+  # "troubleshooting-and-pitfalls" → "troubleshooting patterns"
+  FIRST_WORD=$(echo "$MATCHED_DOMAIN" | cut -d'-' -f1)
+  SEARCH_QUERY="${FIRST_WORD} patterns"
+
+  # 2. Call ce-ace search with domain filter (env vars for context)
+  export ACE_ORG_ID="$ORG_ID"
+  export ACE_PROJECT_ID="$PROJECT_ID"
+
+  # Check if ce-ace is available
+  if ! command -v ce-ace >/dev/null 2>&1; then
+    # No CLI - fallback to reminder
+    jq -n --arg d "$MATCHED_DOMAIN" --arg p "$LAST_DOMAIN" \
+      '{"systemMessage": "💡 [ACE] Domain shift: \($p) → \($d). Consider: /ace:ace-search \($d) (ce-ace not found)"}'
+    exit 0
+  fi
+
+  SEARCH_RESULT=$(echo "$SEARCH_QUERY" | ce-ace search --stdin --json \
+    --allowed-domains "$MATCHED_DOMAIN" 2>/dev/null | \
+    iconv -f UTF-8 -t UTF-8 -c 2>/dev/null || echo "")  # Sanitize Unicode
+
+  # 3. Check if search succeeded
+  PATTERN_COUNT=$(echo "$SEARCH_RESULT" | jq -r '.count // 0' 2>/dev/null || echo "0")
+
+  if [ "$PATTERN_COUNT" != "0" ] && [ "$PATTERN_COUNT" != "null" ] && [ -n "$SEARCH_RESULT" ]; then
+    # 4. Build ace-patterns context (same format as UserPromptSubmit)
+    ACE_CONTEXT="<ace-patterns-domain-shift domain=\"${MATCHED_DOMAIN}\">
+${SEARCH_RESULT}
+</ace-patterns-domain-shift>"
+
+    # 5. Output with additionalContext (patterns injected into Claude's context)
+    jq -n \
+      --arg old "$LAST_DOMAIN" \
+      --arg new "$MATCHED_DOMAIN" \
+      --arg count "$PATTERN_COUNT" \
+      --arg ctx "$ACE_CONTEXT" \
+      '{
+        "systemMessage": "🔄 [ACE] Domain shift: \($old) → \($new). Auto-loaded \($count) patterns.",
+        "hookSpecificOutput": {
+          "hookEventName": "PreToolUse",
+          "additionalContext": $ctx
+        }
+      }'
+  else
+    # Fallback: Search failed or no patterns - show reminder only
+    jq -n \
+      --arg old "$LAST_DOMAIN" \
+      --arg new "$MATCHED_DOMAIN" \
+      '{
+        "systemMessage": "💡 [ACE] Domain shift: \($old) → \($new). Consider: /ace:ace-search \($new)"
+      }'
+  fi
 fi
