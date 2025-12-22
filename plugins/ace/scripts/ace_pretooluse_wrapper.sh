@@ -10,14 +10,15 @@
 
 set -eo pipefail
 
-ACE_PLUGIN_VERSION="5.4.0"
+ACE_PLUGIN_VERSION="5.4.1"
 
 # Dynamic domain matching - no hardcoded lists!
-# Uses common prefix matching with minimum 4-char overlap
+# Splits hyphenated domains into words and matches each word against path segments
 # Examples:
-# - "auth" (path) vs "authentication" (domain) → share "auth" (4 chars) ✓
-# - "cache" (path) vs "caching" (domain) → share "cach" (4 chars) ✓
-# - "hook" (path) vs "hooks" (domain) → share "hook" (4 chars) ✓
+# - "ace-platform-system" domain → words: "ace", "platform", "system"
+# - Path "/ace/scripts/foo.ts" → segments: "ace", "scripts", "foo", "ts"
+# - Match: "ace" = "ace" (exact word match) ✓
+# - Also supports 4-char prefix matching for partial matches
 
 # Get common prefix length between two strings
 common_prefix_len() {
@@ -40,20 +41,30 @@ match_domain_to_path() {
   # Extract path segments (split by / and other separators)
   local segments=$(echo "$path" | tr '/._-' ' ')
 
+  # Extract domain words (split by -)
+  # e.g., "ace-platform-system-diagnostics" → "ace platform system diagnostics"
+  local domain_words=$(echo "$domain" | tr '-' ' ')
+
   for segment in $segments; do
     # Skip very short segments
     [ ${#segment} -lt 3 ] && continue
 
-    # Check common prefix length (min 4 chars for semantic match)
-    local prefix_len=$(common_prefix_len "$domain" "$segment")
-    if [ "$prefix_len" -ge 4 ]; then
-      return 0  # Strong semantic match
-    fi
+    # Check against each word in the domain
+    for word in $domain_words; do
+      # Skip very short words
+      [ ${#word} -lt 3 ] && continue
 
-    # Exact match
-    if [ "$segment" = "$domain" ]; then
-      return 0
-    fi
+      # Exact match (case-insensitive comparison already done upstream)
+      if [ "$segment" = "$word" ]; then
+        return 0  # Exact word match
+      fi
+
+      # Check common prefix length (min 4 chars for semantic match)
+      local prefix_len=$(common_prefix_len "$word" "$segment")
+      if [ "$prefix_len" -ge 4 ]; then
+        return 0  # Strong semantic match
+      fi
+    done
   done
 
   return 1  # No match
