@@ -5,6 +5,51 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.2] - 2025-12-22
+
+### ✨ Feature: Pattern Relevance Metrics
+
+**What's New**: Added comprehensive logging to track pattern relevance metrics for analysis.
+
+**Problem**: After v5.4.0/v5.4.1, patterns ARE being injected into context, but relevance was observed to be low (~10-15% helpful) in some tasks. To optimize, we first need to measure.
+
+**Solution**: Added metrics logging to all ACE hooks:
+
+1. **Search Metrics** (UserPromptSubmit hook):
+   - Patterns returned vs injected
+   - Average confidence scores
+   - Domains matched
+   - Client-side filtering stats
+
+2. **Domain Shift Metrics** (PreToolUse hook):
+   - From/to domain transitions
+   - Auto-search success rate
+   - Patterns found per shift
+
+3. **Execution Metrics** (Stop hook):
+   - Patterns referenced in task
+   - Tools executed (total and state-changing)
+   - Task success/failure
+   - Learning capture status
+
+**New Command**: `/ace:ace-relevance-report`
+- Analyzes metrics from last N hours
+- Shows pattern injection rates, domain transitions, execution stats
+- Provides insights for optimization
+
+**Files Changed**:
+- `plugins/ace/shared-hooks/utils/ace_relevance_logger.py` - NEW: Centralized logging utility
+- `plugins/ace/shared-hooks/ace_before_task.py` - Added search metrics logging
+- `plugins/ace/shared-hooks/ace_after_task.py` - Added execution metrics logging
+- `plugins/ace/scripts/ace_pretooluse_wrapper.sh` - Added domain shift logging
+- `plugins/ace/commands/ace-relevance-report.md` - NEW: Analysis command
+
+**Log Format**: JSONL at `.claude/data/logs/ace-relevance.jsonl`
+
+**Impact**: Enables data-driven optimization of pattern relevance by tracking what's injected vs what's actually helpful.
+
+---
+
 ## [5.4.1] - 2025-12-22
 
 ### 🐛 Bug Fix: Domain Word Matching for Hyphenated Domains

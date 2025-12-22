@@ -10,7 +10,7 @@
 
 set -eo pipefail
 
-ACE_PLUGIN_VERSION="5.4.1"
+ACE_PLUGIN_VERSION="5.4.2"
 
 # Dynamic domain matching - no hardcoded lists!
 # Splits hyphenated domains into words and matches each word against path segments
@@ -179,6 +179,33 @@ if [ "$MATCHED_DOMAIN" != "$LAST_DOMAIN" ] && [ -n "$LAST_DOMAIN" ]; then
 ${SEARCH_RESULT}
 </ace-patterns-domain-shift>"
 
+    # 4.5: Log domain shift metrics (v5.4.2)
+    LOG_DIR=".claude/data/logs"
+    mkdir -p "$LOG_DIR" 2>/dev/null || true
+    SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // "unknown"')
+    TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    jq -n --arg ts "$TIMESTAMP" \
+          --arg hook "PreToolUse" \
+          --arg sid "$SESSION_ID" \
+          --arg pid "$PROJECT_ID" \
+          --arg from "$LAST_DOMAIN" \
+          --arg to "$MATCHED_DOMAIN" \
+          --arg path "$FILE_PATH" \
+          --argjson count "$PATTERN_COUNT" \
+          --argjson success true \
+      '{
+        timestamp: $ts,
+        event: "domain_shift",
+        hook: $hook,
+        session_id: $sid,
+        project_id: $pid,
+        from_domain: $from,
+        to_domain: $to,
+        file_path: ($path | if length > 200 then .[:200] else . end),
+        patterns_found: $count,
+        search_succeeded: $success
+      }' >> "$LOG_DIR/ace-relevance.jsonl" 2>/dev/null || true
+
     # 5. Output with additionalContext (patterns injected into Claude's context)
     jq -n \
       --arg old "$LAST_DOMAIN" \
@@ -193,7 +220,33 @@ ${SEARCH_RESULT}
         }
       }'
   else
-    # Fallback: Search failed or no patterns - show reminder only
+    # Fallback: Search failed or no patterns - log failure and show reminder
+    LOG_DIR=".claude/data/logs"
+    mkdir -p "$LOG_DIR" 2>/dev/null || true
+    SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // "unknown"')
+    TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    jq -n --arg ts "$TIMESTAMP" \
+          --arg hook "PreToolUse" \
+          --arg sid "$SESSION_ID" \
+          --arg pid "$PROJECT_ID" \
+          --arg from "$LAST_DOMAIN" \
+          --arg to "$MATCHED_DOMAIN" \
+          --arg path "$FILE_PATH" \
+          --argjson count 0 \
+          --argjson success false \
+      '{
+        timestamp: $ts,
+        event: "domain_shift",
+        hook: $hook,
+        session_id: $sid,
+        project_id: $pid,
+        from_domain: $from,
+        to_domain: $to,
+        file_path: ($path | if length > 200 then .[:200] else . end),
+        patterns_found: $count,
+        search_succeeded: $success
+      }' >> "$LOG_DIR/ace-relevance.jsonl" 2>/dev/null || true
+
     jq -n \
       --arg old "$LAST_DOMAIN" \
       --arg new "$MATCHED_DOMAIN" \

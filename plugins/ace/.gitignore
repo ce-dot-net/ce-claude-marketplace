@@ -1,0 +1,15 @@
+# ACE Plugin .gitignore
+
+# Claude Code local data (contains logs, databases, and potentially sensitive data)
+.claude/
+
+# Temporary files
+/tmp/
+*.tmp
+
+# OS files
+.DS_Store
+
+# Python cache
+__pycache__/
+*.pyc
