@@ -42,9 +42,11 @@ sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 from ace_context import get_context
 from ace_cli import recall_session
 from utils.git_utils import get_git_context, detect_commits_in_session
+from ace_relevance_logger import log_execution_metrics
 
 # Import re at module level for quality filters
 import re as regex_module
+import time
 
 
 def is_trivial_task(task_description: str) -> bool:
@@ -370,6 +372,9 @@ def main():
     4. Clear accumulated tools (cleanup)
     """
     try:
+        # Track execution start time for metrics
+        execution_start_time = time.time()
+
         # Read hook event from stdin
         event = json.load(sys.stdin)
 
@@ -619,6 +624,30 @@ def main():
             message_lines.append("   You can manually capture with: /ace-learn")
 
         message_lines.append("")
+
+        # STEP 8.5: Log execution metrics for relevance analysis (v5.4.2)
+        try:
+            # Count state-changing tools for metrics
+            state_changing_tools = ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit']
+            state_changing_count = sum(
+                1 for tool_name, _, _, _ in tools
+                if any(t in tool_name for t in state_changing_tools)
+            )
+
+            execution_time = time.time() - execution_start_time
+
+            log_execution_metrics(
+                session_id=session_id,
+                patterns_used=playbook_used,
+                tools_executed=len(tools),
+                state_changing_tools=state_changing_count,
+                success=not has_errors,
+                execution_time_seconds=execution_time,
+                learning_sent='✅' in message_lines[0] if message_lines else False,
+                project_id=context.get('project')
+            )
+        except Exception:
+            pass  # Non-fatal: continue without metrics logging
 
         # STEP 9: Clear accumulated tools (cleanup)
         sys.path.insert(0, str(Path(__file__).parent))

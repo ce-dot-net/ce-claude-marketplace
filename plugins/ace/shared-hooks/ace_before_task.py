@@ -48,6 +48,7 @@ def sanitize_response(obj: Any) -> Any:
 
 from ace_cli import run_search, check_session_pinning_available
 from ace_context import get_context
+from ace_relevance_logger import log_search_metrics
 
 
 def expand_abbreviations(prompt: str) -> str:
@@ -143,6 +144,7 @@ def main():
         # Client-side filtering: Filter low-quality patterns (server team recommendation)
         # Only filter if we have enough results (keep at least 3)
         pattern_list = patterns_response.get('similar_patterns', [])
+        original_pattern_list = list(pattern_list)  # Keep original for logging
         if len(pattern_list) > 5:
             # Filter: confidence >= 0.5 OR helpful >= 2
             high_quality = [p for p in pattern_list if p.get('confidence', 0) >= 0.5 or p.get('helpful', 0) >= 2]
@@ -150,6 +152,23 @@ def main():
                 pattern_list = high_quality
                 patterns_response['similar_patterns'] = pattern_list
                 patterns_response['count'] = len(pattern_list)
+
+        # v5.4.2: Log relevance metrics for analysis
+        try:
+            domains = list(set(p.get('domain', 'unknown') for p in pattern_list if p.get('domain')))
+            log_search_metrics(
+                hook='UserPromptSubmit',
+                session_id=session_id,
+                user_prompt=user_prompt,
+                search_query=search_query,
+                patterns_returned=original_pattern_list,
+                patterns_injected=pattern_list,
+                domains=domains,
+                project_id=context.get('project'),
+                org_id=context.get('org')
+            )
+        except Exception:
+            pass  # Non-fatal: continue without logging
 
         # CRITICAL: Save pattern IDs for reinforcement learning (ACE paper feedback loop)
         # When task completes, ace_after_task.py will load these IDs and include in ExecutionTrace
