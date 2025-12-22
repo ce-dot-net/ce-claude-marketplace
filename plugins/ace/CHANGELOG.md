@@ -5,6 +5,24 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.1] - 2025-12-22
+
+### 🐛 Bug Fix: Domain Word Matching for Hyphenated Domains
+
+**Problem**: Domain shift detection failed for paths like `/ace/scripts/...` because domains like `ace-platform-system-diagnostics` were compared as a whole string against path segments. The 4-char prefix matching between "ace-platform-..." and "ace" (3 chars) never matched.
+
+**Solution**: Split hyphenated domain names into individual words before matching:
+- Domain `ace-platform-system-diagnostics` → words: `ace`, `platform`, `system`, `diagnostics`
+- Path `/ace/scripts/foo.ts` → segments: `ace`, `scripts`, `foo`, `ts`
+- Now matches: `ace` = `ace` (exact word match) ✓
+
+**Files Changed**:
+- `plugins/ace/scripts/ace_pretooluse_wrapper.sh` - Improved `match_domain_to_path()` function
+
+**Impact**: Domain shift detection now works correctly for all ACE-related paths.
+
+---
+
 ## [5.4.0] - 2025-12-21
 
 ### ✨ Feature: Continuous Auto-Search on Domain Shifts
