@@ -5,6 +5,49 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.3] - 2025-12-23
+
+### ✨ Feature: /ace-domains Command (Issue #8)
+
+**What's New**: New `/ace-domains` command to discover available pattern domains for filtering.
+
+**Problem**: Users couldn't effectively use `--allowed-domains` filtering because they didn't know what domain names existed:
+
+```bash
+# Before: guessing domain names
+ce-ace search "auth" --allowed-domains "typescript"
+Result: 0 patterns (wrong domain name!)
+User: 🤷 "What domains do I even have?"
+```
+
+**Solution**: New command shows all available domains with pattern counts:
+
+```bash
+/ace-domains
+
+Available Pattern Domains
+
+Total: 21 domains, 558 patterns
+
+  troubleshooting-and-pitfalls: 120 patterns
+  useful-code-snippets: 101 patterns
+  strategies-and-hard-rules: 70 patterns
+  ...
+
+Use with /ace-search:
+  /ace-search "query" --allowed-domains <domain-name>
+```
+
+**Files Changed**:
+- `plugins/ace/shared-hooks/utils/ace_cli.py` - Added `run_domains()` wrapper function
+- `plugins/ace/commands/ace-domains.md` - NEW: User command
+
+**Requirements**: Requires ce-ace CLI >= v3.4.0
+
+**Related**: Implements GitHub Issue #8
+
+---
+
 ## [5.4.2] - 2025-12-22
 
 ### ✨ Feature: Pattern Relevance Metrics
