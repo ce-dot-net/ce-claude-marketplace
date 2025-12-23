@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.4.1 -->
+<!-- ACE_SECTION_START v5.4.3 -->
 # ACE Plugin
 
 Automatic pattern learning - hooks handle everything.
@@ -73,7 +73,7 @@ Claude now has BOTH auth AND cache patterns in context!
 
 ---
 
-**Version**: v5.4.1 (Domain Word Matching Bug Fix)
+**Version**: v5.4.3 (Domain Pattern Statistics Command)
 **Requires**: ce-ace CLI >= v3.3.0
 
-<!-- ACE_SECTION_END v5.4.1 -->
+<!-- ACE_SECTION_END v5.4.3 -->

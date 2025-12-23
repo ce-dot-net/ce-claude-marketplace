@@ -173,6 +173,61 @@ def run_status(org: str = None, project: str = None) -> Optional[Dict[str, Any]]
         return None
 
 
+def run_domains(org: str = None, project: str = None) -> Optional[Dict[str, Any]]:
+    """
+    Call ce-ace domains --json to list available pattern domains (v3.4.0+)
+
+    Args:
+        org: Organization ID (optional, passed via environment)
+        project: Project ID (optional, passed via environment)
+
+    Returns:
+        Parsed JSON response or None on failure
+
+    Response includes:
+        - domains: List of {name: str, count: int} objects
+        - total_domains: Total number of domains
+        - total_patterns: Total patterns across all domains
+
+    Note:
+        Context passed via environment variables (ACE_ORG_ID, ACE_PROJECT_ID).
+        Requires ce-ace v3.4.0+
+
+    Use Case:
+        Users need to discover domain names to use --allowed-domains filtering
+        in /ace-search command. Without this, they'd have to guess domain names.
+    """
+    try:
+        # Build environment with context
+        env = os.environ.copy()
+        if org:
+            env['ACE_ORG_ID'] = org
+        if project:
+            env['ACE_PROJECT_ID'] = project
+
+        result = subprocess.run(
+            ['ce-ace', 'domains', '--json'],
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=env
+        )
+
+        if result.returncode != 0:
+            return None
+
+        # Filter out update notification lines (💡) before parsing JSON
+        stdout_clean = '\n'.join(
+            line for line in result.stdout.split('\n')
+            if not line.startswith('💡')
+        )
+
+        return json.loads(stdout_clean)
+
+    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
+        return None
+
+
 def recall_session(session_id: str, org: str = None, project: str = None) -> Optional[Dict[str, Any]]:
     """
     Recall pinned patterns from session storage (v1.0.11+)
