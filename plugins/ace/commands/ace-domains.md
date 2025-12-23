@@ -1,6 +1,6 @@
 ---
 description: List available pattern domains for filtering
-argument-hint:
+argument-hint: "[--min-patterns N]"
 ---
 
 # List Available Domains
@@ -10,6 +10,20 @@ Shows all pattern domains with counts. Use these domain names with `/ace-search 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
+
+# Parse arguments
+MIN_PATTERNS=""
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --min-patterns)
+      MIN_PATTERNS="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
+done
 
 # Check ce-ace CLI is installed
 if ! command -v ce-ace >/dev/null 2>&1; then
@@ -27,9 +41,15 @@ fi
 export ACE_ORG_ID="${ACE_ORG_ID:-}"
 export ACE_PROJECT_ID="${ACE_PROJECT_ID:-}"
 
+# Build command with optional min-patterns filter
+CMD="ce-ace domains --json"
+if [ -n "$MIN_PATTERNS" ]; then
+  CMD="$CMD --min-patterns $MIN_PATTERNS"
+fi
+
 # Run ce-ace domains and capture output
 # Filter out CLI update notifications (💡 lines) that break JSON parsing
-RAW_OUTPUT=$(ce-ace domains --json 2>&1)
+RAW_OUTPUT=$(eval "$CMD" 2>&1)
 EXIT_CODE=$?
 DOMAINS_OUTPUT=$(echo "$RAW_OUTPUT" | grep -v '^💡' | grep -v '^$')
 
