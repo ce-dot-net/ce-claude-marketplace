@@ -173,13 +173,14 @@ def run_status(org: str = None, project: str = None) -> Optional[Dict[str, Any]]
         return None
 
 
-def run_domains(org: str = None, project: str = None) -> Optional[Dict[str, Any]]:
+def run_domains(org: str = None, project: str = None, min_patterns: int = None) -> Optional[Dict[str, Any]]:
     """
     Call ce-ace domains --json to list available pattern domains (v3.4.0+)
 
     Args:
         org: Organization ID (optional, passed via environment)
         project: Project ID (optional, passed via environment)
+        min_patterns: Minimum pattern count to include domain (optional, v3.4.1+)
 
     Returns:
         Parsed JSON response or None on failure
@@ -205,8 +206,13 @@ def run_domains(org: str = None, project: str = None) -> Optional[Dict[str, Any]
         if project:
             env['ACE_PROJECT_ID'] = project
 
+        # Build command with optional min-patterns filter
+        cmd = ['ce-ace', 'domains', '--json']
+        if min_patterns is not None and min_patterns > 1:
+            cmd.extend(['--min-patterns', str(min_patterns)])
+
         result = subprocess.run(
-            ['ce-ace', 'domains', '--json'],
+            cmd,
             capture_output=True,
             text=True,
             timeout=30,
