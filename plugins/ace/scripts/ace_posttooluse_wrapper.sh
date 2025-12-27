@@ -10,7 +10,7 @@ ACCUMULATOR="${PLUGIN_ROOT}/shared-hooks/ace_tool_accumulator.py"
 LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="5.3.4"
+export ACE_PLUGIN_VERSION="5.4.5"
 
 # Parse arguments
 ENABLE_LOG=true
@@ -63,7 +63,9 @@ if [[ -z "$SESSION_ID" ]] || [[ -z "$TOOL_NAME" ]] || [[ -z "$TOOL_USE_ID" ]]; t
 fi
 
 # Log PostToolUse event (for debugging/analysis)
-if [[ "$ENABLE_LOG" == "true" ]] && [[ -f "${LOGGER}" ]]; then
+# v5.4.5: Disabled by default to prevent 42GB log growth
+# Enable with: export ACE_EVENT_LOGGING=1
+if [[ "${ACE_EVENT_LOGGING:-0}" == "1" ]] && [[ "$ENABLE_LOG" == "true" ]] && [[ -f "${LOGGER}" ]]; then
   echo "$INPUT_JSON" | uv run "$LOGGER" --event-type PostToolUse --phase start >/dev/null 2>&1 || true
 fi
 

@@ -5,6 +5,42 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.5] - 2025-12-27
+
+### 🔧 Fix: 42GB Log Explosion - Event Logging OFF by Default
+
+**Problem**: The event logging system (added in v5.2.0 for debugging) was logging FULL tool responses to `.claude/data/logs/ace-posttooluse.jsonl`, causing 42GB+ log accumulation over time.
+
+**Root Cause**: `ace_event_logger.py` logged complete `event_data` (file contents, grep results, bash output) with NO cleanup mechanism.
+
+**Solution**:
+
+1. **Event logging disabled by default** - No more 42GB growth
+   - Enable for debugging: `export ACE_EVENT_LOGGING=1`
+   - Affects: `ace_posttooluse_wrapper.sh`, `ace_stop_wrapper.sh`
+
+2. **Log rotation added** - Prevents unbounded growth
+   - `ace_relevance_logger.py`: 10MB max, 3 rotated files
+   - `ace_event_logger.py`: 5MB max, 2 rotated files
+
+3. **New cleanup command** - Manual log management
+   - `/ace:ace-cleanup` - Delete logs older than N days
+   - `/ace:ace-cleanup --status` - Show log sizes
+   - `/ace:ace-cleanup --enable-logging` - Show how to enable event logging
+
+**Files Changed**:
+- `plugins/ace/scripts/ace_posttooluse_wrapper.sh` - Added `ACE_EVENT_LOGGING` check
+- `plugins/ace/scripts/ace_stop_wrapper.sh` - Added `ACE_EVENT_LOGGING` check
+- `plugins/ace/shared-hooks/utils/ace_relevance_logger.py` - Added rotation
+- `plugins/ace/shared-hooks/ace_event_logger.py` - Added rotation
+- `plugins/ace/commands/ace-cleanup.md` - NEW: Cleanup command
+
+**Impact**: Stops 42GB log growth while preserving debugging capability when needed.
+
+**Migration**: No action required. Event logging is now OFF by default.
+
+---
+
 ## [5.4.4] - 2025-12-23
 
 ### ✨ Enhancement: /ace-domains --min-patterns Filtering

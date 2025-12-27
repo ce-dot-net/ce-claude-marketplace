@@ -25,11 +25,41 @@ from typing import Dict, Any, Optional
 
 
 class ACEEventLogger:
-    """Core logging utility for ACE hook events."""
+    """Core logging utility for ACE hook events with rotation."""
+
+    # v5.4.5: Add rotation to prevent unbounded log growth
+    MAX_FILE_SIZE = 5 * 1024 * 1024  # 5MB
+    MAX_BACKUP_FILES = 2  # Keep 2 rotated files
 
     def __init__(self, log_dir: str = ".claude/data/logs"):
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
+
+    def _rotate_if_needed(self, log_path: Path) -> None:
+        """Rotate log file if it exceeds MAX_FILE_SIZE."""
+        try:
+            if not log_path.exists():
+                return
+            if log_path.stat().st_size < self.MAX_FILE_SIZE:
+                return
+
+            # Get base name without extension
+            base_name = log_path.stem
+            ext = log_path.suffix
+
+            # Rotate existing backups
+            for i in range(self.MAX_BACKUP_FILES, 0, -1):
+                old_path = self.log_dir / f"{base_name}.{i}{ext}"
+                new_path = self.log_dir / f"{base_name}.{i+1}{ext}"
+                if i == self.MAX_BACKUP_FILES and old_path.exists():
+                    old_path.unlink()  # Delete oldest
+                elif old_path.exists():
+                    old_path.rename(new_path)
+
+            # Rotate current to .1
+            log_path.rename(self.log_dir / f"{base_name}.1{ext}")
+        except Exception:
+            pass  # Silent fail
 
     def get_log_path(self, event_type: str) -> Path:
         """Get log file path for event type."""
@@ -72,6 +102,7 @@ class ACEEventLogger:
         log_path = self.get_log_path(event_type)
 
         try:
+            self._rotate_if_needed(log_path)
             with open(log_path, 'a') as f:
                 f.write(json.dumps(log_entry) + '\n')
         except Exception as e:
@@ -109,6 +140,7 @@ class ACEEventLogger:
         # Log to errors log
         errors_log_path = self.log_dir / "ace-errors.jsonl"
         try:
+            self._rotate_if_needed(errors_log_path)
             with open(errors_log_path, 'a') as f:
                 f.write(json.dumps(error_entry) + '\n')
         except Exception as e:

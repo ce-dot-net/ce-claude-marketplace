@@ -9,7 +9,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="5.2.8"
+export ACE_PLUGIN_VERSION="5.4.5"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -76,7 +76,9 @@ if [[ -n "$WORKING_DIR" ]] && [[ -d "$WORKING_DIR" ]]; then
 fi
 
 # Log event START
-if [[ "$ENABLE_LOG" == "true" ]]; then
+# v5.4.5: Disabled by default to prevent 42GB log growth
+# Enable with: export ACE_EVENT_LOGGING=1
+if [[ "${ACE_EVENT_LOGGING:-0}" == "1" ]] && [[ "$ENABLE_LOG" == "true" ]]; then
   echo "$INPUT_JSON" | uv run "$LOGGER" --event-type Stop --phase start >/dev/null 2>&1 || {
     echo "[WARN] Failed to log start event" >&2
   }
@@ -139,7 +141,8 @@ else
 fi
 
 # Log event END with result
-if [[ "$ENABLE_LOG" == "true" ]]; then
+# v5.4.5: Disabled by default to prevent 42GB log growth
+if [[ "${ACE_EVENT_LOGGING:-0}" == "1" ]] && [[ "$ENABLE_LOG" == "true" ]]; then
   echo "$RESULT" | uv run "$LOGGER" \
     --event-type Stop \
     --phase end \
