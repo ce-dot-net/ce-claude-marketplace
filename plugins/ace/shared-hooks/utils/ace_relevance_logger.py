@@ -16,16 +16,43 @@ from typing import Dict, Any, List, Optional
 
 
 class ACERelevanceLogger:
-    """Logger for pattern relevance metrics."""
+    """Logger for pattern relevance metrics with rotation."""
+
+    # v5.4.5: Add rotation to prevent unbounded log growth
+    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+    MAX_BACKUP_FILES = 3  # Keep 3 rotated files
 
     def __init__(self, log_dir: str = ".claude/data/logs"):
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.log_path = self.log_dir / "ace-relevance.jsonl"
 
-    def _write_log(self, entry: Dict[str, Any]) -> None:
-        """Write a log entry to the JSONL file."""
+    def _rotate_if_needed(self) -> None:
+        """Rotate log file if it exceeds MAX_FILE_SIZE."""
         try:
+            if not self.log_path.exists():
+                return
+            if self.log_path.stat().st_size < self.MAX_FILE_SIZE:
+                return
+
+            # Rotate existing backups (3 -> delete, 2 -> 3, 1 -> 2)
+            for i in range(self.MAX_BACKUP_FILES, 0, -1):
+                old_path = self.log_dir / f"ace-relevance.{i}.jsonl"
+                new_path = self.log_dir / f"ace-relevance.{i+1}.jsonl"
+                if i == self.MAX_BACKUP_FILES and old_path.exists():
+                    old_path.unlink()  # Delete oldest
+                elif old_path.exists():
+                    old_path.rename(new_path)
+
+            # Rotate current to .1
+            self.log_path.rename(self.log_dir / "ace-relevance.1.jsonl")
+        except Exception:
+            pass  # Silent fail
+
+    def _write_log(self, entry: Dict[str, Any]) -> None:
+        """Write a log entry to the JSONL file with rotation."""
+        try:
+            self._rotate_if_needed()
             with open(self.log_path, 'a') as f:
                 f.write(json.dumps(entry, default=str) + '\n')
         except Exception as e:

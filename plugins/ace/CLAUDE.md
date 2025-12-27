@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.4.4 -->
+<!-- ACE_SECTION_START v5.4.5 -->
 # ACE Plugin
 
 Automatic pattern learning - hooks handle everything.
@@ -73,7 +73,7 @@ Claude now has BOTH auth AND cache patterns in context!
 
 ---
 
-**Version**: v5.4.4 (Domain Filtering Enhancement)
+**Version**: v5.4.5 (Event Logging OFF by Default)
 **Requires**: ce-ace CLI >= v3.4.1
 
-<!-- ACE_SECTION_END v5.4.4 -->
+<!-- ACE_SECTION_END v5.4.5 -->
