@@ -1,21 +1,38 @@
 #!/usr/bin/env python3
-"""ACE CLI Subprocess Wrapper - Calls ce-ace with --stdin pattern"""
+"""ACE CLI Subprocess Wrapper - Calls ace-cli (or ce-ace fallback) with --stdin pattern"""
 
 import subprocess
 import json
 import os
+import shutil
 from typing import Optional, Dict, Any
+
+
+def get_cli_command() -> str:
+    """
+    Get the ACE CLI command name (ace-cli preferred, ce-ace fallback)
+
+    Returns:
+        'ace-cli' if available, otherwise 'ce-ace'
+    """
+    if shutil.which('ace-cli'):
+        return 'ace-cli'
+    return 'ce-ace'
+
+
+# Cache the CLI command at module load time
+CLI_CMD = get_cli_command()
 
 
 def run_search(query: str, org: str = None, project: str = None, session_id: str = None) -> Optional[Dict[str, Any]]:
     """
-    Call ce-ace search --stdin with optional session pinning
+    Call ace-cli search --stdin with optional session pinning
 
     Args:
         query: Search query text
         org: Organization ID (optional, passed via environment)
         project: Project ID (optional, passed via environment)
-        session_id: Session ID to pin results to (optional, requires ce-ace v1.0.11+)
+        session_id: Session ID to pin results to (optional, requires ace-cli v1.0.11+)
 
     Returns:
         Parsed JSON response or None on failure
@@ -44,7 +61,7 @@ def run_search(query: str, org: str = None, project: str = None, session_id: str
             env['ACE_PROJECT_ID'] = project
 
         # Build command with optional session pinning
-        cmd = ['ce-ace', 'search', '--stdin', '--json']
+        cmd = [CLI_CMD, 'search', '--stdin', '--json']
         if session_id:
             cmd.extend(['--pin-session', session_id])
 
@@ -67,7 +84,7 @@ def run_search(query: str, org: str = None, project: str = None, session_id: str
 
 def run_learn(task: str, trajectory: str, success: bool, org: str = None, project: str = None, patterns_used: Optional[list] = None) -> Optional[Dict[str, Any]]:
     """
-    Call ce-ace learn --stdin with JSON response parsing (v1.0.13+)
+    Call ace-cli learn --stdin with JSON response parsing (v1.0.13+)
 
     Args:
         task: Task description
@@ -118,7 +135,7 @@ def run_learn(task: str, trajectory: str, success: bool, org: str = None, projec
             env['ACE_PROJECT_ID'] = project
 
         result = subprocess.run(
-            ['ce-ace', 'learn', '--stdin', '--json'],
+            [CLI_CMD, 'learn', '--stdin', '--json'],
             input=json.dumps(payload).encode('utf-8'),
             capture_output=True,
             timeout=10,
@@ -136,7 +153,7 @@ def run_learn(task: str, trajectory: str, success: bool, org: str = None, projec
 
 def run_status(org: str = None, project: str = None) -> Optional[Dict[str, Any]]:
     """
-    Call ce-ace status
+    Call ace-cli status
 
     Args:
         org: Organization ID (optional, passed via environment)
@@ -158,7 +175,7 @@ def run_status(org: str = None, project: str = None) -> Optional[Dict[str, Any]]
             env['ACE_PROJECT_ID'] = project
 
         result = subprocess.run(
-            ['ce-ace', 'status', '--json'],
+            [CLI_CMD, 'status', '--json'],
             capture_output=True,
             timeout=5,
             env=env
@@ -175,7 +192,7 @@ def run_status(org: str = None, project: str = None) -> Optional[Dict[str, Any]]
 
 def run_domains(org: str = None, project: str = None, min_patterns: int = None) -> Optional[Dict[str, Any]]:
     """
-    Call ce-ace domains --json to list available pattern domains (v3.4.0+)
+    Call ace-cli domains --json to list available pattern domains (v3.4.0+)
 
     Args:
         org: Organization ID (optional, passed via environment)
@@ -192,7 +209,7 @@ def run_domains(org: str = None, project: str = None, min_patterns: int = None) 
 
     Note:
         Context passed via environment variables (ACE_ORG_ID, ACE_PROJECT_ID).
-        Requires ce-ace v3.4.0+
+        Requires ace-cli v3.4.0+
 
     Use Case:
         Users need to discover domain names to use --allowed-domains filtering
@@ -207,7 +224,7 @@ def run_domains(org: str = None, project: str = None, min_patterns: int = None) 
             env['ACE_PROJECT_ID'] = project
 
         # Build command with optional min-patterns filter
-        cmd = ['ce-ace', 'domains', '--json']
+        cmd = [CLI_CMD, 'domains', '--json']
         if min_patterns is not None and min_patterns > 1:
             cmd.extend(['--min-patterns', str(min_patterns)])
 
@@ -270,7 +287,7 @@ def recall_session(session_id: str, org: str = None, project: str = None) -> Opt
             env['ACE_PROJECT_ID'] = project
 
         result = subprocess.run(
-            ['ce-ace', 'cache', 'recall', '--session', session_id, '--json'],
+            [CLI_CMD, 'cache', 'recall', '--session', session_id, '--json'],
             capture_output=True,
             timeout=5,  # Fast recall, should be <10ms
             env=env
@@ -288,7 +305,7 @@ def recall_session(session_id: str, org: str = None, project: str = None) -> Opt
 
 def check_session_pinning_available() -> bool:
     """
-    Check if ce-ace CLI supports session pinning (v1.0.11+)
+    Check if ace-cli CLI supports session pinning (v1.0.11+)
 
     Returns:
         True if session pinning available, False otherwise
@@ -303,7 +320,7 @@ def check_session_pinning_available() -> bool:
     """
     try:
         result = subprocess.run(
-            ['ce-ace', '--version'],
+            [CLI_CMD, '--version'],
             capture_output=True,
             timeout=5
         )

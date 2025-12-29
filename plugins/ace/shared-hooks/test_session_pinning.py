@@ -32,7 +32,7 @@ def test_version_check():
     print(f"Session pinning available: {available}")
 
     if not available:
-        print("❌ FAIL: ce-ace v1.0.11+ required for session pinning")
+        print("❌ FAIL: ace-cli v1.0.11+ required for session pinning")
         print("   Install: npm install -g @ace-sdk/cli@latest")
         return False
 

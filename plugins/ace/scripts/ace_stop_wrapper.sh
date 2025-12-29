@@ -1,6 +1,25 @@
 #!/usr/bin/env bash
 # ace_stop_wrapper.sh - Stop hook with comprehensive logging
+# v5.4.7: Flag file check + ace-cli/ce-ace detection
 set -Eeuo pipefail
+
+# ACE disable flag check (set by SessionStart if CLI issues detected)
+# Official Claude Code pattern: flag file coordination between hooks
+SESSION_ID="${SESSION_ID:-default}"
+ACE_DISABLED_FLAG="/tmp/ace-disabled-${SESSION_ID}.flag"
+if [ -f "$ACE_DISABLED_FLAG" ]; then
+  # ACE is disabled for this session - exit silently
+  exit 0
+fi
+
+# CLI command detection (ace-cli preferred, ce-ace fallback)
+if command -v ace-cli >/dev/null 2>&1; then
+  CLI_CMD="ace-cli"
+elif command -v ce-ace >/dev/null 2>&1; then
+  CLI_CMD="ce-ace"
+else
+  exit 0  # No CLI available - exit silently
+fi
 
 # Resolve paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,7 +28,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="5.4.6"
+export ACE_PLUGIN_VERSION="5.4.7"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -26,12 +45,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# PRE-CHECK: Verify ce-ace CLI is installed
-if ! command -v ce-ace >/dev/null 2>&1; then
-  echo "⚠️  [ACE] ce-ace CLI not found - install with: npm install -g @ace-sdk/cli"
-  # Fail gracefully - don't block session from closing
-  exit 0
-fi
+# PRE-CHECK: CLI already verified by flag file check above
 
 # PRE-CHECK: Verify configuration exists
 GLOBAL_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/ace/config.json"

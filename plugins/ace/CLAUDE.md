@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.4.5 -->
+<!-- ACE_SECTION_START v5.4.7 -->
 # ACE Plugin
 
 Automatic pattern learning - hooks handle everything.
@@ -12,9 +12,32 @@ Automatic pattern learning - hooks handle everything.
 
 All hooks run automatically. No manual invocation needed.
 
+## v5.4.7: CLI Migration & Blocking Detection
+
+**Breaking Change** - Command renamed from `ce-ace` to `ace-cli`:
+
+- Old `@ce-dot-net/ce-ace-cli` package causes 422 API errors (wrong format)
+- SessionStart hook now detects and blocks old package installation
+- Shows clear migration instructions when blocking
+
+**Migration Required**:
+```bash
+# Remove old package
+npm uninstall -g @ce-dot-net/ce-ace-cli
+
+# Install new package
+npm install -g @ace-sdk/cli
+```
+
+**New SessionStart Behavior**:
+- ✅ `ace-cli` found → Normal operation
+- ⚠️ `ce-ace` only found → Warning + continues (transition period)
+- ⛔ Old `@ce-dot-net/ce-ace-cli` detected → ACE hooks DISABLED
+- ⛔ Version < v3.4.1 → ACE hooks DISABLED
+
 ## v5.4.0: Continuous Auto-Search on Domain Shifts
 
-**New Feature** - PreToolUse hook now **automatically searches** when Claude enters a new domain:
+**Feature** - PreToolUse hook **automatically searches** when Claude enters a new domain:
 
 ```
 User: "Fix the authentication bug"
@@ -32,7 +55,7 @@ Claude now has BOTH auth AND cache patterns in context!
 
 **How it works**:
 - Detects domain shift from file paths (e.g., reading a `cache/` file after working on `auth/`)
-- Automatically calls `ce-ace search` with domain filtering
+- Automatically calls `ace-cli search` with domain filtering
 - Injects patterns via `hookSpecificOutput.additionalContext`
 - Shows: "🔄 [ACE] Domain shift: auth → cache. Auto-loaded 5 patterns."
 
@@ -62,7 +85,7 @@ Claude now has BOTH auth AND cache patterns in context!
 
 | Event | Hook | Purpose |
 |-------|------|---------|
-| SessionStart | ace_install_cli.sh | Check CLI installation |
+| SessionStart | ace_install_cli.sh | CLI detection + migration blocking |
 | UserPromptSubmit | ace_before_task.py | Search + inject patterns |
 | PreToolUse | ace_pretooluse_wrapper.sh | **Auto-search on domain shifts** |
 | PostToolUse | ace_posttooluse_wrapper.sh | Accumulate tool calls |
@@ -73,7 +96,7 @@ Claude now has BOTH auth AND cache patterns in context!
 
 ---
 
-**Version**: v5.4.5 (Event Logging OFF by Default)
-**Requires**: ce-ace CLI >= v3.4.1
+**Version**: v5.4.7 (CLI Migration + Blocking Detection)
+**Requires**: ace-cli >= v3.4.1 (npm install -g @ace-sdk/cli)
 
-<!-- ACE_SECTION_END v5.4.5 -->
+<!-- ACE_SECTION_END v5.4.7 -->

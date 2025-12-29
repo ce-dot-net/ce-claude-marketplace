@@ -7,7 +7,7 @@
 ACE Before Task Hook - UserPromptSubmit Event Handler
 
 Searches ACE playbook for relevant patterns when user starts a task.
-Uses ce-ace search --stdin to avoid shell escaping issues.
+Uses ace-cli search --stdin to avoid shell escaping issues.
 Supports session pinning (v1.0.11+) for pattern persistence across compaction.
 """
 

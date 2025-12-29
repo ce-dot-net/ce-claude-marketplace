@@ -7,11 +7,11 @@
 ACE Permission Request Hook - Auto-approve safe ACE CLI commands
 
 Auto-approves safe read-only ACE commands:
-- ce-ace search, status, patterns, top, get-playbook, doctor
-- ce-ace tune (read config)
+- ace-cli/ce-ace search, status, patterns, top, get-playbook, doctor
+- ace-cli/ce-ace tune (read config)
 
 Auto-denies dangerous destructive commands:
-- ce-ace clear (requires explicit user confirmation)
+- ace-cli/ce-ace clear (requires explicit user confirmation)
 
 All other commands pass through for user decision.
 """
@@ -35,21 +35,21 @@ def main():
             print(json.dumps({}))
             sys.exit(0)
 
-        # Check for ACE CLI commands
-        if 'ce-ace' not in command:
+        # Check for ACE CLI commands (supports both ace-cli and legacy ce-ace)
+        if 'ace-cli' not in command and 'ce-ace' not in command:
             # Not an ACE command - pass through
             print(json.dumps({}))
             sys.exit(0)
 
-        # Auto-approve safe read-only ACE commands
+        # Auto-approve safe read-only ACE commands (both ace-cli and ce-ace variants)
         safe_commands = [
-            'ce-ace search',
-            'ce-ace status',
-            'ce-ace patterns',
-            'ce-ace top',
-            'ce-ace get-playbook',
-            'ce-ace doctor',
-            'ce-ace tune'  # Read config only
+            'ace-cli search', 'ce-ace search',
+            'ace-cli status', 'ce-ace status',
+            'ace-cli patterns', 'ce-ace patterns',
+            'ace-cli top', 'ce-ace top',
+            'ace-cli get-playbook', 'ce-ace get-playbook',
+            'ace-cli doctor', 'ce-ace doctor',
+            'ace-cli tune', 'ce-ace tune'  # Read config only
         ]
 
         for safe_cmd in safe_commands:
@@ -65,9 +65,9 @@ def main():
                 print(json.dumps(output))
                 sys.exit(0)
 
-        # Auto-deny dangerous commands
+        # Auto-deny dangerous commands (both ace-cli and ce-ace variants)
         dangerous_commands = [
-            'ce-ace clear'
+            'ace-cli clear', 'ce-ace clear'
         ]
 
         for dangerous_cmd in dangerous_commands:
@@ -83,7 +83,7 @@ def main():
                 print(json.dumps(output))
                 sys.exit(0)
 
-        # For commands like 'ce-ace learn', 'ce-ace bootstrap' - let user decide
+        # For commands like 'ace-cli learn', 'ace-cli bootstrap' - let user decide
         # These modify data but are not destructive
         print(json.dumps({}))
         sys.exit(0)
