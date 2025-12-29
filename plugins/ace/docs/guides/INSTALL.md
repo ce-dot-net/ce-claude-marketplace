@@ -273,8 +273,8 @@ Once installed:
 
 ## 🔗 Additional Resources
 
-- **ACE Server**: https://github.com/ce-dot-net/ce-ace-server
-- **ace-cli**: https://github.com/ce-dot-net/ce-ace-cli
+- **ACE SDK**: https://github.com/ce-dot-net/ace-sdk
+- **ACE SDK (CLI)**: https://github.com/ce-dot-net/ace-sdk
 - **Marketplace**: https://github.com/ce-dot-net/ce-claude-marketplace
 - **Configuration Guide**: See `CONFIGURATION.md`
 - **Troubleshooting**: See `TROUBLESHOOTING.md`

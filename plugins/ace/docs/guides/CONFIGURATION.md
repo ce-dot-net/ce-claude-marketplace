@@ -409,8 +409,8 @@ After configuration:
 
 - **Installation Guide**: See `INSTALL.md`
 - **Troubleshooting Guide**: See `TROUBLESHOOTING.md`
-- **ACE Server API**: <https://github.com/ce-dot-net/ce-ace-server/blob/main/docs/API.md>
-- **ace-cli Docs**: <https://github.com/ce-dot-net/ce-ace-cli>
+- **ACE SDK API**: <https://github.com/ce-dot-net/ace-sdk/blob/main/packages/server/docs/API.md>
+- **ACE SDK Docs**: <https://github.com/ce-dot-net/ace-sdk>
 
 ---
 
