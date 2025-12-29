@@ -10,7 +10,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="5.2.8"
+export ACE_PLUGIN_VERSION="5.4.6"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -96,7 +96,9 @@ if [[ "$ENABLE_LOG" == "true" ]]; then
 fi
 
 # Optional: Save subagent transcript
-if [[ "$ENABLE_CHAT" == "true" ]]; then
+# v5.4.6: Disabled by default to prevent 47MB log growth per session
+# Enable with: export ACE_EVENT_LOGGING=1
+if [[ "${ACE_EVENT_LOGGING:-0}" == "1" ]] && [[ "$ENABLE_CHAT" == "true" ]]; then
   TRANSCRIPT_PATH=$(echo "$INPUT_JSON" | jq -r '.transcript_path // empty')
   if [[ -n "$TRANSCRIPT_PATH" ]] && [[ -f "$TRANSCRIPT_PATH" ]]; then
     SUBAGENT_NAME=$(echo "$INPUT_JSON" | jq -r '.subagent_type // "unknown"')

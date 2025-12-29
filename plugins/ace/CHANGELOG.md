@@ -5,6 +5,24 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.6] - 2025-12-29
+
+### 🔧 Fix: Chat Transcript Saving - Fully Disabled by Default
+
+**Problem**: v5.4.5 fixed event logging but missed the `--chat` flag which was still saving 47MB transcript copies (ace-chat-*.json, ace-subagent-*.json) on every Stop/SubagentStop event.
+
+**Root Cause**: hooks.json always passed `--chat` flag, and the chat saving code wasn't guarded by `ACE_EVENT_LOGGING`.
+
+**Solution**: Added `ACE_EVENT_LOGGING` check to chat transcript saving in both wrapper scripts.
+
+**Files Changed**:
+- `plugins/ace/scripts/ace_stop_wrapper.sh` - Added `ACE_EVENT_LOGGING` check for chat transcript
+- `plugins/ace/scripts/ace_subagent_stop_wrapper.sh` - Added `ACE_EVENT_LOGGING` check for chat transcript
+
+**Impact**: Stops 47MB per-session log growth. Full transcript saving now requires `ACE_EVENT_LOGGING=1`.
+
+---
+
 ## [5.4.5] - 2025-12-27
 
 ### 🔧 Fix: 42GB Log Explosion - Event Logging OFF by Default
