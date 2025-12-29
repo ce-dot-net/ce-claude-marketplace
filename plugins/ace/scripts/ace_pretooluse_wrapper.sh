@@ -10,7 +10,7 @@
 
 set -eo pipefail
 
-ACE_PLUGIN_VERSION="5.4.5"
+ACE_PLUGIN_VERSION="5.4.6"
 
 # Dynamic domain matching - no hardcoded lists!
 # Splits hyphenated domains into words and matches each word against path segments

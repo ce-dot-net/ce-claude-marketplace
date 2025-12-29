@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.4.5",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.4.5: Fix 42GB log explosion - event logging OFF by default. Requires ce-ace >= v3.4.1.",
+  "version": "5.4.6",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.4.6: Fix 47MB chat transcript saving - fully disabled by default. Requires ce-ace >= v3.4.1.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
