@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.4.8 -->
+<!-- ACE_SECTION_START v5.4.9 -->
 # ACE Plugin
 
 Automatic pattern learning - hooks handle everything.
@@ -12,11 +12,12 @@ Automatic pattern learning - hooks handle everything.
 
 All hooks run automatically. No manual invocation needed.
 
-## v5.4.8: Complete CLI Rename (ce-ace to ace-cli)
+## v5.4.9: Fix GitHub Repository URLs
 
-**This release** completes the CLI rename started in v5.4.7:
-- All 39 files updated: commands, scripts, hooks, docs
-- `ce-ace` references replaced with `ace-cli` throughout
+**Fixed**: GitHub repository URLs consolidated to ace-sdk monorepo:
+- Old separate repos (ce-ace-server, ce-ace-cli, ce-ace-mcp) no longer exist
+- All URLs now point to `github.com/ce-dot-net/ace-sdk`
+- npm package reference `@ce-dot-net/ce-ace-cli` unchanged (for uninstall instructions)
 
 ## v5.4.7: CLI Migration & Blocking Detection
 
@@ -102,7 +103,7 @@ Claude now has BOTH auth AND cache patterns in context!
 
 ---
 
-**Version**: v5.4.8 (Complete CLI Rename: ce-ace to ace-cli)
+**Version**: v5.4.9 (Fix GitHub Repository URLs)
 **Requires**: ace-cli >= v3.4.1 (npm install -g @ace-sdk/cli)
 
-<!-- ACE_SECTION_END v5.4.8 -->
+<!-- ACE_SECTION_END v5.4.9 -->

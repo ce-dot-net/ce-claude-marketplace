@@ -5,6 +5,31 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.9] - 2025-12-29
+
+### Fix GitHub Repository URLs
+
+**Problem**: GitHub repository URLs were pointing to old separate repos (ce-ace-server, ce-ace-cli, ce-ace-mcp) that have been consolidated into a single monorepo.
+
+**Solution**: Updated all GitHub repository URLs to point to `github.com/ce-dot-net/ace-sdk`.
+
+**Files Updated (6 total)**:
+- `plugins/ace/README.md` - ACE Server and ace-cli links
+- `plugins/ace/docs/README.md` - MCP Client link
+- `plugins/ace/docs/archive/v4-mcp-architecture/MCP_CLIENT_IMPLEMENTATION.md` - MCP Client Repo
+- `plugins/ace/docs/guides/INSTALL.md` - ACE Server and ace-cli links
+- `plugins/ace/docs/guides/CONFIGURATION.md` - ACE Server API and ace-cli Docs links
+- `plugins/ace/docs/technical/README.md` - MCP Client link
+
+**URL Changes**:
+- `https://github.com/ce-dot-net/ce-ace-server` -> `https://github.com/ce-dot-net/ace-sdk`
+- `https://github.com/ce-dot-net/ce-ace-cli` -> `https://github.com/ce-dot-net/ace-sdk`
+- `https://github.com/ce-dot-net/ce-ace-mcp` -> `https://github.com/ce-dot-net/ace-sdk`
+
+**Note**: `@ce-dot-net/ce-ace-cli` npm package references remain unchanged - that's the actual old package name users need to uninstall.
+
+---
+
 ## [5.4.8] - 2025-12-29
 
 ### Complete CLI Rename: ce-ace to ace-cli

@@ -608,6 +608,6 @@ if (fs.existsSync(oldProjectConfig) && !fs.existsSync('~/.ace/config.json')) {
 ## 14. Contact & Support
 
 **Questions**: Open issue at https://github.com/ce-dot-net/ce-claude-marketplace/issues
-**MCP Client Repo**: https://github.com/ce-dot-net/ce-ace-mcp
+**ACE SDK (MCP)**: https://github.com/ce-dot-net/ace-sdk
 **Plugin Version**: v3.3.2
 **Last Updated**: 2025-11-01
