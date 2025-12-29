@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ACE PreToolUse Hook - Continuous Auto-Search
-# v5.4.7: Flag file check + ace-cli/ce-ace detection
+# v5.4.7: Flag file check + ace-cli/ace-cli detection
 #
 # When Claude enters a new domain (e.g., reading cache files after working on auth),
 # this hook automatically searches for domain-specific patterns and injects them.
@@ -21,10 +21,10 @@ if [ -f "$ACE_DISABLED_FLAG" ]; then
   exit 0
 fi
 
-# CLI command detection (ace-cli preferred, ce-ace fallback)
+# CLI command detection (ace-cli preferred, ace-cli fallback)
 if command -v ace-cli >/dev/null 2>&1; then
   CLI_CMD="ace-cli"
-elif command -v ce-ace >/dev/null 2>&1; then
+elif command -v ace-cli >/dev/null 2>&1; then
   CLI_CMD="ce-ace"
 else
   exit 0  # No CLI available - exit silently

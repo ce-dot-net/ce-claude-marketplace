@@ -1,11 +1,11 @@
 ---
-description: Install and verify ce-ace CLI tool (smart, non-noisy installation wizard)
+description: Install and verify ace-cli tool (smart, non-noisy installation wizard)
 argument-hint:
 ---
 
 # ACE CLI Installation Wizard
 
-This command provides a smart, interactive installation wizard for the `ce-ace` CLI tool.
+This command provides a smart, interactive installation wizard for the `ace-cli` CLI tool.
 
 ## Behavior
 
@@ -23,27 +23,27 @@ When the user invokes this command, follow these steps in order:
 
 Use the Bash tool to check current installation status. **IMPORTANT**: Break this into simple, single-purpose commands to avoid eval parse errors.
 
-**Step 1.1**: Check if ce-ace command exists:
+**Step 1.1**: Check if ace-cli command exists:
 ```bash
-command -v ce-ace && echo "FOUND" || echo "NOT_INSTALLED"
+command -v ace-cli && echo "FOUND" || echo "NOT_INSTALLED"
 ```
 
 **Step 1.2**: If FOUND, get version:
 ```bash
-ce-ace --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
+ace-cli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1
 ```
 
 **Handle results**:
 
 - **If Step 1.1 output contains `FOUND`** and Step 1.2 returns a version:
   - Check if version >= 1.0.0
-  - If yes: Show `✅ ce-ace v{VERSION} installed and working` and EXIT (silent success!)
-  - If no: Show `⚠️ ce-ace v{VERSION} installed (outdated)` and ask `Would you like to upgrade? (Y/n)`
+  - If yes: Show `✅ ace-cli v{VERSION} installed and working` and EXIT (silent success!)
+  - If no: Show `⚠️ ace-cli v{VERSION} installed (outdated)` and ask `Would you like to upgrade? (Y/n)`
     - If yes → proceed to Phase 2 (Installation)
     - If no → EXIT
 
 - **If Step 1.1 output contains `NOT_INSTALLED`**:
-  - Show: `❌ ce-ace CLI not found`
+  - Show: `❌ ace-cli not found`
   - Proceed to Phase 2 (Installation)
 
 ### Phase 2: Package Manager Detection
@@ -177,12 +177,12 @@ Use the Bash tool to verify the installation worked. **IMPORTANT**: Use simple, 
 
 **Step 6.1**: Check if command exists:
 ```bash
-command -v ce-ace
+command -v ace-cli
 ```
 
 **Step 6.2**: Get version (if Step 6.1 succeeded):
 ```bash
-ce-ace --version
+ace-cli --version
 ```
 
 **Step 6.3**: Get OS info:
@@ -191,7 +191,7 @@ uname -s
 ```
 
 **Process results**:
-- If Step 6.1 returns a path: ✅ ce-ace found
+- If Step 6.1 returns a path: ✅ ace-cli found
 - If Step 6.1 fails: ❌ Not found (PATH issue, may need to restart terminal)
 - Extract version number from Step 6.2 output
 - Check OS from Step 6.3: Linux/Darwin = supported, Windows = suggest WSL
@@ -201,7 +201,7 @@ uname -s
 🔍 Installation Verification:
 {OUTPUT_FROM_VERIFICATION}
 
-🎉 All set! The ce-ace CLI tool is installed and ready to use.
+🎉 All set! The ace-cli tool is installed and ready to use.
 
 Next steps:
 1. Run /ace:ace-configure to set up your organization and project

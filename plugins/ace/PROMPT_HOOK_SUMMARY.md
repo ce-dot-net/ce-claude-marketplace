@@ -60,7 +60,7 @@ If has_learning === true
     ↓
 Run: ace_after_task_wrapper.sh
     ↓
-Calls: ce-ace learn --stdin --json
+Calls: ace-cli learn --stdin --json
     ↓
 Server: Reflector → Curator → Playbook Update
 ```
@@ -138,7 +138,7 @@ Check `/tmp/ace_hook_debug.log` for:
 **Non-Breaking for Most Users**:
 - ✅ PreCompact hook unchanged
 - ✅ UserPromptSubmit hook unchanged
-- ✅ Workflow unchanged (still calls `ce-ace learn`)
+- ✅ Workflow unchanged (still calls `ace-cli learn`)
 - ✅ No CLI changes required
 
 **Breaking Changes**:
@@ -151,7 +151,7 @@ Check `/tmp/ace_hook_debug.log` for:
 | Component | Minimum Version |
 |-----------|----------------|
 | **ACE Plugin** | v5.2.0 |
-| **ce-ace CLI** | v1.0.13+ |
+| **ace-cli** | v1.0.13+ |
 | **Claude Code** | Latest (with prompt hook support) |
 
 ## What's Next

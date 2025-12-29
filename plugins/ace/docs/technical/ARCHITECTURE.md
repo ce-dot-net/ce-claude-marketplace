@@ -22,7 +22,7 @@ This document provides a comprehensive analysis of how the ACE (Agentic Context 
 │ UserPromptSubmit Hook: Pattern Retrieval & Pinning    │
 │ 1. Generate UUID session ID                            │
 │ 2. Store session ID in /tmp/ace-session-{project}.txt │
-│ 3. Call: ce-ace search --stdin --pin-session {uuid}   │
+│ 3. Call: ace-cli search --stdin --pin-session {uuid}   │
 │ 4. Patterns saved to ~/.ace-cache/sessions.db         │
 │ 5. Inject patterns as <ace-patterns> context           │
 └─────────────────────────────────────────────────────────┘
@@ -37,7 +37,7 @@ This document provides a comprehensive analysis of how the ACE (Agentic Context 
 ┌─────────────────────────────────────────────────────────┐
 │ PreCompact Hook: Pattern Recall Before Compaction     │
 │ 1. Read session ID from /tmp/ace-session-{project}.txt│
-│ 2. Call: ce-ace cache recall --session {uuid}         │
+│ 2. Call: ace-cli cache recall --session {uuid}         │
 │ 3. Retrieve patterns in ~10ms (89% faster vs server)  │
 │ 4. Re-inject as additionalContext                      │
 │ 5. Continue learning with full pattern context        │
@@ -55,7 +55,7 @@ This document provides a comprehensive analysis of how the ACE (Agentic Context 
 - `shared-hooks/ace_before_task.py` - UUID generation, session storage, pattern pinning
 - `shared-hooks/ace_after_task.py` - Session recall, pattern re-injection
 
-**Requirements**: CE-ACE CLI v1.0.11+ (introduces session pinning support)
+**Requirements**: ace-cli v1.0.11+ (introduces session pinning support)
 
 ### Rich Context Extraction
 

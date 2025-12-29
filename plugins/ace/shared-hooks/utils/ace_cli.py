@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ACE CLI Subprocess Wrapper - Calls ace-cli (or ce-ace fallback) with --stdin pattern"""
+"""ACE CLI Subprocess Wrapper - Calls ace-cli (or ace-cli fallback) with --stdin pattern"""
 
 import subprocess
 import json
@@ -10,7 +10,7 @@ from typing import Optional, Dict, Any
 
 def get_cli_command() -> str:
     """
-    Get the ACE CLI command name (ace-cli preferred, ce-ace fallback)
+    Get the ACE CLI command name (ace-cli preferred, ace-cli fallback)
 
     Returns:
         'ace-cli' if available, otherwise 'ce-ace'

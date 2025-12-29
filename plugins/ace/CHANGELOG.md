@@ -5,6 +5,46 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.8] - 2025-12-29
+
+### Complete CLI Rename: ce-ace to ace-cli
+
+**Problem**: v5.4.7 renamed the CLI command but missed updating all 39 command/script/hook files.
+
+**Solution**: Complete CLI rename across entire plugin codebase.
+
+**Files Updated (39 total)**:
+
+Command Files (16):
+- All commands in `plugins/ace/commands/*.md` updated to use `ace-cli`
+
+Shell Scripts (8):
+- `plugins/ace/scripts/*.sh` - All wrapper scripts use `ace-cli`
+
+Python Files (4):
+- `plugins/ace/shared-hooks/*.py` - Hook implementations use `ace-cli`
+- `plugins/ace/shared-hooks/utils/ace_cli.py` - CLI detection updated
+
+Documentation (11):
+- `plugins/ace/CLAUDE.md` - Version markers and references
+- `plugins/ace/README.md` - Installation and usage
+- `plugins/ace/PROMPT_HOOK_SUMMARY.md` - Hook documentation
+- `plugins/ace/docs/guides/INSTALL.md`
+- `plugins/ace/docs/guides/CONFIGURATION.md`
+- `plugins/ace/docs/technical/ARCHITECTURE.md`
+- `plugins/ace/docs/archive/README.md`
+- `plugins/ace/tests/README.md`
+
+**Intentional ce-ace References Remain**:
+- Fallback code: `CLI_CMD="ce-ace"` when ace-cli not found (transition support)
+- Permission checks: Support both commands during transition
+- Historical changelog entries
+- GitHub repo URLs (ce-ace-server, ce-ace-mcp, ce-ace-cli are actual repo names)
+
+**Impact**: Completes the CLI migration started in v5.4.7. All documentation and scripts now consistently use `ace-cli`.
+
+---
+
 ## [5.4.7] - 2025-12-29
 
 ### BREAKING: CLI Migration from ce-ace to ace-cli
@@ -16,7 +56,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 **New CLI Package**: `@ace-sdk/cli` (command: `ace-cli`)
 
 **SessionStart Hook Rewrite** (`ace_install_cli.sh`):
-- Detects `ace-cli` command (new) or `ce-ace` (deprecated)
+- Detects `ace-cli` command (new) or `ace-cli` (deprecated)
 - BLOCKS if old `@ce-dot-net/ce-ace-cli` package detected
 - BLOCKS if CLI version < v3.4.1
 - Daily update check with caching
@@ -27,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All other hooks check for flag and silently exit if present
 
 **CLI Detection in All Hooks**:
-- All shell wrappers now detect `ace-cli` (preferred) or `ce-ace` (fallback)
+- All shell wrappers now detect `ace-cli` (preferred) or `ace-cli` (fallback)
 - All Python files use `CLI_CMD` variable with `shutil.which()` detection
 
 **Files Changed**:
@@ -40,7 +80,7 @@ Shell Scripts (added flag file check + CLI_CMD):
 - `plugins/ace/scripts/ace_precompact_wrapper.sh`
 - `plugins/ace/scripts/ace_subagent_stop_wrapper.sh`
 
-Python Files (added CLI_CMD detection + replaced ce-ace calls):
+Python Files (added CLI_CMD detection + replaced ace-cli calls):
 - `plugins/ace/shared-hooks/utils/ace_cli.py`
 - `plugins/ace/shared-hooks/ace_after_task.py`
 - `plugins/ace/shared-hooks/ace_before_task.py`
@@ -49,7 +89,7 @@ Python Files (added CLI_CMD detection + replaced ce-ace calls):
 
 Documentation (ce-ace -> ace-cli):
 - `plugins/ace/CLAUDE.md` - Updated version, new migration section
-- `plugins/ace/README.md` - Updated all ce-ace references
+- `plugins/ace/README.md` - Updated all ace-cli references
 
 **Migration for Users**:
 ```bash
@@ -149,7 +189,7 @@ Total: 19 domains (filtered from 21), 552 patterns
 - `plugins/ace/shared-hooks/utils/ace_cli.py` - Added `min_patterns` parameter to `run_domains()`
 - `plugins/ace/commands/ace-domains.md` - Added argument parsing for `--min-patterns`
 
-**Requirements**: Requires ce-ace CLI >= v3.4.1 (--min-patterns flag was fixed in v3.4.1)
+**Requirements**: Requires ace-cli >= v3.4.1 (--min-patterns flag was fixed in v3.4.1)
 
 ---
 
@@ -163,7 +203,7 @@ Total: 19 domains (filtered from 21), 552 patterns
 
 ```bash
 # Before: guessing domain names
-ce-ace search "auth" --allowed-domains "typescript"
+ace-cli search "auth" --allowed-domains "typescript"
 Result: 0 patterns (wrong domain name!)
 User: 🤷 "What domains do I even have?"
 ```
@@ -190,7 +230,7 @@ Use with /ace-search:
 - `plugins/ace/shared-hooks/utils/ace_cli.py` - Added `run_domains()` wrapper function
 - `plugins/ace/commands/ace-domains.md` - NEW: User command
 
-**Requirements**: Requires ce-ace CLI >= v3.4.0
+**Requirements**: Requires ace-cli >= v3.4.0
 
 **Related**: Implements GitHub Issue #8
 
@@ -272,7 +312,7 @@ Use with /ace-search:
 
 **After (v5.4.0)**:
 - PreToolUse detects domain shift
-- **Automatically runs `ce-ace search`** with domain filtering
+- **Automatically runs `ace-cli search`** with domain filtering
 - **Injects patterns via `hookSpecificOutput.additionalContext`**
 - Shows: "🔄 Auto-loaded 11 patterns."
 
@@ -397,7 +437,7 @@ Use with /ace-search:
 - `plugins/ace/CLAUDE.md` - Simplified to educational-only (no MANDATORY language)
 
 **Requirements**:
-- ce-ace CLI >= v3.3.0 (for domain filtering support)
+- ace-cli >= v3.3.0 (for domain filtering support)
 
 **Impact**: Keeps patterns fresh in long sessions and reminds Claude to search when entering new code areas.
 
@@ -489,7 +529,7 @@ Use with /ace-search:
 
 **Implementation**:
 - `shared-hooks/ace_after_task.py` - Added verbosity detection from environment
-- Passes `--verbosity` flag to `ce-ace learn` CLI command
+- Passes `--verbosity` flag to `ace-cli learn` CLI command
 - Default changed to `detailed` for more informative user feedback
 
 **Usage**:
@@ -544,7 +584,7 @@ export ACE_VERBOSITY=detailed
 - `plugins/ace/scripts/*.sh` - version bumped to 5.2.3
 - `plugins/ace/CLAUDE.md` - updated to v5.2.3
 
-**Requires**: ce-ace CLI >= v3.0.0
+**Requires**: ace-cli >= v3.0.0
 
 ## [5.2.2] - 2025-11-26
 
@@ -920,7 +960,7 @@ Updated `shared-hooks/utils/ace_context.py` to fallback to environment variables
 **Problem Solved**: `⚠️ [ACE] Learning capture timed out` errors
 
 **Root Cause**:
-- `ce-ace learn` subprocess takes >30s for:
+- `ace-cli learn` subprocess takes >30s for:
   - Large transcript parsing
   - Network latency to ACE server
   - Server-side Reflector + Curator processing
@@ -960,7 +1000,7 @@ These files were missed by the v5.1.15 release manager run.
 
 #### CLI Requirement Update
 - **Updated requirement**: ce-ace >= v1.0.14 (was v1.0.13)
-- **Reason**: User confirmed ce-ace CLI is now at v1.0.14
+- **Reason**: User confirmed ace-cli is now at v1.0.14
 - **Files updated**: plugin.PRODUCTION.json, plugin.local.json, CLAUDE.md (root), README.md, INSTALL.md, marketplace.json
 
 #### Technical Details
@@ -968,7 +1008,7 @@ The v5.1.14 release correctly updated all plugin version files but the marketpla
 description field still referenced v5.1.14 functionality. This hotfix ensures:
 
 1. Marketplace displays current version (v5.1.15)
-2. CLI requirement reflects current ce-ace version (v1.0.14)
+2. CLI requirement reflects current ace-cli version (v1.0.14)
 3. All version markers are synchronized across the codebase
 
 **Files Updated**: 9 (all version-containing files + marketplace.json)
@@ -998,13 +1038,13 @@ description field still referenced v5.1.14 functionality. This hotfix ensures:
 - Created archive README explaining architectural evolution
 
 #### Minor Fixes
-- 🔇 SessionStart hook now silent when ce-ace already installed
+- 🔇 SessionStart hook now silent when ace-cli already installed
 - 📝 Added .agent/ and .antigravity/ to .gitignore
 
 #### Architecture Documented
 All docs now correctly describe:
 - ✅ Hooks: SessionStart, UserPromptSubmit, PostToolUse, PreCompact, Stop, SubagentStop
-- ✅ ce-ace CLI: Subprocess calls via Python wrappers
+- ✅ ace-cli: Subprocess calls via Python wrappers
 - ✅ Configuration: ~/.config/ace/config.json + .claude/settings.json
 - ✅ Commands: Slash commands (/ace:ace-*)
 - ❌ No MCP server
@@ -1184,7 +1224,7 @@ Added PostToolUse hook with heuristic-based task completion detection:
 2. **Hook Wrapper** (`plugins/ace/scripts/ace_posttooluse_wrapper.sh` - 126 lines):
    - PostToolUse hook wrapper
    - Calls ace_task_detector.py after each tool use
-   - If task complete → forwards to ace_after_task.py → ce-ace learn
+   - If task complete → forwards to ace_after_task.py → ace-cli learn
    - Logs to ace-posttooluse.jsonl (3 phases: detected, task_complete, learning_captured)
    - Silent operation (no user-facing messages)
    - Options: --log, --detect, --no-log, --no-detect
@@ -1211,7 +1251,7 @@ ace_task_detector.py checks heuristics
     ↓
 Heuristic matches (e.g., tool_sequence: 3 tools)
     ↓
-ace_posttooluse_wrapper.sh → ace_after_task.py → ce-ace learn
+ace_posttooluse_wrapper.sh → ace_after_task.py → ace-cli learn
     ↓
 Learning captured immediately! ✅
 ```
@@ -1331,7 +1371,7 @@ Forwards to ace_after_task.py (same logic as Stop hook)
 ace_after_task.py:
   - Extracts trajectory (tool uses, decisions, code changes)
   - Checks for substantial work (has trajectory, length > 0)
-  - Calls `ce-ace learn --stdin` with subagent's work
+  - Calls `ace-cli learn --stdin` with subagent's work
     ↓
 Wrapper logs END event with execution time
     ↓
@@ -1485,7 +1525,7 @@ Inspired by cc-boilerplate-v2, implemented lightweight wrappers that log ALL hoo
    - `ace_stop_wrapper.sh` (93 lines) - Stop hook wrapper
      - Logs START → Forwards to ace_after_task.py → Logs END with metrics
      - Options: `--log` (enable logging), `--chat` (save transcript)
-     - Preserves existing logic: still calls `ce-ace learn`
+     - Preserves existing logic: still calls `ace-cli learn`
 
    - `ace_precompact_wrapper.sh` (86 lines) - PreCompact hook wrapper
      - Same logging pattern as Stop
@@ -1555,7 +1595,7 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 
 **What Was Preserved (Non-Breaking)**:
 - ✅ Before hook unchanged: UserPromptSubmit still uses `ace_before_task_wrapper.sh`
-- ✅ `ce-ace learn` still called: Verified at `shared-hooks/ace_after_task.py:424`
+- ✅ `ace-cli learn` still called: Verified at `shared-hooks/ace_after_task.py:424`
 - ✅ Existing wrappers preserved: Old wrappers still exist for backward compatibility
 - ✅ Trajectory extraction unchanged: `ace_after_task.py` logic intact
 - ✅ Intelligent Stop hook preserved: v5.1.13's prompt-based evaluation still works
@@ -1567,7 +1607,7 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 - `shared-hooks/utils/ace_log_analyzer.py` - NEW: Log analysis tool
 - `hooks/hooks.json` - Updated Stop and PreCompact to use wrapper scripts
 - `docs/ACE_WRAPPER_ARCHITECTURE_PLAN.md` - NEW: Complete architecture design (475 lines)
-- `docs/ACE_TRAJECTORY_FLOW.md` - NEW: Flow from hook to ce-ace learn (334 lines)
+- `docs/ACE_TRAJECTORY_FLOW.md` - NEW: Flow from hook to ace-cli learn (334 lines)
 - `docs/ACE_WRAPPER_TESTING_PLAN.md` - NEW: Testing strategy with 15 scenarios (526 lines)
 
 **Migration**:
@@ -1577,7 +1617,7 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 
 **Requirements**:
 - Claude Code with command hook support
-- ce-ace CLI >= v1.0.13
+- ace-cli >= v1.0.13
 
 ## [5.1.13] - 2025-11-21
 
@@ -1608,7 +1648,7 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 1. Stop event fires at end of session
 2. **Haiku LLM evaluates transcript** (semantic understanding, not regex!)
 3. Returns JSON: `{"has_learning": true, "confidence": 0.85, "learning_type": "architecture"}`
-4. If `has_learning === true` → Run `ace_after_task_wrapper.sh` → `ce-ace learn`
+4. If `has_learning === true` → Run `ace_after_task_wrapper.sh` → `ace-cli learn`
 
 **What Gets Captured (7 Learning Types)**:
 1. ✅ Technical decisions / architectural choices
@@ -1638,11 +1678,11 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 **Migration**:
 - ⚠️ **BREAKING**: Stop hook behavior changes significantly
 - ✅ **Non-breaking**: PreCompact and UserPromptSubmit hooks unchanged
-- ✅ **Workflow unchanged**: Still calls `ce-ace learn` via wrapper script
+- ✅ **Workflow unchanged**: Still calls `ace-cli learn` via wrapper script
 
 **Requirements**:
 - Claude Code with prompt hook support
-- ce-ace CLI >= v1.0.13
+- ace-cli >= v1.0.13
 
 ## [5.1.12] - 2025-11-21
 
@@ -1676,7 +1716,7 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
   - Enhanced code comments explaining dual-hook strategy
 
 **Requirements**:
-- ce-ace CLI >= v1.0.13
+- ace-cli >= v1.0.13
 
 ## [5.1.11] - 2025-11-21
 
@@ -1702,7 +1742,7 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 - `plugins/ace/README.md`: Updated hooks documentation
 
 **Requirements**:
-- ce-ace CLI >= v1.0.13
+- ace-cli >= v1.0.13
 
 ## [5.1.10] - 2025-11-20
 
@@ -1756,7 +1796,7 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 - More comprehensive playbook growth
 
 **Requirements**:
-- CE-ACE CLI: v1.0.13+ (unchanged)
+- ace-cli: v1.0.13+ (unchanged)
 - ACE Server: v3.10.0+ (unchanged)
 
 ## [5.1.8] - 2025-11-20
@@ -1776,7 +1816,7 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 **Files Changed**:
 - `shared-hooks/ace_task_complete.py` (lines 148-286):
   - Added `build_execution_trace_from_posttooluse(event)` - Builds ExecutionTrace from PostToolUse
-  - Added `capture_learning(trace, context)` - Calls ce-ace learn --stdin
+  - Added `capture_learning(trace, context)` - Calls ace-cli learn --stdin
   - Updated `main()` - Captures learning and shows user feedback
   - Removed silent exit - Now actually does something!
 
@@ -1795,7 +1835,7 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 - **NEW**: `docs/POSTTOOLUSE_LEARNING_FIX.md` - Complete fix documentation
 
 **Requirements Update**:
-- **Minimum CE-ACE CLI**: v1.0.13+ (was v1.0.11+)
+- **Minimum ace-cli**: v1.0.13+ (was v1.0.11+)
 - **Reason**: v1.0.13 adds learning_statistics support (already integrated in v5.1.7)
 - **ACE Server**: v3.9.0+ (v3.10.0+ for learning statistics)
 
@@ -1814,7 +1854,7 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 
 ### 🚀 Enhanced Learning Feedback & Query Optimization
 
-**Learning Statistics (ce-ace v1.0.13+)**:
+**Learning Statistics (ace-cli v1.0.13+)**:
 - **Detailed feedback** - Users see patterns created/updated/pruned + quality %
 - Example: `📚 ACE Learning: • 3 new patterns • 2 patterns updated • Quality: 85%`
 - **Files Changed**: `shared-hooks/ace_after_task.py` (lines 231-275), `shared-hooks/utils/ace_cli.py` (lines 68-134)
@@ -1840,12 +1880,12 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 - **NEW**: `docs/QUERY_ENHANCEMENT_DECISION.md` - Query enhancement decision rationale
 
 **Requirements**:
-- **Minimum CE-ACE CLI**: v1.0.11+ (unchanged)
-- **Recommended CE-ACE CLI**: v1.0.13+ (for learning statistics)
+- **Minimum ace-cli**: v1.0.11+ (unchanged)
+- **Recommended ace-cli**: v1.0.13+ (for learning statistics)
 - **ACE Server**: v3.9.0+ (v3.10.0+ for learning statistics)
 
 **Testing**:
-- ✅ Learning statistics displayed when ce-ace v1.0.13+ used
+- ✅ Learning statistics displayed when ace-cli v1.0.13+ used
 - ✅ Graceful degradation on old servers
 - ✅ Abbreviation expansion improves pattern retrieval
 - ✅ Quality filtering removes noise patterns
@@ -1857,9 +1897,9 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 
 **PermissionRequest Hook (NEW)**:
 - **Auto-approve safe ACE CLI commands** - No more manual approvals for read-only operations
-- Auto-approved commands: `ce-ace search`, `status`, `patterns`, `top`, `get-playbook`, `doctor`, `tune`
-- Auto-denied dangerous commands: `ce-ace clear` (requires explicit user confirmation via `/ace-clear`)
-- Pass-through for data modification: `ce-ace learn`, `bootstrap` (user decides)
+- Auto-approved commands: `ace-cli search`, `status`, `patterns`, `top`, `get-playbook`, `doctor`, `tune`
+- Auto-denied dangerous commands: `ace-cli clear` (requires explicit user confirmation via `/ace-clear`)
+- Pass-through for data modification: `ace-cli learn`, `bootstrap` (user decides)
 - **Result**: Seamless UX for pattern searches and status checks
 
 **Enhanced Trajectory Tracking**:
@@ -1881,13 +1921,13 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 - `plugins/ace/CLAUDE.md` - Added "New in v5.1.6" section with feature highlights
 
 **Testing**:
-- ✅ PermissionRequest hook auto-approves `ce-ace search`, `status`, `patterns`
-- ✅ PermissionRequest hook auto-denies `ce-ace clear`
+- ✅ PermissionRequest hook auto-approves `ace-cli search`, `status`, `patterns`
+- ✅ PermissionRequest hook auto-denies `ace-cli clear`
 - ✅ tool_use_id field captured in trajectory when available
 - ✅ Hook timeouts prevent blocking on slow operations
 
 **Requirements**:
-- **Minimum CE-ACE CLI**: v1.0.11+ (unchanged)
+- **Minimum ace-cli**: v1.0.11+ (unchanged)
 - **Claude Code**: v2.0.43+ recommended (for tool_use_id support)
 
 **Impact**:
@@ -1900,7 +1940,7 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 ### 🐛 Bug Fixes & Architecture Improvements
 
 **User Feedback Fixes**:
-- **Removed confusing threshold hint** - No more "Try: ce-ace tune --constitution-threshold 0.3" message when no patterns found
+- **Removed confusing threshold hint** - No more "Try: ace-cli tune --constitution-threshold 0.3" message when no patterns found
 - **Formatted ace-status output** - Pretty-printed display with emojis instead of raw JSON
 - **Fixed ace-search documentation** - Added note about jq filtering (--limit flag not supported)
 - **Improved ace-configure UX** - Added "Keep/Update/Reconfigure" choice when existing configuration detected
@@ -1936,7 +1976,7 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 - Session pinning uses `~/.ace-cache/sessions.db` with 24-hour TTL (vs 2-hour cache TTL)
 - **Fast Recall** - Patterns recalled in ~10ms (89% faster than server fetch)
 - **Before Task**: Generate UUID session ID → Pin patterns with `--pin-session` flag
-- **After Compaction**: Recall patterns with `ce-ace cache recall --session` → Re-inject as context
+- **After Compaction**: Recall patterns with `ace-cli cache recall --session` → Re-inject as context
 - Session IDs stored in `/tmp/ace-session-{project_id}.txt` for cross-hook communication
 - Graceful degradation - falls back to cache/server if session expired or unavailable
 
@@ -1976,7 +2016,7 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 - ✅ Full Workflow - Patterns survive context compaction
 
 **Requirements**:
-- **Minimum CE-ACE CLI**: v1.0.11+ (session pinning support)
+- **Minimum ace-cli**: v1.0.11+ (session pinning support)
 - **Backward Compatible**: Gracefully falls back to cache/server if v1.0.11+ unavailable
 
 **Impact**:
@@ -2016,7 +2056,7 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 **ace-tune.md - Enhanced with Interactive Forms**:
 - Added AskUserQuestion examples for interactive configuration
 - Simplified configuration examples
-- Updated to use ce-ace CLI directly (not MCP tools)
+- Updated to use ace-cli directly (not MCP tools)
 - Better non-interactive mode examples
 
 **Code Improvements**:
@@ -2048,7 +2088,7 @@ uv run shared-hooks/utils/ace_log_analyzer.py --event-type Stop --csv stop-logs.
 
 ### 🐛 Bug Fix: Context Passing in Python Hooks
 
-**Issue**: Python hooks were reading org/project context from `.claude/settings.json` but not passing it to the `ce-ace` CLI subprocess. This caused the CLI to fall back to global config instead of using project-specific configuration.
+**Issue**: Python hooks were reading org/project context from `.claude/settings.json` but not passing it to the `ace-cli` CLI subprocess. This caused the CLI to fall back to global config instead of using project-specific configuration.
 
 **Symptoms**:
 - Hooks would show "Playbook is empty" even after running `/ace-configure --project`
@@ -2070,8 +2110,8 @@ subprocess.run(['ce-ace', 'search', '--stdin'], env=env, ...)
 **Files Changed**:
 - `shared-hooks/utils/ace_cli.py` - Added environment variable passing to `run_search()`, `run_learn()`, `run_status()`
 - `shared-hooks/ace_before_task.py` - Restored org/project parameters to `run_search()` call
-- `shared-hooks/ace_after_task.py` - Added environment building for `ce-ace learn` subprocess
-- `shared-hooks/ace_task_complete.py` - Added environment building for `ce-ace learn` subprocess
+- `shared-hooks/ace_after_task.py` - Added environment building for `ace-cli learn` subprocess
+- `shared-hooks/ace_task_complete.py` - Added environment building for `ace-cli learn` subprocess
 - `plugins/ace/tests/test_ace_cli.py` - Updated tests to verify environment passing
 
 **Testing**:
@@ -2094,7 +2134,7 @@ No migration needed. After upgrading to v5.1.2, hooks will automatically use the
 ### 🐛 Bug Fixes: /ace-configure Command
 
 **Issue 1**: `/ace-configure` command was creating `.claude/settings.json` with incorrect format
-**Issue 2**: `ce-ace config validate` doesn't accept `--server-url` flag (CLI bug workaround)
+**Issue 2**: `ace-cli config validate` doesn't accept `--server-url` flag (CLI bug workaround)
 
 **Wrong format** (what it was creating):
 ```json
@@ -2118,7 +2158,7 @@ No migration needed. After upgrading to v5.1.2, hooks will automatically use the
 - ✅ Updated `/ace-configure` command to write `env` wrapper format
 - ✅ Updated documentation examples to show correct format
 - ✅ Backward compatible: ace_context.py already reads both formats
-- ✅ Added workaround for ce-ace CLI bug: use environment variables instead of flags for validation
+- ✅ Added workaround for ace-cli bug: use environment variables instead of flags for validation
 
 **Files Changed**:
 - `plugins/ace/commands/ace-configure.md` - Fixed settings.json generation (lines 276-302, 385-402) + validation workaround (lines 138-161)
@@ -2163,7 +2203,7 @@ Task completes → PreCompact hook reminds → User manually runs /ace-learn
 
 After (v5.1.0):
 ```
-Task completes → PostToolUse hook automatically → ce-ace learn --stdin → Playbook updated
+Task completes → PostToolUse hook automatically → ace-cli learn --stdin → Playbook updated
 ```
 
 **Architecture Changes**
@@ -2214,9 +2254,9 @@ No action required - the new PostToolUse hook activates automatically on plugin 
 
 **CLI Dependency Update (CRITICAL)**
 
-- ✅ **Requires ce-ace >= v1.0.4**: Updated CLI dependency to fix critical threshold bug
+- ✅ **Requires ace-cli >= v1.0.4**: Updated CLI dependency to fix critical threshold bug
 - 🐛 **Bug fixed**: CLI was hardcoding `constitution_threshold = 0.75` instead of using server config (0.45)
-- ✅ **Fix**: ce-ace v1.0.4 now respects `serverConfig.constitution_threshold` from server
+- ✅ **Fix**: ace-cli v1.0.4 now respects `serverConfig.constitution_threshold` from server
 - 🎯 **Impact**: Hooks now correctly apply server-configured threshold (e.g., 0.45 for semantic filtering)
 
 **Command Output Improvements**
@@ -2244,7 +2284,7 @@ The threshold bug meant hooks were filtering patterns too strictly (0.75 vs 0.45
 **Server-Side Configuration Control**
 
 - ✅ **Removed hardcoded threshold from hooks**: Hooks no longer contain hardcoded `constitution_threshold` values
-- ✅ **Server-side threshold control**: All threshold configuration managed via `ce-ace tune --constitution-threshold`
+- ✅ **Server-side threshold control**: All threshold configuration managed via `ace-cli tune --constitution-threshold`
 - ✅ **Web dashboard integration**: Changes from web dashboard apply immediately to hook behavior
 - ✅ **Single source of truth**: Configuration centralized on server, not in plugin hooks
 
@@ -2264,7 +2304,7 @@ The threshold bug meant hooks were filtering patterns too strictly (0.75 vs 0.45
 
 **Requirements**
 
-- **CE-ACE CLI**: v1.0.3+ (required for `tune` command support)
+- **ace-cli**: v1.0.3+ (required for `tune` command support)
 - **Claude Code**: v1.0.64+ (recommended for best hook visibility)
 - **Node.js**: v18+
 - **Python**: v3.8+
@@ -2293,11 +2333,11 @@ The threshold bug meant hooks were filtering patterns too strictly (0.75 vs 0.45
 - ✅ **Simplified instructions**: Reduced from 224 lines to 65 lines
 - ✅ **Clear architecture**: Documented CLI-based hooks architecture (no MCP server, no subagents)
 - ✅ **Removed confusing subagent references**: Instructions now focus on direct CLI integration
-- ✅ **Added ce-ace v1.0.3 compatibility notes**: Documented `tune` command support
+- ✅ **Added ace-cli v1.0.3 compatibility notes**: Documented `tune` command support
 
 **Verification & Testing**
 
-- ✅ **ce-ace v1.0.3 compatibility verified**: Tested `tune` command for runtime configuration updates
+- ✅ **ace-cli v1.0.3 compatibility verified**: Tested `tune` command for runtime configuration updates
 - ✅ **Hooks tested with real events**: Verified complete workflow (SessionStart, UserPromptSubmit, PreCompact, Stop)
 - ✅ **Server-side threshold config verified**: Hooks now use server-configured threshold (0.5) instead of hardcoded values
 - ✅ **Automatic learning cycle confirmed**: Before-task search (66 patterns retrieved) + after-task capture working
@@ -2310,7 +2350,7 @@ The threshold bug meant hooks were filtering patterns too strictly (0.75 vs 0.45
 
 ### 🔗 Requirements
 
-- **CE-ACE CLI**: v1.0.2+ (v1.0.3 recommended for `tune` command)
+- **ace-cli**: v1.0.2+ (v1.0.3 recommended for `tune` command)
 - **Node.js**: v18+
 - **Python**: v3.8+
 
@@ -2322,7 +2362,7 @@ The threshold bug meant hooks were filtering patterns too strictly (0.75 vs 0.45
 
 **Auto-Install CLI via Hook**
 
-- ✅ **SessionStart hook auto-installs ce-ace CLI**: First-time users get automatic `npm install -g @ace-sdk/cli` on session start
+- ✅ **SessionStart hook auto-installs ace-cli**: First-time users get automatic `npm install -g @ace-sdk/cli` on session start
 - ✅ **Smart detection**: Hook checks if CLI already installed before attempting install
 - ✅ **Non-blocking**: Install happens asynchronously, doesn't slow down session start
 - ✅ **Clear feedback**: Users see installation progress and completion status
@@ -2337,7 +2377,7 @@ The threshold bug meant hooks were filtering patterns too strictly (0.75 vs 0.45
 
 - ✅ **PreCompact hook**: Automatically reminds to capture learning before conversation compaction
 - ✅ **Stop hook**: Triggers learning capture when conversation ends (ensures patterns aren't lost)
-- ✅ **Proper ExecutionTrace format**: Learning hooks use `ce-ace learn --stdin` with structured JSON input
+- ✅ **Proper ExecutionTrace format**: Learning hooks use `ace-cli learn --stdin` with structured JSON input
 
 ### 🔧 Changes
 
@@ -2350,7 +2390,7 @@ The threshold bug meant hooks were filtering patterns too strictly (0.75 vs 0.45
 **Command Updates**
 
 - 🔄 **ace-configure command**: Enhanced with clearer prompts and macOS compatibility (already in v5.0.0)
-- 🔄 **All slash commands**: Use `ce-ace` CLI directly (already in v5.0.0)
+- 🔄 **All slash commands**: Use `ace-cli` CLI directly (already in v5.0.0)
 
 ### 📦 Benefits
 
@@ -2362,7 +2402,7 @@ The threshold bug meant hooks were filtering patterns too strictly (0.75 vs 0.45
 
 ### 🔗 Requirements
 
-- **CE-ACE CLI**: v1.0.0+ (auto-installed via SessionStart hook)
+- **ace-cli**: v1.0.0+ (auto-installed via SessionStart hook)
 - **Node.js**: v18+ (required for npm install)
 - **Python**: v3.8+ (for hook execution with PEP 723 support)
 
@@ -2377,7 +2417,7 @@ The threshold bug meant hooks were filtering patterns too strictly (0.75 vs 0.45
 - Example: `/ace:search` instead of `/ace-orchestration:ace-search`
 - Shorter, cleaner command syntax
 
-**MCP → CE-ACE CLI Migration**
+**MCP → ace-cli Migration**
 
 This is a complete architectural refactoring that removes all MCP dependencies and subagents in favor of direct CLI integration.
 
@@ -2397,7 +2437,7 @@ This is a complete architectural refactoring that removes all MCP dependencies a
 
 #### Added
 
-- ✅ **CE-ACE CLI Integration**: Direct subprocess calls via `ce-ace` CLI
+- ✅ **ace-cli Integration**: Direct subprocess calls via `ace-cli` CLI
 - ✅ **Shared Hooks Pattern**: Marketplace-level Python hooks (cc-boilerplate pattern)
   - `shared-hooks/ace_before_task.py` - UserPromptSubmit handler
   - `shared-hooks/ace_after_task.py` - PreCompact handler
@@ -2406,26 +2446,26 @@ This is a complete architectural refactoring that removes all MCP dependencies a
 - ✅ **Bash Wrappers**: Thin forwarders to shared hooks
   - `scripts/ace_before_task_wrapper.sh`
   - `scripts/ace_after_task_wrapper.sh`
-- ✅ **stdin Pattern**: Uses `ce-ace search --stdin` to avoid shell escaping issues
+- ✅ **stdin Pattern**: Uses `ace-cli search --stdin` to avoid shell escaping issues
 - ✅ **New Command**: `/ace-learn` for interactive pattern capture
 
 #### Changed
 
-- 🔄 **Slash Commands**: All 7 commands now call `ce-ace` CLI directly
-  - `/ace-search` → `ce-ace search`
-  - `/ace-patterns` → `ce-ace patterns`
-  - `/ace-status` → `ce-ace status`
-  - `/ace-learn` → `ce-ace learn --interactive`
-  - `/ace-bootstrap` → `ce-ace bootstrap`
-  - `/ace-configure` → `ce-ace config`
-  - `/ace-clear` → `ce-ace clear`
+- 🔄 **Slash Commands**: All 7 commands now call `ace-cli` CLI directly
+  - `/ace-search` → `ace-cli search`
+  - `/ace-patterns` → `ace-cli patterns`
+  - `/ace-status` → `ace-cli status`
+  - `/ace-learn` → `ace-cli learn --interactive`
+  - `/ace-bootstrap` → `ace-cli bootstrap`
+  - `/ace-configure` → `ace-cli config`
+  - `/ace-clear` → `ace-cli clear`
 - 🔄 **hooks.json**: Simplified to 2 events only (UserPromptSubmit, PreCompact)
 - 🔄 **CLAUDE.md**: Completely rewritten for CLI architecture (66% shorter)
 
 #### Migration Required
 
 **Before upgrading:**
-1. Install ce-ace CLI: `npm install -g @ace-sdk/cli`
+1. Install ace-cli: `npm install -g @ace-sdk/cli`
 2. Update plugin: `/plugin update ace-orchestration`
 3. Configure: `/ace-configure`
 4. Verify: `/ace-status`
@@ -2454,8 +2494,8 @@ Claude → Task Tool → Subagents → MCP Tools → ACE Server
 
 **After (v5.0.0)**:
 ```
-Claude → Hooks → Bash Wrappers → Python Shared Hooks → ce-ace CLI → ACE Server
-Claude → Slash Commands → ce-ace CLI → ACE Server
+Claude → Hooks → Bash Wrappers → Python Shared Hooks → ace-cli → ACE Server
+Claude → Slash Commands → ace-cli → ACE Server
 ```
 
 #### File Changes

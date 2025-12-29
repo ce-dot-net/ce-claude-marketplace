@@ -13,8 +13,8 @@ Reset the ACE playbook by clearing all learned bullets.
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! command -v ce-ace >/dev/null 2>&1; then
-  echo "❌ ce-ace not found - Install: npm install -g @ace-sdk/cli"
+if ! command -v ace-cli >/dev/null 2>&1; then
+  echo "❌ ace-cli not found - Install: npm install -g @ace-sdk/cli"
   exit 1
 fi
 
@@ -34,7 +34,7 @@ if [ "$CONFIRMATION" != "yes" ]; then
   exit 1
 fi
 
-ce-ace --org "$ORG_ID" --project "$PROJECT_ID" clear --confirm
+ace-cli --org "$ORG_ID" --project "$PROJECT_ID" clear --confirm
 ```
 
 ## What Gets Deleted

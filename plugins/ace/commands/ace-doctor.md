@@ -139,7 +139,7 @@ jq -e '.projectId' "$PROJECT_ROOT/.claude/settings.json"
 - ⚠️ Project config exists but ACE_PROJECT_ID missing
 - ❌ Project config missing
 
-**Note**: ce-ace CLI is used for all ACE operations.
+**Note**: ace-cli is used for all ACE operations.
 
 **If Failed**:
 ```
@@ -170,29 +170,29 @@ Recommended Actions:
 
 **What to Check**:
 ```bash
-# Check if ce-ace is installed and working
-command -v ce-ace >/dev/null 2>&1 && echo "INSTALLED" || echo "NOT FOUND"
+# Check if ace-cli is installed and working
+command -v ace-cli >/dev/null 2>&1 && echo "INSTALLED" || echo "NOT FOUND"
 
 # If installed, check version
-ce-ace --version
+ace-cli --version
 ```
 
 **Report**:
-- ✅ ce-ace CLI installed and accessible
-- ⚠️ ce-ace CLI installed but old version
-- ❌ ce-ace CLI not found
+- ✅ ace-cli installed and accessible
+- ⚠️ ace-cli installed but old version
+- ❌ ace-cli not found
 
 **If Failed**:
 ```
 ❌ CLI: NOT FOUND
 
 Possible Causes:
-1. ce-ace CLI not installed globally
+1. ace-cli not installed globally
 2. npm global bin path not in PATH
 
 Recommended Actions:
 1. Install: npm install -g @ace-sdk/cli
-2. Check version: ce-ace --version
+2. Check version: ace-cli --version
 3. Verify PATH includes npm global bin: npm bin -g
 ```
 
@@ -309,7 +309,7 @@ Expected Hook Scripts:
 - ace_before_task_wrapper.sh (retrieves patterns before tasks)
 - ace_task_complete_wrapper.sh (captures learning after tasks)
 - ace_after_task_wrapper.sh (backup learning at session end)
-- ace_install_cli.sh (ensures ce-ace CLI is available)
+- ace_install_cli.sh (ensures ace-cli is available)
 
 Recommended Actions:
 1. Verify plugin installation (Check 1)
@@ -374,18 +374,18 @@ Recommended Actions:
 
 **What to Check**:
 ```bash
-# Check ce-ace CLI config
+# Check ace-cli config
 XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 test -f "$XDG_HOME/ace/config.json" && echo "CONFIG: EXISTS"
 
-# Check if multi-org format (ce-ace v1.x)
+# Check if multi-org format (ace-cli v1.x)
 jq -e '.organizations' "$XDG_HOME/ace/config.json" >/dev/null 2>&1 && echo "FORMAT: MULTI-ORG"
 
 # Check required fields
 jq -e '.organizations[0].apiKey' "$XDG_HOME/ace/config.json" >/dev/null 2>&1 && echo "API_KEY: SET"
 ```
 
-**Expected** (ce-ace v1.x multi-org format):
+**Expected** (ace-cli v1.x multi-org format):
 ```json
 {
   "organizations": [
@@ -407,12 +407,12 @@ jq -e '.organizations[0].apiKey' "$XDG_HOME/ace/config.json" >/dev/null 2>&1 && 
 ```
 ⚠️ CLI Configuration: OLD FORMAT
 
-Current: Single-org format (ce-ace v0.x)
-Expected: Multi-org format (ce-ace v1.x+)
+Current: Single-org format (ace-cli v0.x)
+Expected: Multi-org format (ace-cli v1.x+)
 
 Recommended Actions:
-1. Update ce-ace CLI: npm install -g @ace-sdk/cli@latest
-2. Run: ce-ace configure
+1. Update ace-cli: npm install -g @ace-sdk/cli@latest
+2. Run: ace-cli configure
 3. Or run: /ace:ace-configure
 ```
 
@@ -430,9 +430,9 @@ else
     echo "unknown"
 fi
 
-# Get ce-ace CLI version
-if command -v ce-ace >/dev/null 2>&1; then
-    ce-ace --version 2>/dev/null || echo "unknown"
+# Get ace-cli version
+if command -v ace-cli >/dev/null 2>&1; then
+    ace-cli --version 2>/dev/null || echo "unknown"
 else
     echo "not installed"
 fi
@@ -447,7 +447,7 @@ fi
 
 **Expected Versions** (as of 2024-11):
 - Plugin: v5.1.2+
-- ce-ace CLI: v1.0.9+
+- ace-cli: v1.0.9+
 - CLAUDE.md: v5.0.3+
 
 **Report**:
@@ -461,14 +461,14 @@ fi
 ⚠️ Updates Recommended
 
 Plugin: v5.1.1 → v5.1.2 (latest)
-ce-ace CLI: v1.0.8 → v1.0.9 (latest)
+ace-cli: v1.0.8 → v1.0.9 (latest)
 
 Changes in v5.1.2:
 - Context passing bug fix (subprocess environment variables)
 - Improved error handling in Python hooks
 
 Recommended Actions:
-1. Update ce-ace CLI: npm install -g @ace-sdk/cli@latest
+1. Update ace-cli: npm install -g @ace-sdk/cli@latest
 2. Update plugin from marketplace (if available)
 3. Run: /ace:ace-claude-init to update CLAUDE.md
 4. Restart Claude Code

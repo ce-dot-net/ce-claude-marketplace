@@ -26,13 +26,13 @@ exec "${PLUGIN_ROOT}/scripts/ace-bootstrap.sh" "$@"
 ```
 /ace-bootstrap command
     ↓
-ce-ace CLI
+ace-cli
     ↓
 ACE Server: Reflector analyzes code
     ↓
-ce-ace CLI: returns results
+ace-cli: returns results
     ↓
-Command: calls ce-ace status for final counts
+Command: calls ace-cli status for final counts
     ↓
 Command: generates dynamic report for user
 ```
@@ -41,27 +41,27 @@ Command: generates dynamic report for user
 
 ## Usage
 
-Use `ce-ace bootstrap` to initialize your playbook from the codebase.
+Use `ace-cli bootstrap` to initialize your playbook from the codebase.
 
 **Basic usage**:
 ```bash
 # CLI reads org/project from environment variables or config automatically
-ce-ace bootstrap --json
+ace-cli bootstrap --json
 ```
 
 **With options**:
 ```bash
 # Hybrid mode (recommended) - docs → git → files
-ce-ace bootstrap --json --mode hybrid --thoroughness deep
+ace-cli bootstrap --json --mode hybrid --thoroughness deep
 
 # Git history only
-ce-ace bootstrap --json --mode git-history --commit-limit 1000 --days-back 180
+ace-cli bootstrap --json --mode git-history --commit-limit 1000 --days-back 180
 
 # Local files only
-ce-ace bootstrap --json --mode local-files --max-files 5000
+ace-cli bootstrap --json --mode local-files --max-files 5000
 
 # Docs only
-ce-ace bootstrap --json --mode docs-only
+ace-cli bootstrap --json --mode docs-only
 ```
 
 **Parameters**:

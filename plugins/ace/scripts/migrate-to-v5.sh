@@ -19,30 +19,30 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Step 1: Check ce-ace CLI
-echo "📋 Step 1/5: Checking ce-ace CLI installation..."
+# Step 1: Check ace-cli
+echo "📋 Step 1/5: Checking ace-cli installation..."
 echo ""
 
-if command -v ce-ace >/dev/null 2>&1; then
-  CE_ACE_VERSION=$(ce-ace --version 2>/dev/null || echo "unknown")
-  echo -e "${GREEN}✅ ce-ace CLI found${NC} (version: $CE_ACE_VERSION)"
+if command -v ace-cli >/dev/null 2>&1; then
+  CE_ACE_VERSION=$(ace-cli --version 2>/dev/null || echo "unknown")
+  echo -e "${GREEN}✅ ace-cli found${NC} (version: $CE_ACE_VERSION)"
 else
-  echo -e "${YELLOW}⚠️  ce-ace CLI not found${NC}"
+  echo -e "${YELLOW}⚠️  ace-cli not found${NC}"
   echo ""
   echo "Installation required:"
   echo "  npm install -g @ace-sdk/cli"
   echo ""
-  read -p "Install ce-ace CLI now? (y/n) " -n 1 -r
+  read -p "Install ace-cli now? (y/n) " -n 1 -r
   echo
 
   if [[ $REPLY =~ ^[Yy]$ ]]; then
-    echo "Installing ce-ace CLI..."
+    echo "Installing ace-cli..."
     npm install -g @ace-sdk/cli || {
-      echo -e "${RED}❌ Failed to install ce-ace CLI${NC}"
+      echo -e "${RED}❌ Failed to install ace-cli${NC}"
       echo "Please install manually and run this script again."
       exit 1
     }
-    echo -e "${GREEN}✅ ce-ace CLI installed${NC}"
+    echo -e "${GREEN}✅ ace-cli installed${NC}"
   else
     echo -e "${YELLOW}⚠️  Skipping CLI installation${NC}"
     echo "You'll need to install it before using ACE v5.0.0"
@@ -130,10 +130,10 @@ echo ""
 echo "═══════════════════════════════════════════════════════════════"
 echo ""
 
-if command -v ce-ace >/dev/null 2>&1; then
-  echo -e "${GREEN}✅ ce-ace CLI: Installed${NC}"
+if command -v ace-cli >/dev/null 2>&1; then
+  echo -e "${GREEN}✅ ace-cli: Installed${NC}"
 else
-  echo -e "${RED}❌ ce-ace CLI: Not installed${NC}"
+  echo -e "${RED}❌ ace-cli: Not installed${NC}"
 fi
 
 if [ "$MCP_NEEDS_CLEANUP" = true ]; then

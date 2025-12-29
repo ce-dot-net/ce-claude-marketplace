@@ -87,7 +87,7 @@ When user runs `/ace-tune` without arguments, use AskUserQuestion tool for inter
 
 ```python
 # Step 1: Show current config first
-ce-ace tune show
+ace-cli tune show
 
 # Step 2: Ask what they want to change
 AskUserQuestion({
@@ -133,17 +133,17 @@ AskUserQuestion({
 })
 
 # Step 4: Apply with CLI
-ce-ace tune --constitution-threshold 0.45
+ace-cli tune --constitution-threshold 0.45
 ```
 
 ### 3. Non-Interactive Mode (Direct)
 
 ```bash
 # Single setting
-ce-ace tune --constitution-threshold 0.6
+ace-cli tune --constitution-threshold 0.6
 
 # Multiple settings
-ce-ace tune \
+ace-cli tune \
   --constitution-threshold 0.5 \
   --search-top-k 15 \
   --dedup-enabled true
@@ -161,10 +161,10 @@ ce-ace tune \
 **Adjust Search Threshold**:
 ```bash
 # Lower threshold for broader matches
-ce-ace tune --constitution-threshold 0.35
+ace-cli tune --constitution-threshold 0.35
 
 # Higher threshold for stricter matches
-ce-ace tune --constitution-threshold 0.8
+ace-cli tune --constitution-threshold 0.8
 ```
 
 **Effect on `/ace-search`**:
@@ -175,27 +175,27 @@ ce-ace tune --constitution-threshold 0.8
 **Adjust Multiple Settings**:
 ```bash
 # Configure search behavior
-ce-ace tune \
+ace-cli tune \
   --constitution-threshold 0.5 \
   --search-top-k 15
 
 # Configure deduplication
-ce-ace tune --dedup-similarity-threshold 0.9
+ace-cli tune --dedup-similarity-threshold 0.9
 
 # Configure pruning
-ce-ace tune --pruning-threshold 0.4
+ace-cli tune --pruning-threshold 0.4
 
 # Enable token budget
-ce-ace tune --token-budget-enforcement true --max-playbook-tokens 50000
+ace-cli tune --token-budget-enforcement true --max-playbook-tokens 50000
 ```
 
 **Reset to Defaults**:
 ```bash
 # Reset project to org/server defaults
-ce-ace tune --reset
+ace-cli tune --reset
 
 # Verify reset
-ce-ace tune show
+ace-cli tune show
 ```
 
 ## Configuration Options Reference
@@ -263,12 +263,12 @@ ce-ace tune show
 
 ```
 User: "/ace-tune"
-Claude: [Shows current config via ce-ace tune show]
+Claude: [Shows current config via ace-cli tune show]
 Claude: [Uses AskUserQuestion with options: Search Threshold, Search Top K, Token Budget, View Only]
 User: Selects "Search Threshold"
 Claude: [Uses AskUserQuestion with threshold options: 0.35, 0.45, 0.60, 0.75]
 User: Selects "0.45"
-Claude: [Runs ce-ace tune --constitution-threshold 0.45]
+Claude: [Runs ace-cli tune --constitution-threshold 0.45]
 Claude: "✅ Search threshold updated to 0.45 for this project"
 ```
 
@@ -276,27 +276,27 @@ Claude: "✅ Search threshold updated to 0.45 for this project"
 
 ```bash
 # 1. Check current settings
-ce-ace tune show
+ace-cli tune show
 
 # 2. Adjust search for broader matches
-ce-ace tune --constitution-threshold 0.35
+ace-cli tune --constitution-threshold 0.35
 
 # 3. Increase max results
-ce-ace tune --search-top-k 15
+ace-cli tune --search-top-k 15
 
 # 4. Enable token budget
-ce-ace tune --token-budget-enforcement true --max-playbook-tokens 50000
+ace-cli tune --token-budget-enforcement true --max-playbook-tokens 50000
 
 # 5. Verify changes
-ce-ace tune show
+ace-cli tune show
 
 # 6. Later, reset to org/server defaults
-ce-ace tune --reset
+ace-cli tune --reset
 ```
 
 ## Output Format
 
-### ce-ace tune show
+### ace-cli tune show
 
 ```
 🎛️  ACE Configuration
@@ -326,7 +326,7 @@ ce-ace tune --reset
 ℹ   Curator (Haiku 4.5):    true
 ```
 
-### ce-ace tune --constitution-threshold 0.5
+### ace-cli tune --constitution-threshold 0.5
 
 ```
 ✅ Configuration updated successfully
@@ -342,7 +342,7 @@ ce-ace tune --reset
 ...
 ```
 
-### ce-ace tune --reset
+### ace-cli tune --reset
 
 ```
 ✅ Configuration reset successfully
@@ -350,7 +350,7 @@ ce-ace tune --reset
 All project-level overrides removed.
 Project now inherits organization and server defaults.
 
-Run 'ce-ace tune show' to see current effective config.
+Run 'ace-cli tune show' to see current effective config.
 ```
 
 ## Important Notes
@@ -364,7 +364,7 @@ Run 'ce-ace tune show' to see current effective config.
 
 ### Environment Context
 
-The `ce-ace` CLI automatically reads context from:
+The `ace-cli` CLI automatically reads context from:
 1. `ACE_ORG_ID` environment variable (passed by slash command)
 2. `ACE_PROJECT_ID` environment variable (passed by slash command)
 3. `~/.config/ace/config.json` for API token

@@ -133,11 +133,11 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
 fi
 ```
 
-### Step 5: Call ce-ace CLI with Flags
+### Step 5: Call ace-cli with Flags
 
 ```bash
-if ! command -v ce-ace >/dev/null 2>&1; then
-  echo "❌ ce-ace not found - Install: npm install -g @ace-sdk/cli"
+if ! command -v ace-cli >/dev/null 2>&1; then
+  echo "❌ ace-cli not found - Install: npm install -g @ace-sdk/cli"
   exit 1
 fi
 
@@ -159,7 +159,7 @@ fi
 echo "📚 [ACE Learning] Capturing patterns from your work..."
 echo ""
 
-# Build ce-ace command based on success status
+# Build ace-cli command based on success status
 if [ "$SUCCESS_STATUS" = "Success" ]; then
   SUCCESS_FLAG="--success"
 elif [ "$SUCCESS_STATUS" = "Failed" ]; then
@@ -178,13 +178,13 @@ LEARN_PAYLOAD=$(jq -n \
   --argjson git "${GIT_CONTEXT:-null}" \
   '{task: $task, output: $output, success: $success, git: $git}')
 
-# Call ce-ace learn with --stdin for richer payload
+# Call ace-cli learn with --stdin for richer payload
 if [ -n "$ORG_ID" ]; then
-  echo "$LEARN_PAYLOAD" | ce-ace --json --org "$ORG_ID" --project "$PROJECT_ID" \
+  echo "$LEARN_PAYLOAD" | ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" \
     learn --stdin
 else
   # Single-org mode (no --org flag)
-  echo "$LEARN_PAYLOAD" | ce-ace --json --project "$PROJECT_ID" \
+  echo "$LEARN_PAYLOAD" | ace-cli --json --project "$PROJECT_ID" \
     learn --stdin
 fi
 
@@ -210,7 +210,7 @@ fi
 5. **Handle both org formats**: Direct (`orgId`) and env wrapper (`env.ACE_ORG_ID`)
 
 **Error Handling:**
-- Check ce-ace is installed
+- Check ace-cli is installed
 - Verify project context exists
 - Provide clear error messages
 - Show success confirmation with next steps
@@ -250,7 +250,7 @@ Claude: [Shows AskUserQuestion UI]
   User types in Other: "Root cause was missing await on database.close() causing connection pool exhaustion. Intermittent failures in async code often indicate missing await statements. Always check async cleanup functions."
 
 Claude runs:
-  ce-ace --json --org "org_xxx" --project "prj_xxx" learn \
+  ace-cli --json --org "org_xxx" --project "prj_xxx" learn \
     --task "Debugged intermittent test failures in async database operations" \
     --success \
     --output "Root cause was missing await on database.close() causing connection pool exhaustion. Intermittent failures in async code often indicate missing await statements. Always check async cleanup functions."

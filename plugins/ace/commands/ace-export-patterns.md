@@ -8,14 +8,14 @@ Export your ACE playbook to JSON for backup or cross-project sharing.
 
 ## Instructions for Claude
 
-When the user runs `/ace:export-patterns`, use ce-ace CLI to export the playbook:
+When the user runs `/ace:export-patterns`, use ace-cli to export the playbook:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! command -v ce-ace >/dev/null 2>&1; then
-  echo "❌ ce-ace not found - Install: npm install -g @ace-sdk/cli"
+if ! command -v ace-cli >/dev/null 2>&1; then
+  echo "❌ ace-cli not found - Install: npm install -g @ace-sdk/cli"
   exit 1
 fi
 
@@ -40,9 +40,9 @@ OUTPUT_FILE="${1:-ace-playbook-export.json}"
 echo "📦 Exporting ACE playbook..."
 
 if [ -n "$ORG_ID" ]; then
-  ce-ace --json --org "$ORG_ID" --project "$PROJECT_ID" export > "$OUTPUT_FILE"
+  ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" export > "$OUTPUT_FILE"
 else
-  ce-ace --json --project "$PROJECT_ID" export > "$OUTPUT_FILE"
+  ace-cli --json --project "$PROJECT_ID" export > "$OUTPUT_FILE"
 fi
 
 if [ $? -eq 0 ]; then

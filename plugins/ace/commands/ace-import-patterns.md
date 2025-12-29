@@ -9,14 +9,14 @@ Import an ACE playbook from a JSON file to restore backup or share patterns acro
 
 ## Instructions for Claude
 
-When the user runs `/ace:import-patterns <file>`, use ce-ace CLI to import the playbook:
+When the user runs `/ace:import-patterns <file>`, use ace-cli to import the playbook:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! command -v ce-ace >/dev/null 2>&1; then
-  echo "❌ ce-ace not found - Install: npm install -g @ace-sdk/cli"
+if ! command -v ace-cli >/dev/null 2>&1; then
+  echo "❌ ace-cli not found - Install: npm install -g @ace-sdk/cli"
   exit 1
 fi
 
@@ -53,9 +53,9 @@ echo "📥 Importing ACE playbook from $IMPORT_FILE..."
 
 # Import playbook
 if [ -n "$ORG_ID" ]; then
-  ce-ace --json --org "$ORG_ID" --project "$PROJECT_ID" import --file "$IMPORT_FILE"
+  ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" import --file "$IMPORT_FILE"
 else
-  ce-ace --json --project "$PROJECT_ID" import --file "$IMPORT_FILE"
+  ace-cli --json --project "$PROJECT_ID" import --file "$IMPORT_FILE"
 fi
 
 if [ $? -eq 0 ]; then

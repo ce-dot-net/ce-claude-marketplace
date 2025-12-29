@@ -119,7 +119,7 @@ def main():
         # (Server team: DO NOT add generic keywords - hurts embedding quality!)
         search_query = expand_abbreviations(user_prompt)
 
-        # Call ce-ace search --stdin with optional session pinning
+        # Call ace-cli search --stdin with optional session pinning
         # Context passed via environment, CLI reads server config for top_k/threshold
         patterns_response = run_search(
             query=search_query,

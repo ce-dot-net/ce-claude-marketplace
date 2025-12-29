@@ -5,16 +5,16 @@ argument-hint:
 
 # ACE Test
 
-Verify that the ACE plugin is properly configured and operational with ce-ace CLI.
+Verify that the ACE plugin is properly configured and operational with ace-cli.
 
 ## What This Command Does
 
-1. **Checks if ce-ace CLI is installed**
-   - Verifies `ce-ace` command is available
+1. **Checks if ace-cli is installed**
+   - Verifies `ace-cli` command is available
    - Shows installed version
 
 2. **Tests ACE server connectivity**
-   - Runs `ce-ace doctor` diagnostics
+   - Runs `ace-cli doctor` diagnostics
    - Shows connection status
 
 3. **Verifies hooks configuration**
@@ -45,12 +45,12 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # Test 1: CLI Installation
-echo "[1/4] Checking ce-ace CLI installation..."
-if command -v ce-ace >/dev/null 2>&1; then
-  VERSION=$(ce-ace --version 2>&1 | head -1)
-  echo "✅ ce-ace CLI found: $VERSION"
+echo "[1/4] Checking ace-cli installation..."
+if command -v ace-cli >/dev/null 2>&1; then
+  VERSION=$(ace-cli --version 2>&1 | head -1)
+  echo "✅ ace-cli found: $VERSION"
 else
-  echo "❌ ce-ace CLI not found"
+  echo "❌ ace-cli not found"
   echo "   Install: npm install -g @ace-sdk/cli"
   exit 1
 fi
@@ -80,7 +80,7 @@ fi
 
 # Run doctor command - CLI reads org/project from env vars automatically
 # Filter out CLI update notifications (💡 lines) that break JSON parsing
-RAW_DOCTOR=$(ce-ace doctor --json 2>&1)
+RAW_DOCTOR=$(ace-cli doctor --json 2>&1)
 DOCTOR_EXIT_CODE=$?
 DOCTOR_RESULT=$(echo "$RAW_DOCTOR" | grep -v '^💡' | grep -v '^$')
 
@@ -143,7 +143,7 @@ echo "[4/4] Testing basic ACE operations..."
 
 # Test status command - CLI reads org/project from env vars automatically
 # Filter out CLI update notifications (💡 lines) that break JSON parsing
-RAW_STATUS=$(ce-ace status --json 2>&1)
+RAW_STATUS=$(ace-cli status --json 2>&1)
 STATUS_EXIT_CODE=$?
 STATUS_RESULT=$(echo "$RAW_STATUS" | grep -v '^💡' | grep -v '^$')
 
@@ -169,7 +169,7 @@ echo "  - Capture learning: /ace:ace-learn"
 
 1. **CLI Not Found**
    ```
-   ❌ ce-ace CLI not found
+   ❌ ace-cli not found
    → Install: npm install -g @ace-sdk/cli
    ```
 
@@ -230,27 +230,27 @@ echo "  - Capture learning: /ace:ace-learn"
 
 ## Available ACE Commands
 
-All ACE operations use ce-ace CLI:
+All ACE operations use ace-cli:
 
 **Core Commands**:
-- `ce-ace status` - Get playbook statistics
-- `ce-ace patterns` - View playbook patterns
-- `ce-ace search --stdin` - Search for patterns
-- `ce-ace learn` - Capture learning (via /ace:ace-learn)
-- `ce-ace bootstrap` - Initialize from codebase
-- `ce-ace clear` - Clear playbook
-- `ce-ace export` - Export playbook to JSON
-- `ce-ace import` - Import playbook from JSON
-- `ce-ace top` - Get top-rated patterns
-- `ce-ace doctor` - Run diagnostics
-- `ce-ace config` - Manage configuration
+- `ace-cli status` - Get playbook statistics
+- `ace-cli patterns` - View playbook patterns
+- `ace-cli search --stdin` - Search for patterns
+- `ace-cli learn` - Capture learning (via /ace:ace-learn)
+- `ace-cli bootstrap` - Initialize from codebase
+- `ace-cli clear` - Clear playbook
+- `ace-cli export` - Export playbook to JSON
+- `ace-cli import` - Import playbook from JSON
+- `ace-cli top` - Get top-rated patterns
+- `ace-cli doctor` - Run diagnostics
+- `ace-cli config` - Manage configuration
 
 **Error Handling**:
 
 1. **CLI Not Found**
    ```
-   Error: ce-ace command not found
-   → ce-ace CLI not installed
+   Error: ace-cli command not found
+   → ace-cli not installed
    → Action: npm install -g @ace-sdk/cli
    → Fallback: Check npm global bin is in PATH
    ```
@@ -377,7 +377,7 @@ Troubleshooting Steps:
 ## Common Issues
 
 ### Issue: ACE Server Connection Failed
-**Symptom**: ce-ace commands return connection error or authentication failed
+**Symptom**: ace-cli commands return connection error or authentication failed
 **Solution**:
 1. Run `/ace:ace-configure` to set up connection
 2. Verify server URL in `~/.config/ace/config.json` is correct
