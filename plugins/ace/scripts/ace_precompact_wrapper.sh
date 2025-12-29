@@ -1,15 +1,33 @@
 #!/usr/bin/env bash
 # ACE PreCompact Hook - Pattern Preservation
-# v5.3.0: Recalls session patterns before context compaction so they survive
+# v5.4.7: Flag file check + ace-cli/ce-ace detection
 #
 # When context gets compacted, injected patterns are lost. This hook:
 # 1. Reads the session ID from UserPromptSubmit
-# 2. Calls ce-ace cache recall to get pinned patterns
+# 2. Calls ace-cli cache recall to get pinned patterns
 # 3. Re-injects them as additionalContext (survives compaction)
 
 set -euo pipefail
 
-ACE_PLUGIN_VERSION="5.3.0"
+ACE_PLUGIN_VERSION="5.4.7"
+
+# ACE disable flag check (set by SessionStart if CLI issues detected)
+# Official Claude Code pattern: flag file coordination between hooks
+SESSION_ID_FOR_FLAG="${SESSION_ID:-default}"
+ACE_DISABLED_FLAG="/tmp/ace-disabled-${SESSION_ID_FOR_FLAG}.flag"
+if [ -f "$ACE_DISABLED_FLAG" ]; then
+  # ACE is disabled for this session - exit silently
+  exit 0
+fi
+
+# CLI command detection (ace-cli preferred, ce-ace fallback)
+if command -v ace-cli >/dev/null 2>&1; then
+  CLI_CMD="ace-cli"
+elif command -v ce-ace >/dev/null 2>&1; then
+  CLI_CMD="ce-ace"
+else
+  exit 0  # No CLI available - exit silently
+fi
 
 # Get project context
 PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
@@ -28,14 +46,11 @@ if [ ! -f "$SESSION_FILE" ]; then
 fi
 SESSION_ID=$(cat "$SESSION_FILE")
 
-# Check if ce-ace CLI is available
-if ! command -v ce-ace >/dev/null 2>&1; then
-  exit 0  # CLI not installed, skip silently
-fi
+# CLI already verified by flag file check above
 
 # Recall patterns from session cache (fast SQLite lookup, ~10ms)
 # Filter out CLI update notifications that break JSON parsing
-RAW_PATTERNS=$(ce-ace cache recall --session "$SESSION_ID" --json 2>&1) || true
+RAW_PATTERNS=$($CLI_CMD cache recall --session "$SESSION_ID" --json 2>&1) || true
 PATTERNS=$(echo "$RAW_PATTERNS" | grep -v "^💡" | grep -v "^$" || echo "{}")
 
 # Parse count (default to 0 if parsing fails)

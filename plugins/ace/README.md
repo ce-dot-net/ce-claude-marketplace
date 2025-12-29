@@ -14,13 +14,13 @@
 
 ## 🚀 Quick Start
 
-### 1. Install CE-ACE CLI
+### 1. Install ACE CLI
 
 ```bash
 npm install -g @ace-sdk/cli
 ```
 
-**Requirements:** ce-ace >= v1.0.14
+**Requirements:** ace-cli >= v3.4.1
 
 ### 2. Enable Plugin
 
@@ -55,7 +55,7 @@ Hooks automatically:
 
 **Before Implementation:**
 - Hook detects keywords: `implement`, `build`, `create`, `fix`, `debug`, `refactor`, etc.
-- Calls `ce-ace search --stdin --pin-session` with your prompt
+- Calls `ace-cli search --stdin --pin-session` with your prompt
 - Pins patterns to session (24-hour TTL, survives context compaction)
 - Injects relevant patterns as hidden context
 - Shows summary: `🔍 [ACE] Found 3 relevant patterns`
@@ -107,7 +107,7 @@ Bash Wrapper (ace_before_task_wrapper.sh)
     ↓
 Python Shared Hook (ace_before_task.py)
     ↓
-Subprocess: ce-ace search --stdin
+Subprocess: ace-cli search --stdin
     ↓
 ACE Server
     ↓
@@ -151,7 +151,7 @@ shared-hooks/ (marketplace root)
 
 When you start a task with implementation keywords, the hook:
 1. Reads your prompt from stdin
-2. Calls `ce-ace search --stdin` with full prompt text
+2. Calls `ace-cli search --stdin` with full prompt text
 3. Receives JSON with relevant patterns
 4. Injects patterns as `<ace-patterns>` block for Claude
 5. Shows you a summary of what was found
@@ -173,7 +173,7 @@ Claude uses these patterns to implement!
 After completing work, run `/ace-learn`:
 1. Opens interactive prompt
 2. Asks for task description, success status, key steps, lessons
-3. Calls `ce-ace learn --interactive`
+3. Calls `ace-cli learn --interactive`
 4. Saves patterns to playbook
 5. Available for next session!
 
@@ -203,7 +203,7 @@ Created automatically by `/ace-configure`.
 
 ## 🛠️ Troubleshooting
 
-### "ce-ace not found"
+### "ace-cli not found"
 
 Install the CLI:
 ```bash
@@ -236,7 +236,7 @@ chmod +x plugins/ace/scripts/*.sh
 
 ### Migration Steps
 
-1. **Install ce-ace CLI:**
+1. **Install ace-cli:**
    ```bash
    npm install -g @ace-sdk/cli
    ```
@@ -270,10 +270,10 @@ Claude → Task Tool → ACE Retrieval Subagent → MCP Tools → ACE Server
 Claude → Task Tool → ACE Learning Subagent → MCP Tools → ACE Server
 ```
 
-**After (v5.0.0):**
+**After (v5.0.0+):**
 ```
-Claude → Hooks → ce-ace CLI → ACE Server
-Claude → Commands → ce-ace CLI → ACE Server
+Claude → Hooks → ace-cli → ACE Server
+Claude → Commands → ace-cli → ACE Server
 ```
 
 ## 🧪 Development
@@ -367,8 +367,8 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Version**: v5.1.19 (Critical Learning Hook Fix)
+**Version**: v5.4.7 (CLI Migration + Blocking Detection)
 **Status**: Active Development
 **Maintainer**: CE.NET Team
-**Requires**: CE-ACE CLI v1.0.14+
+**Requires**: ace-cli >= v3.4.1 (npm install -g @ace-sdk/cli)
 **Architecture**: Hooks + CLI (no MCP)

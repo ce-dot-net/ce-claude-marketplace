@@ -5,6 +5,65 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.7] - 2025-12-29
+
+### BREAKING: CLI Migration from ce-ace to ace-cli
+
+**Problem**: Old `@ce-dot-net/ce-ace-cli` package sends wrong API format causing 422 validation errors. No migration path existed for users.
+
+**Solution**: Complete CLI migration with blocking detection.
+
+**New CLI Package**: `@ace-sdk/cli` (command: `ace-cli`)
+
+**SessionStart Hook Rewrite** (`ace_install_cli.sh`):
+- Detects `ace-cli` command (new) or `ce-ace` (deprecated)
+- BLOCKS if old `@ce-dot-net/ce-ace-cli` package detected
+- BLOCKS if CLI version < v3.4.1
+- Daily update check with caching
+- Uses flag file pattern to disable other hooks without blocking Claude Code session
+
+**Flag File Coordination**:
+- SessionStart creates `/tmp/ace-disabled-${SESSION_ID}.flag` when issues detected
+- All other hooks check for flag and silently exit if present
+
+**CLI Detection in All Hooks**:
+- All shell wrappers now detect `ace-cli` (preferred) or `ce-ace` (fallback)
+- All Python files use `CLI_CMD` variable with `shutil.which()` detection
+
+**Files Changed**:
+
+Shell Scripts (added flag file check + CLI_CMD):
+- `plugins/ace/scripts/ace_install_cli.sh` - Complete rewrite
+- `plugins/ace/scripts/ace_stop_wrapper.sh`
+- `plugins/ace/scripts/ace_posttooluse_wrapper.sh`
+- `plugins/ace/scripts/ace_pretooluse_wrapper.sh`
+- `plugins/ace/scripts/ace_precompact_wrapper.sh`
+- `plugins/ace/scripts/ace_subagent_stop_wrapper.sh`
+
+Python Files (added CLI_CMD detection + replaced ce-ace calls):
+- `plugins/ace/shared-hooks/utils/ace_cli.py`
+- `plugins/ace/shared-hooks/ace_after_task.py`
+- `plugins/ace/shared-hooks/ace_before_task.py`
+- `plugins/ace/shared-hooks/ace_permission_request.py`
+- `plugins/ace/shared-hooks/test_session_pinning.py`
+
+Documentation (ce-ace -> ace-cli):
+- `plugins/ace/CLAUDE.md` - Updated version, new migration section
+- `plugins/ace/README.md` - Updated all ce-ace references
+
+**Migration for Users**:
+```bash
+# Remove old package
+npm uninstall -g @ce-dot-net/ce-ace-cli
+
+# Install new package
+npm install -g @ace-sdk/cli
+```
+
+**Impact**: Fixes 422 validation errors. SessionStart hook now guides users through migration.
+
+---
+
 ## [5.4.6] - 2025-12-29
 
 ### 🔧 Fix: Chat Transcript Saving - Fully Disabled by Default

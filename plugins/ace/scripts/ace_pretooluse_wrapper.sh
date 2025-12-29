@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ACE PreToolUse Hook - Continuous Auto-Search
-# v5.4.0: Auto-searches on domain shifts and injects patterns into context
+# v5.4.7: Flag file check + ace-cli/ce-ace detection
 #
 # When Claude enters a new domain (e.g., reading cache files after working on auth),
 # this hook automatically searches for domain-specific patterns and injects them.
@@ -10,7 +10,25 @@
 
 set -eo pipefail
 
-ACE_PLUGIN_VERSION="5.4.6"
+ACE_PLUGIN_VERSION="5.4.7"
+
+# ACE disable flag check (set by SessionStart if CLI issues detected)
+# Official Claude Code pattern: flag file coordination between hooks
+SESSION_ID_FOR_FLAG="${SESSION_ID:-default}"
+ACE_DISABLED_FLAG="/tmp/ace-disabled-${SESSION_ID_FOR_FLAG}.flag"
+if [ -f "$ACE_DISABLED_FLAG" ]; then
+  # ACE is disabled for this session - exit silently
+  exit 0
+fi
+
+# CLI command detection (ace-cli preferred, ce-ace fallback)
+if command -v ace-cli >/dev/null 2>&1; then
+  CLI_CMD="ace-cli"
+elif command -v ce-ace >/dev/null 2>&1; then
+  CLI_CMD="ce-ace"
+else
+  exit 0  # No CLI available - exit silently
+fi
 
 # Dynamic domain matching - no hardcoded lists!
 # Splits hyphenated domains into words and matches each word against path segments
@@ -154,19 +172,13 @@ if [ "$MATCHED_DOMAIN" != "$LAST_DOMAIN" ] && [ -n "$LAST_DOMAIN" ]; then
   FIRST_WORD=$(echo "$MATCHED_DOMAIN" | cut -d'-' -f1)
   SEARCH_QUERY="${FIRST_WORD} patterns"
 
-  # 2. Call ce-ace search with domain filter (env vars for context)
+  # 2. Call ace-cli search with domain filter (env vars for context)
   export ACE_ORG_ID="$ORG_ID"
   export ACE_PROJECT_ID="$PROJECT_ID"
 
-  # Check if ce-ace is available
-  if ! command -v ce-ace >/dev/null 2>&1; then
-    # No CLI - fallback to reminder
-    jq -n --arg d "$MATCHED_DOMAIN" --arg p "$LAST_DOMAIN" \
-      '{"systemMessage": "💡 [ACE] Domain shift: \($p) → \($d). Consider: /ace:ace-search \($d) (ce-ace not found)"}'
-    exit 0
-  fi
+  # CLI already verified by flag file check above
 
-  SEARCH_RESULT=$(echo "$SEARCH_QUERY" | ce-ace search --stdin --json \
+  SEARCH_RESULT=$(echo "$SEARCH_QUERY" | $CLI_CMD search --stdin --json \
     --allowed-domains "$MATCHED_DOMAIN" 2>/dev/null | \
     iconv -f UTF-8 -t UTF-8 -c 2>/dev/null || echo "")  # Sanitize Unicode
 

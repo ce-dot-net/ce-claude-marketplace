@@ -33,6 +33,7 @@ import json
 import sys
 import subprocess
 import os
+import shutil
 from pathlib import Path
 from datetime import datetime
 
@@ -47,6 +48,9 @@ from ace_relevance_logger import log_execution_metrics
 # Import re at module level for quality filters
 import re as regex_module
 import time
+
+# CLI command detection (ace-cli preferred, ce-ace fallback)
+CLI_CMD = 'ace-cli' if shutil.which('ace-cli') else 'ce-ace'
 
 
 def is_trivial_task(task_description: str) -> bool:
@@ -524,7 +528,7 @@ def main():
             verbosity = os.environ.get('ACE_VERBOSITY', 'detailed')
 
             result = subprocess.run(
-                ['ce-ace', 'learn', '--stdin', '--json', '--timeout', '300000', '--verbosity', verbosity],
+                [CLI_CMD, 'learn', '--stdin', '--json', '--timeout', '300000', '--verbosity', verbosity],
                 input=json.dumps(trace),
                 text=True,
                 capture_output=True,
@@ -618,7 +622,7 @@ def main():
             message_lines.append("⚠️ [ACE] Learning capture timed out")
             message_lines.append("   You can manually capture with: /ace-learn")
         except FileNotFoundError:
-            message_lines.append("⚠️ [ACE] ce-ace CLI not found - install with: npm install -g @ace-sdk/cli")
+            message_lines.append("⚠️ [ACE] ace-cli not found - install with: npm install -g @ace-sdk/cli")
         except Exception as e:
             message_lines.append(f"⚠️ [ACE] Learning capture error: {e}")
             message_lines.append("   You can manually capture with: /ace-learn")
