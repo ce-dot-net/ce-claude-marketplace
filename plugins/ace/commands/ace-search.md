@@ -12,15 +12,15 @@ Uses semantic search to find only the most relevant patterns matching your query
 
 ## Instructions for Claude
 
-When the user runs `/ace-search <query>`, use the Bash tool to call ce-ace CLI:
+When the user runs `/ace-search <query>`, use the Bash tool to call ace-cli:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Check ce-ace is available
-if ! command -v ce-ace >/dev/null 2>&1; then
-  echo "❌ ce-ace CLI not found in PATH"
+# Check ace-cli is available
+if ! command -v ace-cli >/dev/null 2>&1; then
+  echo "❌ ace-cli not found in PATH"
   echo ""
   echo "Installation:"
   echo "  npm install -g @ace-sdk/cli"
@@ -38,9 +38,9 @@ if [ -z "$ACE_ORG_ID" ] || [ -z "$ACE_PROJECT_ID" ]; then
   exit 1
 fi
 
-# Call ce-ace search - CLI reads org/project from env vars automatically
-# Threshold comes from server config (ce-ace tune show) - don't override!
-ce-ace search "$*"
+# Call ace-cli search - CLI reads org/project from env vars automatically
+# Threshold comes from server config (ace-cli tune show) - don't override!
+ace-cli search "$*"
 ```
 
 ### Parameters
@@ -48,7 +48,7 @@ ce-ace search "$*"
 - **query** (required): Natural language description passed as command argument
   - Examples: "authentication patterns", "async debugging tips", "database connection pooling best practices"
 - **--threshold**: Similarity threshold (optional, overrides server config)
-  - Default: Uses server config from `ce-ace tune show`
+  - Default: Uses server config from `ace-cli tune show`
   - Range: 0.0 - 1.0 (higher = stricter matching)
   - Only specify if you want to override project's default
 - **--allowed-domains**: Whitelist domains (comma-separated, v5.3.0+)
@@ -61,23 +61,23 @@ ce-ace search "$*"
 
 **Note**: To limit number of results, use `jq` for filtering:
 ```bash
-ce-ace search "query" --json | jq '.patterns[:5]'  # First 5 results
+ace-cli search "query" --json | jq '.patterns[:5]'  # First 5 results
 ```
-The `--limit` flag is not supported by ce-ace CLI. Use `--top-k` via server config (`/ace-tune`) instead.
+The `--limit` flag is not supported by ace-cli. Use `--top-k` via server config (`/ace-tune`) instead.
 
 ### Example Usage
 
 ```bash
 /ace-search JWT authentication best practices
-→ Calls: ce-ace search "JWT authentication best practices"
+→ Calls: ace-cli search "JWT authentication best practices"
 → Uses: Server config threshold (e.g., 0.45)
 
 /ace-search async test failures debugging
-→ Calls: ce-ace search "async test failures debugging"
+→ Calls: ace-cli search "async test failures debugging"
 
 # Override threshold if needed:
 /ace-search "JWT auth" --threshold 0.7
-→ Calls: ce-ace search "JWT auth" --threshold 0.7
+→ Calls: ace-cli search "JWT auth" --threshold 0.7
 
 # Domain filtering (v5.3.0+):
 /ace-search caching patterns --allowed-domains cache,performance

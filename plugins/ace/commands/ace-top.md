@@ -12,14 +12,14 @@ Returns patterns sorted by helpful score (upvotes from successful usage), giving
 
 ## Instructions for Claude
 
-When the user runs `/ace-top [section] [limit]`, use ce-ace CLI:
+When the user runs `/ace-top [section] [limit]`, use ace-cli:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! command -v ce-ace >/dev/null 2>&1; then
-  echo "❌ ce-ace not found - Install: npm install -g @ace-sdk/cli"
+if ! command -v ace-cli >/dev/null 2>&1; then
+  echo "❌ ace-cli not found - Install: npm install -g @ace-sdk/cli"
   exit 1
 fi
 
@@ -54,9 +54,9 @@ echo "🏆 Fetching top-rated patterns..."
 
 # Execute command
 if [ -n "$ORG_ID" ]; then
-  ce-ace --org "$ORG_ID" --project "$PROJECT_ID" top $CMD_ARGS
+  ace-cli --org "$ORG_ID" --project "$PROJECT_ID" top $CMD_ARGS
 else
-  ce-ace --project "$PROJECT_ID" top $CMD_ARGS
+  ace-cli --project "$PROJECT_ID" top $CMD_ARGS
 fi
 
 if [ $? -eq 0 ]; then

@@ -7,15 +7,15 @@ argument-hint:
 
 Display comprehensive statistics about your ACE playbook.
 
-Call ce-ace CLI to get current statistics:
+Call ace-cli to get current statistics:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Check ce-ace CLI is installed
-if ! command -v ce-ace >/dev/null 2>&1; then
-  echo "❌ ce-ace not found - Install: npm install -g @ace-sdk/cli"
+# CLI detection: ace-cli (preferred) or ce-ace (fallback)
+if ! command -v ace-cli >/dev/null 2>&1; then
+  echo "❌ ace-cli not found - Install: npm install -g @ace-sdk/cli"
   exit 1
 fi
 
@@ -26,25 +26,25 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 # Version check: Query npm registry directly (Issue #8 - CLI version check broken)
-INSTALLED_VERSION=$(ce-ace --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
+INSTALLED_VERSION=$(ace-cli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
 LATEST_VERSION=$(curl -s "https://registry.npmjs.org/@ace-sdk/cli/latest" 2>/dev/null | jq -r '.version // "unknown"' || echo "unknown")
 
 if [ "$INSTALLED_VERSION" != "unknown" ] && [ "$LATEST_VERSION" != "unknown" ]; then
   if [ "$INSTALLED_VERSION" != "$LATEST_VERSION" ]; then
-    echo "💡 Update available: ce-ace v$INSTALLED_VERSION → v$LATEST_VERSION"
+    echo "💡 Update available: ace-cli v$INSTALLED_VERSION → v$LATEST_VERSION"
     echo "   Run: npm install -g @ace-sdk/cli@latest"
     echo ""
   fi
 fi
 
 # Optional: Export environment variables if available from .claude/settings.json
-# ce-ace will use these if provided, otherwise fallback to global config
+# ace-cli will use these if provided, otherwise fallback to global config
 export ACE_ORG_ID="${ACE_ORG_ID:-}"
 export ACE_PROJECT_ID="${ACE_PROJECT_ID:-}"
 
-# Run ce-ace status and capture output
+# Run ace-cli status and capture output
 # Filter out CLI update notifications (💡 lines) that break JSON parsing
-RAW_OUTPUT=$(ce-ace status --json 2>&1)
+RAW_OUTPUT=$(ace-cli status --json 2>&1)
 EXIT_CODE=$?
 STATUS_OUTPUT=$(echo "$RAW_OUTPUT" | grep -v '^💡' | grep -v '^$')
 
@@ -64,7 +64,7 @@ fi
 
 # Verify we got valid JSON
 if ! echo "$STATUS_OUTPUT" | jq empty 2>/dev/null; then
-  echo "❌ Invalid response from ce-ace (not valid JSON)"
+  echo "❌ Invalid response from ace-cli (not valid JSON)"
   echo ""
   echo "Response:"
   echo "$STATUS_OUTPUT"

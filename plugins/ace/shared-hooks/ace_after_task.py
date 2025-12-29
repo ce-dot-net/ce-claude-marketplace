@@ -49,7 +49,7 @@ from ace_relevance_logger import log_execution_metrics
 import re as regex_module
 import time
 
-# CLI command detection (ace-cli preferred, ce-ace fallback)
+# CLI command detection (ace-cli preferred, ace-cli fallback)
 CLI_CMD = 'ace-cli' if shutil.which('ace-cli') else 'ce-ace'
 
 
@@ -372,7 +372,7 @@ def main():
     Stop hook processes accumulated tool data:
     1. Query SQLite for session's tools (ground truth from PostToolUse)
     2. Build trajectory with real tool calls
-    3. Send to ce-ace learn --stdin
+    3. Send to ace-cli learn --stdin
     4. Clear accumulated tools (cleanup)
     """
     try:
@@ -516,7 +516,7 @@ def main():
         # STEP 7: Build user-visible message (output depends on verbosity setting)
         message_lines = []
 
-        # STEP 8: Send to ce-ace learn --stdin
+        # STEP 8: Send to ace-cli learn --stdin
         try:
             env = os.environ.copy()
             if context['org']:

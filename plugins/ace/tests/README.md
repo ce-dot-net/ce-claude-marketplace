@@ -13,7 +13,7 @@ tests/
 
 ## Running Tests
 
-### Unit Tests (No ce-ace CLI required)
+### Unit Tests (No ace-cli required)
 
 ```bash
 # Run all tests
@@ -24,13 +24,13 @@ python tests/test_ace_cli.py
 pytest tests/
 ```
 
-### Integration Tests (Requires ce-ace CLI)
+### Integration Tests (Requires ace-cli)
 
-Integration tests require the `ce-ace` CLI to be installed and configured:
+Integration tests require the `ace-cli` CLI to be installed and configured:
 
 ```bash
 npm install -g @ace-sdk/cli
-ce-ace config  # Setup connection
+ace-cli config  # Setup connection
 ```
 
 Then run integration tests:
@@ -90,7 +90,7 @@ if __name__ == '__main__':
 Create shell script to test full workflow:
 ```bash
 #!/usr/bin/env bash
-# Test hooks with real ce-ace CLI
+# Test hooks with real ace-cli
 
 echo '{"prompt":"implement auth"}' | \
   ../scripts/ace_before_task_wrapper.sh
@@ -117,7 +117,7 @@ jobs:
 ## Dependencies
 
 **Unit tests:** None (pure Python stdlib)
-**Integration tests:** `ce-ace` CLI, configured ACE server
+**Integration tests:** `ace-cli` CLI, configured ACE server
 
 ## Troubleshooting
 
@@ -125,9 +125,9 @@ jobs:
 
 Make sure you're running tests from the project root or the imports adjust `sys.path` correctly.
 
-### subprocess.FileNotFoundError: ce-ace
+### subprocess.FileNotFoundError: ace-cli
 
-Install ce-ace CLI: `npm install -g @ace-sdk/cli`
+Install ace-cli: `npm install -g @ace-sdk/cli`
 
 ### Tests pass but hooks don't work
 

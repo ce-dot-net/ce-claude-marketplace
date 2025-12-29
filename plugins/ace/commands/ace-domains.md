@@ -25,9 +25,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Check ce-ace CLI is installed
-if ! command -v ce-ace >/dev/null 2>&1; then
-  echo "ce-ace not found - Install: npm install -g @ace-sdk/cli"
+# CLI detection: ace-cli (preferred) or ce-ace (fallback)
+if ! command -v ace-cli >/dev/null 2>&1; then
+  echo "ace-cli not found - Install: npm install -g @ace-sdk/cli"
   exit 1
 fi
 
@@ -42,12 +42,12 @@ export ACE_ORG_ID="${ACE_ORG_ID:-}"
 export ACE_PROJECT_ID="${ACE_PROJECT_ID:-}"
 
 # Build command with optional min-patterns filter
-CMD="ce-ace domains --json"
+CMD="ace-cli domains --json"
 if [ -n "$MIN_PATTERNS" ]; then
   CMD="$CMD --min-patterns $MIN_PATTERNS"
 fi
 
-# Run ce-ace domains and capture output
+# Run ace-cli domains and capture output
 # Filter out CLI update notifications (💡 lines) that break JSON parsing
 RAW_OUTPUT=$(eval "$CMD" 2>&1)
 EXIT_CODE=$?
@@ -69,7 +69,7 @@ fi
 
 # Verify we got valid JSON
 if ! echo "$DOMAINS_OUTPUT" | jq empty 2>/dev/null; then
-  echo "Invalid response from ce-ace (not valid JSON)"
+  echo "Invalid response from ace-cli (not valid JSON)"
   echo ""
   echo "Response:"
   echo "$DOMAINS_OUTPUT"
@@ -134,14 +134,14 @@ Without knowing domain names, `--allowed-domains` is unusable:
 
 ```
 # Before: guessing domain names
-ce-ace search "auth" --allowed-domains "typescript"
+ace-cli search "auth" --allowed-domains "typescript"
 Result: 0 patterns (wrong domain name!)
 
 # After: using discovered domain names
 /ace-domains
 → "typescript-development-practices"
 
-ce-ace search "auth" --allowed-domains "typescript-development-practices"
+ace-cli search "auth" --allowed-domains "typescript-development-practices"
 Result: Filtered patterns! ✓
 ```
 

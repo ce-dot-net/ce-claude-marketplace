@@ -5,19 +5,19 @@ argument-hint: [--global] [--project]
 
 # Configure ACE Connection
 
-Interactive configuration wizard using ce-ace CLI v1.0.2+ features with Claude Code native UI.
+Interactive configuration wizard using ace-cli v1.0.2+ features with Claude Code native UI.
 
 ## What This Does
 
 **Two-step configuration:**
-1. **Global Config**: Uses `ce-ace config validate` + `ce-ace config` with flags
+1. **Global Config**: Uses `ace-cli config validate` + `ace-cli config` with flags
 2. **Project Config**: Creates `.claude/settings.json` with orgId and projectId
 
 ## Instructions for Claude
 
 When the user runs `/ace:configure`, follow these steps:
 
-### Step 1: Check ce-ace CLI Version and Dependencies
+### Step 1: Check ace-cli Version and Dependencies
 
 ```bash
 #!/usr/bin/env bash
@@ -35,9 +35,9 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-# Check for ce-ace CLI
-if ! command -v ce-ace >/dev/null 2>&1; then
-  echo "❌ ce-ace CLI not found"
+# Check for ace-cli
+if ! command -v ace-cli >/dev/null 2>&1; then
+  echo "❌ ace-cli not found"
   echo ""
   echo "Installation required:"
   echo "  npm install -g @ace-sdk/cli"
@@ -45,13 +45,13 @@ if ! command -v ce-ace >/dev/null 2>&1; then
   exit 1
 fi
 
-VERSION=$(ce-ace --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-echo "✅ ce-ace CLI found (version: $VERSION)"
+VERSION=$(ace-cli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+echo "✅ ace-cli found (version: $VERSION)"
 
 # Check version >= 1.0.2
 REQUIRED_VERSION="1.0.2"
 if [ "$(printf '%s\n' "$REQUIRED_VERSION" "$VERSION" | sort -V | head -n1)" != "$REQUIRED_VERSION" ]; then
-  echo "⚠️  ce-ace v$VERSION found, but v1.0.2+ required for non-interactive config"
+  echo "⚠️  ace-cli v$VERSION found, but v1.0.2+ required for non-interactive config"
   echo ""
   echo "Please upgrade:"
   echo "  npm install -g @ace-sdk/cli@latest"
@@ -151,13 +151,13 @@ echo ""
    echo ""
 
    # Use subshell to avoid polluting parent environment
-   # Workaround: ce-ace config validate doesn't accept --server-url flag properly
+   # Workaround: ace-cli config validate doesn't accept --server-url flag properly
    # Use environment variables instead
    # Filter out CLI update notifications (💡 lines) that break JSON parsing
    RAW_VALIDATION=$(
      ACE_SERVER_URL="$SERVER_URL" \
      ACE_API_TOKEN="$API_TOKEN" \
-     ce-ace config validate --json 2>&1
+     ace-cli config validate --json 2>&1
    )
    VALIDATION_EXIT_CODE=$?
    VALIDATION_OUTPUT=$(echo "$RAW_VALIDATION" | grep -v '^💡' | grep -v '^$')
@@ -239,7 +239,7 @@ echo ""
 
    Extract project_id from user selection.
 
-5. **Configure with ce-ace CLI**:
+5. **Configure with ace-cli**:
    ```bash
    echo "💾 Saving global configuration..."
 
@@ -258,14 +258,14 @@ echo ""
    fi
 
    # Save configuration
-   ce-ace config \
+   ace-cli config \
      --server-url "$SERVER_URL" \
      --api-token "$API_TOKEN" \
      --project-id "$PROJECT_ID" \
      --json
 
    if [ $? -ne 0 ]; then
-     echo "❌ Failed to save global configuration (ce-ace config command failed)"
+     echo "❌ Failed to save global configuration (ace-cli config command failed)"
      exit 1
    fi
 
@@ -273,7 +273,7 @@ echo ""
    if [ ! -f "$GLOBAL_CONFIG" ]; then
      echo "❌ Global config was not created at expected location"
      echo "   Expected: $GLOBAL_CONFIG"
-     echo "   Please check ce-ace CLI logs for details"
+     echo "   Please check ace-cli logs for details"
      exit 1
    fi
 
@@ -512,14 +512,14 @@ echo ""
 
 **Key Points:**
 1. **Always use AskUserQuestion** for user input (not bash read or prompts)
-2. **Parse JSON responses** from `ce-ace config validate --json`
+2. **Parse JSON responses** from `ace-cli config validate --json`
 3. **Build dynamic options** from validation response (orgs/projects)
 4. **Map user selections** to actual values (e.g., "Production" → URL)
 5. **Handle both single-org and multi-org modes** based on global config
 
 **Error Handling:**
 - Check jq availability (required for JSON parsing)
-- Check ce-ace version >= 1.0.2
+- Check ace-cli version >= 1.0.2
 - Validate token before saving (with detailed error messages)
 - Verify global config file was created and is valid JSON
 - Verify global config has required fields (serverUrl, apiToken)
@@ -636,5 +636,5 @@ Set via `ACE_VERBOSITY` in settings.json env block.
 
 - `/ace:status` - Verify configuration
 - `/ace:bootstrap` - Initialize playbook
-- `ce-ace config --help` - CLI config help
-- `ce-ace config show` - View current config
+- `ace-cli config --help` - CLI config help
+- `ace-cli config show` - View current config

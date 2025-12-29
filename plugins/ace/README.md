@@ -361,7 +361,7 @@ MIT License - See [LICENSE](../../LICENSE)
 ## 🔗 Links
 
 - **ACE Server**: https://github.com/ce-dot-net/ce-ace-server
-- **CE-ACE CLI**: https://github.com/ce-dot-net/ce-ace-cli
+- **ace-cli**: https://github.com/ce-dot-net/ce-ace-cli
 - **Marketplace**: https://github.com/ce-dot-net/ce-claude-marketplace
 - **Documentation**: See `docs/` directory
 

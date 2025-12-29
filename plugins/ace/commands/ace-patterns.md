@@ -24,9 +24,9 @@ The ACE framework defines 4 sections:
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Check ce-ace CLI available
-if ! command -v ce-ace >/dev/null 2>&1; then
-  echo "❌ ce-ace CLI not found - Install: npm install -g @ace-sdk/cli"
+# Check ace-cli available
+if ! command -v ace-cli >/dev/null 2>&1; then
+  echo "❌ ace-cli not found - Install: npm install -g @ace-sdk/cli"
   exit 1
 fi
 
@@ -43,8 +43,8 @@ fi
 SECTION="${1:-}"  # Optional section filter
 MIN_HELPFUL="${2:-0}"  # Optional min helpful score
 
-# Call ce-ace patterns - CLI reads org/project from env vars automatically
-ce-ace patterns \
+# Call ace-cli patterns - CLI reads org/project from env vars automatically
+ace-cli patterns \
   ${SECTION:+--section "$SECTION"} \
   --min-helpful "$MIN_HELPFUL"
 ```

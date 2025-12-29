@@ -15,7 +15,7 @@ Files archived from v4.x (2024-2025):
 - `MCP_TEAM_SUMMARY.md` - Team communication about MCP architecture
 - `SUBAGENTS.md` - Subagent architecture documentation (Task tool invocations)
 
-**Why archived**: ACE v5.0.0+ uses hooks + ce-ace CLI instead of MCP server. See `CHANGELOG.md` for migration details.
+**Why archived**: ACE v5.0.0+ uses hooks + ace-cli instead of MCP server. See `CHANGELOG.md` for migration details.
 
 ---
 
@@ -35,7 +35,7 @@ For up-to-date documentation, see:
 
 **v1.x-v3.x** (Early 2024): Hooks + Skills (model-invoked)
 **v4.x** (Mid 2024): Subagents + MCP server
-**v5.x** (Late 2024-2025): Hooks + ce-ace CLI (current)
+**v5.x** (Late 2024-2025): Hooks + ace-cli (current)
 
 Each architecture evolution solved specific problems:
 - v4.x → Avoided Hook Storm Bug (#3523)

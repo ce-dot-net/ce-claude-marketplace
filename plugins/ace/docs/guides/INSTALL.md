@@ -1,21 +1,21 @@
 # ACE Plugin Installation Guide
 
 **Version**: v5.1.19
-**Architecture**: Hooks + ce-ace CLI (no MCP server)
+**Architecture**: Hooks + ace-cli (no MCP server)
 
 ---
 
 ## 🎯 Overview
 
-The ACE plugin uses a **hooks-based architecture** with the `ce-ace` CLI tool. No MCP server configuration needed!
+The ACE plugin uses a **hooks-based architecture** with the `ace-cli` CLI tool. No MCP server configuration needed!
 
 **Architecture:**
 ```
-Claude Code → Hooks → ce-ace CLI → ACE Server
+Claude Code → Hooks → ace-cli → ACE Server
 ```
 
 **What you need:**
-- ✅ ce-ace CLI (npm package)
+- ✅ ace-cli (npm package)
 - ✅ Claude Code with marketplace support
 - ❌ No MCP server setup required
 - ❌ No plugin.json MCP configuration
@@ -24,7 +24,7 @@ Claude Code → Hooks → ce-ace CLI → ACE Server
 
 ## 🚀 Quick Install (3 Steps)
 
-### Step 1: Install ce-ace CLI
+### Step 1: Install ace-cli
 
 ```bash
 npm install -g @ace-sdk/cli
@@ -32,7 +32,7 @@ npm install -g @ace-sdk/cli
 
 **Verify installation:**
 ```bash
-ce-ace --version
+ace-cli --version
 # Should show: v1.0.14 or higher
 ```
 
@@ -94,7 +94,7 @@ This will:
 - Git (for marketplace installation)
 
 **ACE Requirements:**
-- ce-ace CLI >= v1.0.14
+- ace-cli >= v1.0.14
 - ACE server access (API token)
 - Organization and project on ACE server
 
@@ -118,7 +118,7 @@ If you're upgrading from the old MCP-based architecture:
    # Remove "ace-pattern-learning" entry
    ```
 
-2. **Install ce-ace CLI**:
+2. **Install ace-cli**:
    ```bash
    npm install -g @ace-sdk/cli
    ```
@@ -149,9 +149,9 @@ Your playbook data is preserved on the server - no data loss during migration!
 
 ## 🔧 Troubleshooting
 
-### "ce-ace not found"
+### "ace-cli not found"
 
-**Problem**: `ce-ace` command not in PATH.
+**Problem**: `ace-cli` command not in PATH.
 
 **Solution**:
 ```bash
@@ -159,8 +159,7 @@ Your playbook data is preserved on the server - no data loss during migration!
 npm install -g @ace-sdk/cli
 
 # Verify installation
-which ce-ace
-ce-ace --version
+which ace-cli ace-cli --version
 
 # If still not found, check npm global bin path
 npm bin -g
@@ -206,9 +205,9 @@ chmod +x ~/.config/claude-code/marketplaces/ce-dot-net-marketplace/plugins/ace/s
 # Restart Claude Code
 ```
 
-### SessionStart shows "ce-ace not found" every session
+### SessionStart shows "ace-cli not found" every session
 
-**Problem**: ce-ace not installed.
+**Problem**: ace-cli not installed.
 
 **Solution**:
 ```bash
@@ -226,7 +225,7 @@ After installation, verify everything works:
 
 ```bash
 # Check CLI version
-ce-ace --version
+ace-cli --version
 
 # Check plugin status
 /ace:ace-status
@@ -240,7 +239,7 @@ cat .claude/settings.json
 ```
 
 **Expected behavior:**
-- ✅ ce-ace shows version >= v1.0.14
+- ✅ ace-cli shows version >= v1.0.14
 - ✅ `/ace:ace-status` shows playbook stats
 - ✅ `/ace:ace-search` returns results
 - ✅ Config files exist with valid credentials
@@ -275,7 +274,7 @@ Once installed:
 ## 🔗 Additional Resources
 
 - **ACE Server**: https://github.com/ce-dot-net/ce-ace-server
-- **CE-ACE CLI**: https://github.com/ce-dot-net/ce-ace-cli
+- **ace-cli**: https://github.com/ce-dot-net/ce-ace-cli
 - **Marketplace**: https://github.com/ce-dot-net/ce-claude-marketplace
 - **Configuration Guide**: See `CONFIGURATION.md`
 - **Troubleshooting**: See `TROUBLESHOOTING.md`

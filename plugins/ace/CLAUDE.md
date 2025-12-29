@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.4.7 -->
+<!-- ACE_SECTION_START v5.4.8 -->
 # ACE Plugin
 
 Automatic pattern learning - hooks handle everything.
@@ -11,6 +11,12 @@ Automatic pattern learning - hooks handle everything.
 **After tasks**: Stop hook captures learning, sends to server
 
 All hooks run automatically. No manual invocation needed.
+
+## v5.4.8: Complete CLI Rename (ce-ace to ace-cli)
+
+**This release** completes the CLI rename started in v5.4.7:
+- All 39 files updated: commands, scripts, hooks, docs
+- `ce-ace` references replaced with `ace-cli` throughout
 
 ## v5.4.7: CLI Migration & Blocking Detection
 
@@ -31,7 +37,7 @@ npm install -g @ace-sdk/cli
 
 **New SessionStart Behavior**:
 - ✅ `ace-cli` found → Normal operation
-- ⚠️ `ce-ace` only found → Warning + continues (transition period)
+- ⚠️ `ace-cli` only found → Warning + continues (transition period)
 - ⛔ Old `@ce-dot-net/ce-ace-cli` detected → ACE hooks DISABLED
 - ⛔ Version < v3.4.1 → ACE hooks DISABLED
 
@@ -96,7 +102,7 @@ Claude now has BOTH auth AND cache patterns in context!
 
 ---
 
-**Version**: v5.4.7 (CLI Migration + Blocking Detection)
+**Version**: v5.4.8 (Complete CLI Rename: ce-ace to ace-cli)
 **Requires**: ace-cli >= v3.4.1 (npm install -g @ace-sdk/cli)
 
-<!-- ACE_SECTION_END v5.4.7 -->
+<!-- ACE_SECTION_END v5.4.8 -->

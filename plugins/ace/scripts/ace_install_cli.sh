@@ -34,8 +34,8 @@ rm -f "$ACE_DISABLED_FLAG" 2>/dev/null || true
 
 # 1. Check if ace-cli exists (new command name)
 if ! command -v ace-cli >/dev/null 2>&1; then
-  # Fallback: Check old ce-ace command
-  if command -v ce-ace >/dev/null 2>&1; then
+  # Fallback: Check old ace-cli command
+  if command -v ace-cli >/dev/null 2>&1; then
     # Old command found - warn but allow (transition period)
     output_warning "⚠️ [ACE] Deprecated command 'ce-ace' detected. Upgrade: npm uninstall -g @ce-dot-net/ce-ace-cli && npm install -g @ace-sdk/cli"
     CLI_CMD="ce-ace"

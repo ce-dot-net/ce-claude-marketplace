@@ -7,11 +7,11 @@
 ACE Permission Request Hook - Auto-approve safe ACE CLI commands
 
 Auto-approves safe read-only ACE commands:
-- ace-cli/ce-ace search, status, patterns, top, get-playbook, doctor
-- ace-cli/ce-ace tune (read config)
+- ace-cli/ace-cli search, status, patterns, top, get-playbook, doctor
+- ace-cli/ace-cli tune (read config)
 
 Auto-denies dangerous destructive commands:
-- ace-cli/ce-ace clear (requires explicit user confirmation)
+- ace-cli/ace-cli clear (requires explicit user confirmation)
 
 All other commands pass through for user decision.
 """
@@ -41,15 +41,15 @@ def main():
             print(json.dumps({}))
             sys.exit(0)
 
-        # Auto-approve safe read-only ACE commands (both ace-cli and ce-ace variants)
+        # Auto-approve safe read-only ACE commands (both ace-cli and ace-cli variants)
         safe_commands = [
-            'ace-cli search', 'ce-ace search',
-            'ace-cli status', 'ce-ace status',
-            'ace-cli patterns', 'ce-ace patterns',
-            'ace-cli top', 'ce-ace top',
-            'ace-cli get-playbook', 'ce-ace get-playbook',
-            'ace-cli doctor', 'ce-ace doctor',
-            'ace-cli tune', 'ce-ace tune'  # Read config only
+            'ace-cli search', 'ace-cli search',
+            'ace-cli status', 'ace-cli status',
+            'ace-cli patterns', 'ace-cli patterns',
+            'ace-cli top', 'ace-cli top',
+            'ace-cli get-playbook', 'ace-cli get-playbook',
+            'ace-cli doctor', 'ace-cli doctor',
+            'ace-cli tune', 'ace-cli tune'  # Read config only
         ]
 
         for safe_cmd in safe_commands:
@@ -65,9 +65,9 @@ def main():
                 print(json.dumps(output))
                 sys.exit(0)
 
-        # Auto-deny dangerous commands (both ace-cli and ce-ace variants)
+        # Auto-deny dangerous commands (both ace-cli and ace-cli variants)
         dangerous_commands = [
-            'ace-cli clear', 'ce-ace clear'
+            'ace-cli clear', 'ace-cli clear'
         ]
 
         for dangerous_cmd in dangerous_commands:

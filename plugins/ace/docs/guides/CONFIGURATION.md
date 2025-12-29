@@ -1,7 +1,7 @@
 # ACE Plugin Configuration Guide
 
 **Version**: v5.1.19
-**Architecture**: Hooks + ce-ace CLI (no MCP server)
+**Architecture**: Hooks + ace-cli (no MCP server)
 
 ---
 
@@ -9,10 +9,10 @@
 
 The ACE plugin uses **two configuration files**:
 
-1. **`~/.config/ace/config.json`** - Global ce-ace CLI configuration (server URL, API token, org ID)
+1. **`~/.config/ace/config.json`** - Global ace-cli configuration (server URL, API token, org ID)
 2. **`.claude/settings.json`** - Per-project configuration (project ID)
 
-**No MCP configuration needed!** The plugin uses hooks + subprocess calls to `ce-ace`, not MCP tools.
+**No MCP configuration needed!** The plugin uses hooks + subprocess calls to `ace-cli`, not MCP tools.
 
 ---
 
@@ -144,7 +144,7 @@ Then use env format in `.claude/settings.json`:
 
 ## 🔄 Configuration Hierarchy
 
-The ce-ace CLI uses this priority order:
+The ace-cli uses this priority order:
 
 1. **Environment variables** (highest priority)
    - `ACE_SERVER_URL`
@@ -410,7 +410,7 @@ After configuration:
 - **Installation Guide**: See `INSTALL.md`
 - **Troubleshooting Guide**: See `TROUBLESHOOTING.md`
 - **ACE Server API**: <https://github.com/ce-dot-net/ce-ace-server/blob/main/docs/API.md>
-- **CE-ACE CLI Docs**: <https://github.com/ce-dot-net/ce-ace-cli>
+- **ace-cli Docs**: <https://github.com/ce-dot-net/ce-ace-cli>
 
 ---
 

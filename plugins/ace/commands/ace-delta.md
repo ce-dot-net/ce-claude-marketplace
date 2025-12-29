@@ -19,14 +19,14 @@ Allows **direct manipulation** of patterns in the ACE playbook:
 
 ## Instructions for Claude
 
-When the user runs `/ace-delta [operation]`, use ce-ace CLI with JSON input:
+When the user runs `/ace-delta [operation]`, use ace-cli with JSON input:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! command -v ce-ace >/dev/null 2>&1; then
-  echo "❌ ce-ace not found - Install: npm install -g @ace-sdk/cli"
+if ! command -v ace-cli >/dev/null 2>&1; then
+  echo "❌ ace-cli not found - Install: npm install -g @ace-sdk/cli"
   exit 1
 fi
 
@@ -73,9 +73,9 @@ EOF
 )
 
 echo "$JSON_PAYLOAD" | if [ -n "$ORG_ID" ]; then
-  ce-ace --json --org "$ORG_ID" --project "$PROJECT_ID" delta add --stdin
+  ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" delta add --stdin
 else
-  ce-ace --json --project "$PROJECT_ID" delta add --stdin
+  ace-cli --json --project "$PROJECT_ID" delta add --stdin
 fi
 ```
 
@@ -92,9 +92,9 @@ fi
 JSON_PAYLOAD='{"bullets": [{"id": "ctx-1749038476-4cb2", "helpful": 5}]}'
 
 echo "$JSON_PAYLOAD" | if [ -n "$ORG_ID" ]; then
-  ce-ace --json --org "$ORG_ID" --project "$PROJECT_ID" delta update --stdin
+  ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" delta update --stdin
 else
-  ce-ace --json --project "$PROJECT_ID" delta update --stdin
+  ace-cli --json --project "$PROJECT_ID" delta update --stdin
 fi
 ```
 
@@ -110,9 +110,9 @@ fi
 JSON_PAYLOAD='{"bullets": [{"id": "ctx-1749038476-4cb2"}]}'
 
 echo "$JSON_PAYLOAD" | if [ -n "$ORG_ID" ]; then
-  ce-ace --json --org "$ORG_ID" --project "$PROJECT_ID" delta remove --stdin
+  ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" delta remove --stdin
 else
-  ce-ace --json --project "$PROJECT_ID" delta remove --stdin
+  ace-cli --json --project "$PROJECT_ID" delta remove --stdin
 fi
 ```
 
@@ -137,9 +137,9 @@ EOF
 )
 
 echo "$JSON_PAYLOAD" | if [ -n "$ORG_ID" ]; then
-  ce-ace --json --org "$ORG_ID" --project "$PROJECT_ID" delta update --stdin
+  ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" delta update --stdin
 else
-  ce-ace --json --project "$PROJECT_ID" delta update --stdin
+  ace-cli --json --project "$PROJECT_ID" delta update --stdin
 fi
 ```
 
