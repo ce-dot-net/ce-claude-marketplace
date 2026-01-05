@@ -4,12 +4,12 @@
   "private": true,
   "description": "Hook testing infrastructure for ACE plugin",
   "scripts": {
-    "test": "bats tests/hooks/*.bats",
-    "test:unit": "bats tests/hooks/*.bats",
-    "test:integration": "bats tests/integration/*.bats",
-    "test:watch": "nodemon --exec 'bun test' --watch tests --ext bats,sh",
-    "test:coverage": "bash tests/helpers/coverage.sh",
-    "install:bats": "bash tests/helpers/install-bats.sh"
+    "test": "bats hooks/*.bats && bats integration/*.bats",
+    "test:unit": "bats hooks/*.bats",
+    "test:integration": "bats integration/*.bats",
+    "test:watch": "nodemon --exec 'bats hooks/*.bats' --watch . --ext bats,sh",
+    "test:coverage": "bash helpers/coverage.sh",
+    "install:bats": "bash helpers/install-bats.sh"
   },
   "devDependencies": {
     "@types/bun": "latest",

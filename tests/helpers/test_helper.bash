@@ -2,9 +2,14 @@
 # test_helper.bash - Shared test utilities for Bats tests
 
 # Load Bats libraries (if installed via Homebrew)
-if [[ -d "/opt/homebrew/lib" ]]; then
+# These are optional - tests work without them
+if [[ -f "/opt/homebrew/lib/bats-support/load.bash" ]]; then
   load '/opt/homebrew/lib/bats-support/load.bash'
+fi
+if [[ -f "/opt/homebrew/lib/bats-assert/load.bash" ]]; then
   load '/opt/homebrew/lib/bats-assert/load.bash'
+fi
+if [[ -f "/opt/homebrew/lib/bats-file/load.bash" ]]; then
   load '/opt/homebrew/lib/bats-file/load.bash'
 fi
 
