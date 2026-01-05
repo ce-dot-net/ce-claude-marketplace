@@ -28,9 +28,9 @@ setup_test_env() {
   mkdir -p "$TEMP_TEST_DIR"
   cd "$TEMP_TEST_DIR"
 
-  # Create mock directories
+  # Create mock directories (using TEMP_TEST_DIR for isolation)
   mkdir -p .claude/data
-  mkdir -p "${HOME}/.claude/logs"
+  mkdir -p .claude/logs
   mkdir -p "${HOME}/.config/ace"
 
   # Set test environment variables
@@ -42,9 +42,6 @@ setup_test_env() {
   # Mock config file
   echo '{"org_id":"test-org","project_id":"test-project"}' > "${HOME}/.config/ace/config.json"
 
-  # Mock recording infrastructure (Sprint 1 Task 3)
-  export MOCK_CALLS_LOG="${TEMP_TEST_DIR}/.mock-calls.log"
-  : > "$MOCK_CALLS_LOG"  # Create empty file
 }
 
 # Teardown function - cleans up test environment
@@ -56,9 +53,6 @@ teardown_test_env() {
 
   # Remove test flag files
   rm -f "/tmp/ace-disabled-${SESSION_ID}.flag"
-
-  # Clean up background logs
-  rm -f "${HOME}/.claude/logs/ace-background-"*"-$$.log"
 }
 
 # Mock ace-cli command
@@ -287,56 +281,6 @@ assert_hook_async_started() {
 
   assert_hook_output_contains "$result" "Learning started in background" "$message" && \
   assert_hook_json_field "$result" "continue" "true" "$message"
-}
-
-# ============================================================================
-# Mock Recording Infrastructure (Sprint 1 Task 3)
-# ============================================================================
-# Tracks mock invocations for "was called" assertions
-# ============================================================================
-
-# Record a mock invocation
-record_mock_call() {
-  local command="$1"
-  local args="${2:-}"
-  local timestamp=$(timing_get_ms)
-
-  echo "${timestamp}|${command}|${args}" >> "$MOCK_CALLS_LOG"
-}
-
-# Assert mock was called with specific command
-assert_mock_called() {
-  local command="$1"
-  local expected_args="${2:-.*}"  # Regex pattern
-  local message="${3:-Mock was not called}"
-
-  if ! grep -q "^[0-9]*|${command}|${expected_args}" "$MOCK_CALLS_LOG"; then
-    echo "[FAIL] ${message}: '${command}' with args matching '${expected_args}'" >&2
-    echo "Mock call log:" >&2
-    cat "$MOCK_CALLS_LOG" >&2
-    return 1
-  fi
-  return 0
-}
-
-# Assert mock was NOT called
-assert_mock_not_called() {
-  local command="$1"
-  local message="${2:-Mock was unexpectedly called}"
-
-  if grep -q "^[0-9]*|${command}|" "$MOCK_CALLS_LOG"; then
-    echo "[FAIL] ${message}: '${command}' was called" >&2
-    echo "Mock call log:" >&2
-    cat "$MOCK_CALLS_LOG" >&2
-    return 1
-  fi
-  return 0
-}
-
-# Get mock call count
-get_mock_call_count() {
-  local command="$1"
-  grep -c "^[0-9]*|${command}|" "$MOCK_CALLS_LOG" || echo "0"
 }
 
 # Assert file exists within timeout

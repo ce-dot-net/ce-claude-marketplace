@@ -33,9 +33,9 @@ teardown() {
   local exit_code=$(echo "$result" | jq -r '.exit_code')
   [[ $exit_code -eq 0 ]]
 
-  # Check background logs are created
+  # Check background logs are created in test directory
   sleep 1
-  [[ -d "${HOME}/.claude/logs" ]]
+  [[ -d "${TEMP_TEST_DIR}/.claude/logs" ]]
 }
 
 @test "stop hook propagates session ID correctly" {
