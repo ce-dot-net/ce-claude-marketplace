@@ -9,11 +9,15 @@ setup() {
   create_mock_uv
   create_mock_python_hook "ace_event_logger.py" "success"
 
-  # Copy actual hook script to temp location
+  # Copy actual hook script to temp location and patch for testing
   cp "${ACE_SCRIPTS_DIR}/ace_stop_wrapper.sh" "${TEMP_TEST_DIR}/"
 
-  # Patch hook script to use mock paths
-  sed -i.bak "s|PLUGIN_ROOT=.*|PLUGIN_ROOT=\"${TEMP_TEST_DIR}\"|" "${TEMP_TEST_DIR}/ace_stop_wrapper.sh"
+  # Patch PLUGIN_ROOT to use test directory (cross-platform sed)
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "s|PLUGIN_ROOT=\"\$(cd \"\${SCRIPT_DIR}/..\" && pwd)\"|PLUGIN_ROOT=\"${TEMP_TEST_DIR}\"|" "${TEMP_TEST_DIR}/ace_stop_wrapper.sh"
+  else
+    sed -i "s|PLUGIN_ROOT=\"\$(cd \"\${SCRIPT_DIR}/..\" && pwd)\"|PLUGIN_ROOT=\"${TEMP_TEST_DIR}\"|" "${TEMP_TEST_DIR}/ace_stop_wrapper.sh"
+  fi
 }
 
 teardown() {
@@ -55,17 +59,16 @@ EOF
   python3 -c "import os; f='${HOME}/.claude/logs/background-marker.txt'; os.path.exists(f) and os.remove(f)"
 
   # Run hook in async mode
-  local start=$(python3 -c 'import time; print(int(time.time() * 1000))')
+  local start=$(timing_get_ms)
   create_hook_input "Stop" | bash "${TEMP_TEST_DIR}/ace_stop_wrapper.sh"
-  local end=$(python3 -c 'import time; print(int(time.time() * 1000))')
-  local duration=$((end - start))
+  local duration=$(timing_since "$start")
 
   # CRITICAL: Hook MUST return in <2s even though task takes 10s
-  [[ $duration -lt 2000 ]] || {
+  if [[ $duration -ge 2000 ]]; then
     echo "REGRESSION: Async mode took ${duration}ms (expected <2000ms)" >&2
     echo "This means async execution is BROKEN - not actually running in background!" >&2
     return 1
-  }
+  fi
 
   # Marker should NOT exist yet (background still running)
   if [[ -f "${HOME}/.claude/logs/background-marker.txt" ]]; then
@@ -119,17 +122,16 @@ EOF
   python3 -c "import os; f='${HOME}/.claude/logs/sync-marker.txt'; os.path.exists(f) and os.remove(f)"
 
   # Run hook in sync mode
-  local start=$(python3 -c 'import time; print(int(time.time() * 1000))')
+  local start=$(timing_get_ms)
   create_hook_input "Stop" | bash "${TEMP_TEST_DIR}/ace_stop_wrapper.sh"
-  local end=$(python3 -c 'import time; print(int(time.time() * 1000))')
-  local duration=$((end - start))
+  local duration=$(timing_since "$start")
 
   # CRITICAL: Hook MUST block for at least 5s
-  [[ $duration -ge 5000 ]] || {
+  if [[ $duration -lt 5000 ]]; then
     echo "REGRESSION: Sync mode took only ${duration}ms (expected >=5000ms)" >&2
     echo "This means sync mode is NOT blocking - async logic leaked into sync!" >&2
     return 1
-  }
+  fi
 
   # Marker MUST exist immediately after return (task ran synchronously)
   [[ -f "${HOME}/.claude/logs/sync-marker.txt" ]] || {
@@ -171,31 +173,29 @@ EOF
 
   # Test with ACE_ASYNC_LEARNING=0
   export ACE_ASYNC_LEARNING=0
-  local start=$(python3 -c 'import time; print(int(time.time() * 1000))')
+  local start=$(timing_get_ms)
   create_hook_input "Stop" | bash "${TEMP_TEST_DIR}/ace_stop_wrapper.sh" >/dev/null
-  local end=$(python3 -c 'import time; print(int(time.time() * 1000))')
-  local sync_duration=$((end - start))
+  local sync_duration=$(timing_since "$start")
 
   # Should have blocked for 3+ seconds
-  [[ $sync_duration -ge 3000 ]] || {
+  if [[ $sync_duration -lt 3000 ]]; then
     echo "REGRESSION: ACE_ASYNC_LEARNING=0 didn't block (${sync_duration}ms)" >&2
     return 1
-  }
+  fi
 
   python3 -c "import os; f='${HOME}/.claude/logs/mode-test-marker.txt'; os.path.exists(f) and os.remove(f)"
 
   # Now test with ACE_ASYNC_LEARNING=1
   export ACE_ASYNC_LEARNING=1
-  start=$(python3 -c 'import time; print(int(time.time() * 1000))')
+  start=$(timing_get_ms)
   create_hook_input "Stop" | bash "${TEMP_TEST_DIR}/ace_stop_wrapper.sh" >/dev/null
-  end=$(python3 -c 'import time; print(int(time.time() * 1000))')
-  local async_duration=$((end - start))
+  local async_duration=$(timing_since "$start")
 
   # Should have returned quickly
-  [[ $async_duration -lt 2000 ]] || {
+  if [[ $async_duration -ge 2000 ]]; then
     echo "REGRESSION: ACE_ASYNC_LEARNING=1 blocked (${async_duration}ms)" >&2
     return 1
-  }
+  fi
 
   # The difference should be SIGNIFICANT (at least 2s)
   local difference=$((sync_duration - async_duration))
@@ -229,14 +229,13 @@ EOF
   chmod +x "${TEMP_TEST_DIR}/shared-hooks/ace_after_task.py"
 
   # Measure how long the hook takes
-  local start=$(python3 -c 'import time; print(int(time.time() * 1000))')
+  local start=$(timing_get_ms)
   create_hook_input "Stop" | bash "${TEMP_TEST_DIR}/ace_stop_wrapper.sh" >/dev/null
-  local end=$(python3 -c 'import time; print(int(time.time() * 1000))')
-  local duration=$((end - start))
+  local duration=$(timing_since "$start")
 
   # If this test PASSES (duration < 2000), async is working
   # If this test FAILS (duration >= 8000), someone broke async mode!
-  [[ $duration -lt 2000 ]] || {
+  if [[ $duration -ge 2000 ]]; then
     echo "🚨 CRITICAL REGRESSION DETECTED! 🚨" >&2
     echo "" >&2
     echo "Hook took ${duration}ms with ACE_ASYNC_LEARNING=1" >&2
@@ -248,5 +247,5 @@ EOF
     echo "Someone likely removed the '&' from line 136 in ace_stop_wrapper.sh" >&2
     echo "or broke the async execution logic in some other way." >&2
     return 1
-  }
+  fi
 }

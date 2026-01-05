@@ -41,6 +41,10 @@ setup_test_env() {
 
   # Mock config file
   echo '{"org_id":"test-org","project_id":"test-project"}' > "${HOME}/.config/ace/config.json"
+
+  # Mock recording infrastructure (Sprint 1 Task 3)
+  export MOCK_CALLS_LOG="${TEMP_TEST_DIR}/.mock-calls.log"
+  : > "$MOCK_CALLS_LOG"  # Create empty file
 }
 
 # Teardown function - cleans up test environment
@@ -140,6 +144,199 @@ measure_time() {
   "$@"
   local end=$(python3 -c 'import time; print(int(time.time() * 1000))')
   echo $((end - start))
+}
+
+# ============================================================================
+# Timing Utilities (Sprint 1 Task 1 - Refactoring Infrastructure)
+# ============================================================================
+# Extracted from 17 duplicated instances across hook tests.
+# Provides consistent timing measurement and assertion functions.
+#
+# Functions:
+#   timing_get_ms()              - Get current timestamp in ms
+#   timing_since "$start"        - Calculate elapsed time since start
+#   assert_duration_under "$duration" "$threshold" ["msg"]
+#   assert_duration_over "$duration" "$threshold" ["msg"]
+# ============================================================================
+
+# Get current timestamp in milliseconds
+timing_get_ms() {
+  python3 -c 'import time; print(int(time.time() * 1000))'
+}
+
+# Calculate elapsed time since start timestamp
+timing_since() {
+  local start="$1"
+  local end=$(timing_get_ms)
+  echo $((end - start))
+}
+
+# Assert duration is under threshold
+assert_duration_under() {
+  local duration="$1"
+  local threshold="$2"
+  local message="${3:-Duration exceeded threshold}"
+
+  if [[ $duration -ge $threshold ]]; then
+    echo "[FAIL] ${message}: ${duration}ms (expected <${threshold}ms)" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Assert duration is over threshold (for blocking tests)
+assert_duration_over() {
+  local duration="$1"
+  local threshold="$2"
+  local message="${3:-Duration below threshold}"
+
+  if [[ $duration -lt $threshold ]]; then
+    echo "[FAIL] ${message}: ${duration}ms (expected >=${threshold}ms)" >&2
+    return 1
+  fi
+  return 0
+}
+
+# ============================================================================
+# Semantic Hook Assertions (Sprint 1 Task 2)
+# ============================================================================
+# Provides high-level assertions that express test intent clearly.
+# ============================================================================
+
+# Assert hook exited silently (no output, exit 0)
+assert_hook_exits_silently() {
+  local result="$1"
+  local message="${2:-Hook did not exit silently}"
+
+  if [[ -n "$result" ]]; then
+    echo "[FAIL] ${message}: Expected empty output, got: ${result}" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Assert hook succeeded (contains continue:true, exit 0)
+assert_hook_succeeded() {
+  local result="$1"
+  local message="${2:-Hook did not succeed}"
+
+  if ! echo "$result" | grep -q '"continue": true'; then
+    echo "[FAIL] ${message}: Missing 'continue: true' in: ${result}" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Assert hook failed (exit code non-zero)
+assert_hook_failed() {
+  local exit_code="$1"
+  local message="${2:-Hook did not fail as expected}"
+
+  if [[ $exit_code -eq 0 ]]; then
+    echo "[FAIL] ${message}: Exit code was 0" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Assert hook output contains string
+assert_hook_output_contains() {
+  local output="$1"
+  local expected="$2"
+  local message="${3:-Hook output missing expected string}"
+
+  if ! echo "$output" | grep -q "$expected"; then
+    echo "[FAIL] ${message}: Expected '${expected}' in: ${output}" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Assert hook output does NOT contain string
+assert_hook_output_not_contains() {
+  local output="$1"
+  local unexpected="$2"
+  local message="${3:-Hook output contains unexpected string}"
+
+  if echo "$output" | grep -q "$unexpected"; then
+    echo "[FAIL] ${message}: Found '${unexpected}' in: ${output}" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Assert hook JSON contains field with value
+assert_hook_json_field() {
+  local result="$1"
+  local field="$2"
+  local expected="$3"
+  local message="${4:-Hook JSON field mismatch}"
+
+  local actual=$(echo "$result" | jq -r ".${field}")
+  if [[ "$actual" != "$expected" ]]; then
+    echo "[FAIL] ${message}: Expected ${field}='${expected}', got '${actual}'" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Assert hook returned async background message
+assert_hook_async_started() {
+  local result="$1"
+  local message="${2:-Hook did not indicate async start}"
+
+  assert_hook_output_contains "$result" "Learning started in background" "$message" && \
+  assert_hook_json_field "$result" "continue" "true" "$message"
+}
+
+# ============================================================================
+# Mock Recording Infrastructure (Sprint 1 Task 3)
+# ============================================================================
+# Tracks mock invocations for "was called" assertions
+# ============================================================================
+
+# Record a mock invocation
+record_mock_call() {
+  local command="$1"
+  local args="${2:-}"
+  local timestamp=$(timing_get_ms)
+
+  echo "${timestamp}|${command}|${args}" >> "$MOCK_CALLS_LOG"
+}
+
+# Assert mock was called with specific command
+assert_mock_called() {
+  local command="$1"
+  local expected_args="${2:-.*}"  # Regex pattern
+  local message="${3:-Mock was not called}"
+
+  if ! grep -q "^[0-9]*|${command}|${expected_args}" "$MOCK_CALLS_LOG"; then
+    echo "[FAIL] ${message}: '${command}' with args matching '${expected_args}'" >&2
+    echo "Mock call log:" >&2
+    cat "$MOCK_CALLS_LOG" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Assert mock was NOT called
+assert_mock_not_called() {
+  local command="$1"
+  local message="${2:-Mock was unexpectedly called}"
+
+  if grep -q "^[0-9]*|${command}|" "$MOCK_CALLS_LOG"; then
+    echo "[FAIL] ${message}: '${command}' was called" >&2
+    echo "Mock call log:" >&2
+    cat "$MOCK_CALLS_LOG" >&2
+    return 1
+  fi
+  return 0
+}
+
+# Get mock call count
+get_mock_call_count() {
+  local command="$1"
+  grep -c "^[0-9]*|${command}|" "$MOCK_CALLS_LOG" || echo "0"
 }
 
 # Assert file exists within timeout

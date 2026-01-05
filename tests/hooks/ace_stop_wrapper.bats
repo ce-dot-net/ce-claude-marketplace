@@ -10,11 +10,15 @@ setup() {
   create_mock_python_hook "ace_after_task.py" "success"
   create_mock_python_hook "ace_event_logger.py" "success"
 
-  # Copy actual hook script to temp location
+  # Copy actual hook script to temp location and patch for testing
   cp "${ACE_SCRIPTS_DIR}/ace_stop_wrapper.sh" "${TEMP_TEST_DIR}/"
 
-  # Patch hook script to use mock paths
-  sed -i.bak "s|PLUGIN_ROOT=.*|PLUGIN_ROOT=\"${TEMP_TEST_DIR}\"|" "${TEMP_TEST_DIR}/ace_stop_wrapper.sh"
+  # Patch PLUGIN_ROOT to use test directory (cross-platform sed)
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "s|PLUGIN_ROOT=\"\$(cd \"\${SCRIPT_DIR}/..\" && pwd)\"|PLUGIN_ROOT=\"${TEMP_TEST_DIR}\"|" "${TEMP_TEST_DIR}/ace_stop_wrapper.sh"
+  else
+    sed -i "s|PLUGIN_ROOT=\"\$(cd \"\${SCRIPT_DIR}/..\" && pwd)\"|PLUGIN_ROOT=\"${TEMP_TEST_DIR}\"|" "${TEMP_TEST_DIR}/ace_stop_wrapper.sh"
+  fi
 }
 
 teardown() {
@@ -32,16 +36,12 @@ teardown() {
   create_mock_python_hook "ace_after_task.py" "slow"
 
   # Measure execution time
-  local start=$(python3 -c 'import time; print(int(time.time() * 1000))')
+  local start=$(timing_get_ms)
   create_hook_input "Stop" | bash "${TEMP_TEST_DIR}/ace_stop_wrapper.sh"
-  local end=$(python3 -c 'import time; print(int(time.time() * 1000))')
-  local duration=$((end - start))
+  local duration=$(timing_since "$start")
 
   # Assert: Hook returns quickly despite slow background task
-  [[ $duration -lt 2000 ]] || {
-    echo "Hook took ${duration}ms (expected <2000ms)" >&2
-    return 1
-  }
+  assert_duration_under "$duration" 2000 "Hook took too long"
 }
 
 @test "async mode returns immediate success message" {
@@ -50,8 +50,7 @@ teardown() {
   local result=$(create_hook_input "Stop" | bash "${TEMP_TEST_DIR}/ace_stop_wrapper.sh")
 
   # Assert: Result indicates background learning
-  echo "$result" | grep -q "Learning started in background"
-  echo "$result" | grep -q '"continue": true'
+  assert_hook_async_started "$result"
 }
 
 @test "async mode creates background log file" {
@@ -84,16 +83,12 @@ teardown() {
   create_mock_python_hook "ace_after_task.py" "slow"
 
   # Measure execution time
-  local start=$(python3 -c 'import time; print(int(time.time() * 1000))')
+  local start=$(timing_get_ms)
   create_hook_input "Stop" | bash "${TEMP_TEST_DIR}/ace_stop_wrapper.sh"
-  local end=$(python3 -c 'import time; print(int(time.time() * 1000))')
-  local duration=$((end - start))
+  local duration=$(timing_since "$start")
 
   # Assert: Hook blocks for at least 5 seconds
-  [[ $duration -ge 5000 ]] || {
-    echo "Hook returned too quickly in sync mode: ${duration}ms" >&2
-    return 1
-  }
+  assert_duration_over "$duration" 5000 "Hook returned too quickly in sync mode"
 }
 
 @test "sync mode returns actual task result" {
@@ -102,7 +97,7 @@ teardown() {
   local result=$(create_hook_input "Stop" | bash "${TEMP_TEST_DIR}/ace_stop_wrapper.sh")
 
   # Assert: Result is from actual hook, not wrapper
-  echo "$result" | grep -q "Mock success"
+  assert_hook_output_contains "$result" "Mock success"
 }
 
 # ============================================================================
@@ -116,7 +111,7 @@ teardown() {
   local result=$(create_hook_input "Stop" | bash "${TEMP_TEST_DIR}/ace_stop_wrapper.sh")
 
   # Assert: Hook exits with success but no output
-  [[ -z "$result" ]]
+  assert_hook_exits_silently "$result"
 }
 
 @test "hook runs normally when flag does not exist" {
@@ -129,7 +124,7 @@ teardown() {
 
   # Assert: Hook executed
   [[ -n "$result" ]]
-  echo "$result" | grep -q "Learning started"
+  assert_hook_output_contains "$result" "Learning started"
 }
 
 # ============================================================================
@@ -321,18 +316,16 @@ EOF
   export ACE_ASYNC_LEARNING=1
   create_mock_python_hook "ace_after_task.py" "slow"
 
-  local async_start=$(python3 -c 'import time; print(int(time.time() * 1000))')
+  local async_start=$(timing_get_ms)
   create_hook_input "Stop" | bash "${TEMP_TEST_DIR}/ace_stop_wrapper.sh" >/dev/null
-  local async_end=$(python3 -c 'import time; print(int(time.time() * 1000))')
-  local async_duration=$((async_end - async_start))
+  local async_duration=$(timing_since "$async_start")
 
   # Measure sync mode
   export ACE_ASYNC_LEARNING=0
 
-  local sync_start=$(python3 -c 'import time; print(int(time.time() * 1000))')
+  local sync_start=$(timing_get_ms)
   create_hook_input "Stop" | bash "${TEMP_TEST_DIR}/ace_stop_wrapper.sh" >/dev/null
-  local sync_end=$(python3 -c 'import time; print(int(time.time() * 1000))')
-  local sync_duration=$((sync_end - sync_start))
+  local sync_duration=$(timing_since "$sync_start")
 
   # Assert: Async is significantly faster
   local speedup=$((sync_duration / async_duration))
