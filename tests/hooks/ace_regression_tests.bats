@@ -32,19 +32,19 @@ teardown() {
   export ACE_ASYNC_LEARNING=1
 
   # Create slow Python hook (10s delay) that leaves a marker file
-  cat > "${TEMP_TEST_DIR}/shared-hooks/ace_after_task.py" <<'EOF'
+  cat > "${TEMP_TEST_DIR}/shared-hooks/ace_after_task.py" <<EOF
 #!/usr/bin/env python3
 import sys
 import json
 import time
 import os
 
-# Create marker file to prove we ran
-marker = os.path.join(os.environ.get('HOME', '/tmp'), '.claude/logs/background-marker.txt')
+# Create marker file to prove we ran (using TEMP_TEST_DIR for isolation)
+marker = os.path.join('${TEMP_TEST_DIR}', '.claude/logs/background-marker.txt')
 os.makedirs(os.path.dirname(marker), exist_ok=True)
 
 with open(marker, 'w') as f:
-    f.write('background process executed\n')
+    f.write('background process executed\\n')
 
 # Sleep to simulate long-running task
 time.sleep(10)
@@ -56,7 +56,7 @@ EOF
   chmod +x "${TEMP_TEST_DIR}/shared-hooks/ace_after_task.py"
 
   # Delete any existing marker (using Python instead of rm)
-  python3 -c "import os; f='${HOME}/.claude/logs/background-marker.txt'; os.path.exists(f) and os.remove(f)"
+  python3 -c "import os; f='${TEMP_TEST_DIR}/.claude/logs/background-marker.txt'; os.path.exists(f) and os.remove(f)"
 
   # Run hook in async mode
   local start=$(timing_get_ms)
@@ -71,7 +71,7 @@ EOF
   fi
 
   # Marker should NOT exist yet (background still running)
-  if [[ -f "${HOME}/.claude/logs/background-marker.txt" ]]; then
+  if [[ -f "${TEMP_TEST_DIR}/.claude/logs/background-marker.txt" ]]; then
     echo "REGRESSION: Background task completed too quickly!" >&2
     echo "Expected task to still be running in background" >&2
     return 1
@@ -81,33 +81,33 @@ EOF
   sleep 11
 
   # NOW marker should exist (proves background task ran)
-  [[ -f "${HOME}/.claude/logs/background-marker.txt" ]] || {
+  [[ -f "${TEMP_TEST_DIR}/.claude/logs/background-marker.txt" ]] || {
     echo "REGRESSION: Background task never ran!" >&2
     echo "Marker file not found - async execution is BROKEN" >&2
     return 1
   }
 
   # Cleanup using Python
-  python3 -c "import os; f='${HOME}/.claude/logs/background-marker.txt'; os.path.exists(f) and os.remove(f)"
+  python3 -c "import os; f='${TEMP_TEST_DIR}/.claude/logs/background-marker.txt'; os.path.exists(f) and os.remove(f)"
 }
 
 @test "REGRESSION: sync mode does NOT spawn background process" {
   export ACE_ASYNC_LEARNING=0
 
   # Create slow Python hook (5s delay) that leaves a marker file
-  cat > "${TEMP_TEST_DIR}/shared-hooks/ace_after_task.py" <<'EOF'
+  cat > "${TEMP_TEST_DIR}/shared-hooks/ace_after_task.py" <<EOF
 #!/usr/bin/env python3
 import sys
 import json
 import time
 import os
 
-# Create marker file immediately
-marker = os.path.join(os.environ.get('HOME', '/tmp'), '.claude/logs/sync-marker.txt')
+# Create marker file immediately (using TEMP_TEST_DIR for isolation)
+marker = os.path.join('${TEMP_TEST_DIR}', '.claude/logs/sync-marker.txt')
 os.makedirs(os.path.dirname(marker), exist_ok=True)
 
 with open(marker, 'w') as f:
-    f.write('sync process executed\n')
+    f.write('sync process executed\\n')
 
 # Sleep to simulate processing
 time.sleep(5)
@@ -119,7 +119,7 @@ EOF
   chmod +x "${TEMP_TEST_DIR}/shared-hooks/ace_after_task.py"
 
   # Delete any existing marker
-  python3 -c "import os; f='${HOME}/.claude/logs/sync-marker.txt'; os.path.exists(f) and os.remove(f)"
+  python3 -c "import os; f='${TEMP_TEST_DIR}/.claude/logs/sync-marker.txt'; os.path.exists(f) and os.remove(f)"
 
   # Run hook in sync mode
   local start=$(timing_get_ms)
@@ -134,32 +134,33 @@ EOF
   fi
 
   # Marker MUST exist immediately after return (task ran synchronously)
-  [[ -f "${HOME}/.claude/logs/sync-marker.txt" ]] || {
+  [[ -f "${TEMP_TEST_DIR}/.claude/logs/sync-marker.txt" ]] || {
     echo "REGRESSION: Sync task didn't run or didn't create marker" >&2
     return 1
   }
 
   # Cleanup
-  python3 -c "import os; f='${HOME}/.claude/logs/sync-marker.txt'; os.path.exists(f) and os.remove(f)"
+  python3 -c "import os; f='${TEMP_TEST_DIR}/.claude/logs/sync-marker.txt'; os.path.exists(f) and os.remove(f)"
 }
 
 @test "REGRESSION: disabling async via ACE_ASYNC_LEARNING=0 actually works" {
   # This test ensures ACE_ASYNC_LEARNING=0 isn't just ignored
 
   # Create marker-based hook
-  cat > "${TEMP_TEST_DIR}/shared-hooks/ace_after_task.py" <<'EOF'
+  cat > "${TEMP_TEST_DIR}/shared-hooks/ace_after_task.py" <<EOF
 #!/usr/bin/env python3
 import sys
 import json
 import time
 import os
 
-marker = os.path.join(os.environ.get('HOME', '/tmp'), '.claude/logs/mode-test-marker.txt')
+# Using TEMP_TEST_DIR for isolation
+marker = os.path.join('${TEMP_TEST_DIR}', '.claude/logs/mode-test-marker.txt')
 os.makedirs(os.path.dirname(marker), exist_ok=True)
 
 # Write start time
 with open(marker, 'w') as f:
-    f.write(str(time.time()) + '\n')
+    f.write(str(time.time()) + '\\n')
 
 time.sleep(3)
 
@@ -169,7 +170,7 @@ sys.exit(0)
 EOF
   chmod +x "${TEMP_TEST_DIR}/shared-hooks/ace_after_task.py"
 
-  python3 -c "import os; f='${HOME}/.claude/logs/mode-test-marker.txt'; os.path.exists(f) and os.remove(f)"
+  python3 -c "import os; f='${TEMP_TEST_DIR}/.claude/logs/mode-test-marker.txt'; os.path.exists(f) and os.remove(f)"
 
   # Test with ACE_ASYNC_LEARNING=0
   export ACE_ASYNC_LEARNING=0
@@ -183,7 +184,7 @@ EOF
     return 1
   fi
 
-  python3 -c "import os; f='${HOME}/.claude/logs/mode-test-marker.txt'; os.path.exists(f) and os.remove(f)"
+  python3 -c "import os; f='${TEMP_TEST_DIR}/.claude/logs/mode-test-marker.txt'; os.path.exists(f) and os.remove(f)"
 
   # Now test with ACE_ASYNC_LEARNING=1
   export ACE_ASYNC_LEARNING=1

@@ -13,11 +13,13 @@ setup() {
   # Copy actual hook script to temp location and patch for testing
   cp "${ACE_SCRIPTS_DIR}/ace_stop_wrapper.sh" "${TEMP_TEST_DIR}/"
 
-  # Patch PLUGIN_ROOT to use test directory (cross-platform sed)
+  # Patch PLUGIN_ROOT and LOG_DIR to use test directory (cross-platform sed)
   if [[ "$OSTYPE" == "darwin"* ]]; then
     sed -i '' "s|PLUGIN_ROOT=\"\$(cd \"\${SCRIPT_DIR}/..\" && pwd)\"|PLUGIN_ROOT=\"${TEMP_TEST_DIR}\"|" "${TEMP_TEST_DIR}/ace_stop_wrapper.sh"
+    sed -i '' "s|LOG_DIR=\"\${HOME}/.claude/logs\"|LOG_DIR=\"${TEMP_TEST_DIR}/.claude/logs\"|" "${TEMP_TEST_DIR}/ace_stop_wrapper.sh"
   else
     sed -i "s|PLUGIN_ROOT=\"\$(cd \"\${SCRIPT_DIR}/..\" && pwd)\"|PLUGIN_ROOT=\"${TEMP_TEST_DIR}\"|" "${TEMP_TEST_DIR}/ace_stop_wrapper.sh"
+    sed -i "s|LOG_DIR=\"\${HOME}/.claude/logs\"|LOG_DIR=\"${TEMP_TEST_DIR}/.claude/logs\"|" "${TEMP_TEST_DIR}/ace_stop_wrapper.sh"
   fi
 }
 
@@ -64,11 +66,11 @@ teardown() {
   # Wait for background process to complete and write error log
   sleep 2
 
-  # Assert: Error log was created (only happens on failure)
-  local log_count=$(ls -1 "${HOME}/.claude/logs/ace-background-"* 2>/dev/null | wc -l)
+  # Assert: Error log was created in test directory (only happens on failure)
+  local log_count=$(ls -1 "${TEMP_TEST_DIR}/.claude/logs/ace-background-"* 2>/dev/null | wc -l)
   [[ $log_count -gt 0 ]] || {
     # If no log found, at least verify log directory exists
-    [[ -d "${HOME}/.claude/logs" ]]
+    [[ -d "${TEMP_TEST_DIR}/.claude/logs" ]]
   }
 }
 
