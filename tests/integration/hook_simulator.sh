@@ -25,7 +25,12 @@ simulate_hook_trigger() {
 
   # Load context variables from JSON
   if [[ -n "$context_json" ]] && [[ "$context_json" != "{}" ]]; then
-    eval "$(echo "$context_json" | jq -r 'to_entries | .[] | "export \(.key)=\(.value)"')"
+    # Validate JSON first
+    if echo "$context_json" | jq -e . >/dev/null 2>&1; then
+      eval "$(echo "$context_json" | jq -r 'to_entries | .[] | "export \(.key)=\(.value)"')"
+    else
+      echo "[WARN] Invalid context JSON, skipping: $context_json" >&2
+    fi
   fi
 
   # Prepare stdin
@@ -49,15 +54,15 @@ EOF
   local temp_output=$(mktemp)
   local temp_error=$(mktemp)
 
-  local start_ns=$(python3 -c 'import time; print(int(time.time() * 1_000_000_000))')
+  local start_ns=$(python3 -c 'import time; print(int(time.time() * 1000000000))')
 
   set +e
   echo "$hook_input" | bash "$hook_script" >"$temp_output" 2>"$temp_error"
   local exit_code=$?
   set -e
 
-  local end_ns=$(python3 -c 'import time; print(int(time.time() * 1_000_000_000))')
-  local duration_ms=$(( (end_ns - start_ns) / 1_000_000 ))
+  local end_ns=$(python3 -c 'import time; print(int(time.time() * 1000000000))')
+  local duration_ms=$(( (end_ns - start_ns) / 1000000 ))
 
   # Read outputs
   local stdout_content=$(cat "$temp_output")
