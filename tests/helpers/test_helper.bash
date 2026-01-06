@@ -301,6 +301,91 @@ assert_file_eventually_exists() {
   return 1
 }
 
+# ============================================================================
+# Reusable Hook Test Patterns
+# ============================================================================
+# Generic test helpers for common hook wrapper behaviors
+# ============================================================================
+
+# Setup hook wrapper for testing - copies and patches for isolation
+setup_hook_wrapper() {
+  local hook_name="$1"  # e.g., "ace_stop_wrapper.sh"
+  local patch_log_dir="${2:-false}"  # Optional: patch LOG_DIR for hooks that use it
+
+  # Copy hook to test directory
+  cp "${ACE_SCRIPTS_DIR}/${hook_name}" "${TEMP_TEST_DIR}/"
+
+  # Patch PLUGIN_ROOT to use test directory (cross-platform sed)
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "s|PLUGIN_ROOT=\"\$(cd \"\${SCRIPT_DIR}/..\" && pwd)\"|PLUGIN_ROOT=\"${TEMP_TEST_DIR}\"|" "${TEMP_TEST_DIR}/${hook_name}"
+
+    # Optionally patch LOG_DIR for hooks that create background logs
+    if [[ "$patch_log_dir" == "true" ]]; then
+      sed -i '' "s|LOG_DIR=\"\${HOME}/.claude/logs\"|LOG_DIR=\"${TEMP_TEST_DIR}/.claude/logs\"|" "${TEMP_TEST_DIR}/${hook_name}"
+    fi
+  else
+    sed -i "s|PLUGIN_ROOT=\"\$(cd \"\${SCRIPT_DIR}/..\" && pwd)\"|PLUGIN_ROOT=\"${TEMP_TEST_DIR}\"|" "${TEMP_TEST_DIR}/${hook_name}"
+
+    if [[ "$patch_log_dir" == "true" ]]; then
+      sed -i "s|LOG_DIR=\"\${HOME}/.claude/logs\"|LOG_DIR=\"${TEMP_TEST_DIR}/.claude/logs\"|" "${TEMP_TEST_DIR}/${hook_name}"
+    fi
+  fi
+}
+
+# Test that hook respects ACE_DISABLED_FLAG
+test_hook_respects_disable_flag() {
+  local hook_name="$1"
+  local event_type="${2:-Stop}"
+
+  # Create disabled flag
+  touch "/tmp/ace-disabled-${SESSION_ID}.flag"
+
+  local result=$(create_hook_input "$event_type" | bash "${TEMP_TEST_DIR}/${hook_name}")
+
+  # Assert: Hook exits silently
+  assert_hook_exits_silently "$result"
+}
+
+# Test that hook exits when CLI not available
+test_hook_requires_cli() {
+  local hook_name="$1"
+  local event_type="${2:-Stop}"
+
+  # Remove CLI from PATH
+  export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v "$TEMP_TEST_DIR" | tr '\n' ':')
+
+  local result=$(create_hook_input "$event_type" | bash "${TEMP_TEST_DIR}/${hook_name}" 2>&1)
+
+  # Assert: Hook exits gracefully (exit 0)
+  [[ $? -eq 0 ]]
+}
+
+# Test that hook extracts working directory from event JSON
+test_hook_extracts_working_dir() {
+  local hook_name="$1"
+  local event_type="${2:-Stop}"
+
+  # Create test directory structure
+  mkdir -p "${TEMP_TEST_DIR}/project-root/.claude"
+  echo '{}' > "${TEMP_TEST_DIR}/project-root/.claude/settings.json"
+
+  # Create hook input with cwd
+  local input=$(cat <<EOF
+{
+  "hook_event_name": "${event_type}",
+  "cwd": "${TEMP_TEST_DIR}/project-root",
+  "session_id": "${SESSION_ID}"
+}
+EOF
+)
+
+  # Hook should execute in project-root
+  echo "$input" | bash "${TEMP_TEST_DIR}/${hook_name}" >/dev/null 2>&1
+
+  # Assert: No errors (would fail if couldn't cd)
+  [[ $? -eq 0 ]]
+}
+
 # Create test input JSON for hooks
 create_hook_input() {
   local hook_event="${1:-Stop}"
