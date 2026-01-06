@@ -112,7 +112,7 @@ def get_session_tools(session_id: str, working_dir: str = None) -> list:
         working_dir: Project working directory (optional)
 
     Returns:
-        List of tuples: (tool_name, tool_input_json, tool_response_json, tool_use_id)
+        List of dicts with keys: tool_name, tool_input, tool_response, tool_use_id
     """
     try:
         db_path = get_db_path(working_dir)
@@ -120,13 +120,14 @@ def get_session_tools(session_id: str, working_dir: str = None) -> list:
             return []
 
         conn = init_db(db_path)
+        conn.row_factory = sqlite3.Row
         cursor = conn.execute('''
             SELECT tool_name, tool_input, tool_response, tool_use_id
             FROM tool_uses
             WHERE session_id = ?
             ORDER BY id
         ''', (session_id,))
-        tools = cursor.fetchall()
+        tools = [dict(row) for row in cursor.fetchall()]
         conn.close()
         return tools
     except Exception as e:
@@ -175,21 +176,19 @@ def get_session_stats(session_id: str, working_dir: str = None) -> dict:
         working_dir: Project working directory (optional)
 
     Returns:
-        Dict with total_tools, state_changing_tools, tool_names
+        Dict with total_tools, tool_counts (per-tool breakdown)
     """
     tools = get_session_tools(session_id, working_dir)
-    state_changing = ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit']
 
-    tool_names = [t[0] for t in tools]
-    state_changing_count = sum(
-        1 for name in tool_names
-        if any(sc in name for sc in state_changing)
-    )
+    # Count occurrences of each tool
+    tool_counts = {}
+    for tool in tools:
+        tool_name = tool["tool_name"]
+        tool_counts[tool_name] = tool_counts.get(tool_name, 0) + 1
 
     return {
         'total_tools': len(tools),
-        'state_changing_tools': state_changing_count,
-        'tool_names': tool_names
+        'tool_counts': tool_counts
     }
 
 
@@ -248,12 +247,12 @@ def main():
     elif args.command == 'get':
         tools = get_session_tools(args.session_id, args.working_dir)
         result = []
-        for tool_name, tool_input, tool_response, tool_use_id in tools:
+        for tool in tools:
             result.append({
-                'tool_name': tool_name,
-                'tool_input': json.loads(tool_input) if tool_input else {},
-                'tool_response': json.loads(tool_response) if tool_response else {},
-                'tool_use_id': tool_use_id
+                'tool_name': tool['tool_name'],
+                'tool_input': json.loads(tool['tool_input']) if tool['tool_input'] else {},
+                'tool_response': json.loads(tool['tool_response']) if tool['tool_response'] else {},
+                'tool_use_id': tool['tool_use_id']
             })
         print(json.dumps(result, indent=2))
 

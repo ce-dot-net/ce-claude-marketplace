@@ -329,6 +329,11 @@ EOF
   create_hook_input "Stop" | bash "${TEMP_TEST_DIR}/ace_stop_wrapper.sh" >/dev/null
   local sync_duration=$(timing_since "$sync_start")
 
+  # Skip timing assertion on CI (environmental sensitivity)
+  if [[ -n "${CI:-}" ]]; then
+    skip "Timing test - CI runners too variable for reliable performance assertions"
+  fi
+
   # Assert: Async is significantly faster
   local speedup=$((sync_duration / async_duration))
   [[ $speedup -ge 10 ]] || {

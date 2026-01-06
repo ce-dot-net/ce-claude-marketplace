@@ -80,9 +80,25 @@ def is_trivial_task(task_description: str) -> bool:
         r'ace-top',
 
         # Simple queries (not implementation work)
-        r'^(what|how|why|where|when|can you|could you|would you)\s.*\?$',
-        r'^(list|show|display|print|view|see)\s',
-        r'^(check|status|version|help|info)\s*$',
+        r'^what\s+is\s+',
+        r'^how\s+do\s+i\s+',
+        r'^why\s+',
+        r'^where\s+is\s+',
+        r'^when\s+',
+        r'^can\s+you\s+',
+        r'^could\s+you\s+',
+        r'^would\s+you\s+',
+        r'^show\s+me\s+',
+        r'^display\s+',
+        r'^list\s+',
+        r'^print\s+',
+        r'^view\s+',
+        r'^see\s+',
+        r'^check\s+',
+        r'^status\s*$',
+        r'^version\s*$',
+        r'^help\s*$',
+        r'^info\s*$',
 
         # Git status checks (read-only, no learning value)
         r'git\s+(status|log|diff|branch|show)\s*$',
