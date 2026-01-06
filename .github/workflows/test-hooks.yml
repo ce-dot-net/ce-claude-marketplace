@@ -44,7 +44,7 @@ jobs:
       - name: Install Bats (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install bats-core bats-support bats-assert bats-file
+          brew install bats-core
 
       - name: Verify Bats installation
         run: bats --version
@@ -90,7 +90,7 @@ jobs:
       - name: Install Bats (macOS)
         if: runner.os == 'macOS'
         run: |
-          brew install bats-core bats-support bats-assert bats-file
+          brew install bats-core
 
       - name: Setup Python
         uses: actions/setup-python@v5
