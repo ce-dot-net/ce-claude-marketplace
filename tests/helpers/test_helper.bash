@@ -84,6 +84,10 @@ case "${behavior}" in
 esac
 EOF
   chmod +x "${TEMP_TEST_DIR}/mock-ace-cli"
+
+  # Create symlink with actual CLI name that wrappers check for
+  ln -sf "${TEMP_TEST_DIR}/mock-ace-cli" "${TEMP_TEST_DIR}/ace-cli"
+
   export PATH="${TEMP_TEST_DIR}:${PATH}"
   export CLI_CMD="${TEMP_TEST_DIR}/mock-ace-cli"
 }
