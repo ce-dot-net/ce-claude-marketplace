@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.4.9 -->
+<!-- ACE_SECTION_START v5.4.11 -->
 # ACE Plugin
 
 Automatic pattern learning - hooks handle everything.
@@ -11,6 +11,23 @@ Automatic pattern learning - hooks handle everything.
 **After tasks**: Stop hook captures learning, sends to server
 
 All hooks run automatically. No manual invocation needed.
+
+## v5.4.11: agent_type Capture (Claude Code 2.1.2+)
+
+**Feature**: Captures `agent_type` from Claude Code 2.1.2+ SessionStart input.
+
+**How it works**:
+- SessionStart hook reads `agent_type` from input JSON (default: "main")
+- Saves to `/tmp/ace-agent-type-{session_id}.txt` for other hooks
+- UserPromptSubmit includes `agent-type` attribute in `<ace-patterns>` tag
+- Stop hook includes `agent_type` in ExecutionTrace for learning
+
+**Benefit**: Server can weight patterns differently based on agent type (main, refactorer, coder, etc.)
+
+## v5.4.10: Claude Code 2.1.0+ Enhancements
+
+**Added**: Wildcard permissions documentation for smoother workflow
+**Added**: `context: fork` to ace-bootstrap for isolated execution
 
 ## v5.4.9: Fix GitHub Repository URLs
 
@@ -92,8 +109,8 @@ Claude now has BOTH auth AND cache patterns in context!
 
 | Event | Hook | Purpose |
 |-------|------|---------|
-| SessionStart | ace_install_cli.sh | CLI detection + migration blocking |
-| UserPromptSubmit | ace_before_task.py | Search + inject patterns |
+| SessionStart | ace_install_cli.sh | CLI detection + **agent_type capture** |
+| UserPromptSubmit | ace_before_task.py | Search + inject patterns + agent_type |
 | PreToolUse | ace_pretooluse_wrapper.sh | **Auto-search on domain shifts** |
 | PostToolUse | ace_posttooluse_wrapper.sh | Accumulate tool calls |
 | PermissionRequest | ace_permission_request.sh | Auto-approve safe commands |
@@ -103,7 +120,7 @@ Claude now has BOTH auth AND cache patterns in context!
 
 ---
 
-**Version**: v5.4.9 (Fix GitHub Repository URLs)
+**Version**: v5.4.11 (agent_type Capture for Claude Code 2.1.2+)
 **Requires**: ace-cli >= v3.4.1 (npm install -g @ace-sdk/cli)
 
-<!-- ACE_SECTION_END v5.4.9 -->
+<!-- ACE_SECTION_END v5.4.11 -->

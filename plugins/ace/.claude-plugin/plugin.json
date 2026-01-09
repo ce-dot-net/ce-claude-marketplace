@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.4.9",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.4.9: Fix GitHub repository URLs (consolidated to ace-sdk monorepo). Requires ace-cli >= v3.4.1.",
+  "version": "5.4.11",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.4.11: agent_type capture from Claude Code 2.1.2+. Requires ace-cli >= v3.4.1.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

@@ -5,6 +5,45 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.11] - 2026-01-09
+
+### agent_type Capture (Claude Code 2.1.2+)
+
+**Feature**: Captures `agent_type` from Claude Code 2.1.2+ SessionStart input.
+
+**How it works**:
+- SessionStart hook (`ace_install_cli.sh`) reads stdin JSON, extracts `agent_type` field
+- Saves to `/tmp/ace-agent-type-{session_id}.txt` for other hooks
+- UserPromptSubmit (`ace_before_task.py`) includes `agent-type` attribute in `<ace-patterns>` tag
+- Stop hook (`ace_after_task.py`) includes `agent_type` in ExecutionTrace for learning
+
+**Benefit**: Server can weight patterns differently based on agent type (main, refactorer, coder, etc.)
+
+**Files Updated**:
+- `plugins/ace/scripts/ace_install_cli.sh` - Read stdin, extract agent_type
+- `plugins/ace/shared-hooks/ace_before_task.py` - Include in pattern tag
+- `plugins/ace/shared-hooks/ace_after_task.py` - Include in ExecutionTrace
+
+---
+
+## [5.4.10] - 2026-01-09
+
+### Claude Code 2.1.0+ Enhancements
+
+**Added**: Wildcard permissions documentation in README.md
+- Users can add `Bash(ace-cli *)` to auto-approve ACE CLI operations
+- Eliminates permission prompts for smoother workflow
+
+**Added**: `context: fork` frontmatter to `ace-bootstrap.md`
+- Heavy bootstrap operations run in isolated sub-agent
+- Prevents polluting main conversation context
+
+**Analysis Complete**: Evaluated Claude Code 2.1.0 features 4 (prompt hooks) and 7 (updatedInput):
+- Feature 4 (Prompt Hooks): Not applicable - cannot inject additionalContext
+- Feature 7 (updatedInput): Future consideration - no current use case
+
+---
+
 ## [5.4.9] - 2025-12-29
 
 ### Fix GitHub Repository URLs
