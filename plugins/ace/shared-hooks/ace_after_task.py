@@ -470,6 +470,17 @@ def main():
             except Exception:
                 pass
 
+        # v5.4.11: Read agent_type set by SessionStart hook (Claude Code 2.1.2+)
+        # agent_type identifies subagent type: "main", "refactorer", "coder", etc.
+        # Server can use this to attribute learning to specific agent types
+        agent_type = "main"
+        try:
+            agent_type_file = Path(f"/tmp/ace-agent-type-{session_id}.txt")
+            if agent_type_file.exists():
+                agent_type = agent_type_file.read_text().strip() or "main"
+        except Exception:
+            pass  # Default to "main" if file not found
+
         # Build the trace
         trace = {
             "task": f"User request: {user_prompt[:2000]}",
@@ -479,7 +490,8 @@ def main():
                 "output": f"Executed {len(tools)} tool calls"
             },
             "playbook_used": playbook_used,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
+            "agent_type": agent_type  # v5.4.11: Attribute learning to agent type
         }
 
         # STEP 5.5: Git context capture (Issue #6)

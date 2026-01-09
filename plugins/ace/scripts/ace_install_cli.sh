@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # ACE SessionStart Hook - CLI Detection & Migration
+# v5.4.11: Capture agent_type from Claude Code 2.1.2+
 # v5.4.7: Flag-based hook disable + daily update check
 # Command: ace-cli (new) or ce-ace (deprecated)
 #
@@ -11,11 +12,25 @@
 
 set -eo pipefail
 
+# Read stdin JSON (Claude Code 2.1.2+ provides agent_type)
+INPUT_JSON=$(cat 2>/dev/null || echo "{}")
+
+# Extract session_id from input (fall back to env var or default)
+SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // empty' 2>/dev/null || echo "")
+SESSION_ID="${SESSION_ID:-${SESSION_ID:-default}}"
+
+# v5.4.11: Extract agent_type (new in Claude Code 2.1.2)
+# agent_type identifies subagent type: "main", "refactorer", "coder", etc.
+AGENT_TYPE=$(echo "$INPUT_JSON" | jq -r '.agent_type // "main"' 2>/dev/null || echo "main")
+
 # Flag file to disable other ACE hooks (per-session, temp directory)
-SESSION_ID="${SESSION_ID:-default}"
 ACE_DISABLED_FLAG="/tmp/ace-disabled-${SESSION_ID}.flag"
+ACE_AGENT_TYPE_FILE="/tmp/ace-agent-type-${SESSION_ID}.txt"
 CACHE_FILE="/tmp/ace-update-check-$(date +%Y%m%d).txt"
 MIN_VERSION="3.4.1"
+
+# Save agent_type for other hooks (before_task.py, after_task.py)
+echo "$AGENT_TYPE" > "$ACE_AGENT_TYPE_FILE" 2>/dev/null || true
 
 # Helper: Disable ACE hooks by creating flag file
 disable_ace_hooks() {

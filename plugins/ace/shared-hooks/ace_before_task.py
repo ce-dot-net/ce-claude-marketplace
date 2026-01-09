@@ -106,6 +106,17 @@ def main():
         session_id = str(uuid.uuid4())
         use_session_pinning = check_session_pinning_available()
 
+        # v5.4.11: Read agent_type set by SessionStart hook (Claude Code 2.1.2+)
+        # agent_type identifies subagent type: "main", "refactorer", "coder", etc.
+        agent_type = "main"
+        try:
+            # SessionStart creates this file with agent_type from Claude Code input
+            agent_type_file = Path(f"/tmp/ace-agent-type-{event.get('session_id', 'default')}.txt")
+            if agent_type_file.exists():
+                agent_type = agent_type_file.read_text().strip() or "main"
+        except Exception:
+            pass  # Default to "main" if file not found or unreadable
+
         # Store session ID for PreCompact hook (recall patterns after compaction)
         if use_session_pinning and context['project']:
             try:
@@ -207,7 +218,8 @@ def main():
                 pass
 
         # Build context for Claude (JSON in XML tags - includes domain metadata)
-        ace_context = f"<ace-patterns>\n{json.dumps(patterns_response, indent=2)}\n</ace-patterns>"
+        # v5.4.11: Include agent_type attribute for server-side pattern weighting
+        ace_context = f'<ace-patterns agent-type="{agent_type}">\n{json.dumps(patterns_response, indent=2)}\n</ace-patterns>'
 
         # Build user-visible message
         pattern_list = patterns_response.get('similar_patterns', [])
