@@ -179,6 +179,23 @@ After completing work, run `/ace-learn`:
 
 ## 🔧 Configuration
 
+### Recommended Settings (Claude Code 2.1.0+)
+
+Add to your `~/.claude/settings.json` to auto-approve ACE CLI operations:
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(ace-cli *)",
+      "Bash(uv run *)"
+    ]
+  }
+}
+```
+
+This eliminates permission prompts for ACE operations, providing a smoother workflow.
+
 ### Server Connection
 
 The `/ace-configure` wizard sets up:
