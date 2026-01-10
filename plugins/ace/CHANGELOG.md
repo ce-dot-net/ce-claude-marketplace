@@ -5,6 +5,25 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.12] - 2026-01-10
+
+### Explicit Claude Code Version Requirements
+
+**Added**: Clear version requirements in plugin description.
+
+Since Claude Code doesn't support an `engines` field in plugin.json (like npm's package.json),
+version requirements are now documented in the description field:
+
+```
+Requires: Claude Code >= 2.1.2, ace-cli >= 3.4.1
+```
+
+**Research**: Searched official docs and GitHub issues - no `engines` field exists for plugins.
+Feature request opportunity: [anthropics/claude-code#9444](https://github.com/anthropics/claude-code/issues/9444)
+discusses plugin dependencies but not version constraints.
+
+---
+
 ## [5.4.11] - 2026-01-09
 
 ### agent_type Capture (Claude Code 2.1.2+)
