@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.4.11 -->
+<!-- ACE_SECTION_START v5.4.12 -->
 # ACE Plugin
 
 Automatic pattern learning - hooks handle everything.
@@ -120,7 +120,7 @@ Claude now has BOTH auth AND cache patterns in context!
 
 ---
 
-**Version**: v5.4.11 (agent_type Capture for Claude Code 2.1.2+)
-**Requires**: ace-cli >= v3.4.1 (npm install -g @ace-sdk/cli)
+**Version**: v5.4.12 (Explicit Claude Code Version Requirements)
+**Requires**: Claude Code >= 2.1.2, ace-cli >= 3.4.1 (npm install -g @ace-sdk/cli)
 
-<!-- ACE_SECTION_END v5.4.11 -->
+<!-- ACE_SECTION_END v5.4.12 -->
