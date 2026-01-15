@@ -5,6 +5,37 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.19] - 2026-01-15
+
+### WARNING UX Fix - Sliding Window TTL
+
+**IMPORTANT:** Don't warn active users about token expiration!
+
+The server uses **sliding window TTL** that extends tokens +48h on every API call.
+Active users will never see expiration because their tokens auto-extend.
+
+**Changed Warning Logic:**
+- ❌ **No longer warns** active users about token expiration (was misleading)
+- ✅ **Only warns for:**
+  - 🔴 Hard cap approaching (7-day continuous use limit)
+  - 🟡 Idle 47h+ AND token expiring soon
+  - ⛔ Session actually expired (refresh token expired)
+
+**New Server Fields Supported:**
+- `token_expires_in` (seconds) - Precise expiration time
+- `absolute_expires_at` - 7-day hard cap timestamp
+- `last_used_at` - For idle detection
+- `is_hard_cap_approaching` - Server-computed flag
+- `hard_cap_hours_remaining` - Hours until 7-day limit
+
+**Files Changed:**
+- `plugins/ace/shared-hooks/utils/ace_cli.py` - Rewritten `check_auth_status()` with idle-aware logic
+- `plugins/ace/tests/test_issue15_edge_cases.py` - New `TestWarningUX` class with 9 tests
+
+**Related:** GitHub Issue #15 description update (Jan 15, 17:21 UTC)
+
+---
+
 ## [5.4.18] - 2026-01-15
 
 ### Smart Login + Granular Token Expiration

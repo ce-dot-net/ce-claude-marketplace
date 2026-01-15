@@ -305,32 +305,34 @@ def recall_session(session_id: str, org: str = None, project: str = None) -> Opt
 
 def check_auth_status(warn_threshold_hours: float = 2.0) -> Optional[str]:
     """
-    Check ACE authentication status - granular token expiration (v5.4.18+)
+    Check ACE authentication status - WARNING UX v5.4.19
+
+    IMPORTANT: Don't warn active users! The sliding window TTL automatically
+    extends the token by +48h on EVERY API call. SDK Core also auto-refreshes
+    tokens when they're about to expire.
+
+    Only warn in these specific cases:
+    1. Hard cap approaching (7-day limit) - server provides is_hard_cap_approaching
+    2. User has been idle ~47h AND token expiring soon
+    3. Refresh token expired (actual session end)
+    4. Not authenticated at all
 
     Args:
-        warn_threshold_hours: Warn if token expires within this many hours (default: 2)
-                              Used by UserPromptSubmit to warn before complex tasks.
-                              Set to 24 for SessionStart hook (less urgent).
+        warn_threshold_hours: Only used for idle detection (default: 2)
+                              Ignored for active users (sliding window handles it)
 
     Returns:
         Warning message string if auth issues detected, None if OK
 
-    Use this before pattern search to warn users about expired sessions.
-    This catches the case where a user closes laptop for 48h+ and resumes
-    with an expired token.
-
-    v5.4.18 Changes:
-        - Uses token_expires_in field (seconds) for precise expiration checking
-        - Configurable threshold for different hook contexts
-        - Falls back to token_status string if expires_in not available
-
-    Token Expiration Thresholds:
-        - <= 0 seconds: "Session expired" (must re-login)
-        - < warn_threshold_hours: "Token expires in X minutes" (consider re-login)
+    v5.4.19 Changes:
+        - DON'T warn active users (sliding window auto-extends tokens)
+        - Check is_hard_cap_approaching for 7-day limit
+        - Check last_used_at for idle detection
+        - Only warn for: hard cap, idle+expiring, or actual expiration
 
     Note:
         Non-blocking - returns None on any error to avoid breaking workflow.
-        ace-cli may auto-refresh tokens if refresh token is valid.
+        ace-cli auto-refreshes tokens via SDK Core's ensureValidToken().
     """
     try:
         result = subprocess.run(
@@ -346,22 +348,49 @@ def check_auth_status(warn_threshold_hours: float = 2.0) -> Optional[str]:
                 if not data.get('authenticated', False):
                     return "⚠️ [ACE] Not authenticated. Run /ace-login to setup."
 
-                # v5.4.18: Use token_expires_in (seconds) for precise checking
+                # v5.4.19: Check for hard cap approaching (7-day limit)
+                if data.get('is_hard_cap_approaching', False):
+                    hard_cap_hours = data.get('hard_cap_hours_remaining', 0)
+                    if hard_cap_hours < 24:
+                        return f"⚠️ [ACE] Session hard limit in {int(hard_cap_hours)}h. Must re-login after 7 days of continuous use."
+
+                # v5.4.19: Check token expiration
                 expires_in = data.get('token_expires_in')
                 if expires_in is not None:
-                    # Numeric expiration available
-                    expires_in_hours = expires_in / 3600.0
-
+                    # Token already expired
                     if expires_in <= 0:
                         return "⚠️ [ACE] Session expired. Run /ace-login to re-authenticate."
 
-                    if expires_in_hours < warn_threshold_hours:
+                    # v5.4.19: Check for idle state before warning
+                    # Only warn if user has been idle AND token expiring soon
+                    last_used_at = data.get('last_used_at')
+                    expires_in_hours = expires_in / 3600.0
+
+                    if last_used_at is not None:
+                        # User has used the API before - check if idle
+                        # If last_used_at is recent, DON'T warn (sliding window will extend)
+                        # The server extends token +48h on every API call
+                        # So if expires_in < warn_threshold AND last_used_at is old, warn
+                        from datetime import datetime
+                        try:
+                            last_used = datetime.fromisoformat(last_used_at.replace('Z', '+00:00'))
+                            now = datetime.now(last_used.tzinfo)
+                            idle_hours = (now - last_used).total_seconds() / 3600.0
+
+                            # Only warn if idle for 46+ hours AND token expiring soon
+                            if idle_hours >= 46 and expires_in_hours < warn_threshold_hours:
+                                mins = int(expires_in / 60)
+                                return f"⚠️ [ACE] Been idle for {int(idle_hours)}h, token expires in {mins} min. Your next action will auto-refresh."
+                        except (ValueError, TypeError):
+                            pass  # Can't parse last_used_at, skip idle check
+
+                    elif expires_in_hours < warn_threshold_hours:
+                        # last_used_at is null (first time) - only warn if actually expiring
+                        # This shouldn't happen normally since new tokens have 48h TTL
                         mins = int(expires_in / 60)
                         if mins < 60:
                             return f"⚠️ [ACE] Token expires in {mins} minutes. Consider running /ace-login."
-                        else:
-                            hrs = round(expires_in_hours, 1)
-                            return f"⚠️ [ACE] Token expires in {hrs}h. Consider running /ace-login."
+
                 else:
                     # Fallback: Parse token_status string (legacy servers)
                     token_status = data.get('token_status', '')
