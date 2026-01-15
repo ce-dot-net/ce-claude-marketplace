@@ -303,6 +303,55 @@ def recall_session(session_id: str, org: str = None, project: str = None) -> Opt
         return None
 
 
+def check_auth_status() -> Optional[str]:
+    """
+    Check ACE authentication status - catches 48h standby scenario (v5.4.13+)
+
+    Returns:
+        Warning message string if auth issues detected, None if OK
+
+    Use this before pattern search to warn users about expired sessions.
+    This catches the case where a user closes laptop for 48h+ and resumes
+    with an expired token.
+
+    Note:
+        Non-blocking - returns None on any error to avoid breaking workflow.
+        ace-cli may auto-refresh tokens if refresh token is valid.
+    """
+    try:
+        result = subprocess.run(
+            [CLI_CMD, 'whoami', '--json'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        if result.returncode == 0:
+            try:
+                data = json.loads(result.stdout)
+                if not data.get('authenticated', False):
+                    return "⚠️ [ACE] Not authenticated. Run /ace-login to setup."
+
+                token_status = data.get('token_status', '')
+                if 'expired' in token_status.lower():
+                    return "⚠️ [ACE] Session expired. Run /ace-login to re-authenticate."
+
+                # Also check for "minutes" which indicates token about to expire
+                # Skip this warning in hooks - only show on new sessions
+            except json.JSONDecodeError:
+                pass
+        else:
+            # CLI failed - check stderr for auth errors
+            stderr = result.stderr or ''
+            if '401' in stderr or 'unauthorized' in stderr.lower() or 'expired' in stderr.lower():
+                return "⚠️ [ACE] Session expired. Run /ace-login to re-authenticate."
+
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass  # Non-fatal
+
+    return None
+
+
 def check_session_pinning_available() -> bool:
     """
     Check if ace-cli CLI supports session pinning (v1.0.11+)

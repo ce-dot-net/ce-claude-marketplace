@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.4.12 -->
+<!-- ACE_SECTION_START v5.4.13 -->
 # ACE Plugin
 
 Automatic pattern learning - hooks handle everything.
@@ -11,6 +11,19 @@ Automatic pattern learning - hooks handle everything.
 **After tasks**: Stop hook captures learning, sends to server
 
 All hooks run automatically. No manual invocation needed.
+
+## v5.4.13: Device Code Login + Token Expiration Warnings
+
+**New Authentication Flow:**
+- `/ace-login`: Browser-based device code authentication (replaces API token entry)
+- `/ace-configure`: Now requires login first, uses `ace-cli whoami/orgs/projects`
+
+**Token Expiration Handling:**
+- SessionStart hook: Checks auth on new sessions
+- UserPromptSubmit hook: Catches 48h standby scenario (laptop sleep → resume)
+- Shows clear "Run /ace-login" warnings when token expired
+
+**Migration:** Users with old org tokens must run `/ace-login` then `/ace-configure`.
 
 ## v5.4.11: agent_type Capture (Claude Code 2.1.2+)
 
@@ -120,7 +133,7 @@ Claude now has BOTH auth AND cache patterns in context!
 
 ---
 
-**Version**: v5.4.12 (Explicit Claude Code Version Requirements)
-**Requires**: Claude Code >= 2.1.2, ace-cli >= 3.4.1 (npm install -g @ace-sdk/cli)
+**Version**: v5.4.13 (Device Code Login + Token Expiration Warnings)
+**Requires**: Claude Code >= 2.1.2, ace-cli >= 3.5.0 (npm install -g @ace-sdk/cli)
 
-<!-- ACE_SECTION_END v5.4.12 -->
+<!-- ACE_SECTION_END v5.4.13 -->

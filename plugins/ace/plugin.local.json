@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.4.11",
-  "description": "Code Engine ACE - LOCAL DEVELOPMENT MODE - v5.4.11: agent_type capture from Claude Code 2.1.2+ - Uses local build instead of npm package",
+  "version": "5.4.13",
+  "description": "Code Engine ACE - LOCAL DEVELOPMENT MODE - v5.4.13: Device code login + token expiration warnings - Uses local build instead of npm package",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

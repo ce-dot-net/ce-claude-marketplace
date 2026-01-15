@@ -99,28 +99,39 @@ npx --package=@ce-dot-net/ace-client@3.0.3 ace-client
 
 ---
 
-### 5. Verify Environment Variables
+### 5. Verify Authentication Status
 
 ```bash
-echo "ACE_SERVER_URL: $ACE_SERVER_URL"
-echo "ACE_API_TOKEN: ${ACE_API_TOKEN:0:10}..."
-echo "ACE_PROJECT_ID: $ACE_PROJECT_ID"
+# Check if authenticated (v5.4.13+)
+ace-cli whoami --json
 ```
 
 **Should show:**
-```
-ACE_SERVER_URL: https://ace-api.code-engine.app
-ACE_API_TOKEN: ace_wFIuXz...
-ACE_PROJECT_ID: prj_5bc0b560221052c1
+```json
+{
+  "authenticated": true,
+  "token_type": "user",
+  "user": {
+    "email": "your@email.com",
+    "organizations": [...]
+  },
+  "token_status": "Expires in X hours"
+}
 ```
 
-**Fix if missing:**
+**If not authenticated:**
 ```bash
-export ACE_SERVER_URL="https://ace-api.code-engine.app"
-export ACE_API_TOKEN="ace_wFIuXzQvaR5IVn2SoizOf-ncOKP6bmHDmocaQ3b5aWU"
-export ACE_PROJECT_ID="prj_5bc0b560221052c1"
+# Run device code login
+/ace-login
 
-# Add to ~/.zshrc or ~/.bashrc to persist
+# Then configure project
+/ace-configure
+```
+
+**If token expired:**
+```bash
+# Re-authenticate
+/ace-login
 ```
 
 ---
@@ -174,15 +185,18 @@ ace-pattern-learning: connected
 
 **Solutions:**
 ```bash
-# 1. Check if variables are in Claude Code's environment
-# Add to ~/.zshrc or ~/.bashrc:
-export ACE_SERVER_URL="https://ace-api.code-engine.app"
-export ACE_API_TOKEN="your-token"
-export ACE_PROJECT_ID="your-project-id"
+# 1. Check authentication status (v5.4.13+)
+ace-cli whoami --json
 
-# 2. Restart terminal AND Claude Code
+# 2. If not authenticated, login first:
+/ace-login
 
-# 3. Test ACE server manually:
+# 3. Then configure project:
+/ace-configure
+
+# 4. Restart Claude Code after configuration
+
+# 5. Test ACE server manually:
 curl https://ace-api.code-engine.app/api/health
 ```
 
