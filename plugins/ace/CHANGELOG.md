@@ -5,6 +5,48 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.13] - 2026-01-15
+
+### Device Code Login & Token Expiration Warnings (Issue #15)
+
+**New Commands:**
+- **`/ace-login`**: Browser-based device code authentication (RFC 8628)
+  - Replaces manual API token entry
+  - Auto-refreshing tokens (1h access, 28d refresh)
+  - Works with SSO/OAuth providers
+
+**Breaking Changes:**
+- `/ace-configure` no longer asks for API token directly
+- Must run `/ace-login` first for browser-based authentication
+- Requires ace-cli >= 3.5.0 (includes `login` command)
+
+**Token Expiration Warnings:**
+- **SessionStart hook**: Checks auth on new Claude Code sessions
+- **UserPromptSubmit hook**: Catches 48h standby scenario
+  - User closes laptop → resumes 48h+ later → expired token detected
+  - Shows clear "Run /ace-login to re-authenticate" message
+
+**`/ace-configure` Rewrite:**
+- Now uses `ace-cli whoami` to verify authentication
+- Uses `ace-cli orgs` to list available organizations
+- Uses `ace-cli projects --org` to list projects
+- No more manual token entry or deprecated verify endpoint
+
+**Files Changed:**
+- `plugins/ace/commands/ace-login.md` - **NEW** device code login command
+- `plugins/ace/commands/ace-configure.md` - **REWRITTEN** for user token flow
+- `plugins/ace/scripts/ace_install_cli.sh` - Added auth check in SessionStart
+- `plugins/ace/shared-hooks/ace_before_task.py` - Added `check_auth_status()`
+- `plugins/ace/shared-hooks/utils/ace_cli.py` - Added `check_auth_status()` function
+- `plugins/ace/docs/guides/TROUBLESHOOTING.md` - Updated for new auth model
+
+**Migration:**
+Users with old org tokens (`ace_xxx`) must:
+1. Run `/ace-login` to authenticate with device code
+2. Run `/ace-configure` to select org/project
+
+---
+
 ## [5.4.12] - 2026-01-10
 
 ### Explicit Claude Code Version Requirements

@@ -9,6 +9,8 @@ ACE Before Task Hook - UserPromptSubmit Event Handler
 Searches ACE playbook for relevant patterns when user starts a task.
 Uses ace-cli search --stdin to avoid shell escaping issues.
 Supports session pinning (v1.0.11+) for pattern persistence across compaction.
+
+v5.4.13: Added check_auth_status() to catch 48h standby scenario.
 """
 
 import json
@@ -46,7 +48,7 @@ def sanitize_response(obj: Any) -> Any:
     else:
         return obj
 
-from ace_cli import run_search, check_session_pinning_available
+from ace_cli import run_search, check_session_pinning_available, check_auth_status
 from ace_context import get_context
 from ace_relevance_logger import log_search_metrics
 
@@ -126,6 +128,9 @@ def main():
                 # Non-fatal: continue without session pinning
                 use_session_pinning = False
 
+        # v5.4.13: Check auth status before search (catches 48h standby scenario)
+        auth_warning = check_auth_status()
+
         # Minimal enhancement: Expand abbreviations for semantic clarity
         # (Server team: DO NOT add generic keywords - hurts embedding quality!)
         search_query = expand_abbreviations(user_prompt)
@@ -145,10 +150,13 @@ def main():
             patterns_response = sanitize_response(patterns_response)
 
         if not patterns_response:
-            # Search failed - show error to user
-            output = {
-                "systemMessage": "❌ [ACE] Search failed or returned no results"
-            }
+            # Search failed - check if it's an auth error
+            if auth_warning:
+                # Auth issue detected - show auth warning instead of generic error
+                output = {"systemMessage": auth_warning}
+            else:
+                # Generic search failure
+                output = {"systemMessage": "❌ [ACE] Search failed or returned no results"}
             print(json.dumps(output))
             sys.exit(0)
 
@@ -253,6 +261,10 @@ def main():
             user_message = "\n".join(summary_lines)
         else:
             user_message = "ℹ️  [ACE] No patterns found for this query"
+
+        # v5.4.13: Prepend auth warning if detected (still show patterns if found)
+        if auth_warning and pattern_count > 0:
+            user_message = f"{auth_warning}\n\n{user_message}"
 
         # Output JSON with both user message and Claude context
         output = {

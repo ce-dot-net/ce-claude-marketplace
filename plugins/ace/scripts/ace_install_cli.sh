@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # ACE SessionStart Hook - CLI Detection & Migration
+# v5.4.13: Token expiration check (catches 48h standby on new sessions)
 # v5.4.11: Capture agent_type from Claude Code 2.1.2+
 # v5.4.7: Flag-based hook disable + daily update check
 # Command: ace-cli (new) or ce-ace (deprecated)
@@ -91,6 +92,23 @@ LATEST=$(cat "$CACHE_FILE" 2>/dev/null || echo "")
 
 if [ -n "$LATEST" ] && [ "$LATEST" != "$CURRENT_VERSION" ]; then
   output_warning "💡 [ACE] Update available: v$CURRENT_VERSION → v$LATEST. Run: npm install -g @ace-sdk/cli"
+fi
+
+# 5. v5.4.13: Token expiration check (catches 48h standby scenario on new sessions)
+TOKEN_JSON=$($CLI_CMD whoami --json 2>/dev/null || echo '{}')
+AUTHENTICATED=$(echo "$TOKEN_JSON" | jq -r '.authenticated // false' 2>/dev/null)
+TOKEN_STATUS=$(echo "$TOKEN_JSON" | jq -r '.token_status // empty' 2>/dev/null)
+
+if [ "$AUTHENTICATED" = "false" ]; then
+  output_warning "⚠️ [ACE] Not authenticated. Run /ace-login to setup."
+elif [ -n "$TOKEN_STATUS" ]; then
+  # Check for expired or expiring soon
+  if echo "$TOKEN_STATUS" | grep -qi "expired"; then
+    output_warning "⚠️ [ACE] Session expired. Run /ace-login to re-authenticate."
+  elif echo "$TOKEN_STATUS" | grep -qi "minutes"; then
+    # Token expires in minutes - warn user
+    output_warning "⚠️ [ACE] Session expires soon ($TOKEN_STATUS). Consider /ace-login."
+  fi
 fi
 
 # Success - ACE hooks can proceed (no flag file = enabled)
