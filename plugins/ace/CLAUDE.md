@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.4.19 -->
+<!-- ACE_SECTION_START v5.4.20 -->
 # ACE Plugin
 
 Automatic pattern learning - hooks handle everything.
@@ -164,7 +164,7 @@ Claude now has BOTH auth AND cache patterns in context!
 
 ---
 
-**Version**: v5.4.19 (WARNING UX Fix - Sliding Window TTL)
+**Version**: v5.4.20 (Token Lifecycle Docs Fix)
 **Requires**: Claude Code >= 2.1.2, ace-cli >= 3.5.0 (npm install -g @ace-sdk/cli)
 
-<!-- ACE_SECTION_END v5.4.19 -->
+<!-- ACE_SECTION_END v5.4.20 -->

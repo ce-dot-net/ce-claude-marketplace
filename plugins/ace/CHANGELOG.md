@@ -5,6 +5,24 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.20] - 2026-01-15
+
+### Token Lifecycle Docs Fix
+
+**Fixed:**
+- Updated outdated token lifecycle documentation in `/ace-login` command
+- Access token TTL: Changed from "~1 hour" to "48h sliding window"
+- Added sliding window TTL explanation (extends +48h on every API call)
+- Added 7-day absolute max (hard cap) documentation
+- Updated troubleshooting to reference new `whoami` response fields
+
+**Files Changed:**
+- `plugins/ace/commands/ace-login.md` - Updated Token Lifecycle section
+
+**Related:** Commit 7e35f61
+
+---
+
 ## [5.4.19] - 2026-01-15
 
 ### WARNING UX Fix - Sliding Window TTL
