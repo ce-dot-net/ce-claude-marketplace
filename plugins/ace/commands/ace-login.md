@@ -39,18 +39,24 @@ if [ -f "$OLD_CONFIG" ]; then
   # Check if it has old apiToken format
   OLD_TOKEN=$(jq -r '.apiToken // empty' "$OLD_CONFIG" 2>/dev/null || echo "")
   if [ -n "$OLD_TOKEN" ]; then
-    echo "Found old ACE configuration (~/.ace/config.json)"
+    echo "⚠️  Found old ACE configuration (~/.ace/config.json)"
     echo ""
     echo "The old API token format (ace_xxx) is deprecated."
     echo "This login will set up the new user token authentication."
     echo ""
-    echo "After login, run /ace-configure to select your organization and project."
+    echo "After successful login + configure, you can safely remove the old config:"
+    echo "  rm ~/.ace/config.json"
     echo ""
   fi
 fi
 ```
 
 **Note**: Old config at `~/.ace/config.json` with `apiToken` field indicates deprecated setup. The new config uses `~/.config/ace/config.json` with user tokens from device code flow.
+
+**Migration Path**:
+1. Run `/ace-login` → Creates new config at `~/.config/ace/config.json`
+2. Run `/ace-configure` → Saves org/project to `.claude/settings.json`
+3. Remove old config: `rm ~/.ace/config.json` (optional but recommended)
 
 ### Step 3: Check Current Authentication Status (New Config)
 
@@ -136,6 +142,8 @@ fi
 ```bash
 # Check if project is configured
 CONFIG_FILE=".claude/settings.json"
+OLD_CONFIG="$HOME/.ace/config.json"
+
 if [ -f "$CONFIG_FILE" ]; then
   PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
   if [ -n "$PROJECT_ID" ]; then
@@ -143,6 +151,13 @@ if [ -f "$CONFIG_FILE" ]; then
     echo "  Project: $PROJECT_ID (configured)"
     echo ""
     echo "You're all set! ACE will now work with your tasks."
+
+    # Remind about old config cleanup if it exists
+    if [ -f "$OLD_CONFIG" ]; then
+      echo ""
+      echo "💡 You can now safely remove the old config:"
+      echo "   rm ~/.ace/config.json"
+    fi
   else
     echo ""
     echo "Next step:"
