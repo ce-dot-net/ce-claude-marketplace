@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.4.13 -->
+<!-- ACE_SECTION_START v5.4.18 -->
 # ACE Plugin
 
 Automatic pattern learning - hooks handle everything.
@@ -11,6 +11,24 @@ Automatic pattern learning - hooks handle everything.
 **After tasks**: Stop hook captures learning, sends to server
 
 All hooks run automatically. No manual invocation needed.
+
+## v5.4.18: Smart Login + Granular Token Expiration
+
+**Smart Login (First-Time Users):**
+- `/ace-login`: Now auto-configures org/project on first login
+- Auto-selects if only 1 org/project available
+- Prompts if multiple options, saves to `.claude/settings.json`
+- No need to run `/ace-configure` separately!
+
+**Granular Token Expiration:**
+- Uses `token_expires_in` (seconds) for precise warnings
+- Warns if token expires within 2 hours before complex tasks
+- Falls back to string parsing for legacy servers
+
+**Fresh Data Fetch:**
+- `/ace-configure`: Now fetches fresh org/project lists from server
+- Shows current config before prompting
+- Newly created projects appear immediately
 
 ## v5.4.13: Device Code Login + Token Expiration Warnings
 
@@ -133,7 +151,7 @@ Claude now has BOTH auth AND cache patterns in context!
 
 ---
 
-**Version**: v5.4.13 (Device Code Login + Token Expiration Warnings)
+**Version**: v5.4.18 (Smart Login + Granular Token Expiration)
 **Requires**: Claude Code >= 2.1.2, ace-cli >= 3.5.0 (npm install -g @ace-sdk/cli)
 
-<!-- ACE_SECTION_END v5.4.13 -->
+<!-- ACE_SECTION_END v5.4.18 -->

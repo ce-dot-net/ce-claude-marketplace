@@ -303,9 +303,14 @@ def recall_session(session_id: str, org: str = None, project: str = None) -> Opt
         return None
 
 
-def check_auth_status() -> Optional[str]:
+def check_auth_status(warn_threshold_hours: float = 2.0) -> Optional[str]:
     """
-    Check ACE authentication status - catches 48h standby scenario (v5.4.13+)
+    Check ACE authentication status - granular token expiration (v5.4.18+)
+
+    Args:
+        warn_threshold_hours: Warn if token expires within this many hours (default: 2)
+                              Used by UserPromptSubmit to warn before complex tasks.
+                              Set to 24 for SessionStart hook (less urgent).
 
     Returns:
         Warning message string if auth issues detected, None if OK
@@ -313,6 +318,15 @@ def check_auth_status() -> Optional[str]:
     Use this before pattern search to warn users about expired sessions.
     This catches the case where a user closes laptop for 48h+ and resumes
     with an expired token.
+
+    v5.4.18 Changes:
+        - Uses token_expires_in field (seconds) for precise expiration checking
+        - Configurable threshold for different hook contexts
+        - Falls back to token_status string if expires_in not available
+
+    Token Expiration Thresholds:
+        - <= 0 seconds: "Session expired" (must re-login)
+        - < warn_threshold_hours: "Token expires in X minutes" (consider re-login)
 
     Note:
         Non-blocking - returns None on any error to avoid breaking workflow.
@@ -332,12 +346,28 @@ def check_auth_status() -> Optional[str]:
                 if not data.get('authenticated', False):
                     return "⚠️ [ACE] Not authenticated. Run /ace-login to setup."
 
-                token_status = data.get('token_status', '')
-                if 'expired' in token_status.lower():
-                    return "⚠️ [ACE] Session expired. Run /ace-login to re-authenticate."
+                # v5.4.18: Use token_expires_in (seconds) for precise checking
+                expires_in = data.get('token_expires_in')
+                if expires_in is not None:
+                    # Numeric expiration available
+                    expires_in_hours = expires_in / 3600.0
 
-                # Also check for "minutes" which indicates token about to expire
-                # Skip this warning in hooks - only show on new sessions
+                    if expires_in <= 0:
+                        return "⚠️ [ACE] Session expired. Run /ace-login to re-authenticate."
+
+                    if expires_in_hours < warn_threshold_hours:
+                        mins = int(expires_in / 60)
+                        if mins < 60:
+                            return f"⚠️ [ACE] Token expires in {mins} minutes. Consider running /ace-login."
+                        else:
+                            hrs = round(expires_in_hours, 1)
+                            return f"⚠️ [ACE] Token expires in {hrs}h. Consider running /ace-login."
+                else:
+                    # Fallback: Parse token_status string (legacy servers)
+                    token_status = data.get('token_status', '')
+                    if 'expired' in token_status.lower():
+                        return "⚠️ [ACE] Session expired. Run /ace-login to re-authenticate."
+
             except json.JSONDecodeError:
                 pass
         else:

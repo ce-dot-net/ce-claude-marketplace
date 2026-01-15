@@ -11,6 +11,8 @@ Uses ace-cli search --stdin to avoid shell escaping issues.
 Supports session pinning (v1.0.11+) for pattern persistence across compaction.
 
 v5.4.13: Added check_auth_status() to catch 48h standby scenario.
+v5.4.18: Granular token expiration using token_expires_in (seconds).
+         Warns if token expires within 2 hours before complex tasks.
 """
 
 import json
@@ -128,8 +130,9 @@ def main():
                 # Non-fatal: continue without session pinning
                 use_session_pinning = False
 
-        # v5.4.13: Check auth status before search (catches 48h standby scenario)
-        auth_warning = check_auth_status()
+        # v5.4.18: Granular token expiration check (warn if < 2 hours)
+        # Catches 48h standby scenario AND warns before complex tasks
+        auth_warning = check_auth_status(warn_threshold_hours=2.0)
 
         # Minimal enhancement: Expand abbreviations for semantic clarity
         # (Server team: DO NOT add generic keywords - hurts embedding quality!)

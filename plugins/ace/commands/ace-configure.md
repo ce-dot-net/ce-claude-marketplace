@@ -3,7 +3,7 @@ description: Configure ACE server connection settings interactively
 argument-hint: [--global] [--project]
 ---
 
-# Configure ACE Connection (v5.4.13)
+# Configure ACE Connection (v5.4.18)
 
 Interactive configuration wizard using the new user token authentication model.
 
@@ -12,9 +12,14 @@ Interactive configuration wizard using the new user token authentication model.
 ## What This Does
 
 1. Verifies user is authenticated (via `ace-cli whoami`)
-2. Lists available organizations
-3. Lets user select organization and project
-4. Saves project config to `.claude/settings.json`
+2. **Shows current configuration** (if exists)
+3. **Fetches FRESH** organization and project lists (not cached)
+4. Lets user select organization and project
+5. Saves project config to `.claude/settings.json`
+
+**v5.4.18 Changes**:
+- Always shows current config before prompting
+- Fetches fresh org/project lists (shows newly created projects)
 
 ## Instructions for Claude
 
@@ -83,9 +88,12 @@ Session: Expires in 10 hours
 Proceeding with configuration...
 ```
 
-### Step 3: Get Organizations
+### Step 3: Fetch FRESH Organizations (Always From Server)
+
+**v5.4.18**: Always fetch fresh data to show newly added orgs/projects.
 
 ```bash
+# Fetch FRESH organization list from server (not cached)
 ORGS_JSON=$(ace-cli orgs --json 2>&1)
 ORG_COUNT=$(echo "$ORGS_JSON" | jq -r '.count // 0')
 ```
@@ -133,9 +141,12 @@ Build options dynamically from the organizations list. For example:
 
 Extract the selected org_id from user's choice.
 
-### Step 5: Get Projects for Selected Org
+### Step 5: Fetch FRESH Projects for Selected Org
+
+**v5.4.18**: Always fetch fresh project list (shows newly created projects).
 
 ```bash
+# Fetch FRESH project list from server (not cached)
 PROJECTS_JSON=$(ace-cli projects --org "$SELECTED_ORG_ID" --json 2>&1)
 PROJECT_LIST=$(echo "$PROJECTS_JSON" | jq -r '.projects // []')
 PROJECT_COUNT=$(echo "$PROJECT_LIST" | jq 'length')
@@ -282,14 +293,29 @@ echo "  /ace-search  - Search for specific patterns"
 echo "  /ace-learn   - Manually capture learning"
 ```
 
-## Handling Existing Configuration
+## Handling Existing Configuration (Step 2.5 - After Auth Check)
+
+**v5.4.18**: Always show current config, then proceed to selection.
 
 **If `.claude/settings.json` already exists with ACE config:**
 
-1. Read existing values:
+1. Read and display existing values:
 ```bash
-EXISTING_ORG=$(jq -r '.env.ACE_ORG_ID // empty' "$PROJECT_CONFIG" 2>/dev/null || echo "")
-EXISTING_PROJECT=$(jq -r '.env.ACE_PROJECT_ID // empty' "$PROJECT_CONFIG" 2>/dev/null || echo "")
+PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+PROJECT_CONFIG="$PROJECT_ROOT/.claude/settings.json"
+
+if [ -f "$PROJECT_CONFIG" ]; then
+  EXISTING_ORG=$(jq -r '.env.ACE_ORG_ID // empty' "$PROJECT_CONFIG" 2>/dev/null || echo "")
+  EXISTING_PROJECT=$(jq -r '.env.ACE_PROJECT_ID // empty' "$PROJECT_CONFIG" 2>/dev/null || echo "")
+
+  if [ -n "$EXISTING_ORG" ] && [ -n "$EXISTING_PROJECT" ]; then
+    echo ""
+    echo "Current Configuration:"
+    echo "  Organization: $EXISTING_ORG"
+    echo "  Project: $EXISTING_PROJECT"
+    echo ""
+  fi
+fi
 ```
 
 2. **Use AskUserQuestion** to ask what to do:
@@ -297,17 +323,17 @@ EXISTING_PROJECT=$(jq -r '.env.ACE_PROJECT_ID // empty' "$PROJECT_CONFIG" 2>/dev
 {
   questions: [
     {
-      question: "Found existing ACE configuration. What would you like to do?",
+      question: "What would you like to do?",
       header: "Config Action",
       multiSelect: false,
       options: [
         {
-          label: "Keep existing configuration",
-          description: "No changes - use current org and project settings"
+          label: "Reconfigure (recommended)",
+          description: "Fetch fresh org/project lists and select new settings"
         },
         {
-          label: "Reconfigure",
-          description: "Choose different organization and/or project"
+          label: "Keep existing configuration",
+          description: "No changes - use current org and project settings"
         }
       ]
     }
@@ -318,11 +344,13 @@ EXISTING_PROJECT=$(jq -r '.env.ACE_PROJECT_ID // empty' "$PROJECT_CONFIG" 2>/dev
 3. If "Keep existing", show current config and exit:
 ```
 Keeping existing configuration:
-  Organization: org_xxxxx
-  Project: prj_xxxxx
+  Organization: $EXISTING_ORG
+  Project: $EXISTING_PROJECT
 
 Run /ace-status to verify connection.
 ```
+
+4. If "Reconfigure", continue to Step 3 (fetch fresh data)
 
 ## Project Config Format
 
