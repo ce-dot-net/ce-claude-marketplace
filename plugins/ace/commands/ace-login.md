@@ -299,17 +299,23 @@ fi
 - Secure browser-based authentication
 - Works with SSO/OAuth providers
 
-## Token Lifecycle
+## Token Lifecycle (v5.4.19)
 
-| Token Type | Lifetime | Refresh |
-|------------|----------|---------|
-| Access Token | ~1 hour | Auto-refreshes at 5-min threshold |
-| Refresh Token | 28 days | Re-login required after expiry |
+| Token Type | Lifetime | Behavior |
+|------------|----------|----------|
+| Access Token | **48h sliding window** | Extends +48h on EVERY API call |
+| Refresh Token | 30 days | Used to get new access tokens |
+| Absolute Max | 7 days | Hard cap - must re-login even if active |
+
+**Sliding Window TTL**: Active users never see expiration because:
+- Server extends `expires_at` by +48h on every API call
+- SDK Core auto-refreshes tokens at 5-min threshold
+- Only idle users (no activity for 48h+) trigger warnings
 
 **48h standby scenario**: If you close your laptop for 48+ hours:
-- Access token will expire (1 hour)
-- ace-cli will auto-refresh using refresh token (if within 28 days)
-- ACE hooks will warn if re-login is needed
+- Access token will expire (after 48h of no API calls)
+- ace-cli will auto-refresh using refresh token (if within 30 days)
+- ACE hooks will warn ONLY if you've been idle AND token is expiring
 
 ## Troubleshooting
 
@@ -320,11 +326,16 @@ The 6-character code is only valid for 15 minutes. Run `/ace-login` again.
 Check your internet connection. The CLI polls every 5 seconds for up to 5 minutes.
 
 ### "Already authenticated" but ACE not working
-Your access token may have expired. Run:
+Your session may have expired (idle 48h+ or 7-day hard cap). Run:
 ```bash
 ace-cli whoami --json
 ```
-Check `token_status` field. If "expired", run `/ace-login` again.
+Check these fields:
+- `token_status`: Shows time until expiration
+- `is_hard_cap_approaching`: True if near 7-day limit
+- `token_expires_in`: Seconds until expiration (0 = expired)
+
+If expired, run `/ace-login` again.
 
 ### "Device limit reached"
 You've logged in on too many devices (default limit: 2). Options:
