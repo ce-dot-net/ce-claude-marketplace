@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.4.14",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.4.14: Device limit docs + edge case tests. Requires: Claude Code >= 2.1.2, ace-cli >= 3.5.0.",
+  "version": "5.4.15",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.4.15: Old config migration UX. Requires: Claude Code >= 2.1.2, ace-cli >= 3.5.0.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

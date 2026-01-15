@@ -5,6 +5,25 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.15] - 2026-01-15
+
+### Old Config Migration UX
+
+**Improved:**
+- Old config migration guidance in `/ace-login`
+- Clear migration path: login -> configure -> cleanup
+- Cleanup reminder after successful setup
+
+**Documentation:**
+- Added migration path section to `ace-login.md`
+- Shows `rm ~/.ace/config.json` command when safe to remove
+- Better UX with emoji indicators (warning, tip)
+
+**Files Changed:**
+- `plugins/ace/commands/ace-login.md` - Added migration guidance section
+
+---
+
 ## [5.4.14] - 2026-01-15
 
 ### Device Limit Troubleshooting & Edge Case Tests
