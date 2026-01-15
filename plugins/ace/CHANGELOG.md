@@ -5,6 +5,36 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.18] - 2026-01-15
+
+### Smart Login + Granular Token Expiration
+
+**Server Team Request (Issue #15 Comments):**
+Implements requirements from 4 server team comments on Issue #15.
+
+**New Features:**
+- **Smart Login**: First-time `/ace-login` auto-configures org/project
+  - Auto-selects if only 1 org/project available
+  - Prompts with AskUserQuestion if multiple options
+  - No need to run `/ace-configure` separately for first-time users
+- **Granular Token Warnings**: Uses `token_expires_in` (seconds) for precise warnings
+  - Warns if token expires within 2 hours before complex tasks
+  - Falls back to `token_status` string for legacy servers
+
+**Improvements:**
+- **Fresh Data Fetch**: `/ace-configure` now fetches fresh org/project lists
+  - Shows current config before prompting
+  - Newly created projects appear immediately
+- **Better UX**: Shows current org/project before asking to change
+
+**Files Changed:**
+- `plugins/ace/commands/ace-login.md` - Added Step 6 Smart Auto-Configure
+- `plugins/ace/commands/ace-configure.md` - Added fresh data fetch, show current config
+- `plugins/ace/shared-hooks/utils/ace_cli.py` - Updated `check_auth_status()` with configurable threshold
+- `plugins/ace/shared-hooks/ace_before_task.py` - Uses 2h threshold for pre-task warning
+
+---
+
 ## [5.4.17] - 2026-01-15
 
 ### Fix Relevance Report Parsing

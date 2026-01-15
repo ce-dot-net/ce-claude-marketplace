@@ -167,36 +167,115 @@ else
 fi
 ```
 
-### Step 6: Check Project Configuration & Suggest Next Steps
+### Step 6: Smart Auto-Configure (First Time Only)
+
+**v5.4.18**: First-time login now auto-configures org/project to streamline setup.
 
 ```bash
-# Check if project is configured
+# Check if project is already configured
 CONFIG_FILE=".claude/settings.json"
 OLD_CONFIG="$HOME/.ace/config.json"
+IS_FIRST_TIME="false"
 
 if [ -f "$CONFIG_FILE" ]; then
   PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
-  if [ -n "$PROJECT_ID" ]; then
-    echo ""
-    echo "  Project: $PROJECT_ID (configured)"
-    echo ""
-    echo "You're all set! ACE will now work with your tasks."
-
-    # Remind about old config cleanup if it exists
-    if [ -f "$OLD_CONFIG" ]; then
-      echo ""
-      echo "💡 You can now safely remove the old config:"
-      echo "   rm ~/.ace/config.json"
-    fi
-  else
-    echo ""
-    echo "Next step:"
-    echo "  Run /ace-configure to select your organization and project"
+  if [ -z "$PROJECT_ID" ]; then
+    IS_FIRST_TIME="true"
   fi
 else
+  IS_FIRST_TIME="true"
+fi
+```
+
+**If already configured** (has ACE_PROJECT_ID):
+```
+✅ Project already configured: $PROJECT_ID
+
+You're all set! ACE will now work with your tasks.
+```
+
+**If first time** (no ACE_PROJECT_ID), proceed with auto-configure:
+
+#### Step 6a: Get Organizations
+
+```bash
+ORGS_JSON=$(ace-cli orgs --json 2>&1)
+ORG_COUNT=$(echo "$ORGS_JSON" | jq -r '.count // 0')
+```
+
+**If 1 organization**: Auto-select it
+```bash
+if [ "$ORG_COUNT" = "1" ]; then
+  SELECTED_ORG_ID=$(echo "$ORGS_JSON" | jq -r '.organizations[0].org_id')
+  SELECTED_ORG_NAME=$(echo "$ORGS_JSON" | jq -r '.organizations[0].name')
+  echo "You have 1 organization. Auto-selecting: $SELECTED_ORG_NAME"
+fi
+```
+
+**If multiple organizations**: Use **AskUserQuestion** tool to prompt user
+- Build options from `organizations[]` array
+- Each option: `label: "Org Name"`, `description: "Role: admin/member"`
+
+#### Step 6b: Get Projects for Selected Org
+
+```bash
+PROJECTS_JSON=$(ace-cli projects --org "$SELECTED_ORG_ID" --json 2>&1)
+PROJECT_COUNT=$(echo "$PROJECTS_JSON" | jq -r '.projects | length // 0')
+```
+
+**If 1 project**: Auto-select it
+```bash
+if [ "$PROJECT_COUNT" = "1" ]; then
+  SELECTED_PROJECT_ID=$(echo "$PROJECTS_JSON" | jq -r '.projects[0].project_id')
+  SELECTED_PROJECT_NAME=$(echo "$PROJECTS_JSON" | jq -r '.projects[0].name')
+  echo "You have 1 project. Auto-selecting: $SELECTED_PROJECT_NAME"
+fi
+```
+
+**If multiple projects**: Use **AskUserQuestion** tool to prompt user
+- Build options from `projects[]` array
+- Each option: `label: "Project Name"`, `description: "Project ID: prj_xxx"`
+
+**If 0 projects**:
+```
+No projects found in this organization.
+Please create a project at https://ace.code-engine.app and run /ace-configure.
+```
+
+#### Step 6c: Save Configuration
+
+```bash
+# Ensure .claude directory exists
+mkdir -p .claude
+
+# Write settings.json
+cat > "$CONFIG_FILE" << EOF
+{
+  "env": {
+    "ACE_ORG_ID": "$SELECTED_ORG_ID",
+    "ACE_PROJECT_ID": "$SELECTED_PROJECT_ID",
+    "ACE_VERBOSITY": "detailed"
+  }
+}
+EOF
+
+echo ""
+echo "✅ ACE configured successfully!"
+echo ""
+echo "  Organization: $SELECTED_ORG_NAME"
+echo "  Project: $SELECTED_PROJECT_NAME"
+echo ""
+echo "You're all set! ACE will now work with your tasks."
+```
+
+#### Step 6d: Cleanup Reminder
+
+```bash
+# Remind about old config cleanup if it exists
+if [ -f "$OLD_CONFIG" ]; then
   echo ""
-  echo "Next step:"
-  echo "  Run /ace-configure to select your organization and project"
+  echo "💡 You can now safely remove the old config:"
+  echo "   rm ~/.ace/config.json"
 fi
 ```
 
