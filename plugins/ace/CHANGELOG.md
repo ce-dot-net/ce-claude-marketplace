@@ -5,6 +5,30 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.14] - 2026-01-15
+
+### Device Limit Troubleshooting & Edge Case Tests
+
+**Documentation:**
+- **`/ace-login`**: Added "Device limit reached" troubleshooting section
+  - Explains the 5-device limit per user
+  - Links to device management: https://ace.code-engine.app/dashboard/devices
+  - From Issue #15 acceptance criteria
+
+**Testing:**
+- **`plugins/ace/tests/test_issue15_edge_cases.py`**: Added comprehensive test suite (17 tests)
+  - `check_auth_status()` function tests
+  - Old config detection and migration flow tests
+  - Device limit error handling tests
+  - Token lifecycle tests (expired, invalid, refresh)
+  - Edge cases for session start/standby scenarios
+
+**Files Changed:**
+- `plugins/ace/commands/ace-login.md` - Added troubleshooting section
+- `plugins/ace/tests/test_issue15_edge_cases.py` - **NEW** comprehensive test file
+
+---
+
 ## [5.4.13] - 2026-01-15
 
 ### Device Code Login & Token Expiration Warnings (Issue #15)

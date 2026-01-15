@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.4.13",
-  "description": "Code Engine ACE - LOCAL DEVELOPMENT MODE - v5.4.13: Device code login + token expiration warnings - Uses local build instead of npm package",
+  "version": "5.4.14",
+  "description": "Code Engine ACE - LOCAL DEVELOPMENT MODE - v5.4.14: Device limit docs + edge case tests - Uses local build instead of npm package",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
