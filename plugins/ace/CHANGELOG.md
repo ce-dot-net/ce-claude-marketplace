@@ -5,6 +5,30 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.16] - 2026-01-15
+
+### Dual Location Config Detection
+
+**Fixed:**
+- Detection of deprecated `apiToken` at NEW location (`~/.config/ace/config.json`)
+- Previously only checked OLD location (`~/.ace/config.json`)
+- Now checks both locations for deprecated format
+
+**Config Detection Logic:**
+- OLD location: `~/.ace/config.json` with `apiToken` field (deprecated)
+- NEW location (old format): `~/.config/ace/config.json` with `apiToken` field (deprecated)
+- NEW location (new format): `~/.config/ace/config.json` with `auth.token` field (current)
+
+**Added:**
+- Test case for "new location with old format" scenario
+- Now 18 edge case tests total in `test_issue15_edge_cases.py`
+
+**Files Changed:**
+- `plugins/ace/shared-hooks/utils/ace_cli.py` - Updated `check_auth_status()` to check both locations
+- `plugins/ace/tests/test_issue15_edge_cases.py` - Added test for new location with old format
+
+---
+
 ## [5.4.15] - 2026-01-15
 
 ### Old Config Migration UX
