@@ -297,6 +297,138 @@ class TestUserPromptSubmitHook(unittest.TestCase):
         print("✅ PASS: Auth warning correctly prepended to patterns")
 
 
+class TestGranularTokenExpiration(unittest.TestCase):
+    """Test v5.4.18 granular token expiration using token_expires_in (seconds)"""
+
+    @patch('ace_cli.subprocess.run')
+    def test_token_expires_in_seconds_expired(self, mock_run):
+        """v5.4.18: token_expires_in <= 0 should return expired warning"""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({
+                "authenticated": True,
+                "token_expires_in": 0,  # Expired
+                "token_status": "Token expired"
+            }),
+            stderr=""
+        )
+
+        result = check_auth_status(warn_threshold_hours=2.0)
+        self.assertIsNotNone(result)
+        self.assertIn("expired", result.lower())
+        self.assertIn("/ace-login", result)
+        print("✅ PASS: token_expires_in=0 returns expired warning")
+
+    @patch('ace_cli.subprocess.run')
+    def test_token_expires_in_under_2_hours(self, mock_run):
+        """v5.4.18: token_expires_in < 2 hours should warn (UserPromptSubmit threshold)"""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({
+                "authenticated": True,
+                "token_expires_in": 5400,  # 90 minutes = 1.5 hours
+                "token_status": "Expires in 90 minutes"
+            }),
+            stderr=""
+        )
+
+        result = check_auth_status(warn_threshold_hours=2.0)
+        self.assertIsNotNone(result)
+        # Accept either "1.5h" or "90 minutes" format
+        self.assertTrue("1.5h" in result or "90" in result, f"Expected time in result: {result}")
+        self.assertIn("/ace-login", result)
+        print("✅ PASS: token_expires_in=5400 (1.5h) returns warning with 2h threshold")
+
+    @patch('ace_cli.subprocess.run')
+    def test_token_expires_in_under_1_hour_minutes_format(self, mock_run):
+        """v5.4.18: token_expires_in < 1 hour should show minutes format"""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({
+                "authenticated": True,
+                "token_expires_in": 1800,  # 30 minutes
+                "token_status": "Expires in 30 minutes"
+            }),
+            stderr=""
+        )
+
+        result = check_auth_status(warn_threshold_hours=2.0)
+        self.assertIsNotNone(result)
+        self.assertIn("30", result)  # Should show 30 minutes
+        self.assertIn("minutes", result.lower())
+        print("✅ PASS: token_expires_in=1800 (30 min) shows minutes format")
+
+    @patch('ace_cli.subprocess.run')
+    def test_token_expires_in_over_threshold_no_warning(self, mock_run):
+        """v5.4.18: token_expires_in > threshold should NOT warn"""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({
+                "authenticated": True,
+                "token_expires_in": 36000,  # 10 hours
+                "token_status": "Expires in 10 hours"
+            }),
+            stderr=""
+        )
+
+        result = check_auth_status(warn_threshold_hours=2.0)
+        self.assertIsNone(result)  # No warning for 10 hours
+        print("✅ PASS: token_expires_in=36000 (10h) returns None (no warning)")
+
+    @patch('ace_cli.subprocess.run')
+    def test_token_expires_in_24h_threshold_for_session_start(self, mock_run):
+        """v5.4.18: Higher threshold for SessionStart hook (24 hours)"""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({
+                "authenticated": True,
+                "token_expires_in": 36000,  # 10 hours
+                "token_status": "Expires in 10 hours"
+            }),
+            stderr=""
+        )
+
+        # With 24h threshold (SessionStart), 10h should trigger warning
+        result = check_auth_status(warn_threshold_hours=24.0)
+        self.assertIsNotNone(result)
+        print("✅ PASS: token_expires_in=36000 (10h) warns with 24h threshold")
+
+    @patch('ace_cli.subprocess.run')
+    def test_fallback_to_string_parsing_no_expires_in(self, mock_run):
+        """v5.4.18: Falls back to token_status string when token_expires_in missing"""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({
+                "authenticated": True,
+                # No token_expires_in field (legacy server)
+                "token_status": "Token expired"
+            }),
+            stderr=""
+        )
+
+        result = check_auth_status(warn_threshold_hours=2.0)
+        self.assertIsNotNone(result)
+        self.assertIn("expired", result.lower())
+        print("✅ PASS: Falls back to string parsing when token_expires_in missing")
+
+    @patch('ace_cli.subprocess.run')
+    def test_fallback_to_string_valid_token(self, mock_run):
+        """v5.4.18: Falls back to string parsing for valid token (no expires_in)"""
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout=json.dumps({
+                "authenticated": True,
+                # No token_expires_in field (legacy server)
+                "token_status": "Expires in 10 hours"
+            }),
+            stderr=""
+        )
+
+        result = check_auth_status(warn_threshold_hours=2.0)
+        self.assertIsNone(result)  # Valid token, no warning
+        print("✅ PASS: Fallback string parsing returns None for valid token")
+
+
 class TestAceCliCommands(unittest.TestCase):
     """Test ace-cli command structure"""
 
@@ -373,6 +505,7 @@ def run_all_tests():
         TestTokenLifecycle,
         TestSessionStartHook,
         TestUserPromptSubmitHook,
+        TestGranularTokenExpiration,  # v5.4.18 tests
         TestAceCliCommands,
     ]
 

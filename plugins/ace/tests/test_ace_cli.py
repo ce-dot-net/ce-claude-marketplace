@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
 # Add shared-hooks to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / 'shared-hooks' / 'utils'))
+sys.path.insert(0, str(Path(__file__).parent.parent / 'shared-hooks' / 'utils'))
 
 from ace_cli import run_search, run_learn, run_status
 
@@ -30,9 +30,9 @@ def test_run_search_success():
         assert len(result['patterns']) == 1
         assert result['patterns'][0]['content'] == 'Test pattern'
 
-        # Verify subprocess call - no flags, but env vars passed!
+        # Verify subprocess call - uses ace-cli (renamed from ce-ace in v5.4.7)
         args, kwargs = mock_run.call_args
-        assert args[0] == ['ce-ace', 'search', '--stdin', '--json']
+        assert args[0] == ['ace-cli', 'search', '--stdin', '--json']
         assert 'env' in kwargs
         assert kwargs['env']['ACE_ORG_ID'] == 'org_123'
         assert kwargs['env']['ACE_PROJECT_ID'] == 'prj_456'
@@ -80,6 +80,7 @@ def test_run_learn_success():
     """Test successful learn call with context passed via environment"""
     mock_result = MagicMock()
     mock_result.returncode = 0
+    mock_result.stdout = json.dumps({'status': 'ok', 'patterns_learned': 1}).encode('utf-8')
 
     with patch('subprocess.run', return_value=mock_result) as mock_run:
         result = run_learn(
@@ -90,11 +91,12 @@ def test_run_learn_success():
             project='prj_456'
         )
 
-        assert result is True
+        assert result is not None
+        assert result.get('status') == 'ok'
 
-        # Verify subprocess call - no flags, but env vars passed!
+        # Verify subprocess call - uses ace-cli (renamed from ce-ace in v5.4.7)
         args, kwargs = mock_run.call_args
-        assert args[0] == ['ce-ace', 'learn', '--stdin']
+        assert args[0] == ['ace-cli', 'learn', '--stdin', '--json']
         assert 'env' in kwargs
         assert kwargs['env']['ACE_ORG_ID'] == 'org_123'
         assert kwargs['env']['ACE_PROJECT_ID'] == 'prj_456'
@@ -114,7 +116,7 @@ def test_run_learn_failure():
             success=True
         )
 
-        assert result is False
+        assert result is None  # Now returns None on failure (not False)
         print("✅ test_run_learn_failure passed")
 
 
@@ -133,9 +135,9 @@ def test_run_status_success():
         assert result is not None
         assert result['total_patterns'] == 42
 
-        # Verify subprocess call - no flags, but env vars passed!
+        # Verify subprocess call - uses ace-cli (renamed from ce-ace in v5.4.7)
         args, kwargs = mock_run.call_args
-        assert args[0] == ['ce-ace', 'status', '--json']
+        assert args[0] == ['ace-cli', 'status', '--json']
         assert 'env' in kwargs
         assert kwargs['env']['ACE_ORG_ID'] == 'org_123'
         assert kwargs['env']['ACE_PROJECT_ID'] == 'prj_456'
