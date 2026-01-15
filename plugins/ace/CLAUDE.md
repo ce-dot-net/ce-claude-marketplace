@@ -1,4 +1,4 @@
-<!-- ACE_SECTION_START v5.4.18 -->
+<!-- ACE_SECTION_START v5.4.19 -->
 # ACE Plugin
 
 Automatic pattern learning - hooks handle everything.
@@ -12,23 +12,36 @@ Automatic pattern learning - hooks handle everything.
 
 All hooks run automatically. No manual invocation needed.
 
+## v5.4.19: WARNING UX Fix (Sliding Window TTL)
+
+**IMPORTANT CHANGE:** Don't warn active users about token expiration!
+
+The server uses **sliding window TTL** that extends tokens +48h on EVERY API call.
+Active users will never see expiration because their tokens auto-extend.
+
+**New Warning Logic (Only warn for):**
+- 🔴 **Hard cap approaching** - 7-day continuous use limit (`is_hard_cap_approaching`)
+- 🟡 **Idle 47h+ AND expiring** - User hasn't used API in 47+ hours
+- ⛔ **Session expired** - Refresh token expired (must re-login)
+
+**NO warning for active users** - sliding window handles it automatically.
+
+**New Server Fields:**
+- `token_expires_in` (seconds) - Precise expiration
+- `absolute_expires_at` - 7-day hard cap timestamp
+- `last_used_at` - For idle detection
+- `is_hard_cap_approaching` - Server-computed flag
+- `hard_cap_hours_remaining` - Hours until 7-day limit
+
 ## v5.4.18: Smart Login + Granular Token Expiration
 
 **Smart Login (First-Time Users):**
 - `/ace-login`: Now auto-configures org/project on first login
 - Auto-selects if only 1 org/project available
 - Prompts if multiple options, saves to `.claude/settings.json`
-- No need to run `/ace-configure` separately!
-
-**Granular Token Expiration:**
-- Uses `token_expires_in` (seconds) for precise warnings
-- Warns if token expires within 2 hours before complex tasks
-- Falls back to string parsing for legacy servers
 
 **Fresh Data Fetch:**
 - `/ace-configure`: Now fetches fresh org/project lists from server
-- Shows current config before prompting
-- Newly created projects appear immediately
 
 ## v5.4.13: Device Code Login + Token Expiration Warnings
 
@@ -151,7 +164,7 @@ Claude now has BOTH auth AND cache patterns in context!
 
 ---
 
-**Version**: v5.4.18 (Smart Login + Granular Token Expiration)
+**Version**: v5.4.19 (WARNING UX Fix - Sliding Window TTL)
 **Requires**: Claude Code >= 2.1.2, ace-cli >= 3.5.0 (npm install -g @ace-sdk/cli)
 
-<!-- ACE_SECTION_END v5.4.18 -->
+<!-- ACE_SECTION_END v5.4.19 -->
