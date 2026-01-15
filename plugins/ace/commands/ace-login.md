@@ -202,6 +202,13 @@ ace-cli whoami --json
 ```
 Check `token_status` field. If "expired", run `/ace-login` again.
 
+### "Device limit reached"
+You've logged in on too many devices (default limit: 2). Options:
+1. **Revoke a device**: Visit https://ace.code-engine.app/dashboard/devices
+2. **Logout from another device**: Run `ace-cli logout` on another machine
+
+After revoking, run `/ace-login` again.
+
 ### Logout and re-login
 ```bash
 ace-cli logout
