@@ -5,6 +5,25 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.17] - 2026-01-15
+
+### Fix Relevance Report Parsing
+
+**Fixed:**
+- `/ace:ace-relevance-report` now correctly parses JSON with spaces
+- Was using `grep '"event":"search"'` which didn't match `"event": "search"` format
+- Now uses `jq select(.event == "search")` for robust filtering
+- Correctly reports all search events, domain shifts, and task completions
+
+**Improved:**
+- Added emoji indicators to insights section for better readability
+- More robust jq-based filtering for all event types
+
+**Files Changed:**
+- `plugins/ace/commands/ace-relevance-report.md` - Fixed grep patterns, added emojis
+
+---
+
 ## [5.4.16] - 2026-01-15
 
 ### Dual Location Config Detection

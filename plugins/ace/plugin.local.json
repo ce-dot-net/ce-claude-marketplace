@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.4.16",
-  "description": "Code Engine ACE - LOCAL DEVELOPMENT MODE - v5.4.16: Dual Location Config Detection - Uses local build instead of npm package",
+  "version": "5.4.17",
+  "description": "Code Engine ACE - LOCAL DEVELOPMENT MODE - v5.4.17: Fix Relevance Report Parsing - Uses local build instead of npm package",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
