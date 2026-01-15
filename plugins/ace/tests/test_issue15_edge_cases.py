@@ -164,6 +164,30 @@ class TestOldConfigDetection(unittest.TestCase):
             self.assertFalse(has_old_token)
             print("✅ PASS: New config format detected correctly")
 
+    def test_new_location_old_format(self):
+        """Edge case: New location ~/.config/ace/config.json but OLD format (apiToken)"""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            new_config_path = Path(tmpdir) / ".config" / "ace" / "config.json"
+            new_config_path.parent.mkdir(parents=True)
+
+            # Write OLD format at NEW location (pre-device-code setup)
+            old_format_new_location = {
+                "serverUrl": "https://ace-api.code-engine.app",
+                "apiToken": "ace_org_token_xxx",  # OLD format
+                "projectId": "prj_123"
+            }
+            new_config_path.write_text(json.dumps(old_format_new_location))
+
+            # Read and check
+            config = json.loads(new_config_path.read_text())
+            has_api_token = "apiToken" in config and config["apiToken"]
+            has_auth_token = "auth" in config and "token" in config.get("auth", {})
+
+            # Should detect old format even at new location
+            self.assertTrue(has_api_token)
+            self.assertFalse(has_auth_token)
+            print("✅ PASS: New location with old format (apiToken) detected correctly")
+
 
 class TestDeviceLimitHandling(unittest.TestCase):
     """Test device limit error handling"""

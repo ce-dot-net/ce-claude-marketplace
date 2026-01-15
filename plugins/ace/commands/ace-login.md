@@ -33,30 +33,60 @@ echo "ace-cli found (version: $VERSION)"
 
 ### Step 2: Check for Old Config Format (Migration Warning)
 
+Check BOTH locations for deprecated `apiToken` format:
+
 ```bash
-OLD_CONFIG="$HOME/.ace/config.json"
-if [ -f "$OLD_CONFIG" ]; then
-  # Check if it has old apiToken format
-  OLD_TOKEN=$(jq -r '.apiToken // empty' "$OLD_CONFIG" 2>/dev/null || echo "")
+DEPRECATED_FORMAT_FOUND=""
+
+# Check OLD location: ~/.ace/config.json
+OLD_LOCATION="$HOME/.ace/config.json"
+if [ -f "$OLD_LOCATION" ]; then
+  OLD_TOKEN=$(jq -r '.apiToken // empty' "$OLD_LOCATION" 2>/dev/null || echo "")
   if [ -n "$OLD_TOKEN" ]; then
-    echo "⚠️  Found old ACE configuration (~/.ace/config.json)"
-    echo ""
-    echo "The old API token format (ace_xxx) is deprecated."
-    echo "This login will set up the new user token authentication."
-    echo ""
+    echo "⚠️  Found deprecated config at ~/.ace/config.json"
+    echo "   Format: apiToken (org token)"
+    DEPRECATED_FORMAT_FOUND="old_location"
+  fi
+fi
+
+# Check NEW location: ~/.config/ace/config.json for OLD format (apiToken instead of auth.token)
+NEW_LOCATION="$HOME/.config/ace/config.json"
+if [ -f "$NEW_LOCATION" ]; then
+  # Check if it has apiToken (old format) instead of auth.token (new format)
+  API_TOKEN=$(jq -r '.apiToken // empty' "$NEW_LOCATION" 2>/dev/null || echo "")
+  AUTH_TOKEN=$(jq -r '.auth.token // empty' "$NEW_LOCATION" 2>/dev/null || echo "")
+
+  if [ -n "$API_TOKEN" ] && [ -z "$AUTH_TOKEN" ]; then
+    echo "⚠️  Found deprecated format at ~/.config/ace/config.json"
+    echo "   Format: apiToken (should be auth.token)"
+    DEPRECATED_FORMAT_FOUND="new_location_old_format"
+  fi
+fi
+
+# Show migration message if deprecated format found
+if [ -n "$DEPRECATED_FORMAT_FOUND" ]; then
+  echo ""
+  echo "The old API token format (ace_xxx) is deprecated."
+  echo "This login will set up the new user token authentication (ace_user_xxx)."
+  echo ""
+  if [ "$DEPRECATED_FORMAT_FOUND" = "old_location" ]; then
     echo "After successful login + configure, you can safely remove the old config:"
     echo "  rm ~/.ace/config.json"
-    echo ""
   fi
+  echo ""
 fi
 ```
 
-**Note**: Old config at `~/.ace/config.json` with `apiToken` field indicates deprecated setup. The new config uses `~/.config/ace/config.json` with user tokens from device code flow.
+**Note**: The deprecated `apiToken` format can exist in TWO locations:
+1. `~/.ace/config.json` - Old location (pre-XDG)
+2. `~/.config/ace/config.json` - New location but old format (before device code flow)
+
+The new format uses `auth.token` with user tokens from device code flow.
 
 **Migration Path**:
-1. Run `/ace-login` → Creates new config at `~/.config/ace/config.json`
+1. Run `/ace-login` → Creates/updates config at `~/.config/ace/config.json` with `auth.token`
 2. Run `/ace-configure` → Saves org/project to `.claude/settings.json`
-3. Remove old config: `rm ~/.ace/config.json` (optional but recommended)
+3. Remove old config: `rm ~/.ace/config.json` (if it exists)
 
 ### Step 3: Check Current Authentication Status (New Config)
 
