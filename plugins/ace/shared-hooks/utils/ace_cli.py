@@ -36,6 +36,7 @@ def run_search(query: str, org: str = None, project: str = None, session_id: str
 
     Returns:
         Parsed JSON response or None on failure
+        v5.4.21: Returns {"error": ..., "message": ...} dict on auth failure
 
     Response includes:
         - similar_patterns: List of matching patterns
@@ -51,6 +52,10 @@ def run_search(query: str, org: str = None, project: str = None, session_id: str
     Session Pinning (v1.0.11+):
         If session_id provided, patterns are pinned to session storage for 24h.
         Enables fast recall after context compaction via recall_session().
+
+    v5.4.21 Changes:
+        Returns {"error": "not_authenticated", "message": "..."} on auth failure
+        instead of None, enabling better error messages to users.
     """
     try:
         # Build environment with context
@@ -74,12 +79,28 @@ def run_search(query: str, org: str = None, project: str = None, session_id: str
         )
 
         if result.returncode != 0:
+            # v5.4.21: Check if failure is due to auth
+            # CLI may output JSON error even on non-zero exit
+            stderr = result.stderr.decode('utf-8', errors='replace') if result.stderr else ''
+            stdout = result.stdout.decode('utf-8', errors='replace') if result.stdout else ''
+
+            # Check for auth-related errors
+            if any(x in stderr.lower() for x in ['unauthorized', '401', 'not logged in', 'no api token']):
+                return {"error": "not_authenticated", "message": "Not logged in. Run /ace-login first."}
+            if any(x in stdout.lower() for x in ['not logged in', 'no api token']):
+                return {"error": "not_authenticated", "message": "Not logged in. Run /ace-login first."}
+
+            # Other failures
             return None
 
         return json.loads(result.stdout)
 
-    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
-        return None
+    except subprocess.TimeoutExpired:
+        return {"error": "timeout", "message": "Search timed out. Check your connection."}
+    except json.JSONDecodeError:
+        return None  # Invalid JSON response
+    except FileNotFoundError:
+        return {"error": "cli_not_found", "message": "ace-cli not found. Run: npm install -g @ace-sdk/cli"}
 
 
 def run_learn(task: str, trajectory: str, success: bool, org: str = None, project: str = None, patterns_used: Optional[list] = None) -> Optional[Dict[str, Any]]:
@@ -305,7 +326,7 @@ def recall_session(session_id: str, org: str = None, project: str = None) -> Opt
 
 def check_auth_status(warn_threshold_hours: float = 2.0) -> Optional[str]:
     """
-    Check ACE authentication status - WARNING UX v5.4.19
+    Check ACE authentication status - WARNING UX v5.4.21
 
     IMPORTANT: Don't warn active users! The sliding window TTL automatically
     extends the token by +48h on EVERY API call. SDK Core also auto-refreshes
@@ -323,6 +344,11 @@ def check_auth_status(warn_threshold_hours: float = 2.0) -> Optional[str]:
 
     Returns:
         Warning message string if auth issues detected, None if OK
+
+    v5.4.21 Changes:
+        - FIX: Parse stdout even when returncode != 0 (CLI returns valid JSON
+          with authenticated:false but exit code 1)
+        - This fixes silent auth check failures after Mac sleep/wake
 
     v5.4.19 Changes:
         - DON'T warn active users (sliding window auto-extends tokens)
@@ -342,65 +368,71 @@ def check_auth_status(warn_threshold_hours: float = 2.0) -> Optional[str]:
             timeout=5
         )
 
-        if result.returncode == 0:
+        # v5.4.21 FIX: Parse stdout regardless of returncode
+        # The CLI returns valid JSON even with exit code 1 when not authenticated
+        # Example: returncode=1, stdout='{"authenticated":false,"message":"Not logged in"}'
+        data = None
+        if result.stdout:
             try:
                 data = json.loads(result.stdout)
-                if not data.get('authenticated', False):
-                    return "⚠️ [ACE] Not authenticated. Run /ace-login to setup."
-
-                # v5.4.19: Check for hard cap approaching (7-day limit)
-                if data.get('is_hard_cap_approaching', False):
-                    hard_cap_hours = data.get('hard_cap_hours_remaining', 0)
-                    if hard_cap_hours < 24:
-                        return f"⚠️ [ACE] Session hard limit in {int(hard_cap_hours)}h. Must re-login after 7 days of continuous use."
-
-                # v5.4.19: Check token expiration
-                expires_in = data.get('token_expires_in')
-                if expires_in is not None:
-                    # Token already expired
-                    if expires_in <= 0:
-                        return "⚠️ [ACE] Session expired. Run /ace-login to re-authenticate."
-
-                    # v5.4.19: Check for idle state before warning
-                    # Only warn if user has been idle AND token expiring soon
-                    last_used_at = data.get('last_used_at')
-                    expires_in_hours = expires_in / 3600.0
-
-                    if last_used_at is not None:
-                        # User has used the API before - check if idle
-                        # If last_used_at is recent, DON'T warn (sliding window will extend)
-                        # The server extends token +48h on every API call
-                        # So if expires_in < warn_threshold AND last_used_at is old, warn
-                        from datetime import datetime
-                        try:
-                            last_used = datetime.fromisoformat(last_used_at.replace('Z', '+00:00'))
-                            now = datetime.now(last_used.tzinfo)
-                            idle_hours = (now - last_used).total_seconds() / 3600.0
-
-                            # Only warn if idle for 46+ hours AND token expiring soon
-                            if idle_hours >= 46 and expires_in_hours < warn_threshold_hours:
-                                mins = int(expires_in / 60)
-                                return f"⚠️ [ACE] Been idle for {int(idle_hours)}h, token expires in {mins} min. Your next action will auto-refresh."
-                        except (ValueError, TypeError):
-                            pass  # Can't parse last_used_at, skip idle check
-
-                    elif expires_in_hours < warn_threshold_hours:
-                        # last_used_at is null (first time) - only warn if actually expiring
-                        # This shouldn't happen normally since new tokens have 48h TTL
-                        mins = int(expires_in / 60)
-                        if mins < 60:
-                            return f"⚠️ [ACE] Token expires in {mins} minutes. Consider running /ace-login."
-
-                else:
-                    # Fallback: Parse token_status string (legacy servers)
-                    token_status = data.get('token_status', '')
-                    if 'expired' in token_status.lower():
-                        return "⚠️ [ACE] Session expired. Run /ace-login to re-authenticate."
-
             except json.JSONDecodeError:
                 pass
-        else:
-            # CLI failed - check stderr for auth errors
+
+        if data:
+            if not data.get('authenticated', False):
+                return "⚠️ [ACE] Not authenticated. Run /ace-login to setup."
+
+            # v5.4.19: Check for hard cap approaching (7-day limit)
+            if data.get('is_hard_cap_approaching', False):
+                hard_cap_hours = data.get('hard_cap_hours_remaining', 0)
+                if hard_cap_hours < 24:
+                    return f"⚠️ [ACE] Session hard limit in {int(hard_cap_hours)}h. Must re-login after 7 days of continuous use."
+
+            # v5.4.19: Check token expiration
+            expires_in = data.get('token_expires_in')
+            if expires_in is not None:
+                # Token already expired
+                if expires_in <= 0:
+                    return "⚠️ [ACE] Session expired. Run /ace-login to re-authenticate."
+
+                # v5.4.19: Check for idle state before warning
+                # Only warn if user has been idle AND token expiring soon
+                last_used_at = data.get('last_used_at')
+                expires_in_hours = expires_in / 3600.0
+
+                if last_used_at is not None:
+                    # User has used the API before - check if idle
+                    # If last_used_at is recent, DON'T warn (sliding window will extend)
+                    # The server extends token +48h on every API call
+                    # So if expires_in < warn_threshold AND last_used_at is old, warn
+                    from datetime import datetime
+                    try:
+                        last_used = datetime.fromisoformat(last_used_at.replace('Z', '+00:00'))
+                        now = datetime.now(last_used.tzinfo)
+                        idle_hours = (now - last_used).total_seconds() / 3600.0
+
+                        # Only warn if idle for 46+ hours AND token expiring soon
+                        if idle_hours >= 46 and expires_in_hours < warn_threshold_hours:
+                            mins = int(expires_in / 60)
+                            return f"⚠️ [ACE] Been idle for {int(idle_hours)}h, token expires in {mins} min. Your next action will auto-refresh."
+                    except (ValueError, TypeError):
+                        pass  # Can't parse last_used_at, skip idle check
+
+                elif expires_in_hours < warn_threshold_hours:
+                    # last_used_at is null (first time) - only warn if actually expiring
+                    # This shouldn't happen normally since new tokens have 48h TTL
+                    mins = int(expires_in / 60)
+                    if mins < 60:
+                        return f"⚠️ [ACE] Token expires in {mins} minutes. Consider running /ace-login."
+
+            else:
+                # Fallback: Parse token_status string (legacy servers)
+                token_status = data.get('token_status', '')
+                if 'expired' in token_status.lower():
+                    return "⚠️ [ACE] Session expired. Run /ace-login to re-authenticate."
+
+        elif result.returncode != 0:
+            # CLI failed and no valid JSON - check stderr for auth errors
             stderr = result.stderr or ''
             if '401' in stderr or 'unauthorized' in stderr.lower() or 'expired' in stderr.lower():
                 return "⚠️ [ACE] Session expired. Run /ace-login to re-authenticate."
@@ -409,6 +441,54 @@ def check_auth_status(warn_threshold_hours: float = 2.0) -> Optional[str]:
         pass  # Non-fatal
 
     return None
+
+
+def ensure_authenticated() -> tuple:
+    """
+    Pre-flight authentication check for ACE operations - v5.4.21
+
+    Returns:
+        Tuple of (is_authenticated: bool, error_message: Optional[str])
+        - (True, None) if authenticated
+        - (False, "error message") if not authenticated
+
+    Usage:
+        is_ok, error = ensure_authenticated()
+        if not is_ok:
+            # Handle auth failure - show error to user
+            return {"error": "not_authenticated", "message": error}
+
+    Note:
+        This is a SYNCHRONOUS check. Use at the start of slash commands
+        or utility functions to fail fast with a clear message.
+    """
+    try:
+        result = subprocess.run(
+            [CLI_CMD, 'whoami', '--json'],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        # Parse stdout regardless of returncode (CLI returns JSON even on error)
+        if result.stdout:
+            try:
+                data = json.loads(result.stdout)
+                if data.get('authenticated', False):
+                    return (True, None)
+                else:
+                    message = data.get('message', 'Not logged in')
+                    return (False, f"❌ [ACE] {message}. Run /ace-login to authenticate.")
+            except json.JSONDecodeError:
+                pass
+
+        # CLI failed without valid JSON
+        return (False, "❌ [ACE] Authentication check failed. Run /ace-login to setup.")
+
+    except subprocess.TimeoutExpired:
+        return (False, "❌ [ACE] Authentication check timed out. Check your connection.")
+    except FileNotFoundError:
+        return (False, "❌ [ACE] ace-cli not found. Run: npm install -g @ace-sdk/cli")
 
 
 def check_session_pinning_available() -> bool:

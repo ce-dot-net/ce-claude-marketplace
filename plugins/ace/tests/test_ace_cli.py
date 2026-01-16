@@ -41,25 +41,48 @@ def test_run_search_success():
 
 
 def test_run_search_failure():
-    """Test search call with non-zero exit code"""
+    """Test search call with non-zero exit code (generic failure)"""
     mock_result = MagicMock()
     mock_result.returncode = 1
+    mock_result.stdout = b''  # Empty stdout
+    mock_result.stderr = b''  # Empty stderr (no auth error indicators)
 
     with patch('subprocess.run', return_value=mock_result):
         result = run_search('test query')
 
+        # v5.4.21: Generic failures still return None
         assert result is None
         print("✅ test_run_search_failure passed")
 
 
-def test_run_search_timeout():
-    """Test search call timeout"""
-    import subprocess
+def test_run_search_auth_failure():
+    """Test search call with auth error (v5.4.21)"""
+    mock_result = MagicMock()
+    mock_result.returncode = 1
+    mock_result.stdout = b'{"error": "Not logged in"}'
+    mock_result.stderr = b''
 
-    with patch('subprocess.run', side_effect=subprocess.TimeoutExpired('ce-ace', 10)):
+    with patch('subprocess.run', return_value=mock_result):
         result = run_search('test query')
 
-        assert result is None
+        # v5.4.21: Auth failures return structured error
+        assert result is not None
+        assert result.get('error') == 'not_authenticated'
+        assert 'ace-login' in result.get('message', '')
+        print("✅ test_run_search_auth_failure passed")
+
+
+def test_run_search_timeout():
+    """Test search call timeout (v5.4.21)"""
+    import subprocess
+
+    with patch('subprocess.run', side_effect=subprocess.TimeoutExpired('ace-cli', 10)):
+        result = run_search('test query')
+
+        # v5.4.21: Timeout returns structured error instead of None
+        assert result is not None
+        assert result.get('error') == 'timeout'
+        assert 'timed out' in result.get('message', '').lower()
         print("✅ test_run_search_timeout passed")
 
 
@@ -151,6 +174,7 @@ if __name__ == '__main__':
 
     test_run_search_success()
     test_run_search_failure()
+    test_run_search_auth_failure()
     test_run_search_timeout()
     test_run_search_invalid_json()
     test_run_learn_success()

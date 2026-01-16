@@ -12,21 +12,56 @@ Uses semantic search to find only the most relevant patterns matching your query
 
 ## Instructions for Claude
 
-When the user runs `/ace-search <query>`, use the Bash tool to call ace-cli:
+When the user runs `/ace-search <query>`:
+
+### Step 1: Pre-flight Auth Check
+
+First, run this bash script to check authentication:
+
+```bash
+#!/usr/bin/env bash
+# ACE Pre-flight Auth Check (v5.4.21)
+
+# Check ace-cli is available
+if ! command -v ace-cli >/dev/null 2>&1; then
+  echo "ACE_STATUS=cli_not_found"
+  exit 0
+fi
+
+# Check authentication status
+AUTH_JSON=$(ace-cli whoami --json 2>/dev/null || echo '{"authenticated":false}')
+IS_AUTH=$(echo "$AUTH_JSON" | jq -r '.authenticated // false')
+
+if [ "$IS_AUTH" != "true" ]; then
+  echo "ACE_STATUS=not_authenticated"
+else
+  echo "ACE_STATUS=ok"
+fi
+```
+
+### Step 2: Handle Auth Status
+
+Based on the output:
+
+- **If `ACE_STATUS=cli_not_found`**: Tell the user to install ace-cli:
+  ```
+  ❌ ace-cli not found. Install: npm install -g @ace-sdk/cli
+  ```
+
+- **If `ACE_STATUS=not_authenticated`**: Use the **AskUserQuestion** tool to ask the user:
+  - **Question**: "ACE is not authenticated. Would you like to login now?"
+  - **Options**:
+    1. **"Login now"** - Run `/ace-login` command for them
+    2. **"Continue without ACE"** - Show message: "⚠️ ACE pattern learning is disabled for this session. Run /ace-login anytime to enable."
+    3. **"Skip"** - Just exit without action
+
+- **If `ACE_STATUS=ok`**: Proceed to Step 3
+
+### Step 3: Run Search (only if authenticated)
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-
-# Check ace-cli is available
-if ! command -v ace-cli >/dev/null 2>&1; then
-  echo "❌ ace-cli not found in PATH"
-  echo ""
-  echo "Installation:"
-  echo "  npm install -g @ace-sdk/cli"
-  echo ""
-  exit 1
-fi
 
 # Get context from .claude/settings.json and export as env vars
 export ACE_ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")

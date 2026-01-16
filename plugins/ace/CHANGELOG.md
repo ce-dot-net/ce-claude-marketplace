@@ -5,6 +5,52 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.21] - 2026-01-16
+
+### Silent Auth Check Fix + Interactive Login UX
+
+**CRITICAL BUG FIX:** Auth check was failing silently after Mac sleep/wake!
+
+The `ace-cli whoami --json` command returns **exit code 1** when not authenticated,
+but still outputs valid JSON to stdout. The old code only parsed stdout when exit code
+was 0, causing auth warnings to be silently swallowed.
+
+**Bug Scenario:**
+1. User closes Mac lid → Mac sleeps for 48+ hours
+2. User opens Mac → Claude Code still running (no new SessionStart)
+3. User types message → UserPromptSubmit hook runs
+4. `check_auth_status()` returns `None` (BUG: should return warning)
+5. `run_search()` fails silently → User sees "Search failed" (not helpful!)
+
+**Fixed:**
+- `check_auth_status()` now parses stdout regardless of exit code
+- `run_search()` returns structured errors `{"error": "not_authenticated", "message": "..."}`
+- `ace_before_task.py` handles structured errors with specific messages
+- Added `ensure_authenticated()` utility for pre-flight checks
+
+**New Interactive UX for Slash Commands:**
+- `/ace-search` and `/ace-status` now check auth BEFORE running
+- If not authenticated, Claude uses **AskUserQuestion** to prompt:
+  - "Login now" → Runs `/ace-login`
+  - "Continue without ACE" → Shows warning, ACE disabled for session
+  - "Skip" → No action
+
+**New Tests:**
+- `TestV5421AuthFix` - Tests non-zero exit + valid JSON handling
+- `TestEnsureAuthenticated` - Tests pre-flight auth check utility
+
+**Files Changed:**
+- `plugins/ace/shared-hooks/utils/ace_cli.py` - Fixed `check_auth_status()`, added `ensure_authenticated()`
+- `plugins/ace/shared-hooks/ace_before_task.py` - Handle structured error responses
+- `plugins/ace/commands/ace-search.md` - Interactive auth prompt
+- `plugins/ace/commands/ace-status.md` - Interactive auth prompt
+- `plugins/ace/tests/test_ace_cli.py` - Updated + new auth failure tests
+- `plugins/ace/tests/test_issue15_edge_cases.py` - New v5.4.21 test classes
+
+**Related:** User reported silent auth failures after Mac sleep/wake
+
+---
+
 ## [5.4.20] - 2026-01-15
 
 ### Token Lifecycle Docs Fix

@@ -115,6 +115,88 @@ class TestCheckAuthStatus(unittest.TestCase):
         print("✅ PASS: Timeout returns None (doesn't block)")
 
 
+class TestV5421AuthFix(unittest.TestCase):
+    """Test v5.4.21 fix: Parse stdout even on non-zero exit code"""
+
+    @patch('ace_cli.subprocess.run')
+    def test_non_zero_exit_with_valid_json_not_authenticated(self, mock_run):
+        """v5.4.21 FIX: CLI returns exit code 1 but valid JSON with authenticated:false"""
+        mock_run.return_value = MagicMock(
+            returncode=1,  # Non-zero exit code!
+            stdout='{"authenticated":false,"message":"Not logged in"}',
+            stderr=""
+        )
+
+        result = check_auth_status()
+        self.assertIsNotNone(result)  # Should NOT be None anymore!
+        self.assertIn("Not authenticated", result)
+        self.assertIn("/ace-login", result)
+        print("✅ PASS: v5.4.21 - Non-zero exit + JSON authenticated:false returns warning")
+
+    @patch('ace_cli.subprocess.run')
+    def test_non_zero_exit_with_valid_json_authenticated(self, mock_run):
+        """Edge case: Non-zero exit but authenticated (shouldn't happen but handle it)"""
+        mock_run.return_value = MagicMock(
+            returncode=1,  # Non-zero exit code!
+            stdout='{"authenticated":true,"token_status":"Valid"}',
+            stderr=""
+        )
+
+        result = check_auth_status()
+        self.assertIsNone(result)  # Authenticated, no warning
+        print("✅ PASS: Non-zero exit + authenticated:true returns None")
+
+
+class TestEnsureAuthenticated(unittest.TestCase):
+    """Test ensure_authenticated() pre-flight check function (v5.4.21)"""
+
+    @patch('ace_cli.subprocess.run')
+    def test_authenticated_returns_true(self, mock_run):
+        """Pre-flight check passes when authenticated"""
+        from ace_cli import ensure_authenticated
+
+        mock_run.return_value = MagicMock(
+            returncode=0,
+            stdout='{"authenticated":true}',
+            stderr=""
+        )
+
+        is_ok, error = ensure_authenticated()
+        self.assertTrue(is_ok)
+        self.assertIsNone(error)
+        print("✅ PASS: ensure_authenticated returns (True, None) when authenticated")
+
+    @patch('ace_cli.subprocess.run')
+    def test_not_authenticated_returns_false(self, mock_run):
+        """Pre-flight check fails when not authenticated"""
+        from ace_cli import ensure_authenticated
+
+        mock_run.return_value = MagicMock(
+            returncode=1,
+            stdout='{"authenticated":false,"message":"Not logged in"}',
+            stderr=""
+        )
+
+        is_ok, error = ensure_authenticated()
+        self.assertFalse(is_ok)
+        self.assertIsNotNone(error)
+        self.assertIn("ace-login", error)
+        print("✅ PASS: ensure_authenticated returns (False, error) when not authenticated")
+
+    @patch('ace_cli.subprocess.run')
+    def test_cli_not_found_returns_error(self, mock_run):
+        """Pre-flight check handles missing CLI"""
+        from ace_cli import ensure_authenticated
+
+        mock_run.side_effect = FileNotFoundError("ace-cli not found")
+
+        is_ok, error = ensure_authenticated()
+        self.assertFalse(is_ok)
+        self.assertIsNotNone(error)
+        self.assertIn("npm install", error)
+        print("✅ PASS: ensure_authenticated returns (False, install message) when CLI missing")
+
+
 class TestOldConfigDetection(unittest.TestCase):
     """Test old config format detection for migration warnings"""
 
