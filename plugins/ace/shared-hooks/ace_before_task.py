@@ -152,6 +152,7 @@ def main():
         if patterns_response:
             patterns_response = sanitize_response(patterns_response)
 
+        # v5.4.21: Check for error responses from run_search()
         if not patterns_response:
             # Search failed - check if it's an auth error
             if auth_warning:
@@ -160,6 +161,23 @@ def main():
             else:
                 # Generic search failure
                 output = {"systemMessage": "❌ [ACE] Search failed or returned no results"}
+            print(json.dumps(output))
+            sys.exit(0)
+
+        # v5.4.21: Handle structured error responses
+        if isinstance(patterns_response, dict) and patterns_response.get('error'):
+            error_type = patterns_response.get('error')
+            error_msg = patterns_response.get('message', 'Unknown error')
+
+            if error_type == 'not_authenticated':
+                output = {"systemMessage": f"⚠️ [ACE] {error_msg}"}
+            elif error_type == 'timeout':
+                output = {"systemMessage": f"⏱️ [ACE] {error_msg}"}
+            elif error_type == 'cli_not_found':
+                output = {"systemMessage": f"❌ [ACE] {error_msg}"}
+            else:
+                output = {"systemMessage": f"❌ [ACE] {error_msg}"}
+
             print(json.dumps(output))
             sys.exit(0)
 
