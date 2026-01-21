@@ -5,6 +5,38 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.22] - 2026-01-21
+
+### Deprecated Config Detection
+
+**Feature:** SessionStart hook now detects deprecated config formats and warns users to migrate.
+
+**Problem:** Users with old config files (from pre-device-code era) would experience silent failures
+or confusing errors because the new `ace-cli` expects the new auth format.
+
+**Two Config Locations Checked:**
+
+| Location | Old Format | New Format |
+|----------|-----------|------------|
+| `~/.ace/config.json` | `{"apiToken": "ace_xxx"}` | ❌ Deprecated |
+| `~/.config/ace/config.json` | `{"apiToken": "ace_xxx"}` | `{"auth": {"token": "ace_user_xxx"}}` |
+
+**SessionStart now warns:**
+- `⚠️ [ACE] Deprecated config at ~/.ace/config.json. Run /ace-login to migrate.`
+- `⚠️ [ACE] Old config format detected. Run /ace-login to migrate to device code auth.`
+
+**Why This Matters:**
+- Old `apiToken` format used organization tokens (deprecated)
+- New `auth.token` format uses user tokens from device code flow
+- Users need to run `/ace-login` to get proper user authentication
+
+**Files Changed:**
+- `plugins/ace/scripts/ace_install_cli.sh` - Added deprecated config detection (step 5)
+
+**Related:** Investigation of ${CLAUDE_SESSION_ID} confirmed it's per-CLI-launch (not useful for ACE's task-based approach)
+
+---
+
 ## [5.4.21] - 2026-01-16
 
 ### Silent Auth Check Fix + Interactive Login UX

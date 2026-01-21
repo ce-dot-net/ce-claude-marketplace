@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # ACE SessionStart Hook - CLI Detection & Migration
+# v5.4.22: Deprecated config detection (old ~/.ace/config.json or apiToken format)
 # v5.4.13: Token expiration check (catches 48h standby on new sessions)
 # v5.4.11: Capture agent_type from Claude Code 2.1.2+
 # v5.4.7: Flag-based hook disable + daily update check
@@ -94,7 +95,23 @@ if [ -n "$LATEST" ] && [ "$LATEST" != "$CURRENT_VERSION" ]; then
   output_warning "💡 [ACE] Update available: v$CURRENT_VERSION → v$LATEST. Run: npm install -g @ace-sdk/cli"
 fi
 
-# 5. v5.4.13: Token expiration check (catches 48h standby scenario on new sessions)
+# 5. v5.4.22: Deprecated config detection (migration warning)
+OLD_CONFIG="$HOME/.ace/config.json"
+NEW_CONFIG="$HOME/.config/ace/config.json"
+
+# Check old location with apiToken (pre-device-code era)
+if [ -f "$OLD_CONFIG" ] && grep -q '"apiToken"' "$OLD_CONFIG" 2>/dev/null; then
+  output_warning "⚠️ [ACE] Deprecated config at ~/.ace/config.json. Run /ace-login to migrate."
+fi
+
+# Check new location with old format (apiToken but no auth object - intermediate migration state)
+if [ -f "$NEW_CONFIG" ]; then
+  if grep -q '"apiToken"' "$NEW_CONFIG" 2>/dev/null && ! grep -q '"auth"' "$NEW_CONFIG" 2>/dev/null; then
+    output_warning "⚠️ [ACE] Old config format detected. Run /ace-login to migrate to device code auth."
+  fi
+fi
+
+# 6. v5.4.13: Token expiration check (catches 48h standby scenario on new sessions)
 TOKEN_JSON=$($CLI_CMD whoami --json 2>/dev/null || echo '{}')
 AUTHENTICATED=$(echo "$TOKEN_JSON" | jq -r '.authenticated // false' 2>/dev/null)
 TOKEN_STATUS=$(echo "$TOKEN_JSON" | jq -r '.token_status // empty' 2>/dev/null)
