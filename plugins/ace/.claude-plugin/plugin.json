@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.4.21",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.4.21: Token Lifecycle Docs Fix. Requires: Claude Code >= 2.1.2, ace-cli >= 3.5.0.",
+  "version": "5.4.22",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.4.22: Deprecated Config Detection. Requires: Claude Code >= 2.1.2, ace-cli >= 3.5.0.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
