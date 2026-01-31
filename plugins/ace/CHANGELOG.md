@@ -5,6 +5,59 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.23] - 2026-01-30
+
+### Deprecated CLAUDE.md Detection + Auto-Cleanup
+
+**Feature:** SessionStart hook now detects and removes deprecated v3.x ACE content from CLAUDE.md files.
+
+**Problem:** Users who upgraded from v3.x (skill-based architecture) to v5.x (hook-based) still have
+old ACE instructions in their CLAUDE.md files. These instructions:
+- Reference the old skill-based system (`ace-orchestration:ace-playbook-retrieval`, etc.)
+- Waste tokens on every conversation start
+- Cause confusion about how ACE works in v5.x
+
+**Solution:**
+
+1. **SessionStart hook auto-detection:**
+   - Checks both global (`~/CLAUDE.md`) and project CLAUDE.md files
+   - Detects v3.x markers: `<!-- ACE_SECTION_START v3.x.x -->` or skill references
+   - Creates timestamped backup before any modification
+
+2. **Auto-cleanup for marker-based content:**
+   - If proper `<!-- ACE_SECTION_START -->` / `<!-- ACE_SECTION_END -->` markers exist
+   - Removes the entire section between markers (inclusive)
+   - Shows: `🧹 [ACE] Removed deprecated v3.x.x content from {location} CLAUDE.md. Backup: {filename}`
+
+3. **Warning for unmarked content:**
+   - If skill references exist without markers, shows warning only
+   - `⚠️ [ACE] Deprecated v3.x ACE skill instructions in {location} CLAUDE.md. Manual removal recommended.`
+
+4. **Deprecated `/ace-claude-init` command:**
+   - Added deprecation notice to command documentation
+   - Explains why hooks don't need CLAUDE.md instructions
+   - Preserved for historical reference
+
+**Files Changed:**
+- `plugins/ace/scripts/ace_install_cli.sh` - Added `cleanup_deprecated_claude()` function (step 7)
+- `plugins/ace/commands/ace-claude-init.md` - Added deprecation notice
+- `plugins/ace/.claude-plugin/plugin.json` - Version → 5.4.23
+- `plugins/ace/.claude-plugin/plugin.template.json` - Version → 5.4.23
+- `plugins/ace/CLAUDE.md` - Updated version markers + added v5.4.23 section
+
+**Testing:**
+```bash
+# Create test file with v3.x content
+echo '<!-- ACE_SECTION_START v3.2.40 -->
+test content
+<!-- ACE_SECTION_END v3.2.40 -->' > /tmp/test-claude.md
+
+# Run cleanup function (simulated)
+# Verify backup created and section removed
+```
+
+---
+
 ## [5.4.22] - 2026-01-21
 
 ### Deprecated Config Detection
