@@ -1,8 +1,27 @@
 ---
-description: Add ACE plugin instructions to project CLAUDE.md (one-time setup)
+description: "[DEPRECATED] v5.x hooks don't need CLAUDE.md instructions"
 ---
 
-# ACE Claude Init
+# ACE Claude Init (DEPRECATED)
+
+> ⚠️ **DEPRECATED in v5.4.23**: The hook-based architecture no longer needs ACE instructions in CLAUDE.md.
+> Hooks inject patterns automatically - no user action required.
+>
+> **Why deprecated?**
+> - v3.x required CLAUDE.md instructions for the skill-based architecture
+> - v5.x hooks work automatically without any CLAUDE.md content
+> - Old v3.x content just adds confusion and wastes tokens
+>
+> **What to do if you have old ACE content in CLAUDE.md:**
+> - The SessionStart hook will automatically detect and remove deprecated v3.x content
+> - A backup is created before removal
+> - You can also manually remove any content between `<!-- ACE_SECTION_START v3.x.x -->` markers
+>
+> This command is preserved for documentation purposes only.
+
+---
+
+## Original Documentation (Historical Reference)
 
 Initialize ACE plugin instructions in your project's CLAUDE.md file.
 
