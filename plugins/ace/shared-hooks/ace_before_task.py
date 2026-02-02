@@ -96,8 +96,10 @@ def main():
             # No prompt, nothing to search
             sys.exit(0)
 
-        # Skip slash commands (e.g., /plugin, /ace-configure, etc.)
-        if user_prompt.strip().startswith('/'):
+        # Skip only ACE slash commands (not other plugins' commands!)
+        # Other plugins like /c4-architecture should still trigger ACE pattern search
+        prompt_lower = user_prompt.strip().lower()
+        if prompt_lower.startswith('/ace-') or prompt_lower.startswith('/ace:'):
             sys.exit(0)
 
         # Get project context from .claude/settings.json
