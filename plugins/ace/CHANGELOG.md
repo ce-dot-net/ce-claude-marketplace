@@ -5,6 +5,43 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.24] - 2026-02-02
+
+### Fix Slash Command Filtering
+
+**BUG FIX:** ACE hooks were skipping ALL slash commands instead of just ACE commands.
+
+**Problem:**
+- Running `/c4-architecture:c4-architecture` or any non-ACE slash command would NOT trigger ACE pattern search
+- The `ace_before_task.py` hook had an overly broad filter: `if user_prompt.startswith('/'): sys.exit(0)`
+- This meant patterns were never injected when using other plugins' slash commands
+
+**Before (broken):**
+```python
+# Skip slash commands (e.g., /plugin, /ace-configure, etc.)
+if user_prompt.strip().startswith('/'):
+    sys.exit(0)
+```
+
+**After (fixed):**
+```python
+# Skip only ACE slash commands (not other plugins' commands!)
+prompt_lower = user_prompt.strip().lower()
+if prompt_lower.startswith('/ace-') or prompt_lower.startswith('/ace:'):
+    sys.exit(0)
+```
+
+**Now works correctly:**
+- `/ace-search auth` → ACE hook skips (correct - it's an ACE command)
+- `/c4-architecture:c4-architecture` → ACE hook runs and injects patterns ✓
+- `/sketch:diagram` → ACE hook runs and injects patterns ✓
+- Any other plugin command → ACE hook runs normally ✓
+
+**Files Changed:**
+- `plugins/ace/shared-hooks/ace_before_task.py` - Fixed slash command filter (lines 99-102)
+
+---
+
 ## [5.4.23] - 2026-01-30
 
 ### Deprecated CLAUDE.md Detection + Auto-Cleanup
