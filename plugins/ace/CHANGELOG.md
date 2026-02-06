@@ -5,6 +5,30 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.26] - 2026-02-07
+
+### Add Integration Tests for Session ID Fix (Issue #16)
+
+**NEW:** Comprehensive integration test suite proving the Issue #16 fix works end-to-end.
+
+**Tests Added:**
+- `tests/test_playbook_used_populated.py` - 8 end-to-end integration tests:
+  1. **Fixed path: playbook_used IS populated** - Full SQLite roundtrip proving the fix works
+  2. **Broken path: playbook_used IS empty** - Proves the bug existed before the fix
+  3. **Trace dict structure** - Validates trace matches what `ace-cli learn --stdin` expects
+  4. **Multiple task cycles** - 3 consecutive cycles each correctly populate playbook_used
+  5. **No patterns scenario** - Confirms empty list when search finds nothing (expected behavior)
+  6. **Source code regression guard** - Reads ace_before_task.py and verifies `event.get('session_id')`
+  7. **Path consistency** - Verifies state file path construction matches between hooks
+  8. **Full round-trip** - Real SQLite accumulation with 5 tool calls + pattern verification
+
+**Cleanup:**
+- `tests/test_session_id_mismatch.py` - Removed unused imports (os, sqlite3) to fix lint warnings
+
+**Note:** The actual bug fix was released in v5.4.25. This release adds the test coverage.
+
+---
+
 ## [5.4.25] - 2026-02-06
 
 ### Fix Session ID Mismatch in Hook Feedback Loop (Issue #16)
