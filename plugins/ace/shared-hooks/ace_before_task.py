@@ -108,8 +108,9 @@ def main():
             print("⚠️ [ACE] No project context found - skipping search")
             sys.exit(0)
 
-        # Generate unique session ID for pattern pinning
-        session_id = str(uuid.uuid4())
+        # Use Claude's session_id for state file consistency (Issue #16)
+        # ace_after_task.py reads event.get('session_id') — we must use the same key
+        session_id = event.get('session_id', str(uuid.uuid4()))
         use_session_pinning = check_session_pinning_available()
 
         # v5.4.11: Read agent_type set by SessionStart hook (Claude Code 2.1.2+)
