@@ -5,6 +5,44 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.25] - 2026-02-06
+
+### Fix Session ID Mismatch in Hook Feedback Loop (Issue #16)
+
+**BUG FIX:** Session ID mismatch between before/after task hooks caused `playbook_used` to always be empty in execution traces, breaking the ACE feedback loop.
+
+**Problem:**
+- The before-hook (`ace_before_task.py`) generated a new `uuid.uuid4()` for the session ID
+- The after-hook (`ace_after_task.py`) used `event.get('session_id')` from Claude's event
+- These never matched, so the after-hook could never find the patterns-used state file
+- Result: 16,042 execution traces had empty `playbook_used` arrays
+- The feedback loop (patterns used -> effectiveness scoring) was completely broken
+
+**Root Cause (line 113 of ace_before_task.py):**
+```python
+# Before (broken):
+session_id = str(uuid.uuid4())
+
+# After (fixed):
+session_id = event.get('session_id', str(uuid.uuid4()))
+```
+
+**Impact:**
+- Pattern effectiveness scoring now works correctly
+- Server can track which patterns were actually used in each task
+- Feedback loop restored: search -> inject -> use -> score -> improve rankings
+
+**Files Changed:**
+- `plugins/ace/shared-hooks/ace_before_task.py` - Use Claude's session_id instead of generating a new one (1 line)
+
+**Tests Added:**
+- `tests/test_session_id_mismatch.py` - 7 tests covering the session ID mismatch bug and fix
+
+**Cleanup:**
+- Purged 66 orphaned `ace-patterns-used-*.json` state files created by the old mismatched UUIDs
+
+---
+
 ## [5.4.24] - 2026-02-02
 
 ### Fix Slash Command Filtering
