@@ -5,6 +5,44 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.27] - 2026-02-10
+
+### Deprecated CLAUDE.md Auto-Cleanup (All Versions)
+
+**BUG FIX:** The SessionStart CLAUDE.md cleaner only targeted v3.x ACE content, leaving v4.x and v5.x deprecated instructions untouched.
+
+**Problem:**
+- The `cleanup_deprecated_claude()` function had two v3-only gates:
+  - Gate 1: Initial grep guard only matched `ACE_SECTION_START v3\.`
+  - Gate 2: Marker version check only proceeded for v3.x versions
+- v4.x and v5.x ACE content in user CLAUDE.md files was never cleaned
+- Since v5.x hooks handle everything automatically, ALL versions of ACE CLAUDE.md instructions are deprecated
+
+**Fix:**
+- Gate 1: Now matches `ACE_SECTION_START` (any version) plus `# ACE Plugin` header
+- Gate 2: Removed entirely - all marker versions are now cleaned
+- Added `ace:ace-` pattern detection for v5.x skill references without markers
+- Added blank line cleanup after section removal
+
+**Safety (verified by 48 TDD tests):**
+- File is NEVER deleted - only the ACE `<!-- ACE_SECTION_START -->` to `<!-- ACE_SECTION_END -->` section is removed
+- Backup always created before any modification (`*.ace-backup-YYYYMMDD-HHMMSS`)
+- User content before/after the ACE section is always preserved
+- Files without markers get a warning only (no auto-modification)
+
+**Other Changes:**
+- **MIN_VERSION bumped to 3.10.3** (latest ace-cli) - users with older versions will be prompted to upgrade
+- **Fixed copy-paste bug** in CLI detection: line 56 checked `command -v ace-cli` instead of `command -v ce-ace`, making the deprecated fallback branch unreachable
+- Deleted deprecated `ace-claude-init` command and script (hooks handle everything)
+- Cleaned `ace-claude-init` references from `ace-doctor.md`
+- Removed all CLAUDE.md references from `release-manager.md` agent
+
+**Tests:**
+- `tests/test_claude_md_cleaner.py` - 48 tests covering v3/v4/v5 markers, user content safety, backup creation, edge cases, and source code analysis
+- `tests/test_version_check.py` - 51 tests covering CLI detection, deprecated package detection, version comparison (sort -V -C), daily update check, and edge cases
+
+---
+
 ## [5.4.26] - 2026-02-07
 
 ### Add Integration Tests for Session ID Fix (Issue #16)

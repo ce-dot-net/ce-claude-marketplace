@@ -30,14 +30,12 @@ I specialize in complete, error-free plugin releases that prevent common mistake
   - `plugins/ace/.claude-plugin/plugin.json` (Claude Code plugin)
   - `plugins/ace/.claude-plugin/plugin.template.json` (plugin template)
   - `.claude-plugin/marketplace.json` (plugin marketplace)
-  - **`plugins/ace/CLAUDE.md`** ⚠️ **CRITICAL FOR /ace:ace-claude-init**
 - [ ] Verify ALL versions match the target version
-- [ ] **CRITICAL**: Verify `CLAUDE.md` version headers match target version (see below)
 
 ### 2. File Update Verification
 **CRITICAL**: I MUST verify these files are staged before committing:
 ```bash
-git status | grep -E "(marketplace.json|plugin.json|plugin.template.json|CLAUDE.md)"
+git status | grep -E "(marketplace.json|plugin.json|plugin.template.json)"
 ```
 
 **IMPORTANT**: Check plugin.template.json version matches plugin.json!
@@ -59,7 +57,6 @@ If ANY of these files show as "modified" but NOT staged, I MUST:
 git add .claude-plugin/marketplace.json \
         plugins/ace/.claude-plugin/plugin.json \
         plugins/ace/.claude-plugin/plugin.template.json \
-        plugins/ace/CLAUDE.md \
         plugins/ace/commands/*.md \
         plugins/ace/CHANGELOG.md
 git commit -m "🔖 Release: ACE Plugin v{VERSION}"
@@ -134,111 +131,6 @@ echo "plugin.template.json:" && grep version plugins/ace-orchestration/plugin.te
 **Expected**: Both should show same version (e.g., 3.2.14)
 **If mismatch**: Update plugin.template.json and commit!
 
-### ❌ Mistake 6: Forgetting CLAUDE.md version references (UPDATED v4.1.5)
-**THE PROBLEM**: The `/ace:ace-claude-init` command and script-based updates rely on CLAUDE.md version markers!
-
-**WHY THIS MATTERS**:
-- User runs `/ace:ace-claude-init` in their project
-- Command reads plugin template: `plugins/ace/CLAUDE.md`
-- Script checks HTML markers for version (NOT plugin.json!)
-- If CLAUDE.md versions are old → users won't get update prompt or script-based fast path!
-
-**CRITICAL FILE**:
-- `plugins/ace/CLAUDE.md` (the template `/ace:ace-claude-init` copies)
-
-**Version References to Update** (2 locations in plugins/ace/CLAUDE.md):
-```markdown
-Line ~1:   <!-- ACE_SECTION_START vX.X.X -->
-Line ~194: <!-- ACE_SECTION_END vX.X.X -->
-```
-
-**Detection**: After determining target version, I check BOTH locations:
-```bash
-grep -n "ACE_SECTION_START v" plugins/ace/CLAUDE.md
-grep -n "ACE_SECTION_END v" plugins/ace/CLAUDE.md
-```
-
-**Expected**: Both HTML markers should show target version (e.g., v4.1.5)
-**If mismatch**: Update BOTH locations and commit!
-
-**Example**:
-```bash
-# For v4.1.5 release, these lines should be:
-<!-- ACE_SECTION_START v4.1.5 -->
-<!-- ACE_SECTION_END v4.1.5 -->
-```
-
-**Why HTML markers only?**:
-- HTML markers (lines 1 & ~194): Used by script-based updates for fast, token-free section detection
-- Script relies solely on these markers for version comparison
-- Must match for proper version detection and update prompts
-
-### ❌ Mistake 7: Adding Changelog Content to CLAUDE.md Footer (ADDED v4.1.5)
-**THE PROBLEM**: CLAUDE.md is a TEMPLATE for project instructions, NOT a changelog!
-
-**WHY THIS MATTERS**:
-- CLAUDE.md gets copied to user projects via `/ace-claude-init`
-- Users see the footer as "current version info", not release history
-- Detailed release notes belong in CHANGELOG.md ONLY
-- Footer should be minimal: version number + one-line summary + opt-out info
-
-**BAD EXAMPLE** (❌ TOO MUCH DETAIL):
-```markdown
-**Version**: v4.1.5 (UserPromptSubmit Hook + MCP Client v3.8.2)
-**Updated**: Added lightweight UserPromptSubmit hook for workflow reminders
-**New Feature**: Hook fires when trigger words detected (check, implement, fix, debug, etc.)
-**Hook Behavior**: Shows reminder about ACE sequential workflow (Retrieval → Work → Learning)
-**Requirements**: MCP Client v3.8.2+
-**Migration**: Hook activates automatically on next session. Opt-out: delete `hooks/` directory
-**Safety**: Single non-cascading hook (learned from v3.x Hook Storm Bug #3523)
-```
-
-**GOOD EXAMPLE** (✅ MINIMAL):
-```markdown
-**Version**: v4.1.5 (Subagent Architecture + UserPromptSubmit Hook)
-**New in v4.1.5**: Lightweight hook reminds Claude to use ACE workflow when trigger words detected
-**Opt-out**: Delete `hooks/` directory to disable hook reminders
-```
-
-**GOLDEN RULE**: Keep CLAUDE.md footer to 3-4 lines maximum. Detailed changelog goes in CHANGELOG.md only!
-
-### ❌ Mistake 8: Bloated CLAUDE.md Template (ADDED v5.1.2)
-**THE PROBLEM**: CLAUDE.md should be minimal (~50-70 lines), focused on essentials users need.
-
-**WHY THIS MATTERS**:
-- CLAUDE.md is injected as context for EVERY task
-- Verbose documentation wastes tokens and clutters context
-- Users can read README.md for detailed documentation
-- Template should be scannable and action-oriented
-
-**WHAT TO KEEP** (✅ ESSENTIAL):
-- One-line description of what ACE does
-- Installation (2 commands: npm + /ace-configure)
-- How it works (before/after tasks, 2-3 lines)
-- 4 playbook sections (list only)
-- Commands (grouped: search/view, setup/manage)
-- Quick start (4 steps)
-- Version info (1-2 lines)
-
-**WHAT TO REMOVE** (❌ BLOAT):
-- Architecture diagrams
-- Example workflows with ASCII art
-- Hook implementation details
-- Benefits lists
-- Verbose explanations
-- "Disabling ACE" sections
-- Duplicate setup instructions
-
-**TARGET LENGTH**: 50-70 lines (currently 56 lines ✓)
-
-**DETECTION**: Check line count:
-```bash
-wc -l plugins/ace/CLAUDE.md
-# Should be ~50-70 lines, not 150-200 lines!
-```
-
-**GOLDEN RULE**: If it's in README.md, it doesn't need to be in CLAUDE.md!
-
 ## My Process
 
 1. **Analyze**: Find all version-related files
@@ -247,7 +139,6 @@ wc -l plugins/ace/CLAUDE.md
    - plugin.json
    - plugin.template.json
    - marketplace.json
-   - CLAUDE.md (with updated HTML version markers AND minimal footer!)
    - Any updated command files
 4. **Verify**: Confirm nothing left uncommitted
 5. **Push**: Push commit to GitHub
@@ -266,16 +157,6 @@ Found version files:
 - plugins/ace/.claude-plugin/plugin.json
 - plugins/ace/.claude-plugin/plugin.template.json
 - .claude-plugin/marketplace.json
-- plugins/ace/CLAUDE.md (2 HTML markers + footer)
-
-[Checks CLAUDE.md versions]
-Line 1:   <!-- ACE_SECTION_START v5.0.2 --> → v5.0.3
-Line ~180: <!-- ACE_SECTION_END v5.0.2 --> → v5.0.3
-Footer:   **Version**: v5.0.2 (...) → v5.0.3 (...)
-
-[Verifies CLAUDE.md footer is minimal]
-✅ Footer is 3 lines (acceptable)
-✅ No detailed changelog content in footer
 
 [Updates versions]
 [Commits]
@@ -293,7 +174,6 @@ Verification:
 ✅ GitHub release: Created
 ✅ marketplace.json: In tagged commit
 ✅ plugin.json: In tagged commit
-✅ CLAUDE.md: Both HTML markers updated to v5.0.3, footer minimal
 ```
 
 ## Files I Always Check
@@ -302,12 +182,6 @@ For this plugin specifically:
 - `plugins/ace/.claude-plugin/plugin.json` ⚠️ **MUST match template version!**
 - `plugins/ace/.claude-plugin/plugin.template.json` ⚠️ **MUST match plugin.json version!**
 - `.claude-plugin/marketplace.json`
-- **`plugins/ace/CLAUDE.md`** ⚠️ **CRITICAL: Multiple requirements**
-  - Line ~1: `<!-- ACE_SECTION_START vX.X.X -->`
-  - Line ~55: `<!-- ACE_SECTION_END vX.X.X -->`
-  - Footer: Version info (2-3 lines maximum, NO detailed changelog!)
-  - **Total length: 50-70 lines (check with `wc -l`)**
-  - **No verbose documentation** (architecture diagrams, example workflows, etc.)
 - All files in `plugins/ace/commands/` (if documentation updated)
 - `plugins/ace/CHANGELOG.md` (update with release notes)
 
@@ -329,10 +203,8 @@ A release is successful when:
 2. ✅ All changed files are committed (verified with `git status`)
 3. ✅ Git tag points to commit with ALL files
 4. ✅ GitHub release created with correct notes
-5. ✅ CLAUDE.md has BOTH HTML markers updated AND footer is minimal (2-3 lines max)
-6. ✅ CLAUDE.md is minimal length (50-70 lines, NOT 150-200 lines)
-7. ✅ Detailed changelog is in CHANGELOG.md, NOT in CLAUDE.md footer
-8. ✅ User can verify plugin in Claude Code marketplace
+5. ✅ Detailed changelog is in CHANGELOG.md
+6. ✅ User can verify plugin in Claude Code marketplace
 
 ## Release Types
 

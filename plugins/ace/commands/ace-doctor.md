@@ -347,10 +347,8 @@ grep -oP 'ACE_SECTION_START v\K[\d.]+' "$PROJECT_ROOT/CLAUDE.md"
 ❌ CLAUDE.md: NOT FOUND
 
 Recommended Actions:
-1. Run: /ace:ace-claude-init
-2. This will create CLAUDE.md with ACE instructions
-3. Documents hook-based architecture and automatic learning
-4. Commit CLAUDE.md to your repository
+1. No action needed - v5.x hooks handle everything automatically
+2. CLAUDE.md is maintained by the plugin, not by user commands
 ```
 
 **If Outdated**:
@@ -363,8 +361,8 @@ Latest: v5.1.2
 Breaking Change: v5.x uses hooks instead of skills/subagents
 
 Recommended Actions:
-1. Run: /ace:ace-claude-init
-2. This will update to hook-based architecture
+1. Update plugin from marketplace
+2. Hooks handle everything automatically in v5.x
 3. Review CHANGELOG.md for migration details
 ```
 
@@ -470,8 +468,7 @@ Changes in v5.1.2:
 Recommended Actions:
 1. Update ace-cli: npm install -g @ace-sdk/cli@latest
 2. Update plugin from marketplace (if available)
-3. Run: /ace:ace-claude-init to update CLAUDE.md
-4. Restart Claude Code
+3. Restart Claude Code
 ```
 
 ---
@@ -564,7 +561,7 @@ Overall Health: 🟡 NEEDS ATTENTION (4 warnings)
 [7] CLAUDE.md Status
     Issue: Outdated version (v4.2.0, latest: v5.1.2)
     Impact: Using old skills-based architecture instead of hooks
-    Fix: Run /ace:ace-claude-init
+    Fix: Update plugin from marketplace (v5.x hooks handle CLAUDE.md automatically)
 
 [9] Version Status
     Issue: Updates available
@@ -578,9 +575,8 @@ Overall Health: 🟡 NEEDS ATTENTION (4 warnings)
 
 Run these commands in order:
 1. /ace:ace-configure
-2. /ace:ace-claude-init
-3. npm install -g @ace-sdk/cli@latest
-4. Restart Claude Code
+2. npm install -g @ace-sdk/cli@latest
+3. Restart Claude Code
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
