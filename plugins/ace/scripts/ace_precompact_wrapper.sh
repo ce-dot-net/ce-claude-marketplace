@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # ACE PreCompact Hook - Pattern Preservation
-# v5.4.7: Flag file check + ace-cli/ace-cli detection
+# v5.4.28: Fix Issue #17 - save patterns to temp file (side-effect only)
 #
 # When context gets compacted, injected patterns are lost. This hook:
 # 1. Reads the session ID from UserPromptSubmit
 # 2. Calls ace-cli cache recall to get pinned patterns
-# 3. Re-injects them as additionalContext (survives compaction)
+# 3. Saves them to temp file for SessionStart(compact) to inject
 
 set -euo pipefail
 
-ACE_PLUGIN_VERSION="5.4.7"
+ACE_PLUGIN_VERSION="5.4.28"
 
 # ACE disable flag check (set by SessionStart if CLI issues detected)
 # Official Claude Code pattern: flag file coordination between hooks
@@ -67,16 +67,24 @@ if [ -z "$FORMATTED" ]; then
   exit 0
 fi
 
-# Output as hookSpecificOutput with additionalContext
-# This survives context compaction and keeps patterns in Claude's context
-jq -n \
+# Save patterns to temp file for SessionStart(compact) to inject
+# PreCompact hooks can only do side-effects, not context injection
+TEMP_FILE="/tmp/ace-patterns-precompact-${SESSION_ID}.json"
+# Atomic write with restrictive permissions (subshell-scoped umask)
+TEMP_STAGING=$(mktemp "/tmp/ace-patterns-staging-XXXXXX")
+(umask 077; jq -n \
   --arg patterns "$FORMATTED" \
   --arg session "$SESSION_ID" \
   --arg count "$COUNT" \
   '{
-    "systemMessage": "📚 [ACE] Preserved \($count) patterns through compaction",
-    "hookSpecificOutput": {
-      "hookEventName": "PreCompact",
-      "additionalContext": "<!-- ACE Patterns (preserved from session \($session)) -->\n<ace-patterns-recalled>\n\($patterns)\n</ace-patterns-recalled>"
-    }
+    "patterns": $patterns,
+    "session_id": $session,
+    "count": $count
+  }' > "$TEMP_STAGING") && mv -f "$TEMP_STAGING" "$TEMP_FILE" || rm -f "$TEMP_STAGING"
+
+# Output systemMessage only (valid for PreCompact hooks)
+jq -n \
+  --arg count "$COUNT" \
+  '{
+    "systemMessage": "📚 [ACE] Saved \($count) patterns for post-compaction injection"
   }'
