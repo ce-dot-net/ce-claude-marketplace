@@ -30,7 +30,7 @@ AGENT_TYPE=$(echo "$INPUT_JSON" | jq -r '.agent_type // "main"' 2>/dev/null || e
 ACE_DISABLED_FLAG="/tmp/ace-disabled-${SESSION_ID}.flag"
 ACE_AGENT_TYPE_FILE="/tmp/ace-agent-type-${SESSION_ID}.txt"
 CACHE_FILE="/tmp/ace-update-check-$(date +%Y%m%d).txt"
-MIN_VERSION="3.4.1"
+MIN_VERSION="3.10.3"
 
 # Save agent_type for other hooks (before_task.py, after_task.py)
 echo "$AGENT_TYPE" > "$ACE_AGENT_TYPE_FILE" 2>/dev/null || true
@@ -52,8 +52,8 @@ rm -f "$ACE_DISABLED_FLAG" 2>/dev/null || true
 
 # 1. Check if ace-cli exists (new command name)
 if ! command -v ace-cli >/dev/null 2>&1; then
-  # Fallback: Check old ace-cli command
-  if command -v ace-cli >/dev/null 2>&1; then
+  # Fallback: Check old ce-ace command (deprecated)
+  if command -v ce-ace >/dev/null 2>&1; then
     # Old command found - warn but allow (transition period)
     output_warning "⚠️ [ACE] Deprecated command 'ce-ace' detected. Upgrade: npm uninstall -g @ce-dot-net/ce-ace-cli && npm install -g @ace-sdk/cli"
     CLI_CMD="ce-ace"
@@ -129,8 +129,8 @@ elif [ -n "$TOKEN_STATUS" ]; then
   fi
 fi
 
-# 7. v5.4.23: Deprecated CLAUDE.md content detection + auto-cleanup
-# Removes old v3.x skill-based ACE instructions (hooks don't need them)
+# 7. v5.4.27: Deprecated CLAUDE.md content detection + auto-cleanup
+# Hooks handle everything - ACE instructions in CLAUDE.md are no longer needed (any version)
 cleanup_deprecated_claude() {
   local file="$1"
   local location="$2"  # "project" or "global"
@@ -139,14 +139,14 @@ cleanup_deprecated_claude() {
     return
   fi
 
-  # Check for v3.x markers or skill references (old skill-based architecture)
-  if ! grep -q 'ACE_SECTION_START v3\.\|ace-orchestration:ace-\|# ACE Orchestration Plugin' "$file" 2>/dev/null; then
+  # Check for ANY ACE markers or skill references (all versions deprecated)
+  if ! grep -q 'ACE_SECTION_START\|ace-orchestration:ace-\|# ACE Orchestration Plugin\|# ACE Plugin' "$file" 2>/dev/null; then
     return
   fi
 
-  # Detected deprecated content - extract version
+  # Detected ACE content - extract version
   local version
-  version=$(grep -oE 'ACE_SECTION_START v[0-9]+\.[0-9]+\.[0-9]+' "$file" 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "3.x")
+  version=$(grep -oE 'ACE_SECTION_START v[0-9]+\.[0-9]+\.[0-9]+' "$file" 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
 
   # Create backup
   local backup="${file}.ace-backup-$(date +%Y%m%d-%H%M%S)"
@@ -160,21 +160,16 @@ cleanup_deprecated_claude() {
     end_line=$(grep -n '<!-- ACE_SECTION_END' "$file" | head -1 | cut -d: -f1)
 
     if [ -n "$start_line" ] && [ -n "$end_line" ] && [ "$start_line" -lt "$end_line" ]; then
-      # Only remove if this is a v3.x section (not v5.x which is current)
-      local marker_version
-      marker_version=$(sed -n "${start_line}p" "$file" | grep -oE 'v[0-9]+\.[0-9]+' | head -1)
-      if echo "$marker_version" | grep -q 'v3\.'; then
-        # Remove ACE section (lines start_line through end_line)
-        sed -i '' "${start_line},${end_line}d" "$file"
-        # Clean up any resulting multiple blank lines
-        sed -i '' '/^$/N;/^\n$/d' "$file"
-        output_warning "🧹 [ACE] Removed deprecated v${version} content from ${location} CLAUDE.md. Backup: $(basename "$backup")"
-      fi
+      # Remove ACE section (lines start_line through end_line) - all versions
+      sed -i '' "${start_line},${end_line}d" "$file"
+      # Clean up any resulting multiple blank lines
+      sed -i '' '/^$/N;/^\n$/d' "$file"
+      output_warning "🧹 [ACE] Removed deprecated v${version} instructions from ${location} CLAUDE.md. Hooks handle everything now. Backup: $(basename "$backup")"
     fi
   else
     # No markers - check for skill-based content without markers (warn only)
-    if grep -q 'ace-orchestration:ace-' "$file" 2>/dev/null; then
-      output_warning "⚠️ [ACE] Deprecated v${version} ACE skill instructions in ${location} CLAUDE.md. Manual removal recommended (hooks don't need CLAUDE.md instructions)."
+    if grep -q 'ace-orchestration:ace-\|ace:ace-' "$file" 2>/dev/null; then
+      output_warning "⚠️ [ACE] Deprecated ACE instructions in ${location} CLAUDE.md. Manual removal recommended (hooks handle everything automatically)."
       # Remove backup since we didn't modify
       rm -f "$backup" 2>/dev/null || true
     fi
