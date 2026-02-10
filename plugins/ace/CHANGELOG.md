@@ -5,6 +5,39 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.28] - 2026-02-10
+
+### Fix PreCompact Hook JSON Validation Failure (Issue #17)
+
+**BUG FIX:** PreCompact hook was outputting `hookEventName: "PreCompact"` which is NOT in Claude Code's discriminated union schema, causing zero pattern survival through compaction.
+
+**Root Cause (3-layer issue):**
+- Layer 1: Invalid `hookEventName` - "PreCompact" not in Claude Code's schema
+- Layer 2: No `hookSpecificOutput` support - PreCompact hooks are side-effect only
+- Layer 3: Architectural mismatch - PreCompact was never intended for context injection
+
+**Failure modes:**
+- Claude Code v2.1.23: Loud fail — `Hook JSON output validation failed: Invalid input`
+- Claude Code v2.1.37+: Silent fail — Hook succeeds but `hookSpecificOutput` silently dropped, 0 patterns recalled
+
+**Solution: PreCompact → SessionStart(compact) Handoff**
+- PreCompact now saves patterns to temp file (side-effect only, no hookSpecificOutput)
+- New SessionStart(compact) hook reads temp file and injects via valid `hookEventName: "SessionStart"`
+- Atomic write pattern (mktemp + mv) with restrictive permissions (umask 077)
+- Temp file cleaned up after consumption
+
+**Files Changed:**
+- `plugins/ace/hooks/hooks.json` - Added SessionStart matcher for compact event
+- `plugins/ace/scripts/ace_precompact_wrapper.sh` - Removed invalid hookSpecificOutput, saves to temp file
+- `plugins/ace/scripts/ace_sessionstart_compact.sh` - NEW: Reads temp file, injects via valid SessionStart
+
+**Tests:**
+- `tests/test_precompact_handoff.py` - 68 TDD tests covering PreCompact save, SessionStart inject, temp file lifecycle, hooks.json config, full handoff cycles, source code analysis, and edge cases
+- `plugins/ace/tests/test_issue17_precompact_invalid_json.sh` - 7 regression tests (from PR #18)
+- `plugins/ace/tests/test_precompact_sessionstart_handoff.sh` - 5 integration tests (from PR #18)
+
+---
+
 ## [5.4.27] - 2026-02-10
 
 ### Deprecated CLAUDE.md Auto-Cleanup (All Versions)
