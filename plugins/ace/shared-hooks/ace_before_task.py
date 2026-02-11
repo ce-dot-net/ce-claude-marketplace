@@ -24,6 +24,9 @@ from typing import Dict, Any
 
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent / 'utils'))
+sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
+
+from validation import is_valid_pattern_id
 
 
 def sanitize_unicode(text: str) -> str:
@@ -218,7 +221,7 @@ def main():
         # Server uses this to update 'helpful' scores for patterns that worked
         if pattern_list and context['project']:
             try:
-                pattern_ids = [p.get('id') for p in pattern_list if p.get('id')]
+                pattern_ids = [p.get('id') for p in pattern_list if p.get('id') and is_valid_pattern_id(p.get('id'))]
                 if pattern_ids:
                     state_dir = Path('.claude/data/logs')
                     state_dir.mkdir(parents=True, exist_ok=True)

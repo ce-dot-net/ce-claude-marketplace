@@ -5,6 +5,19 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.29] - 2026-02-11
+
+### Fixed
+- Pattern ID validation: reject `pattern_` prefix IDs from server (1525 normalizations prevented)
+- Validation regex: accept hyphenated suffixes like `ctx-1234567890-abcd`
+- Wire `is_valid_pattern_id()` into ace_before_task.py (filter before save)
+- Wire `is_valid_pattern_id()` into ace_after_task.py (filter after load)
+
+### Added
+- 41 TDD tests for pattern ID prefix validation (test_pattern_id_prefix.py)
+
+---
+
 ## [5.4.28] - 2026-02-10
 
 ### Fix PreCompact Hook JSON Validation Failure (Issue #17)
