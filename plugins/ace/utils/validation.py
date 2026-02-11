@@ -63,9 +63,10 @@ def validate_pattern_id(pattern_id: str) -> tuple[bool, Optional[str]]:
     if not suffix:
         return False, "Pattern ID must have content after 'ctx-' prefix"
 
-    # Check if suffix contains only lowercase letters and numbers
-    if not re.match(r'^[a-z0-9]+$', suffix):
-        return False, "Pattern ID must contain only lowercase letters and numbers after 'ctx-' prefix"
+    # Check if suffix contains only lowercase letters, numbers, and hyphens
+    # Valid formats: ctx-abc123, ctx-1234567890-abcd, ctx-abc-123-def
+    if not re.match(r'^[a-z0-9]+(-[a-z0-9]+)*$', suffix):
+        return False, "Pattern ID must contain only lowercase letters, numbers, and hyphens after 'ctx-' prefix"
 
     return True, None
 

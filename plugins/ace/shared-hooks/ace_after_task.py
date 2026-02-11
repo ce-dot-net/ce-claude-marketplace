@@ -45,6 +45,10 @@ from ace_cli import recall_session
 from utils.git_utils import get_git_context, detect_commits_in_session
 from ace_relevance_logger import log_execution_metrics
 
+# Add plugin utils to path for validation
+sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
+from validation import is_valid_pattern_id
+
 # Import re at module level for quality filters
 import re as regex_module
 import time
@@ -465,7 +469,8 @@ def main():
             try:
                 state_file = Path(f'.claude/data/logs/ace-patterns-used-{session_id}.json')
                 if state_file.exists():
-                    playbook_used = json.loads(state_file.read_text())
+                    playbook_used_raw = json.loads(state_file.read_text())
+                    playbook_used = [pid for pid in playbook_used_raw if isinstance(pid, str) and is_valid_pattern_id(pid)]
                     state_file.unlink()  # One-time use
             except Exception:
                 pass
