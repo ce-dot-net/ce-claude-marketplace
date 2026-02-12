@@ -1136,3 +1136,456 @@ class TestFormatInsightsHtml:
             sample_sessions_data, sample_helpfulness_data, sample_top_patterns_data, sample_trends_data
         )
         assert "Inter" in html, "HTML report should reference the Inter font family"
+
+
+# =========================================================================
+# TestAgentType -- agent_type field in sessions and HTML
+# =========================================================================
+
+class TestAgentType:
+    """Test that agent_type is captured from log entries and displayed."""
+
+    def test_agent_type_from_execution_event(self, now):
+        """Sessions with agent_type in execution event should capture it."""
+        entries = [
+            {
+                "timestamp": _ts(now - timedelta(minutes=5)),
+                "event": "search",
+                "hook": "UserPromptSubmit",
+                "session_id": "ses-tdd-001",
+                "agent_type": "tdd",
+                "user_prompt": "Write tests for auth",
+                "search_query": "auth tests",
+                "patterns_returned": 5,
+                "patterns_injected": 3,
+                "patterns_filtered": 2,
+                "avg_confidence": 0.8,
+                "domains": ["testing"],
+                "top_patterns": [],
+            },
+            {
+                "timestamp": _ts(now),
+                "event": "execution",
+                "hook": "Stop",
+                "session_id": "ses-tdd-001",
+                "agent_type": "tdd",
+                "patterns_used_count": 3,
+                "pattern_ids": ["ctx-1", "ctx-2", "ctx-3"],
+                "tools_executed": 15,
+                "state_changing_tools": 8,
+                "success": True,
+                "execution_time_seconds": 30.0,
+                "learning_sent": True,
+            },
+        ]
+        result = analyze_sessions(entries)
+        assert result["sessions"][0]["agent_type"] == "tdd"
+
+    def test_agent_type_defaults_to_main(self, now):
+        """Sessions without agent_type should default to 'main'."""
+        entries = [
+            {
+                "timestamp": _ts(now),
+                "event": "execution",
+                "hook": "Stop",
+                "session_id": "ses-main-001",
+                "patterns_used_count": 0,
+                "pattern_ids": [],
+                "tools_executed": 5,
+                "state_changing_tools": 3,
+                "success": True,
+                "execution_time_seconds": 10.0,
+                "learning_sent": False,
+            },
+        ]
+        result = analyze_sessions(entries)
+        assert result["sessions"][0]["agent_type"] == "main"
+
+    def test_agent_type_shown_in_text_report(self, now):
+        """Non-main agent_type should appear in text report."""
+        sessions = {
+            "sessions": [{
+                "session_id": "ses-tdd-001",
+                "agent_type": "tdd",
+                "start_time": _ts(now),
+                "end_time": _ts(now),
+                "duration_seconds": 30,
+                "searches": 1,
+                "patterns_injected": 3,
+                "patterns_used": 3,
+                "domain_shifts": 0,
+                "domains": ["testing"],
+                "tools_executed": 15,
+                "success": True,
+                "learning_sent": True,
+                "user_prompts": ["Write tests"],
+            }],
+            "total_sessions": 1,
+            "active_sessions": 1,
+        }
+        helpfulness = {
+            "tasks_with_patterns": 1, "tasks_without_patterns": 0,
+            "success_rate_with_patterns": 100.0, "success_rate_without_patterns": 0,
+            "pattern_advantage": 100.0, "avg_patterns_per_task": 3.0, "avg_confidence": 0.8,
+        }
+        report = format_insights_report(sessions, helpfulness, [], {"current_period": {}, "previous_period": {}, "changes": {}})
+        assert "[tdd]" in report
+
+    def test_agent_type_badge_in_html(self, now):
+        """agent_type should appear as a badge in HTML report."""
+        sessions = {
+            "sessions": [{
+                "session_id": "ses-coder-001",
+                "agent_type": "coder",
+                "start_time": _ts(now),
+                "end_time": _ts(now),
+                "duration_seconds": 60,
+                "searches": 2,
+                "patterns_injected": 5,
+                "patterns_used": 4,
+                "domain_shifts": 1,
+                "domains": ["api"],
+                "tools_executed": 20,
+                "success": True,
+                "learning_sent": True,
+                "user_prompts": ["Build API endpoint"],
+            }],
+            "total_sessions": 1,
+            "active_sessions": 1,
+        }
+        helpfulness = {
+            "tasks_with_patterns": 1, "tasks_without_patterns": 0,
+            "success_rate_with_patterns": 100.0, "success_rate_without_patterns": 0,
+            "pattern_advantage": 100.0, "avg_patterns_per_task": 4.0, "avg_confidence": 0.9,
+        }
+        html = format_insights_html(sessions, helpfulness, [], {"current_period": {}, "previous_period": {}, "changes": {}})
+        assert "agent-coder" in html
+        assert "coder" in html
+
+    def test_main_agent_no_tag_in_text_report(self, now):
+        """Main agent should not show [main] tag in text report."""
+        sessions = {
+            "sessions": [{
+                "session_id": "ses-main-001",
+                "agent_type": "main",
+                "start_time": _ts(now),
+                "end_time": _ts(now),
+                "duration_seconds": 60,
+                "searches": 1,
+                "patterns_injected": 2,
+                "patterns_used": 2,
+                "domain_shifts": 0,
+                "domains": [],
+                "tools_executed": 10,
+                "success": True,
+                "learning_sent": True,
+                "user_prompts": ["Fix bug"],
+            }],
+            "total_sessions": 1,
+            "active_sessions": 1,
+        }
+        helpfulness = {
+            "tasks_with_patterns": 1, "tasks_without_patterns": 0,
+            "success_rate_with_patterns": 100.0, "success_rate_without_patterns": 0,
+            "pattern_advantage": 100.0, "avg_patterns_per_task": 2.0, "avg_confidence": 0.7,
+        }
+        report = format_insights_report(sessions, helpfulness, [], {"current_period": {}, "previous_period": {}, "changes": {}})
+        assert "[main]" not in report
+
+
+# =========================================================================
+# TestAgentTypeEdgeCases -- additional coverage for agent_type
+# =========================================================================
+
+class TestAgentTypeEdgeCases:
+    """Additional edge-case tests for agent_type handling.
+
+    Gaps identified during TDD review:
+      - agent_type=None in log entries
+      - agent_type="" (empty string) in log entries
+      - XSS via malicious agent_type values in HTML
+      - agent_type from search event only (no execution)
+      - Mixed agent_type across events in same session
+    """
+
+    def test_agent_type_none_in_entry_defaults_to_main(self, now):
+        """Entries with agent_type=None should result in 'main'."""
+        entries = [
+            {
+                "timestamp": _ts(now),
+                "event": "execution",
+                "hook": "Stop",
+                "session_id": "ses-none-agent",
+                "agent_type": None,
+                "patterns_used_count": 2,
+                "pattern_ids": ["ctx-1", "ctx-2"],
+                "tools_executed": 5,
+                "state_changing_tools": 3,
+                "success": True,
+                "execution_time_seconds": 10.0,
+                "learning_sent": False,
+            },
+        ]
+        result = analyze_sessions(entries)
+        assert result["sessions"][0]["agent_type"] == "main"
+
+    def test_agent_type_empty_string_defaults_to_main(self, now):
+        """Entries with agent_type='' (empty string) should default to 'main'."""
+        entries = [
+            {
+                "timestamp": _ts(now),
+                "event": "execution",
+                "hook": "Stop",
+                "session_id": "ses-empty-agent",
+                "agent_type": "",
+                "patterns_used_count": 1,
+                "pattern_ids": ["ctx-1"],
+                "tools_executed": 3,
+                "state_changing_tools": 1,
+                "success": True,
+                "execution_time_seconds": 5.0,
+                "learning_sent": False,
+            },
+        ]
+        result = analyze_sessions(entries)
+        assert result["sessions"][0]["agent_type"] == "main"
+
+    def test_agent_type_from_search_event_only(self, now):
+        """When only search event has agent_type, it should still be captured."""
+        entries = [
+            {
+                "timestamp": _ts(now - timedelta(minutes=5)),
+                "event": "search",
+                "hook": "UserPromptSubmit",
+                "session_id": "ses-search-only-agent",
+                "agent_type": "researcher",
+                "user_prompt": "Analyze codebase",
+                "search_query": "analyze codebase",
+                "patterns_returned": 3,
+                "patterns_injected": 2,
+                "patterns_filtered": 1,
+                "avg_confidence": 0.7,
+                "domains": ["code"],
+                "top_patterns": [],
+            },
+            {
+                "timestamp": _ts(now),
+                "event": "execution",
+                "hook": "Stop",
+                "session_id": "ses-search-only-agent",
+                # No agent_type on execution event
+                "patterns_used_count": 2,
+                "pattern_ids": ["ctx-1", "ctx-2"],
+                "tools_executed": 10,
+                "state_changing_tools": 5,
+                "success": True,
+                "execution_time_seconds": 20.0,
+                "learning_sent": True,
+            },
+        ]
+        result = analyze_sessions(entries)
+        assert result["sessions"][0]["agent_type"] == "researcher"
+
+    def test_mixed_agent_type_across_events_prefers_non_main(self, now):
+        """When events have different agent_types, the first non-main type wins."""
+        entries = [
+            {
+                "timestamp": _ts(now - timedelta(minutes=5)),
+                "event": "search",
+                "hook": "UserPromptSubmit",
+                "session_id": "ses-mixed-agent",
+                "agent_type": "main",
+                "user_prompt": "Do something",
+                "search_query": "something",
+                "patterns_returned": 1,
+                "patterns_injected": 1,
+                "patterns_filtered": 0,
+                "avg_confidence": 0.5,
+                "domains": [],
+                "top_patterns": [],
+            },
+            {
+                "timestamp": _ts(now),
+                "event": "execution",
+                "hook": "Stop",
+                "session_id": "ses-mixed-agent",
+                "agent_type": "refactorer",
+                "patterns_used_count": 1,
+                "pattern_ids": ["ctx-1"],
+                "tools_executed": 8,
+                "state_changing_tools": 4,
+                "success": True,
+                "execution_time_seconds": 15.0,
+                "learning_sent": True,
+            },
+        ]
+        result = analyze_sessions(entries)
+        # The analyzer scans for the first non-main agent_type
+        assert result["sessions"][0]["agent_type"] == "refactorer"
+
+    def test_html_escapes_malicious_agent_type(self, now):
+        """Malicious agent_type values must be HTML-escaped in the HTML report (XSS prevention)."""
+        sessions = {
+            "sessions": [{
+                "session_id": "ses-xss-agent",
+                "agent_type": '<img src=x onerror="alert(1)">',
+                "start_time": _ts(now),
+                "end_time": _ts(now),
+                "duration_seconds": 30,
+                "searches": 1,
+                "patterns_injected": 1,
+                "patterns_used": 1,
+                "domain_shifts": 0,
+                "domains": [],
+                "tools_executed": 5,
+                "success": True,
+                "learning_sent": False,
+                "user_prompts": ["Test"],
+            }],
+            "total_sessions": 1,
+            "active_sessions": 1,
+        }
+        helpfulness = {
+            "tasks_with_patterns": 1, "tasks_without_patterns": 0,
+            "success_rate_with_patterns": 100.0, "success_rate_without_patterns": 0,
+            "pattern_advantage": 100.0, "avg_patterns_per_task": 1.0, "avg_confidence": 0.5,
+        }
+        html = format_insights_html(sessions, helpfulness, [], {
+            "current_period": {}, "previous_period": {}, "changes": {}
+        })
+        # The raw <img> tag must NOT appear unescaped
+        assert '<img ' not in html, "agent_type must be HTML-escaped to prevent XSS"
+        assert '&lt;img' in html, "Escaped <img> tag should appear in output"
+
+    def test_all_known_agent_types_have_css_classes(self, now):
+        """Known agent types (tdd, coder, refactorer, researcher) should have matching CSS classes."""
+        # We only need to verify CSS exists in the HTML output
+        sessions = {
+            "sessions": [],
+            "total_sessions": 0,
+            "active_sessions": 0,
+        }
+        helpfulness = {
+            "tasks_with_patterns": 0, "tasks_without_patterns": 0,
+            "success_rate_with_patterns": 0, "success_rate_without_patterns": 0,
+            "pattern_advantage": 0, "avg_patterns_per_task": 0, "avg_confidence": 0,
+        }
+        html = format_insights_html(sessions, helpfulness, [], {
+            "current_period": {}, "previous_period": {}, "changes": {}
+        })
+        # Verify CSS definitions exist for known agent types
+        for agent in ("main", "tdd", "coder", "refactorer", "researcher"):
+            assert f".agent-{agent}" in html, (
+                f"CSS class .agent-{agent} must be defined in the HTML report"
+            )
+
+
+# =========================================================================
+# TestLoggerAgentType -- unit tests for ACERelevanceLogger agent_type
+# =========================================================================
+
+class TestLoggerAgentType:
+    """Unit tests for ACERelevanceLogger writing agent_type to JSONL."""
+
+    def test_log_search_metrics_includes_agent_type(self, tmp_path):
+        """log_search_metrics() must write agent_type to the JSONL entry."""
+        import json
+        sys.path.insert(0, str(Path(__file__).parent.parent / "plugins" / "ace" / "shared-hooks" / "utils"))
+        from ace_relevance_logger import ACERelevanceLogger
+
+        logger = ACERelevanceLogger(log_dir=str(tmp_path))
+        logger.log_search_metrics(
+            hook="UserPromptSubmit",
+            session_id="ses-logger-001",
+            user_prompt="Test prompt",
+            search_query="test",
+            patterns_returned=[{"id": "ctx-1"}],
+            patterns_injected=[{"id": "ctx-1", "confidence": 0.8}],
+            domains=["test"],
+            agent_type="tdd",
+        )
+
+        log_file = tmp_path / "ace-relevance.jsonl"
+        assert log_file.exists(), "Log file should be created"
+        entry = json.loads(log_file.read_text().strip())
+        assert entry["agent_type"] == "tdd"
+
+    def test_log_search_metrics_agent_type_defaults_to_main(self, tmp_path):
+        """log_search_metrics() with agent_type=None writes 'main'."""
+        import json
+        from ace_relevance_logger import ACERelevanceLogger
+
+        logger = ACERelevanceLogger(log_dir=str(tmp_path))
+        logger.log_search_metrics(
+            hook="UserPromptSubmit",
+            session_id="ses-logger-002",
+            user_prompt="Test",
+            search_query="test",
+            patterns_returned=[],
+            patterns_injected=[],
+            domains=[],
+            agent_type=None,
+        )
+
+        entry = json.loads((tmp_path / "ace-relevance.jsonl").read_text().strip())
+        assert entry["agent_type"] == "main"
+
+    def test_log_execution_metrics_includes_agent_type(self, tmp_path):
+        """log_execution_metrics() must write agent_type to the JSONL entry."""
+        import json
+        from ace_relevance_logger import ACERelevanceLogger
+
+        logger = ACERelevanceLogger(log_dir=str(tmp_path))
+        logger.log_execution_metrics(
+            session_id="ses-logger-003",
+            patterns_used=["ctx-1", "ctx-2"],
+            tools_executed=10,
+            state_changing_tools=5,
+            success=True,
+            execution_time_seconds=25.0,
+            learning_sent=True,
+            agent_type="coder",
+        )
+
+        entry = json.loads((tmp_path / "ace-relevance.jsonl").read_text().strip())
+        assert entry["agent_type"] == "coder"
+
+    def test_log_execution_metrics_agent_type_defaults_to_main(self, tmp_path):
+        """log_execution_metrics() with no agent_type writes 'main'."""
+        import json
+        from ace_relevance_logger import ACERelevanceLogger
+
+        logger = ACERelevanceLogger(log_dir=str(tmp_path))
+        logger.log_execution_metrics(
+            session_id="ses-logger-004",
+            patterns_used=[],
+            tools_executed=3,
+            state_changing_tools=1,
+            success=False,
+            execution_time_seconds=5.0,
+            learning_sent=False,
+            # agent_type not passed -- should default
+        )
+
+        entry = json.loads((tmp_path / "ace-relevance.jsonl").read_text().strip())
+        assert entry["agent_type"] == "main"
+
+    def test_log_search_metrics_empty_string_agent_type_becomes_main(self, tmp_path):
+        """log_search_metrics() with agent_type='' writes 'main' (falsy default)."""
+        import json
+        from ace_relevance_logger import ACERelevanceLogger
+
+        logger = ACERelevanceLogger(log_dir=str(tmp_path))
+        logger.log_search_metrics(
+            hook="UserPromptSubmit",
+            session_id="ses-logger-005",
+            user_prompt="Test",
+            search_query="test",
+            patterns_returned=[],
+            patterns_injected=[],
+            domains=[],
+            agent_type="",
+        )
+
+        entry = json.loads((tmp_path / "ace-relevance.jsonl").read_text().strip())
+        assert entry["agent_type"] == "main"

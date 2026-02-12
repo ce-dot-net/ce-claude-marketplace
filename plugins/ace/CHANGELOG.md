@@ -5,6 +5,23 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.31] - 2026-02-12
+
+### Added
+- **Agent Type Tracking**: JSONL relevance log now captures `agent_type` (main, tdd, coder, refactorer, researcher) on both search and execution events
+- **Agent Badges in HTML Report**: Color-coded badges per session (purple=tdd, blue=coder, yellow=refactorer, green=researcher)
+- **Agent Tags in Text Report**: Non-main agents show `[tdd]`, `[coder]` etc. in terminal output
+- **Auto-Open on macOS**: HTML report now auto-opens in default browser via `open` command
+- **16 new tests** covering agent_type edge cases, XSS prevention, and logger unit tests (104 total)
+
+### Fixed
+- **Command Path Resolution**: Replaced broken `$0`-based path with repo-relative + `git rev-parse` fallback (commands run in Claude Code context don't have reliable `$0`)
+- **HTML Report Not Generated**: Path resolution fix ensures `ace-insights.html` is actually created at `~/.claude/usage-data/`
+
+### Changed
+- `ace_relevance_logger.py`: `log_search_metrics()` and `log_execution_metrics()` accept `agent_type` parameter
+- `ace_before_task.py` and `ace_after_task.py`: Pass `agent_type` to relevance logger
+
 ## [5.4.30] - 2026-02-12
 
 ### Added

@@ -92,6 +92,21 @@ def analyze_sessions(entries: List[Dict[str, Any]], hours: int = 24) -> dict:
             if to_d:
                 domains.add(to_d)
 
+        # Detect agent_type from any event in this session
+        agent_type = "main"
+        for e in events:
+            at = e.get("agent_type")
+            if at and at != "main":
+                agent_type = at
+                break
+        # Fallback: check all events for any agent_type
+        if agent_type == "main":
+            for e in events:
+                at = e.get("agent_type")
+                if at:
+                    agent_type = at
+                    break
+
         # Execution metrics (use last execution if multiple)
         has_execution = len(executions) > 0
         if has_execution:
@@ -109,6 +124,7 @@ def analyze_sessions(entries: List[Dict[str, Any]], hours: int = 24) -> dict:
 
         sessions.append({
             "session_id": sid,
+            "agent_type": agent_type,
             "start_time": start_time,
             "end_time": end_time,
             "duration_seconds": duration,
@@ -354,7 +370,9 @@ def format_insights_report(
             if len(s.get("user_prompts", [])) > 2:
                 prompts += "..."
 
-            lines.append(f"  [{status}] {s['session_id'][:12]}... ({dur_str})")
+            agent = s.get("agent_type", "main")
+            agent_tag = f" [{agent}]" if agent != "main" else ""
+            lines.append(f"  [{status}]{agent_tag} {s['session_id'][:12]}... ({dur_str})")
             if prompts:
                 lines.append(f"         Task: {prompts}")
             lines.append(
@@ -493,10 +511,14 @@ def format_insights_html(
         te = s.get("tools_executed", 0)
         lr = "Yes" if s.get("learning_sent") else "No"
 
+        agent_type = _html_escape(s.get('agent_type', 'main'))
+        agent_badge = f'<span class="agent-badge agent-{agent_type}">{agent_type}</span>' if agent_type != 'main' else '<span class="agent-badge agent-main">main</span>'
+
         session_rows += f"""
         <div class="session-card">
           <div class="session-header">
             <span class="session-status {status_class}">{status_text}</span>
+            {agent_badge}
             <span class="session-id">{_html_escape(s['session_id'][:16])}...</span>
             <span class="session-duration">{dur_str}</span>
           </div>
@@ -596,6 +618,12 @@ def format_insights_html(
     .status-ok {{ background: #dcfce7; color: #16a34a; }}
     .status-fail {{ background: #fecaca; color: #dc2626; }}
     .status-pending {{ background: #f1f5f9; color: #94a3b8; }}
+    .agent-badge {{ font-size: 10px; font-weight: 700; padding: 2px 6px; border-radius: 4px; text-transform: uppercase; letter-spacing: 0.5px; }}
+    .agent-main {{ background: #f1f5f9; color: #64748b; }}
+    .agent-tdd {{ background: #ede9fe; color: #7c3aed; }}
+    .agent-coder {{ background: #dbeafe; color: #2563eb; }}
+    .agent-refactorer {{ background: #fef3c7; color: #d97706; }}
+    .agent-researcher {{ background: #d1fae5; color: #059669; }}
     .session-id {{ font-size: 13px; font-family: monospace; color: #64748b; }}
     .session-duration {{ font-size: 12px; color: #94a3b8; margin-left: auto; }}
     .session-task {{ font-size: 14px; color: #334155; margin-bottom: 8px; font-weight: 500; }}

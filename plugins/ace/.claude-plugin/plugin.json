@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.4.30",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.4.30: ACE Insights interactive HTML report - /ace-insights generates shareable analysis at ~/.claude/usage-data/ace-insights.html. Requires: Claude Code >= 2.1.2, ace-cli >= 3.10.3.",
+  "version": "5.4.31",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.4.31: ACE Insights agent type tracking & bug fixes - JSONL logs now capture agent_type, HTML report shows colored agent badges. Requires: Claude Code >= 2.1.2, ace-cli >= 3.10.3.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
