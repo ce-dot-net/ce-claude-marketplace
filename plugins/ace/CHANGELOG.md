@@ -5,6 +5,33 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.30] - 2026-02-12
+
+### Added
+- **Interactive HTML Report**: `/ace-insights` generates a shareable HTML report at `~/.claude/usage-data/ace-insights.html`
+  - Per-session breakdown with status, duration, and patterns used
+  - Pattern helpfulness advantage card (success with vs without patterns)
+  - Top patterns bar chart with usage counts
+  - Trend comparison cards with up/down indicators
+  - Self-contained HTML matching Claude Code's `/insights` aesthetic
+- **Analysis Engine**: New `ace_insights_analyzer.py` with 6 analysis functions
+  - `analyze_sessions` — Group entries by session with per-session metrics
+  - `calculate_helpfulness` — Correlate pattern usage with task success rates
+  - `get_top_patterns` — Rank patterns by usage count and session spread
+  - `calculate_trends` — Period-over-period comparison with percentage changes
+  - `format_insights_report` — Plain text terminal summary
+  - `format_insights_html` — Full interactive HTML report
+- **47 new tests** covering all analysis functions including XSS prevention
+
+### Changed
+- Renamed `/ace-relevance-report` to `/ace-insights` for better discoverability
+- Command now outputs both terminal summary AND HTML file
+
+### Removed
+- `ace-relevance-report.md` (replaced by `ace-insights.md`)
+
+---
+
 ## [5.4.29] - 2026-02-11
 
 ### Fixed
