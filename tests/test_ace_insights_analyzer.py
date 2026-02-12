@@ -1589,3 +1589,145 @@ class TestLoggerAgentType:
 
         entry = json.loads((tmp_path / "ace-relevance.jsonl").read_text().strip())
         assert entry["agent_type"] == "main"
+
+
+# =========================================================================
+# TestAceInsightsCommand -- command markdown format validation
+# =========================================================================
+
+class TestAceInsightsCommand:
+    """Tests that ace-insights.md command file follows the working command pattern.
+
+    The /ace:ace-insights command fails because its markdown is structured as
+    documentation rather than instructions for Claude. Working commands like
+    ace-status.md and ace-doctor.md have an "Instructions for Claude" section
+    that tells Claude to execute bash blocks. Without this section, Claude
+    displays the markdown as text instead of running the script.
+
+    These tests verify the command file structure matches working commands.
+    """
+
+    COMMANDS_DIR = PROJECT_ROOT / "plugins" / "ace" / "commands"
+    INSIGHTS_CMD = COMMANDS_DIR / "ace-insights.md"
+    STATUS_CMD = COMMANDS_DIR / "ace-status.md"
+    DOCTOR_CMD = COMMANDS_DIR / "ace-doctor.md"
+
+    @pytest.fixture
+    def insights_content(self):
+        """Read the ace-insights.md command file."""
+        return self.INSIGHTS_CMD.read_text()
+
+    @pytest.fixture
+    def status_content(self):
+        """Read the ace-status.md command file (known working)."""
+        return self.STATUS_CMD.read_text()
+
+    @pytest.fixture
+    def doctor_content(self):
+        """Read the ace-doctor.md command file (known working)."""
+        return self.DOCTOR_CMD.read_text()
+
+    def test_command_file_exists(self):
+        """The ace-insights.md command file must exist."""
+        assert self.INSIGHTS_CMD.exists(), (
+            f"Command file not found: {self.INSIGHTS_CMD}"
+        )
+
+    def test_has_instructions_for_claude_section(self, insights_content):
+        """The command must have an 'Instructions for Claude' section (like working commands)."""
+        assert "## Instructions for Claude" in insights_content, (
+            "ace-insights.md must contain '## Instructions for Claude' section. "
+            "Without it, Claude displays the markdown as text instead of executing the bash script."
+        )
+
+    def test_instructions_section_appears_before_bash_block(self, insights_content):
+        """The 'Instructions for Claude' section must appear before the main bash code block."""
+        instructions_pos = insights_content.find("## Instructions for Claude")
+        bash_pos = insights_content.find("```bash")
+        assert instructions_pos != -1, "Missing '## Instructions for Claude' section"
+        assert bash_pos != -1, "Missing bash code block"
+        assert instructions_pos < bash_pos, (
+            "The 'Instructions for Claude' section must appear BEFORE the bash code block. "
+            f"Instructions at position {instructions_pos}, bash at position {bash_pos}."
+        )
+
+    def test_has_bash_code_block_with_script(self, insights_content):
+        """The command must contain a bash code block with the actual script."""
+        import re
+        bash_blocks = re.findall(r'```bash\n(.*?)```', insights_content, re.DOTALL)
+        assert len(bash_blocks) >= 1, "ace-insights.md must contain at least one bash code block"
+
+        # The main script block should have shebang and set -euo pipefail
+        main_script = bash_blocks[0]
+        assert "#!/usr/bin/env bash" in main_script, (
+            "Main bash block must start with #!/usr/bin/env bash"
+        )
+        assert "set -euo pipefail" in main_script, (
+            "Main bash block must contain 'set -euo pipefail' for safe execution"
+        )
+
+    def test_no_documentation_sections_before_instructions(self, insights_content):
+        """No documentation-only sections (Usage, What You'll See, etc.) should appear
+        BEFORE the Instructions for Claude section, as they cause Claude to display
+        text instead of executing the script."""
+        doc_sections = [
+            "## Usage",
+            "## What You'll See",
+            "## Interpreting Results",
+            "## See Also",
+        ]
+        instructions_pos = insights_content.find("## Instructions for Claude")
+        if instructions_pos == -1:
+            pytest.fail("Missing '## Instructions for Claude' section")
+
+        for section in doc_sections:
+            section_pos = insights_content.find(section)
+            if section_pos != -1:
+                assert section_pos > instructions_pos, (
+                    f"Documentation section '{section}' appears at position {section_pos}, "
+                    f"which is BEFORE 'Instructions for Claude' at position {instructions_pos}. "
+                    f"This causes Claude to display the section as text instead of executing the script."
+                )
+
+    def test_no_usage_examples_before_script(self, insights_content):
+        """Usage examples (like '/ace:ace-insights --hours 1') should not appear before
+        the main bash block, as they confuse Claude into displaying documentation."""
+        instructions_pos = insights_content.find("## Instructions for Claude")
+        if instructions_pos == -1:
+            pytest.fail("Missing '## Instructions for Claude' section")
+
+        # Check that usage example patterns don't appear before the instructions
+        before_instructions = insights_content[:instructions_pos]
+        assert "/ace:ace-insights" not in before_instructions, (
+            "Usage examples with '/ace:ace-insights' found before Instructions section. "
+            "This causes Claude to display documentation instead of executing."
+        )
+
+    def test_matches_working_command_pattern(self, insights_content, status_content, doctor_content):
+        """The ace-insights.md structure should match the pattern of working commands:
+        frontmatter -> title -> brief description -> Instructions for Claude -> bash block."""
+        # All working commands have this pattern
+        for name, content in [("ace-status", status_content), ("ace-doctor", doctor_content)]:
+            assert "## Instructions for Claude" in content, (
+                f"Reference command {name}.md unexpectedly missing Instructions section"
+            )
+
+        # ace-insights must also follow this pattern
+        assert "## Instructions for Claude" in insights_content
+
+    def test_frontmatter_preserved(self, insights_content):
+        """The YAML frontmatter with description and argument-hint must be preserved."""
+        assert insights_content.startswith("---"), "Must start with YAML frontmatter"
+        assert "description:" in insights_content, "Frontmatter must include description"
+
+    def test_bash_script_contains_python_analyzer_call(self, insights_content):
+        """The bash script must contain the Python analyzer call that generates the HTML report."""
+        assert "ace_insights_analyzer" in insights_content, (
+            "Bash script must import from ace_insights_analyzer module"
+        )
+        assert "format_insights_html" in insights_content, (
+            "Bash script must call format_insights_html to generate the HTML report"
+        )
+        assert "format_insights_report" in insights_content, (
+            "Bash script must call format_insights_report to generate the text summary"
+        )

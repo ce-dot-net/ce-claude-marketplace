@@ -5,6 +5,17 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.32] - 2026-02-12
+
+### Fixed
+- **Command Not Executing**: `/ace:ace-insights` was displaying markdown as text instead of running the bash script
+  - Root cause: Command file was structured as documentation (like a README) instead of as instructions for Claude
+  - Fix: Added "Instructions for Claude" section matching the pattern of working commands (ace-status, ace-doctor)
+  - The bash script and Python analyzer were already correct -- only the command markdown format needed fixing
+
+### Added
+- **9 new command format tests** verifying structural consistency with working commands (113 total tests)
+
 ## [5.4.31] - 2026-02-12
 
 ### Added
