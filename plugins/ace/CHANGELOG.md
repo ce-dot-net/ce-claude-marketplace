@@ -5,6 +5,33 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.33] - 2026-02-12
+
+### Added
+- **LLM-as-Judge Evaluation**: Claude now evaluates each task's ACE helpfulness (0-100%) with reasoning, replacing misleading statistical comparisons
+- **3-Step Command Architecture**: Python extracts data -> Claude evaluates -> Python generates HTML with evaluations baked in
+- **Per-Task Helpfulness Cards**: Each task shows colored helpfulness gauge (green/yellow/red), Claude's reasoning, pattern domains, and confidence
+- **Time-Gap Task Splitting**: Events clustered by 30-minute gaps instead of session_id grouping
+- **Event Deduplication**: Removes near-duplicate execution events within tasks
+- **Pattern Name Resolution**: Opaque `ctx-XXXX` IDs resolved to human-readable `"domain / section"` names
+- **Daily Breakdown**: Per-day task counts and success rates in HTML report
+- **Newest-First Ordering**: Most recent tasks shown at top of report
+- **New Functions**:
+  - `extract_task_data_for_evaluation()` -- enriches tasks with pattern details for LLM evaluation
+  - `generate_evaluated_html()` -- generates HTML with Claude's evaluations baked in
+  - `deduplicate_events()` -- removes near-duplicate execution events
+  - `extract_pattern_names()` -- maps pattern IDs to readable names
+  - `split_into_tasks()` -- clusters events into logical tasks by time gap
+  - `compute_ace_engagement()` -- computes ACE engagement metrics
+
+### Changed
+- **ace-insights command**: Complete rewrite from statistical metrics to LLM-evaluated per-task helpfulness
+- `ace_insights_analyzer.py`: Major refactoring with 6 new functions and modified existing ones
+- `ace-insights.md`: Rewritten to 3-step LLM-evaluated flow
+
+### Test Coverage
+- 190 tests total: 149 insights analyzer + 41 pattern ID validation (was 93 in v5.4.30)
+
 ## [5.4.32] - 2026-02-12
 
 ### Fixed
