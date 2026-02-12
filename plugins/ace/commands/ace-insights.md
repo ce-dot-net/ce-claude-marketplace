@@ -7,6 +7,12 @@ argument-hint: "[--hours N]"
 
 Generate a shareable interactive HTML report analyzing how helpful ACE patterns were across your Claude sessions.
 
+## Instructions for Claude
+
+When the user runs `/ace:ace-insights`, execute the following bash script. The script analyzes ACE relevance logs and generates both a terminal text summary and an interactive HTML report saved to `~/.claude/usage-data/ace-insights.html`.
+
+Run this bash script:
+
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
@@ -112,6 +118,8 @@ if command -v open &>/dev/null; then
 fi
 ```
 
+After the script completes, summarize the key findings from the terminal output for the user.
+
 ## What You'll See
 
 **Interactive HTML Report** (saved to `~/.claude/usage-data/ace-insights.html`):
@@ -125,7 +133,7 @@ fi
 
 ## Usage
 
-```bash
+```
 # Last 24 hours (default)
 /ace:ace-insights
 
@@ -135,20 +143,6 @@ fi
 # Last 7 days
 /ace:ace-insights --hours 168
 ```
-
-## Interpreting Results
-
-**High pattern advantage (>20pp)**:
-- ACE patterns are significantly improving task success
-- Keep learning and growing the playbook
-
-**Low/negative pattern advantage**:
-- Patterns may not be relevant to current tasks
-- Consider running `/ace:ace-bootstrap` to refresh
-
-**No active sessions**:
-- Sessions without task execution don't count as "active"
-- Check if Stop hook is firing (run `/ace:ace-doctor`)
 
 ## See Also
 
