@@ -665,7 +665,8 @@ def main():
                 success=not has_errors,
                 execution_time_seconds=execution_time,
                 learning_sent='✅' in message_lines[0] if message_lines else False,
-                project_id=context.get('project')
+                project_id=context.get('project'),
+                agent_type=agent_type
             )
         except Exception:
             pass  # Non-fatal: continue without metrics logging

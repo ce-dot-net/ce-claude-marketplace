@@ -29,13 +29,12 @@ if [ ! -f "$LOG_FILE" ]; then
   exit 0
 fi
 
-# Find the analyzer module
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# Find the analyzer module (Claude Code commands don't have a reliable $0)
 ANALYZER=""
 for candidate in \
-  "${SCRIPT_DIR}/../shared-hooks/utils/ace_insights_analyzer.py" \
   "plugins/ace/shared-hooks/utils/ace_insights_analyzer.py" \
-  "${HOME}/.claude/plugins/ace/shared-hooks/utils/ace_insights_analyzer.py"; do
+  "${HOME}/.claude/plugins/ace/shared-hooks/utils/ace_insights_analyzer.py" \
+  "$(git rev-parse --show-toplevel 2>/dev/null)/plugins/ace/shared-hooks/utils/ace_insights_analyzer.py"; do
   if [ -f "$candidate" ]; then
     ANALYZER="$(cd "$(dirname "$candidate")" && pwd)/$(basename "$candidate")"
     break
@@ -106,6 +105,11 @@ print(f'Time window: Last {hours} hours')
 echo ""
 echo "Your shareable insights report is ready:"
 echo "  file://${REPORT_FILE}"
+
+# Auto-open in browser on macOS
+if command -v open &>/dev/null; then
+  open "${REPORT_FILE}"
+fi
 ```
 
 ## What You'll See

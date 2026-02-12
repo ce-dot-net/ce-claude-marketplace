@@ -69,7 +69,8 @@ class ACERelevanceLogger:
         patterns_injected: List[Dict[str, Any]],
         domains: List[str],
         project_id: Optional[str] = None,
-        org_id: Optional[str] = None
+        org_id: Optional[str] = None,
+        agent_type: Optional[str] = None
     ) -> None:
         """
         Log pattern search and injection metrics.
@@ -101,6 +102,7 @@ class ACERelevanceLogger:
             'session_id': session_id,
             'project_id': project_id,
             'org_id': org_id,
+            'agent_type': agent_type or 'main',
             'user_prompt': user_prompt[:200] if user_prompt else '',  # Truncate long prompts
             'search_query': search_query[:100] if search_query else '',
             'patterns_returned': len(patterns_returned),
@@ -152,7 +154,8 @@ class ACERelevanceLogger:
         success: bool,
         execution_time_seconds: float,
         learning_sent: bool,
-        project_id: Optional[str] = None
+        project_id: Optional[str] = None,
+        agent_type: Optional[str] = None
     ) -> None:
         """
         Log task execution metrics for correlation with pattern usage.
@@ -165,6 +168,7 @@ class ACERelevanceLogger:
             'hook': 'Stop',
             'session_id': session_id,
             'project_id': project_id,
+            'agent_type': agent_type or 'main',
             'patterns_used_count': len(patterns_used),
             'pattern_ids': patterns_used[:20],  # Limit to 20 IDs
             'tools_executed': tools_executed,

@@ -211,7 +211,8 @@ def main():
                 patterns_injected=pattern_list,
                 domains=domains,
                 project_id=context.get('project'),
-                org_id=context.get('org')
+                org_id=context.get('org'),
+                agent_type=agent_type
             )
         except Exception:
             pass  # Non-fatal: continue without logging
