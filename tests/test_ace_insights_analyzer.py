@@ -1738,6 +1738,34 @@ class TestAceInsightsCommand:
             "Bash script must call generate_evaluated_html for Step 3 HTML generation"
         )
 
+    def test_bash_script_checks_marketplace_plugin_path(self, insights_content):
+        """The bash script must search the marketplace install location generically.
+
+        When running from a different project directory (not the marketplace repo),
+        the analyzer won't be found via relative paths or git root. The script must
+        search ~/.claude/plugins/marketplaces/ generically (not hardcoded to a
+        specific marketplace name) so it works for any marketplace installation.
+        """
+        assert "plugins/marketplaces" in insights_content, (
+            "ace-insights.md bash script must search the marketplaces directory "
+            "generically so the analyzer can be found from any marketplace install."
+        )
+        assert "ace/shared-hooks/utils/ace_insights_analyzer.py" in insights_content, (
+            "ace-insights.md bash script must search for the correct analyzer path pattern."
+        )
+
+    def test_bash_script_checks_cache_plugin_path(self, insights_content):
+        """The bash script must search the plugin cache location generically.
+
+        Claude Code caches installed plugins under ~/.claude/plugins/cache/.
+        The bash script must search this directory generically so the command
+        works when the analyzer is only available in the plugin cache.
+        """
+        assert "plugins/cache" in insights_content, (
+            "ace-insights.md bash script must search the plugin cache directory "
+            "generically so the analyzer can be found from any cached installation."
+        )
+
 
 # =========================================================================
 # BUG FIX TESTS: Duration formatting, patterns_used aggregation

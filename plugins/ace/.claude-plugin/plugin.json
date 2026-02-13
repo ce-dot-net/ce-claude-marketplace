@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.4.33",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.4.33: ACE Insights v2 - LLM-evaluated per-task helpfulness with reasoning, time-gap task splitting, event deduplication, pattern name resolution. Requires: Claude Code >= 2.1.2, ace-cli >= 3.10.3.",
+  "version": "5.4.34",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.4.34: ACE Insights generic plugin path detection - works with any marketplace installation. Requires: Claude Code >= 2.1.2, ace-cli >= 3.10.3.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

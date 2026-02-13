@@ -34,13 +34,14 @@ if [ ! -f "$LOG_FILE" ]; then
   exit 0
 fi
 
-# Find the analyzer module
+# Find the analyzer module (works for any marketplace installation)
 ANALYZER=""
 for candidate in \
   "plugins/ace/shared-hooks/utils/ace_insights_analyzer.py" \
-  "${HOME}/.claude/plugins/ace/shared-hooks/utils/ace_insights_analyzer.py" \
-  "$(git rev-parse --show-toplevel 2>/dev/null)/plugins/ace/shared-hooks/utils/ace_insights_analyzer.py"; do
-  if [ -f "$candidate" ]; then
+  "$(git rev-parse --show-toplevel 2>/dev/null)/plugins/ace/shared-hooks/utils/ace_insights_analyzer.py" \
+  "$(find "${HOME}/.claude/plugins/marketplaces" -path "*/ace/shared-hooks/utils/ace_insights_analyzer.py" 2>/dev/null | head -1)" \
+  "$(find "${HOME}/.claude/plugins/cache" -path "*/ace/*/shared-hooks/utils/ace_insights_analyzer.py" 2>/dev/null | sort -V | tail -1)"; do
+  if [ -n "$candidate" ] && [ -f "$candidate" ]; then
     ANALYZER="$(cd "$(dirname "$candidate")" && pwd)/$(basename "$candidate")"
     break
   fi
@@ -127,8 +128,10 @@ ANALYZER=""
 for candidate in \
   "plugins/ace/shared-hooks/utils/ace_insights_analyzer.py" \
   "${HOME}/.claude/plugins/ace/shared-hooks/utils/ace_insights_analyzer.py" \
-  "$(git rev-parse --show-toplevel 2>/dev/null)/plugins/ace/shared-hooks/utils/ace_insights_analyzer.py"; do
-  if [ -f "$candidate" ]; then
+  "$(git rev-parse --show-toplevel 2>/dev/null)/plugins/ace/shared-hooks/utils/ace_insights_analyzer.py" \
+  "${HOME}/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace/shared-hooks/utils/ace_insights_analyzer.py" \
+  "$(ls -1d "${HOME}/.claude/plugins/cache/ce-dot-net-marketplace/ace"/*/shared-hooks/utils/ace_insights_analyzer.py 2>/dev/null | sort -V | tail -1)"; do
+  if [ -n "$candidate" ] && [ -f "$candidate" ]; then
     ANALYZER="$(cd "$(dirname "$candidate")" && pwd)/$(basename "$candidate")"
     break
   fi
