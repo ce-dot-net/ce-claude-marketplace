@@ -1738,32 +1738,72 @@ class TestAceInsightsCommand:
             "Bash script must call generate_evaluated_html for Step 3 HTML generation"
         )
 
-    def test_bash_script_checks_marketplace_plugin_path(self, insights_content):
-        """The bash script must search the marketplace install location generically.
+    def test_uses_claude_plugin_root(self, insights_content):
+        """The command must use CLAUDE_PLUGIN_ROOT env var for analyzer path.
 
-        When running from a different project directory (not the marketplace repo),
-        the analyzer won't be found via relative paths or git root. The script must
-        search ~/.claude/plugins/marketplaces/ generically (not hardcoded to a
-        specific marketplace name) so it works for any marketplace installation.
+        CLAUDE_PLUGIN_ROOT is the official Claude Code env var that resolves to
+        the plugin's absolute path. It is available in all command markdown files
+        and eliminates the need for fragile find-based path detection.
         """
-        assert "plugins/marketplaces" in insights_content, (
-            "ace-insights.md bash script must search the marketplaces directory "
-            "generically so the analyzer can be found from any marketplace install."
-        )
-        assert "ace/shared-hooks/utils/ace_insights_analyzer.py" in insights_content, (
-            "ace-insights.md bash script must search for the correct analyzer path pattern."
+        assert "CLAUDE_PLUGIN_ROOT" in insights_content, (
+            "ace-insights.md must use CLAUDE_PLUGIN_ROOT env var to locate the "
+            "analyzer module. This is the official Claude Code env var that "
+            "resolves to the plugin's absolute path."
         )
 
-    def test_bash_script_checks_cache_plugin_path(self, insights_content):
-        """The bash script must search the plugin cache location generically.
+    def test_no_find_commands(self, insights_content):
+        """The command must NOT use find commands for path detection.
 
-        Claude Code caches installed plugins under ~/.claude/plugins/cache/.
-        The bash script must search this directory generically so the command
-        works when the analyzer is only available in the plugin cache.
+        The old approach used 'find "${HOME}/.claude/plugins' which is fragile
+        and slow. CLAUDE_PLUGIN_ROOT makes find-based detection unnecessary.
         """
-        assert "plugins/cache" in insights_content, (
-            "ace-insights.md bash script must search the plugin cache directory "
-            "generically so the analyzer can be found from any cached installation."
+        assert 'find "${HOME}/.claude/plugins' not in insights_content, (
+            "ace-insights.md must not use find commands for path detection. "
+            "Use CLAUDE_PLUGIN_ROOT instead."
+        )
+
+    def test_no_hardcoded_marketplace_name(self, insights_content):
+        """The command must NOT contain any hardcoded marketplace name.
+
+        Hardcoded names like 'ce-dot-net-marketplace' break for users who
+        install from different marketplaces. CLAUDE_PLUGIN_ROOT is universal.
+        """
+        assert "ce-dot-net-marketplace" not in insights_content, (
+            "ace-insights.md must not contain hardcoded marketplace name "
+            "'ce-dot-net-marketplace'. Use CLAUDE_PLUGIN_ROOT instead."
+        )
+
+    def test_analyzer_path_uses_plugin_root(self, insights_content):
+        """The analyzer path must be constructed from CLAUDE_PLUGIN_ROOT.
+
+        The exact pattern should be:
+        ${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils/ace_insights_analyzer.py
+        """
+        expected = "${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils/ace_insights_analyzer.py"
+        assert expected in insights_content, (
+            f"ace-insights.md must contain the analyzer path pattern: {expected}"
+        )
+
+    def test_step1_and_step3_same_path(self, insights_content):
+        """Both Step 1 and Step 3 bash blocks must use the same CLAUDE_PLUGIN_ROOT path.
+
+        Previously, Step 1 and Step 3 had different path detection blocks which
+        could lead to inconsistencies. Both must now use the identical
+        CLAUDE_PLUGIN_ROOT-based path.
+        """
+        import re
+        bash_blocks = re.findall(r'```bash\n(.*?)```', insights_content, re.DOTALL)
+        assert len(bash_blocks) >= 2, (
+            "ace-insights.md must have at least 2 bash blocks (Step 1 and Step 3)"
+        )
+        expected = "${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils/ace_insights_analyzer.py"
+        step1_block = bash_blocks[0]
+        step3_block = bash_blocks[1]
+        assert expected in step1_block, (
+            f"Step 1 bash block must contain: {expected}"
+        )
+        assert expected in step3_block, (
+            f"Step 3 bash block must contain: {expected}"
         )
 
 
@@ -3044,7 +3084,7 @@ class TestFormatInsightsHtmlV2:
         assert "<script>alert" not in html
         assert "&lt;script&gt;" in html
 
-    def test_empty_data(self, now):
+    def test_empty_data(self, now):  # noqa: ARG002
         """Empty raw_entries should produce valid HTML with no task cards."""
         sessions = {"sessions": [], "total_sessions": 0, "active_sessions": 0}
         helpfulness = {
@@ -3676,7 +3716,7 @@ def _make_search_event(
     ts: datetime,
     session_id: str = "sess-1",
     user_prompt: str = "Fix the auth bug",
-    patterns: list = None,
+    patterns: list | None = None,
 ) -> dict:
     """Helper to build a search event entry."""
     if patterns is None:
@@ -3710,7 +3750,7 @@ def _make_exec_event(
     success: bool = True,
     tools: int = 15,
     patterns_used: int = 2,
-    pattern_ids: list = None,
+    pattern_ids: list | None = None,
 ) -> dict:
     """Helper to build an execution event entry."""
     return {
@@ -4040,3 +4080,91 @@ class TestGenerateEvaluatedHtml:
         html = generate_evaluated_html(task_data, evaluations)
         assert "auth / strategies" in html
         assert "cache / rules" in html
+
+
+# ---------------------------------------------------------------------------
+# ACE Status Command – jq template field validation (Issue: flat vs nested)
+# ---------------------------------------------------------------------------
+
+class TestAceStatusCommand:
+    """Validate that ace-status.md jq template references correct API fields.
+
+    The actual ``ace-cli status --json`` response nests playbook data under
+    ``.playbook`` and subscription data under ``.subscription``.  Earlier
+    versions of the jq template used flat root-level fields that never existed
+    in the real response, causing every value to render as 0 / "Not configured".
+    """
+
+    ACE_STATUS_MD = (
+        Path(__file__).parent.parent
+        / "plugins"
+        / "ace"
+        / "commands"
+        / "ace-status.md"
+    )
+
+    @pytest.fixture()
+    def jq_block(self) -> str:
+        """Extract the jq formatting block from ace-status.md (Step 3 only)."""
+        content = self.ACE_STATUS_MD.read_text()
+        # Target the STATUS_OUTPUT formatting jq block, not the auth jq line
+        in_jq = False
+        lines: list[str] = []
+        for line in content.splitlines():
+            if "STATUS_OUTPUT" in line and "jq -r" in line:
+                in_jq = True
+                lines.append(line)
+                continue
+            if in_jq:
+                lines.append(line)
+                # jq block ends at the closing single-quote line
+                if line.strip() == "'":
+                    break
+        return "\n".join(lines)
+
+    # -- 1. Total patterns must use nested path --------------------------
+
+    def test_status_jq_references_playbook_total_patterns(self, jq_block: str):
+        """jq must reference ``.playbook.total_patterns``, not ``.total_bullets``."""
+        assert ".playbook.total_patterns" in jq_block, (
+            "jq template should reference .playbook.total_patterns"
+        )
+
+    # -- 2. Section counts must be under .playbook.by_section ------------
+
+    def test_status_jq_references_playbook_by_section(self, jq_block: str):
+        """Section counts must be nested under ``.playbook.by_section``."""
+        assert ".playbook.by_section.strategies_and_hard_rules" in jq_block, (
+            "jq template should reference .playbook.by_section.strategies_and_hard_rules"
+        )
+        assert ".playbook.by_section.useful_code_snippets" in jq_block
+        assert ".playbook.by_section.troubleshooting_and_pitfalls" in jq_block
+        assert ".playbook.by_section.apis_to_use" in jq_block
+
+    # -- 3. No legacy flat .total_bullets --------------------------------
+
+    def test_status_jq_no_flat_total_bullets(self, jq_block: str):
+        """``.total_bullets`` must NOT appear -- it was never in the API."""
+        assert ".total_bullets" not in jq_block, (
+            "jq template must not reference the non-existent .total_bullets field"
+        )
+
+    # -- 4. No flat .org_id (not in API response) ------------------------
+
+    def test_status_jq_no_flat_org_id(self, jq_block: str):
+        """``.org_id`` must NOT appear -- the status API does not return it."""
+        assert ".org_id" not in jq_block, (
+            "jq template must not reference .org_id (not in ace-cli status response)"
+        )
+
+    # -- 5. Helpful / harmful for confidence calculation -----------------
+
+    def test_status_jq_references_helpful_harmful(self, jq_block: str):
+        """Confidence should be computed from ``.playbook.helpful_total`` and
+        ``.playbook.harmful_total``."""
+        assert ".playbook.helpful_total" in jq_block, (
+            "jq template should reference .playbook.helpful_total"
+        )
+        assert ".playbook.harmful_total" in jq_block, (
+            "jq template should reference .playbook.harmful_total"
+        )

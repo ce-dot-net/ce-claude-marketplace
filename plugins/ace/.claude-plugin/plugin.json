@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.4.34",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.4.34: ACE Insights generic plugin path detection - works with any marketplace installation. Requires: Claude Code >= 2.1.2, ace-cli >= 3.10.3.",
+  "version": "5.4.35",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.4.35: Fix ace-status display & CLAUDE_PLUGIN_ROOT path detection. Requires: Claude Code >= 2.1.2, ace-cli >= 3.10.3.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
