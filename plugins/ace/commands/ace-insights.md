@@ -34,20 +34,10 @@ if [ ! -f "$LOG_FILE" ]; then
   exit 0
 fi
 
-# Find the analyzer module (works for any marketplace installation)
-ANALYZER=""
-for candidate in \
-  "plugins/ace/shared-hooks/utils/ace_insights_analyzer.py" \
-  "$(git rev-parse --show-toplevel 2>/dev/null)/plugins/ace/shared-hooks/utils/ace_insights_analyzer.py" \
-  "$(find "${HOME}/.claude/plugins/marketplaces" -path "*/ace/shared-hooks/utils/ace_insights_analyzer.py" 2>/dev/null | head -1)" \
-  "$(find "${HOME}/.claude/plugins/cache" -path "*/ace/*/shared-hooks/utils/ace_insights_analyzer.py" 2>/dev/null | sort -V | tail -1)"; do
-  if [ -n "$candidate" ] && [ -f "$candidate" ]; then
-    ANALYZER="$(cd "$(dirname "$candidate")" && pwd)/$(basename "$candidate")"
-    break
-  fi
-done
+# Locate the analyzer module via CLAUDE_PLUGIN_ROOT (set by Claude Code for all plugins)
+ANALYZER="${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils/ace_insights_analyzer.py"
 
-if [ -z "$ANALYZER" ]; then
+if [ ! -f "$ANALYZER" ]; then
   echo "ACE insights analyzer not found. Re-install the ACE plugin."
   exit 1
 fi
@@ -123,19 +113,13 @@ set -euo pipefail
 HOURS="${1:-24}"
 LOG_FILE=".claude/data/logs/ace-relevance.jsonl"
 
-# Find the analyzer module
-ANALYZER=""
-for candidate in \
-  "plugins/ace/shared-hooks/utils/ace_insights_analyzer.py" \
-  "${HOME}/.claude/plugins/ace/shared-hooks/utils/ace_insights_analyzer.py" \
-  "$(git rev-parse --show-toplevel 2>/dev/null)/plugins/ace/shared-hooks/utils/ace_insights_analyzer.py" \
-  "${HOME}/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace/shared-hooks/utils/ace_insights_analyzer.py" \
-  "$(ls -1d "${HOME}/.claude/plugins/cache/ce-dot-net-marketplace/ace"/*/shared-hooks/utils/ace_insights_analyzer.py 2>/dev/null | sort -V | tail -1)"; do
-  if [ -n "$candidate" ] && [ -f "$candidate" ]; then
-    ANALYZER="$(cd "$(dirname "$candidate")" && pwd)/$(basename "$candidate")"
-    break
-  fi
-done
+# Locate the analyzer module via CLAUDE_PLUGIN_ROOT (set by Claude Code for all plugins)
+ANALYZER="${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils/ace_insights_analyzer.py"
+
+if [ ! -f "$ANALYZER" ]; then
+  echo "ACE insights analyzer not found. Re-install the ACE plugin."
+  exit 1
+fi
 
 REPORT_DIR="${HOME}/.claude/usage-data"
 mkdir -p "$REPORT_DIR"

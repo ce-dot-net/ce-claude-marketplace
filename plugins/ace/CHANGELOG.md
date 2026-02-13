@@ -5,6 +5,20 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.35] - 2026-02-13
+
+### Fixed
+- **ace-status: Fix jq template mismatch** -- The jq template referenced flat root-level fields (`.org_id`, `.total_bullets`, `.by_section.*`) that don't exist in the `ace-cli status --json` response. The actual response nests data under `.playbook` and `.subscription`. Fixed to use `.playbook.total_patterns`, `.playbook.by_section.*`, computed confidence from `.playbook.helpful_total`/`.playbook.harmful_total`, and added subscription plan/usage display. Removed non-existent `.org_id`/`.project_id` fields.
+- **ace-insights: Replace fragile path detection with CLAUDE_PLUGIN_ROOT** -- The path detection logic used complex `find` commands and had a critical bug: Step 3 still had hardcoded `ce-dot-net-marketplace` paths (missed in v5.4.34). Replaced ALL path detection in both Step 1 and Step 3 with the official Claude Code `${CLAUDE_PLUGIN_ROOT}` env var -- a single portable line that works across all installations.
+
+### Changed
+- `ace-status.md`: jq template now uses `.playbook.*` and `.subscription.*` nested paths
+- `ace-insights.md`: Both bash blocks use `${CLAUDE_PLUGIN_ROOT}` for analyzer path
+
+### Test Coverage
+- 200 tests pass (159 insights analyzer + 41 pattern ID validation)
+- 10 new tests: 5 for ace-status jq fields, 5 for ace-insights CLAUDE_PLUGIN_ROOT path
+
 ## [5.4.34] - 2026-02-13
 
 ### Fixed

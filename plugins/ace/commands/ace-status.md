@@ -116,18 +116,20 @@ fi
 echo "$STATUS_OUTPUT" | jq -r '
   "📊 ACE Playbook Status",
   "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-  "Organization: \(.org_id // "Not configured")",
-  "Project: \(.project_id // "Not configured")",
   "",
-  "📚 Total Patterns: \(.total_bullets // 0)",
+  "📚 Total Patterns: \(.playbook.total_patterns // 0)",
   "",
   "By Section:",
-  "  • Strategies & Rules: \(.by_section.strategies_and_hard_rules // 0)",
-  "  • Code Snippets: \(.by_section.useful_code_snippets // 0)",
-  "  • Troubleshooting: \(.by_section.troubleshooting_and_pitfalls // 0)",
-  "  • APIs to Use: \(.by_section.apis_to_use // 0)",
+  "  • Strategies & Rules: \(.playbook.by_section.strategies_and_hard_rules // 0)",
+  "  • Code Snippets: \(.playbook.by_section.useful_code_snippets // 0)",
+  "  • Troubleshooting: \(.playbook.by_section.troubleshooting_and_pitfalls // 0)",
+  "  • APIs to Use: \(.playbook.by_section.apis_to_use // 0)",
   "",
-  "📈 Average Confidence: \((.avg_confidence // 0) * 100 | floor)%"
+  "📈 Helpful: \(.playbook.helpful_total // 0) | Harmful: \(.playbook.harmful_total // 0)",
+  "📈 Confidence: \((if (.playbook.helpful_total // 0) + (.playbook.harmful_total // 0) > 0 then ((.playbook.helpful_total // 0) * 100 / ((.playbook.helpful_total // 0) + (.playbook.harmful_total // 0))) else 0 end) | floor)%",
+  "",
+  "💼 Plan: \(.subscription.plan // "unknown")",
+  "📊 Patterns Used: \(.subscription.usage.patterns.used // 0)/\(.subscription.usage.patterns.limit // 0)"
 '
 ```
 
