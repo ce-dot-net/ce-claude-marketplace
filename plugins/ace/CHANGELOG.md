@@ -5,6 +5,21 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.4.34] - 2026-02-13
+
+### Fixed
+- **Generic Plugin Path Detection**: `/ace:ace-insights` command now finds the analyzer module from ANY marketplace installation, not just hardcoded to `ce-dot-net-marketplace`
+- Replaced hardcoded marketplace path (`ce-dot-net-marketplace`) with generic `find` command that searches `~/.claude/plugins/marketplaces/` and `~/.claude/plugins/cache/` for any marketplace
+- Both Step 1 (data extraction) and Step 3 (HTML generation) bash blocks updated with generic path detection
+- Removed stale fallback path `${HOME}/.claude/plugins/ace/...` that never existed
+
+### Changed
+- `ace-insights.md`: Generic path detection in both bash blocks
+- `test_ace_insights_analyzer.py`: Updated path detection tests to verify generic path patterns instead of hardcoded marketplace names
+
+### Test Coverage
+- 192 tests pass (all existing + 2 updated path tests)
+
 ## [5.4.33] - 2026-02-12
 
 ### Added
