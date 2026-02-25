@@ -70,6 +70,9 @@ print(json.dumps(task_data, indent=2))
 "
 ```
 
+**IMPORTANT**: Do NOT run additional bash commands to read or inspect the JSON output.
+Evaluate the task data directly from the output above.
+
 ### Step 2: Evaluate Helpfulness
 
 Read the JSON output from Step 1. **You are the LLM — evaluate each task's ACE helpfulness.**
@@ -170,7 +173,7 @@ if command -v open &>/dev/null; then
 fi
 ```
 
-**Important**: In Step 3, replace the literal string `EVALUATION_JSON` with your actual JSON evaluation from Step 2. Ensure the JSON is valid and properly escaped (no unescaped single quotes inside the JSON string).
+**IMPORTANT**: In Step 3, replace the literal string `EVALUATION_JSON` with your actual JSON evaluation from Step 2. Ensure the JSON is valid and properly escaped (no unescaped single quotes inside the JSON string). Do NOT run any additional bash commands beyond Steps 1 and 3.
 
 After the script completes, summarize the key findings for the user: overall helpfulness %, which tasks ACE helped most/least, and any patterns that stood out.
 

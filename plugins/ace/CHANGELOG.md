@@ -5,6 +5,29 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.5.0] - 2026-02-25
+
+### Added
+- **`last_assistant_message` capture** (Claude Code 2.1.51+): Agent's final response now included in ExecutionTrace as `result.summary` for richer learning context
+- **Plugin `settings.json`**: Ships default permissions (`ace-cli *`, `uv run *`, `python3 -c *`) eliminating permission prompt storm on install and during `/ace-insights`
+- New tests: `test_last_assistant_message.py`, `test_plugin_settings.py`, `test_wrapper_exit_codes.py`
+
+### Changed
+- **Hook safety overhaul**: All 7 wrapper scripts now use `trap 'exit 0' ERR` and never `exit 1`. ACE hooks can no longer block user actions
+- `ace_install_cli.sh`: Removed `cleanup_deprecated_claude` function, added ERR trap
+- `ace-doctor.md`: Removed Check 7 (CLAUDE.md integration check), renumbered remaining checks
+- `ace-status.md`: Removed `/ace:claude-init` reference
+- `ace-insights.md`: Added anti-permission-storm instructions
+
+### Removed
+- **Deprecation cleanup**: Removed `CLAUDE.md` template, `section-parser.sh`, `migrate-to-v5.sh`, `ace-enable-auto-update` command
+- Deleted: `plugins/ace/CLAUDE.md`, `plugins/ace/commands/ace-enable-auto-update.md`, `plugins/ace/scripts/lib/section-parser.sh`, `plugins/ace/scripts/migrate-to-v5.sh`
+- Deleted: `tests/test_claude_md_cleaner.py` (no longer needed after CLAUDE.md template removal)
+
+### Requirements
+- Claude Code >= 2.1.51 (for `last_assistant_message` support)
+- ace-cli >= 3.10.3
+
 ## [5.4.35] - 2026-02-13
 
 ### Fixed

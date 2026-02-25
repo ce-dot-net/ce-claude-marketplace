@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ACE Before Task Wrapper - Forwards to shared-hooks/ace_before_task.py
-set -Eeuo pipefail
+set -euo pipefail
+trap 'exit 0' ERR
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
@@ -8,7 +9,7 @@ HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_before_task.py"
 
 [[ -f "${HOOK_SCRIPT}" ]] || {
   echo "[ERROR] ace_before_task.py not found: ${HOOK_SCRIPT}" >&2
-  exit 1
+  exit 0
 }
 
 # Extract working directory from stdin and cd to it
@@ -28,7 +29,7 @@ fi
 if [[ -n "$WORKING_DIR" ]] && [[ -d "$WORKING_DIR" ]]; then
   cd "$WORKING_DIR" || {
     echo "[ERROR] Failed to change to working directory: $WORKING_DIR" >&2
-    exit 1
+    exit 0
   }
 fi
 

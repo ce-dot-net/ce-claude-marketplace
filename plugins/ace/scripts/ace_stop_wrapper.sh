@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ace_stop_wrapper.sh - Stop hook with comprehensive logging
 # v5.4.7: Flag file check + ace-cli/ace-cli detection
-set -Eeuo pipefail
+set -euo pipefail
+trap 'exit 0' ERR
 
 # ACE disable flag check (set by SessionStart if CLI issues detected)
 # Official Claude Code pattern: flag file coordination between hooks
@@ -58,13 +59,13 @@ fi
 # Check if logger exists
 [[ -f "${LOGGER}" ]] || {
   echo "[ERROR] ace_event_logger.py not found: ${LOGGER}" >&2
-  exit 1
+  exit 0
 }
 
 # Check if hook script exists
 [[ -f "${HOOK_SCRIPT}" ]] || {
   echo "[ERROR] ace_after_task.py not found: ${HOOK_SCRIPT}" >&2
-  exit 1
+  exit 0
 }
 
 # Read stdin
@@ -85,7 +86,7 @@ fi
 if [[ -n "$WORKING_DIR" ]] && [[ -d "$WORKING_DIR" ]]; then
   cd "$WORKING_DIR" || {
     echo "[ERROR] Failed to change to working directory: $WORKING_DIR" >&2
-    exit 1
+    exit 0
   }
 fi
 
