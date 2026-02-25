@@ -200,13 +200,9 @@ ACE v3.0 stores playbooks in:
 - **If not configured yet:**
   - Run `/ace:configure` to set up ACE server connection
 
-- **If ACE not initialized in project:**
-  - Run `/ace:claude-init` to add ACE instructions to CLAUDE.md
-
 ## See Also
 
 - `/ace:configure` - Configure ACE server connection
-- `/ace:claude-init` - Initialize ACE in project
 - `/ace:bootstrap` - Bootstrap playbook from git/docs/code
 - `/ace:patterns` - View learned patterns
 - `/ace:clear` - Clear playbook and start fresh

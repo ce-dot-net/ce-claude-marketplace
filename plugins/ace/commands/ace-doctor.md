@@ -321,54 +321,7 @@ Recommended Actions:
 
 ---
 
-### Check 7: CLAUDE.md Status
-
-**What to Check**:
-```bash
-# Check if CLAUDE.md exists in project root
-PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-test -f "$PROJECT_ROOT/CLAUDE.md" && echo "EXISTS" || echo "MISSING"
-
-# If exists, check for ACE section
-grep -q "ACE_SECTION_START" "$PROJECT_ROOT/CLAUDE.md" && echo "HAS_ACE" || echo "NO_ACE"
-
-# Extract version
-grep -oP 'ACE_SECTION_START v\K[\d.]+' "$PROJECT_ROOT/CLAUDE.md"
-```
-
-**Report**:
-- ✅ CLAUDE.md exists with ACE instructions (v5.x.x)
-- ⚠️ CLAUDE.md exists but no ACE section
-- ⚠️ CLAUDE.md exists but outdated version (< v5.0.0)
-- ❌ CLAUDE.md missing
-
-**If Missing**:
-```
-❌ CLAUDE.md: NOT FOUND
-
-Recommended Actions:
-1. No action needed - v5.x hooks handle everything automatically
-2. CLAUDE.md is maintained by the plugin, not by user commands
-```
-
-**If Outdated**:
-```
-⚠️ CLAUDE.md: OUTDATED VERSION
-
-Current: v4.x.x (or earlier)
-Latest: v5.1.2
-
-Breaking Change: v5.x uses hooks instead of skills/subagents
-
-Recommended Actions:
-1. Update plugin from marketplace
-2. Hooks handle everything automatically in v5.x
-3. Review CHANGELOG.md for migration details
-```
-
----
-
-### Check 8: CLI Configuration
+### Check 7: CLI Configuration
 
 **What to Check**:
 ```bash
@@ -416,7 +369,7 @@ Recommended Actions:
 
 ---
 
-### Check 9: Version Status
+### Check 8: Version Status
 
 **What to Check**:
 ```bash
@@ -487,9 +440,8 @@ After running all checks, present results in this format:
 [4] CLI Availability..................... ✅ PASS (v1.0.9)
 [5] ACE Server Connectivity.............. ✅ PASS (HTTP 200)
 [6] Hooks Registered..................... ✅ PASS (5/5)
-[7] CLAUDE.md Status..................... ✅ PASS (v5.1.2)
-[8] CLI Configuration.................... ✅ PASS (multi-org)
-[9] Version Status....................... ✅ PASS
+[7] CLI Configuration.................... ✅ PASS (multi-org)
+[8] Version Status....................... ✅ PASS
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -537,13 +489,12 @@ Report issues: https://github.com/ce-dot-net/ce-claude-marketplace/issues
 [4] CLI Availability..................... ✅ PASS (v1.0.9)
 [5] ACE Server Connectivity.............. ✅ PASS (HTTP 200)
 [6] Hooks Registered..................... ⚠️  WARN (3/5)
-[7] CLAUDE.md Status..................... ⚠️  WARN (v4.2.0)
-[8] CLI Configuration.................... ✅ PASS
-[9] Version Status....................... ⚠️  WARN
+[7] CLI Configuration.................... ✅ PASS
+[8] Version Status....................... ⚠️  WARN
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-Overall Health: 🟡 NEEDS ATTENTION (4 warnings)
+Overall Health: 🟡 NEEDS ATTENTION (3 warnings)
 
 ⚠️  Warnings Found:
 
@@ -558,12 +509,7 @@ Overall Health: 🟡 NEEDS ATTENTION (4 warnings)
     Impact: Learning capture won't work after tasks
     Fix: Reinstall plugin or check scripts/ directory
 
-[7] CLAUDE.md Status
-    Issue: Outdated version (v4.2.0, latest: v5.1.2)
-    Impact: Using old skills-based architecture instead of hooks
-    Fix: Update plugin from marketplace (v5.x hooks handle CLAUDE.md automatically)
-
-[9] Version Status
+[8] Version Status
     Issue: Updates available
     Plugin: v5.1.1 → v5.1.2
     CLI: v1.0.8 → v1.0.9

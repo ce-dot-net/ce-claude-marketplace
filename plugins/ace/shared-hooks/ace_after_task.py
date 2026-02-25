@@ -399,6 +399,7 @@ def main():
         hook_event_name = event.get('hook_event_name', 'Stop')
         session_id = event.get('session_id', 'unknown')
         transcript_path = event.get('transcript_path', '')
+        last_assistant_message = event.get('last_assistant_message', '')  # v5.5.0: CC 2.1.51+
 
         # Handle SubagentStop: use agent's transcript
         if hook_event_name == 'SubagentStop' and 'agent_transcript_path' in event:
@@ -492,7 +493,8 @@ def main():
             "trajectory": trajectory,
             "result": {
                 "success": not has_errors,
-                "output": f"Executed {len(tools)} tool calls"
+                "output": f"Executed {len(tools)} tool calls",
+                "summary": last_assistant_message[:2000] if last_assistant_message else None,  # v5.5.0: CC 2.1.51+
             },
             "playbook_used": playbook_used,
             "timestamp": datetime.now().isoformat(),

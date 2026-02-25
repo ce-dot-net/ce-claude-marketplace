@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ACE SessionStart Hook - CLI Detection & Migration
-# v5.4.23: Deprecated CLAUDE.md content detection + auto-cleanup
+# v5.5.0: Removed deprecated CLAUDE.md cleanup (template deleted)
 # v5.4.22: Deprecated config detection (old ~/.ace/config.json or apiToken format)
 # v5.4.13: Token expiration check (catches 48h standby on new sessions)
 # v5.4.11: Capture agent_type from Claude Code 2.1.2+
@@ -14,6 +14,7 @@
 # - Never use continue:false (blocks entire Claude Code session)
 
 set -eo pipefail
+trap 'exit 0' ERR
 
 # Read stdin JSON (Claude Code 2.1.2+ provides agent_type)
 INPUT_JSON=$(cat 2>/dev/null || echo "{}")
@@ -127,62 +128,6 @@ elif [ -n "$TOKEN_STATUS" ]; then
     # Token expires in minutes - warn user
     output_warning "⚠️ [ACE] Session expires soon ($TOKEN_STATUS). Consider /ace-login."
   fi
-fi
-
-# 7. v5.4.27: Deprecated CLAUDE.md content detection + auto-cleanup
-# Hooks handle everything - ACE instructions in CLAUDE.md are no longer needed (any version)
-cleanup_deprecated_claude() {
-  local file="$1"
-  local location="$2"  # "project" or "global"
-
-  if [ ! -f "$file" ]; then
-    return
-  fi
-
-  # Check for ANY ACE markers or skill references (all versions deprecated)
-  if ! grep -q 'ACE_SECTION_START\|ace-orchestration:ace-\|# ACE Orchestration Plugin\|# ACE Plugin' "$file" 2>/dev/null; then
-    return
-  fi
-
-  # Detected ACE content - extract version
-  local version
-  version=$(grep -oE 'ACE_SECTION_START v[0-9]+\.[0-9]+\.[0-9]+' "$file" 2>/dev/null | head -1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "unknown")
-
-  # Create backup
-  local backup="${file}.ace-backup-$(date +%Y%m%d-%H%M%S)"
-  cp "$file" "$backup"
-
-  # Check if file has proper markers for safe removal
-  if grep -q '<!-- ACE_SECTION_START' "$file" && grep -q '<!-- ACE_SECTION_END' "$file"; then
-    # Safe removal using sed - remove lines between markers (inclusive)
-    local start_line end_line
-    start_line=$(grep -n '<!-- ACE_SECTION_START' "$file" | head -1 | cut -d: -f1)
-    end_line=$(grep -n '<!-- ACE_SECTION_END' "$file" | head -1 | cut -d: -f1)
-
-    if [ -n "$start_line" ] && [ -n "$end_line" ] && [ "$start_line" -lt "$end_line" ]; then
-      # Remove ACE section (lines start_line through end_line) - all versions
-      sed -i '' "${start_line},${end_line}d" "$file"
-      # Clean up any resulting multiple blank lines
-      sed -i '' '/^$/N;/^\n$/d' "$file"
-      output_warning "🧹 [ACE] Removed deprecated v${version} instructions from ${location} CLAUDE.md. Hooks handle everything now. Backup: $(basename "$backup")"
-    fi
-  else
-    # No markers - check for skill-based content without markers (warn only)
-    if grep -q 'ace-orchestration:ace-\|ace:ace-' "$file" 2>/dev/null; then
-      output_warning "⚠️ [ACE] Deprecated ACE instructions in ${location} CLAUDE.md. Manual removal recommended (hooks handle everything automatically)."
-      # Remove backup since we didn't modify
-      rm -f "$backup" 2>/dev/null || true
-    fi
-  fi
-}
-
-# Check global CLAUDE.md
-cleanup_deprecated_claude "$HOME/CLAUDE.md" "global"
-
-# Check project CLAUDE.md (use CLAUDE_PROJECT_DIR if set, else pwd)
-PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
-if [ -n "$PROJECT_DIR" ] && [ -f "$PROJECT_DIR/CLAUDE.md" ]; then
-  cleanup_deprecated_claude "$PROJECT_DIR/CLAUDE.md" "project"
 fi
 
 # Success - ACE hooks can proceed (no flag file = enabled)

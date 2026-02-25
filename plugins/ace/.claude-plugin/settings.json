@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ace-cli *)",
+      "Bash(uv run *)",
+      "Bash(python3 -c *)"
+    ]
+  },
+  "env": {
+    "ACE_VERBOSITY": "detailed"
+  }
+}

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # ace_posttooluse_wrapper.sh - PostToolUse hook with tool accumulation
 # v5.4.7: Flag file check + ace-cli/ace-cli detection
-set -Eeuo pipefail
+set -euo pipefail
+trap 'exit 0' ERR
 
 # ACE disable flag check (set by SessionStart if CLI issues detected)
 # Official Claude Code pattern: flag file coordination between hooks
@@ -44,7 +45,7 @@ done
 # Check if accumulator exists
 [[ -f "${ACCUMULATOR}" ]] || {
   echo "[ERROR] ace_tool_accumulator.py not found: ${ACCUMULATOR}" >&2
-  exit 1
+  exit 0
 }
 
 # Read stdin (PostToolUse event JSON)

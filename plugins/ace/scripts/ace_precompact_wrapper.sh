@@ -8,6 +8,7 @@
 # 3. Saves them to temp file for SessionStart(compact) to inject
 
 set -euo pipefail
+trap 'exit 0' ERR
 
 ACE_PLUGIN_VERSION="5.4.28"
 
