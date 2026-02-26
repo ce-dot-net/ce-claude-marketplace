@@ -1658,18 +1658,15 @@ class TestAceInsightsCommand:
         )
 
     def test_has_bash_code_block_with_script(self, insights_content):
-        """The command must contain a bash code block with the actual script."""
+        """The command must contain a bash code block with a python3 -c command."""
         import re
         bash_blocks = re.findall(r'```bash\n(.*?)```', insights_content, re.DOTALL)
         assert len(bash_blocks) >= 1, "ace-insights.md must contain at least one bash code block"
 
-        # The main script block should have shebang and set -euo pipefail
-        main_script = bash_blocks[0]
-        assert "#!/usr/bin/env bash" in main_script, (
-            "Main bash block must start with #!/usr/bin/env bash"
-        )
-        assert "set -euo pipefail" in main_script, (
-            "Main bash block must contain 'set -euo pipefail' for safe execution"
+        # The main script block should start with python3 -c to match permission pattern
+        main_script = bash_blocks[0].strip()
+        assert main_script.startswith("python3 -c"), (
+            "Main bash block must start with 'python3 -c' to match Bash(python3 -c *) permission pattern"
         )
 
     def test_no_documentation_sections_before_instructions(self, insights_content):
@@ -1776,27 +1773,29 @@ class TestAceInsightsCommand:
     def test_analyzer_path_uses_plugin_root(self, insights_content):
         """The analyzer path must be constructed from CLAUDE_PLUGIN_ROOT.
 
-        The exact pattern should be:
-        ${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils/ace_insights_analyzer.py
+        In the python3 -c approach, the path is built via:
+        Path(os.environ.get('CLAUDE_PLUGIN_ROOT', '')) / 'shared-hooks' / 'utils' / 'ace_insights_analyzer.py'
         """
-        expected = "${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils/ace_insights_analyzer.py"
-        assert expected in insights_content, (
-            f"ace-insights.md must contain the analyzer path pattern: {expected}"
+        assert "CLAUDE_PLUGIN_ROOT" in insights_content, (
+            "ace-insights.md must reference CLAUDE_PLUGIN_ROOT env var for analyzer path"
+        )
+        assert "ace_insights_analyzer.py" in insights_content, (
+            "ace-insights.md must reference ace_insights_analyzer.py module"
         )
 
     def test_step1_and_step3_same_path(self, insights_content):
-        """Both Step 1 and Step 3 bash blocks must use the same CLAUDE_PLUGIN_ROOT path.
+        """Both Step 1 and Step 3 bash blocks must use the same CLAUDE_PLUGIN_ROOT path pattern.
 
         Previously, Step 1 and Step 3 had different path detection blocks which
         could lead to inconsistencies. Both must now use the identical
-        CLAUDE_PLUGIN_ROOT-based path.
+        CLAUDE_PLUGIN_ROOT-based path via os.environ.get('CLAUDE_PLUGIN_ROOT', '').
         """
         import re
         bash_blocks = re.findall(r'```bash\n(.*?)```', insights_content, re.DOTALL)
         assert len(bash_blocks) >= 2, (
             "ace-insights.md must have at least 2 bash blocks (Step 1 and Step 3)"
         )
-        expected = "${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils/ace_insights_analyzer.py"
+        expected = "os.environ.get('CLAUDE_PLUGIN_ROOT', '')"
         step1_block = bash_blocks[0]
         step3_block = bash_blocks[1]
         assert expected in step1_block, (

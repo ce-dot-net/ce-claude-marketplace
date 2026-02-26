@@ -5,6 +5,20 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.5.1] - 2026-02-26
+
+### Fixed
+- **Fix ace-insights permission storm**: Refactored `/ace-insights` Steps 1 and 3 from multi-line bash scripts to single `python3 -c "..."` commands that match the `Bash(python3 -c *)` permission pattern in settings.json. Users no longer get permission prompts when running `/ace-insights`.
+
+### Changed
+- `ace-insights.md`: Steps 1 and 3 now use inline `python3 -c` with `os.environ.get('CLAUDE_PLUGIN_ROOT', '')` for path detection instead of bash `${CLAUDE_PLUGIN_ROOT}` expansion
+- `test_plugin_settings.py`: Added `TestAceInsightsPermissions` class with 4 new tests verifying no shebangs, no `set -euo pipefail`, and that Steps 1/3 start with `python3 -c`
+- `test_ace_insights_analyzer.py`: Updated 3 tests to match new python3-c approach (path pattern, shebang checks)
+
+### Requirements
+- Claude Code >= 2.1.51
+- ace-cli >= 3.10.3
+
 ## [5.5.0] - 2026-02-25
 
 ### Added

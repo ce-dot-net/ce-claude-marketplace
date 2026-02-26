@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.5.0",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.5.0: last_assistant_message capture, default permissions, hook safety, deprecation cleanup. Requires: Claude Code >= 2.1.51, ace-cli >= 3.10.3.",
+  "version": "5.5.1",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.5.1: Fix ace-insights permission prompts. Requires: Claude Code >= 2.1.51, ace-cli >= 3.10.3.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
