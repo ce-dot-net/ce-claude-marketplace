@@ -16,42 +16,33 @@ When the user runs `/ace:ace-insights`, follow these three steps sequentially.
 Run this bash script to extract structured per-task data as JSON:
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-HOURS="${1:-24}"
-LOG_FILE=".claude/data/logs/ace-relevance.jsonl"
-
-if [ ! -f "$LOG_FILE" ]; then
-  echo "No relevance metrics found yet."
-  echo ""
-  echo "Metrics will be recorded after:"
-  echo "  1. Pattern searches (UserPromptSubmit hook)"
-  echo "  2. Domain shifts (PreToolUse hook)"
-  echo "  3. Task completions (Stop hook)"
-  echo ""
-  echo "Try running a few tasks with ACE enabled first!"
-  exit 0
-fi
-
-# Locate the analyzer module via CLAUDE_PLUGIN_ROOT (set by Claude Code for all plugins)
-ANALYZER="${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils/ace_insights_analyzer.py"
-
-if [ ! -f "$ANALYZER" ]; then
-  echo "ACE insights analyzer not found. Re-install the ACE plugin."
-  exit 1
-fi
-
-# Extract task data as JSON
 python3 -c "
-import json, sys
+import json, sys, os
 from pathlib import Path
 
-sys.path.insert(0, str(Path('${ANALYZER}').parent))
+hours = int(sys.argv[1]) if len(sys.argv) > 1 else 24
+log_path = Path('.claude/data/logs/ace-relevance.jsonl')
+
+if not log_path.exists():
+    print('No relevance metrics found yet.')
+    print('')
+    print('Metrics will be recorded after:')
+    print('  1. Pattern searches (UserPromptSubmit hook)')
+    print('  2. Domain shifts (PreToolUse hook)')
+    print('  3. Task completions (Stop hook)')
+    print('')
+    print('Try running a few tasks with ACE enabled first!')
+    sys.exit(0)
+
+analyzer_path = Path(os.environ.get('CLAUDE_PLUGIN_ROOT', '')) / 'shared-hooks' / 'utils' / 'ace_insights_analyzer.py'
+if not analyzer_path.exists():
+    print('ACE insights analyzer not found. Re-install the ACE plugin.')
+    sys.exit(1)
+
+sys.path.insert(0, str(analyzer_path.parent))
 from ace_insights_analyzer import extract_task_data_for_evaluation
 
 entries = []
-log_path = Path('${LOG_FILE}')
 for line in log_path.read_text().splitlines():
     line = line.strip()
     if line:
@@ -64,10 +55,9 @@ if not entries:
     print('No valid log entries found.')
     sys.exit(0)
 
-hours = int('${HOURS}')
 task_data = extract_task_data_for_evaluation(entries, hours=hours)
 print(json.dumps(task_data, indent=2))
-"
+" ${1:-24}
 ```
 
 **IMPORTANT**: Do NOT run additional bash commands to read or inspect the JSON output.
@@ -110,34 +100,26 @@ Produce your evaluation as a JSON object with this exact structure:
 Using your evaluation JSON from Step 2 and the task data JSON from Step 1, run this bash script. Replace `EVALUATION_JSON` with your actual evaluation JSON (properly escaped for Python):
 
 ```bash
-#!/usr/bin/env bash
-set -euo pipefail
-
-HOURS="${1:-24}"
-LOG_FILE=".claude/data/logs/ace-relevance.jsonl"
-
-# Locate the analyzer module via CLAUDE_PLUGIN_ROOT (set by Claude Code for all plugins)
-ANALYZER="${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils/ace_insights_analyzer.py"
-
-if [ ! -f "$ANALYZER" ]; then
-  echo "ACE insights analyzer not found. Re-install the ACE plugin."
-  exit 1
-fi
-
-REPORT_DIR="${HOME}/.claude/usage-data"
-mkdir -p "$REPORT_DIR"
-REPORT_FILE="${REPORT_DIR}/ace-insights.html"
-
 python3 -c "
-import json, sys
+import json, sys, os, subprocess, platform
 from pathlib import Path
 
-sys.path.insert(0, str(Path('${ANALYZER}').parent))
+hours = int(sys.argv[1]) if len(sys.argv) > 1 else 24
+log_path = Path('.claude/data/logs/ace-relevance.jsonl')
+
+analyzer_path = Path(os.environ.get('CLAUDE_PLUGIN_ROOT', '')) / 'shared-hooks' / 'utils' / 'ace_insights_analyzer.py'
+if not analyzer_path.exists():
+    print('ACE insights analyzer not found. Re-install the ACE plugin.')
+    sys.exit(1)
+
+report_dir = Path.home() / '.claude' / 'usage-data'
+report_dir.mkdir(parents=True, exist_ok=True)
+report_file = report_dir / 'ace-insights.html'
+
+sys.path.insert(0, str(analyzer_path.parent))
 from ace_insights_analyzer import extract_task_data_for_evaluation, generate_evaluated_html
 
-# Re-extract task data
 entries = []
-log_path = Path('${LOG_FILE}')
 for line in log_path.read_text().splitlines():
     line = line.strip()
     if line:
@@ -146,31 +128,22 @@ for line in log_path.read_text().splitlines():
         except json.JSONDecodeError:
             continue
 
-hours = int('${HOURS}')
 task_data = extract_task_data_for_evaluation(entries, hours=hours)
-
-# Claude's evaluation (injected by the LLM)
 evaluations = json.loads('''EVALUATION_JSON''')
-
-# Generate HTML with evaluations baked in
 html = generate_evaluated_html(task_data, evaluations, hours=hours)
-report_path = Path('${REPORT_FILE}')
-report_path.write_text(html)
+report_file.write_text(html)
 
 print(f'Tasks analyzed: {len(task_data.get(\"tasks\", []))}')
 print(f'Overall ACE helpfulness: {evaluations.get(\"overall_helpfulness_pct\", \"N/A\")}%')
 print(f'Summary: {evaluations.get(\"overall_summary\", \"\")}')
-print(f'Report saved to: ${REPORT_FILE}')
-"
+print(f'Report saved to: {report_file}')
+print('')
+print('Your LLM-evaluated insights report is ready:')
+print(f'  file://{report_file}')
 
-echo ""
-echo "Your LLM-evaluated insights report is ready:"
-echo "  file://${REPORT_FILE}"
-
-# Auto-open in browser on macOS
-if command -v open &>/dev/null; then
-  open "${REPORT_FILE}"
-fi
+if platform.system() == 'Darwin':
+    subprocess.run(['open', str(report_file)], check=False)
+" ${1:-24}
 ```
 
 **IMPORTANT**: In Step 3, replace the literal string `EVALUATION_JSON` with your actual JSON evaluation from Step 2. Ensure the JSON is valid and properly escaped (no unescaped single quotes inside the JSON string). Do NOT run any additional bash commands beyond Steps 1 and 3.
