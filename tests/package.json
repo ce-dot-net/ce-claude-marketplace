@@ -1,0 +1,22 @@
+{
+  "name": "@ce-claude-marketplace/tests",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Hook testing infrastructure for ACE plugin",
+  "scripts": {
+    "test": "bats hooks/*.bats && bats integration/*.bats",
+    "test:unit": "bats hooks/*.bats",
+    "test:integration": "bats integration/*.bats",
+    "test:watch": "nodemon --exec 'bats hooks/*.bats' --watch . --ext bats,sh",
+    "test:coverage": "bash helpers/coverage.sh",
+    "install:bats": "bash helpers/install-bats.sh"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "nodemon": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0",
+    "bun": ">=1.0.0"
+  }
+}
