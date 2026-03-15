@@ -5,6 +5,25 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [5.5.2] - 2026-03-15
+
+### Fixed
+- **Fix ace-doctor Check 5 projectId resolution**: Check 5 now reads `ACE_PROJECT_ID` from `.claude/settings.json` using the correct fallback pattern (`.env.ACE_PROJECT_ID // .projectId // empty`) instead of reading stale `projectId` from global config
+- **Increase search timeout from 10s to 30s**: `ace_cli.py` search and learn timeouts increased to handle cold-start embedding model loads on the server
+
+### Added
+- **Stale projectId warning in SessionStart**: `ace_install_cli.sh` now warns if `~/.config/ace/config.json` contains a stale `projectId` field (per-project field shouldn't be in global config)
+- **3 new tests**: `test_doctor_project_config.py` with static analysis tests for doctor and install_cli fixes
+
+### Changed
+- `plugins/ace/commands/ace-doctor.md`: Check 5 jq pattern fix for projectId resolution
+- `plugins/ace/scripts/ace_install_cli.sh`: Added stale projectId detection and warning
+- `plugins/ace/shared-hooks/utils/ace_cli.py`: Timeout 10s to 30s for search and learn commands
+
+### Requirements
+- Claude Code >= 2.1.51
+- ace-cli >= 3.10.3
+
 ## [5.5.1] - 2026-02-26
 
 ### Fixed

@@ -206,7 +206,7 @@ Recommended Actions:
 XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 SERVER_URL=$(jq -r '.serverUrl' "$XDG_HOME/ace/config.json")
 API_TOKEN=$(jq -r '.apiToken' "$XDG_HOME/ace/config.json")
-PROJECT_ID=$(jq -r '.projectId' .claude/settings.json)
+PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // .projectId // empty' .claude/settings.json)
 
 # Test connection to ACE server
 curl -s -X GET \
