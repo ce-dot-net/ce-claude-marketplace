@@ -113,6 +113,11 @@ if [ -f "$NEW_CONFIG" ]; then
   fi
 fi
 
+# 5b. Stale projectId in global config (per-project field should not be in global config)
+if [ -f "$NEW_CONFIG" ] && grep -q '"projectId"' "$NEW_CONFIG" 2>/dev/null; then
+  output_warning "⚠️ [ACE] Stale projectId in global config (~/.config/ace/config.json). projectId is per-project — use ACE_PROJECT_ID in .claude/settings.json instead. Remove projectId from global config."
+fi
+
 # 6. v5.4.13: Token expiration check (catches 48h standby scenario on new sessions)
 TOKEN_JSON=$($CLI_CMD whoami --json 2>/dev/null || echo '{}')
 AUTHENTICATED=$(echo "$TOKEN_JSON" | jq -r '.authenticated // false' 2>/dev/null)

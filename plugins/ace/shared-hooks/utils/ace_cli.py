@@ -74,7 +74,7 @@ def run_search(query: str, org: str = None, project: str = None, session_id: str
             cmd,
             input=query.encode('utf-8'),
             capture_output=True,
-            timeout=10,
+            timeout=30,
             env=env
         )
 
@@ -159,7 +159,7 @@ def run_learn(task: str, trajectory: str, success: bool, org: str = None, projec
             [CLI_CMD, 'learn', '--stdin', '--json'],
             input=json.dumps(payload).encode('utf-8'),
             capture_output=True,
-            timeout=10,
+            timeout=30,
             env=env
         )
 
