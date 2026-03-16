@@ -34,16 +34,6 @@
             "timeout": 30000
           }
         ]
-      },
-      {
-        "matcher": "compact",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_sessionstart_compact.sh",
-            "timeout": 10000
-          }
-        ]
       }
     ],
     "UserPromptSubmit": [
@@ -65,7 +55,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_posttooluse_wrapper.sh --log",
-            "timeout": 130000
+            "timeout": 15000
           }
         ]
       }
@@ -90,6 +80,30 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_stop_wrapper.sh --log --chat",
             "timeout": 130000
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_sessionend_wrapper.sh",
+            "timeout": 3000
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_postcompact_wrapper.sh",
+            "timeout": 5000
           }
         ]
       }

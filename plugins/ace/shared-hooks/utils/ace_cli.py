@@ -1,27 +1,14 @@
 #!/usr/bin/env python3
-"""ACE CLI Subprocess Wrapper - Calls ace-cli (or ace-cli fallback) with --stdin pattern"""
+"""ACE CLI Subprocess Wrapper - Calls ace-cli with --stdin pattern"""
 
 import subprocess
 import json
 import os
-import shutil
 from typing import Optional, Dict, Any
 
 
-def get_cli_command() -> str:
-    """
-    Get the ACE CLI command name (ace-cli preferred, ace-cli fallback)
-
-    Returns:
-        'ace-cli' if available, otherwise 'ce-ace'
-    """
-    if shutil.which('ace-cli'):
-        return 'ace-cli'
-    return 'ce-ace'
-
-
-# Cache the CLI command at module load time
-CLI_CMD = get_cli_command()
+# v6.0.0: Legacy CLI removed, ace-cli is the only supported command
+CLI_CMD = 'ace-cli'
 
 
 def run_search(query: str, org: str = None, project: str = None, session_id: str = None) -> Optional[Dict[str, Any]]:

@@ -10,7 +10,7 @@
 
 set -eo pipefail
 
-ACE_PLUGIN_VERSION="5.4.7"
+ACE_PLUGIN_VERSION="6.0.0"
 
 # ACE disable flag check (set by SessionStart if CLI issues detected)
 # Official Claude Code pattern: flag file coordination between hooks
@@ -21,14 +21,11 @@ if [ -f "$ACE_DISABLED_FLAG" ]; then
   exit 0
 fi
 
-# CLI command detection (ace-cli preferred, ace-cli fallback)
-if command -v ace-cli >/dev/null 2>&1; then
-  CLI_CMD="ace-cli"
-elif command -v ace-cli >/dev/null 2>&1; then
-  CLI_CMD="ce-ace"
-else
+# CLI command detection
+if ! command -v ace-cli >/dev/null 2>&1; then
   exit 0  # No CLI available - exit silently
 fi
+CLI_CMD="ace-cli"
 
 # Dynamic domain matching - no hardcoded lists!
 # Splits hyphenated domains into words and matches each word against path segments

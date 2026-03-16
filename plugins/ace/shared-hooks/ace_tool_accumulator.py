@@ -52,17 +52,25 @@ def init_db(db_path: Path = None) -> sqlite3.Connection:
             tool_input TEXT,
             tool_response TEXT,
             tool_use_id TEXT,
+            agent_id TEXT,
             timestamp TEXT,
             UNIQUE(tool_use_id)
         )
     ''')
+    # v6.0.0: Add agent_id column if upgrading from older schema
+    try:
+        conn.execute('ALTER TABLE tool_uses ADD COLUMN agent_id TEXT')
+        conn.commit()
+    except sqlite3.OperationalError:
+        pass  # Column already exists
     conn.execute('CREATE INDEX IF NOT EXISTS idx_session ON tool_uses(session_id)')
     conn.commit()
     return conn
 
 
 def append_tool(session_id: str, tool_name: str, tool_input: dict,
-                tool_response: dict, tool_use_id: str, working_dir: str = None) -> bool:
+                tool_response: dict, tool_use_id: str, agent_id: str = None,
+                working_dir: str = None) -> bool:
     """
     Append tool use to accumulator (called by PostToolUse hook).
 
@@ -72,6 +80,7 @@ def append_tool(session_id: str, tool_name: str, tool_input: dict,
         tool_input: Tool input parameters (dict)
         tool_response: Tool response/result (dict)
         tool_use_id: Unique tool use ID from Claude Code
+        agent_id: Agent ID for per-agent trajectory (CC 2.1.69+, optional)
         working_dir: Project working directory (optional)
 
     Returns:
@@ -83,14 +92,15 @@ def append_tool(session_id: str, tool_name: str, tool_input: dict,
 
         conn.execute('''
             INSERT OR IGNORE INTO tool_uses
-            (session_id, tool_name, tool_input, tool_response, tool_use_id, timestamp)
-            VALUES (?, ?, ?, ?, ?, datetime('now'))
+            (session_id, tool_name, tool_input, tool_response, tool_use_id, agent_id, timestamp)
+            VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
         ''', (
             session_id,
             tool_name,
             json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input),
             json.dumps(tool_response) if isinstance(tool_response, dict) else str(tool_response),
-            tool_use_id
+            tool_use_id,
+            agent_id or None
         ))
         conn.commit()
         conn.close()
@@ -112,7 +122,7 @@ def get_session_tools(session_id: str, working_dir: str = None) -> list:
         working_dir: Project working directory (optional)
 
     Returns:
-        List of tuples: (tool_name, tool_input_json, tool_response_json, tool_use_id)
+        List of tuples: (tool_name, tool_input_json, tool_response_json, tool_use_id, agent_id)
     """
     try:
         db_path = get_db_path(working_dir)
@@ -121,7 +131,7 @@ def get_session_tools(session_id: str, working_dir: str = None) -> list:
 
         conn = init_db(db_path)
         cursor = conn.execute('''
-            SELECT tool_name, tool_input, tool_response, tool_use_id
+            SELECT tool_name, tool_input, tool_response, tool_use_id, agent_id
             FROM tool_uses
             WHERE session_id = ?
             ORDER BY id
@@ -205,6 +215,7 @@ def main():
     append_parser.add_argument('--tool-input', required=True, help='Tool input (JSON)')
     append_parser.add_argument('--tool-response', required=True, help='Tool response (JSON)')
     append_parser.add_argument('--tool-use-id', required=True, help='Tool use ID')
+    append_parser.add_argument('--agent-id', default='', help='Agent ID (CC 2.1.69+)')
     append_parser.add_argument('--working-dir', help='Working directory')
 
     # get command
@@ -240,6 +251,7 @@ def main():
             tool_input=tool_input,
             tool_response=tool_response,
             tool_use_id=args.tool_use_id,
+            agent_id=args.agent_id or None,
             working_dir=args.working_dir
         )
         print(json.dumps({'success': success}))
@@ -248,12 +260,13 @@ def main():
     elif args.command == 'get':
         tools = get_session_tools(args.session_id, args.working_dir)
         result = []
-        for tool_name, tool_input, tool_response, tool_use_id in tools:
+        for tool_name, tool_input, tool_response, tool_use_id, agent_id in tools:
             result.append({
                 'tool_name': tool_name,
                 'tool_input': json.loads(tool_input) if tool_input else {},
                 'tool_response': json.loads(tool_response) if tool_response else {},
-                'tool_use_id': tool_use_id
+                'tool_use_id': tool_use_id,
+                'agent_id': agent_id
             })
         print(json.dumps(result, indent=2))
 

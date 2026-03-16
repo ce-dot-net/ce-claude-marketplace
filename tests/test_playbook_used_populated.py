@@ -113,7 +113,7 @@ def simulate_after_task_read_and_build_trace(
     trajectory = []
     has_errors = False
     if tools:
-        for i, (tool_name, tool_input_json, tool_response_json, tool_use_id) in enumerate(tools, 1):
+        for i, (tool_name, tool_input_json, tool_response_json, tool_use_id, *_extra) in enumerate(tools, 1):
             trajectory.append({
                 "step": i,
                 "tool": tool_name,

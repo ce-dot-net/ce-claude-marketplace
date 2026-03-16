@@ -1045,35 +1045,31 @@ class TestHooksJsonConfig:
         self.hooks_data = json.loads(HOOKS_JSON_PATH.read_text())
         self.hooks = self.hooks_data["hooks"]
 
-    def test_compact_matcher_exists(self):
+    def test_consolidated_sessionstart_handles_compact(self):
         """
-        Test scenario 16: A 'compact' matcher must exist in SessionStart hooks.
+        v6.0.0: Consolidated SessionStart handles compact via source field.
+        The main ace_install_cli.sh reads .source from stdin and branches.
         """
         session_start_hooks = self.hooks.get("SessionStart", [])
-        matchers = [h.get("matcher") for h in session_start_hooks]
-        assert "compact" in matchers, (
-            f"Expected 'compact' matcher in SessionStart hooks. "
-            f"Found matchers: {matchers}"
+        assert len(session_start_hooks) == 1, (
+            f"v6.0.0: SessionStart should have 1 consolidated entry, "
+            f"got {len(session_start_hooks)}"
         )
-
-    def test_compact_matcher_routes_to_correct_script(self):
-        """
-        Test scenario 17: The compact matcher must route to
-        ace_sessionstart_compact.sh.
-        """
-        session_start_hooks = self.hooks.get("SessionStart", [])
-        compact_entry = None
-        for entry in session_start_hooks:
-            if entry.get("matcher") == "compact":
-                compact_entry = entry
-                break
-
-        assert compact_entry is not None, "compact matcher entry not found"
-        commands = [h.get("command", "") for h in compact_entry.get("hooks", [])]
-        assert any("ace_sessionstart_compact.sh" in cmd for cmd in commands), (
-            f"compact matcher must route to ace_sessionstart_compact.sh. "
+        # The single entry should route to ace_install_cli.sh
+        commands = [h.get("command", "") for h in session_start_hooks[0].get("hooks", [])]
+        assert any("ace_install_cli.sh" in cmd for cmd in commands), (
+            f"Consolidated SessionStart must route to ace_install_cli.sh. "
             f"Found commands: {commands}"
         )
+
+    def test_install_cli_handles_compact_source(self):
+        """
+        v6.0.0: ace_install_cli.sh must handle source=compact for pattern restoration.
+        """
+        install_cli = HOOKS_JSON_PATH.parent.parent / "scripts" / "ace_install_cli.sh"
+        content = install_cli.read_text()
+        assert '.source' in content, "Script must read .source field from event"
+        assert 'compact' in content, "Script must handle compact source"
 
     def test_precompact_entry_still_exists(self):
         """
@@ -1096,31 +1092,28 @@ class TestHooksJsonConfig:
             f"Found commands: {commands}"
         )
 
-    def test_sessionstart_has_both_default_and_compact(self):
-        """SessionStart must have both a default matcher and a compact matcher."""
+    def test_sessionstart_has_default_matcher(self):
+        """SessionStart must have a default (empty) matcher."""
         session_start_hooks = self.hooks.get("SessionStart", [])
         matchers = [h.get("matcher") for h in session_start_hooks]
         assert "" in matchers, "SessionStart must have a default (empty) matcher"
-        assert "compact" in matchers, "SessionStart must have a 'compact' matcher"
 
-    def test_compact_hook_has_timeout(self):
-        """The compact hook entry must have a timeout configured."""
+    def test_sessionstart_hook_has_timeout(self):
+        """The SessionStart hook entry must have a timeout configured."""
         session_start_hooks = self.hooks.get("SessionStart", [])
         for entry in session_start_hooks:
-            if entry.get("matcher") == "compact":
-                for hook in entry.get("hooks", []):
-                    assert "timeout" in hook, (
-                        "compact hook must have a timeout configured"
-                    )
-                    assert hook["timeout"] > 0
+            for hook in entry.get("hooks", []):
+                assert "timeout" in hook, (
+                    "SessionStart hook must have a timeout configured"
+                )
+                assert hook["timeout"] > 0
 
-    def test_compact_hook_type_is_command(self):
-        """The compact hook must be of type 'command'."""
+    def test_sessionstart_hook_type_is_command(self):
+        """The SessionStart hook must be of type 'command'."""
         session_start_hooks = self.hooks.get("SessionStart", [])
         for entry in session_start_hooks:
-            if entry.get("matcher") == "compact":
-                for hook in entry.get("hooks", []):
-                    assert hook.get("type") == "command"
+            for hook in entry.get("hooks", []):
+                assert hook.get("type") == "command"
 
 
 # ===========================================================================

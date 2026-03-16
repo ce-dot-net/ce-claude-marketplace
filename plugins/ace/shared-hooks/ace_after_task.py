@@ -33,7 +33,6 @@ import json
 import sys
 import subprocess
 import os
-import shutil
 from pathlib import Path
 from datetime import datetime
 
@@ -53,8 +52,8 @@ from validation import is_valid_pattern_id
 import re as regex_module
 import time
 
-# CLI command detection (ace-cli preferred, ace-cli fallback)
-CLI_CMD = 'ace-cli' if shutil.which('ace-cli') else 'ce-ace'
+# CLI command detection
+CLI_CMD = 'ace-cli'
 
 
 def is_trivial_task(task_description: str) -> bool:
@@ -269,7 +268,7 @@ def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = 
     tools = get_session_tools(session_id, working_dir)
     trajectory = []
 
-    for i, (tool_name, tool_input_json, tool_response_json, tool_use_id) in enumerate(tools, 1):
+    for i, (tool_name, tool_input_json, tool_response_json, tool_use_id, agent_id) in enumerate(tools, 1):
         try:
             tool_input = json.loads(tool_input_json) if tool_input_json else {}
         except json.JSONDecodeError:
@@ -476,16 +475,9 @@ def main():
             except Exception:
                 pass
 
-        # v5.4.11: Read agent_type set by SessionStart hook (Claude Code 2.1.2+)
+        # v6.0.0: Read agent_type natively from hook event (CC 2.1.69+)
         # agent_type identifies subagent type: "main", "refactorer", "coder", etc.
-        # Server can use this to attribute learning to specific agent types
-        agent_type = "main"
-        try:
-            agent_type_file = Path(f"/tmp/ace-agent-type-{session_id}.txt")
-            if agent_type_file.exists():
-                agent_type = agent_type_file.read_text().strip() or "main"
-        except Exception:
-            pass  # Default to "main" if file not found
+        agent_type = event.get('agent_type', 'main')
 
         # Build the trace
         trace = {

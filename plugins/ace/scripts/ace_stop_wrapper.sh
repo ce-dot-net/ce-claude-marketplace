@@ -13,14 +13,11 @@ if [ -f "$ACE_DISABLED_FLAG" ]; then
   exit 0
 fi
 
-# CLI command detection (ace-cli preferred, ace-cli fallback)
-if command -v ace-cli >/dev/null 2>&1; then
-  CLI_CMD="ace-cli"
-elif command -v ace-cli >/dev/null 2>&1; then
-  CLI_CMD="ce-ace"
-else
+# CLI command detection
+if ! command -v ace-cli >/dev/null 2>&1; then
   exit 0  # No CLI available - exit silently
 fi
+CLI_CMD="ace-cli"
 
 # Resolve paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,7 +26,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="5.4.7"
+export ACE_PLUGIN_VERSION="6.0.0"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
