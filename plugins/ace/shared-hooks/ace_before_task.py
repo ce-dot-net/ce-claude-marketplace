@@ -116,16 +116,9 @@ def main():
         session_id = event.get('session_id', str(uuid.uuid4()))
         use_session_pinning = check_session_pinning_available()
 
-        # v5.4.11: Read agent_type set by SessionStart hook (Claude Code 2.1.2+)
+        # v6.0.0: Read agent_type natively from hook event (CC 2.1.69+)
         # agent_type identifies subagent type: "main", "refactorer", "coder", etc.
-        agent_type = "main"
-        try:
-            # SessionStart creates this file with agent_type from Claude Code input
-            agent_type_file = Path(f"/tmp/ace-agent-type-{event.get('session_id', 'default')}.txt")
-            if agent_type_file.exists():
-                agent_type = agent_type_file.read_text().strip() or "main"
-        except Exception:
-            pass  # Default to "main" if file not found or unreadable
+        agent_type = event.get('agent_type', 'main')
 
         # Store session ID for PreCompact hook (recall patterns after compaction)
         if use_session_pinning and context['project']:

@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "5.4.17",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v5.4.17: Fix Relevance Report Parsing. Requires: Claude Code >= 2.1.2, ace-cli >= 3.5.0.",
+  "version": "6.0.0",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.0.0: Native agent_type from CC events, SessionEnd cleanup, PostCompact logging. Requires: Claude Code >= 2.1.69, ace-cli >= 3.10.3.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

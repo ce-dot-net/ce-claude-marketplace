@@ -35,8 +35,8 @@ def main():
             print(json.dumps({}))
             sys.exit(0)
 
-        # Check for ACE CLI commands (supports both ace-cli and legacy ce-ace)
-        if 'ace-cli' not in command and 'ce-ace' not in command:
+        # Check for ACE CLI commands
+        if 'ace-cli' not in command:
             # Not an ACE command - pass through
             print(json.dumps({}))
             sys.exit(0)

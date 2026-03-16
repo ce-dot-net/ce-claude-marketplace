@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# ACE SessionStart Hook - CLI Detection & Migration
-# v5.5.0: Removed deprecated CLAUDE.md cleanup (template deleted)
+# ACE SessionStart Hook - Consolidated CLI Detection, Migration & Pattern Restoration
+# v6.0.0: Consolidated SessionStart (source field routing for CC 2.1.69+)
+#   - startup: Full CLI check, version validation, auth check
+#   - resume: Light CLI availability check only (already validated)
+#   - compact: Pattern restoration from PreCompact temp file
+#   - clear: Full CLI check + pattern restoration
 # v5.4.22: Deprecated config detection (old ~/.ace/config.json or apiToken format)
 # v5.4.13: Token expiration check (catches 48h standby on new sessions)
-# v5.4.11: Capture agent_type from Claude Code 2.1.2+
 # v5.4.7: Flag-based hook disable + daily update check
-# Command: ace-cli (new) or ce-ace (deprecated)
+# Command: ace-cli
 #
 # Official Claude Code Hook Pattern:
 # - Exit 0 with systemMessage for warnings (session continues)
@@ -16,25 +19,21 @@
 set -eo pipefail
 trap 'exit 0' ERR
 
-# Read stdin JSON (Claude Code 2.1.2+ provides agent_type)
+# Read stdin JSON (Claude Code 2.1.69+ provides source, agent_type, agent_id)
 INPUT_JSON=$(cat 2>/dev/null || echo "{}")
 
-# Extract session_id from input (fall back to env var or default)
+# Extract session_id from input (fall back to default)
 SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // empty' 2>/dev/null || echo "")
-SESSION_ID="${SESSION_ID:-${SESSION_ID:-default}}"
+SESSION_ID="${SESSION_ID:-default}"
 
-# v5.4.11: Extract agent_type (new in Claude Code 2.1.2)
-# agent_type identifies subagent type: "main", "refactorer", "coder", etc.
-AGENT_TYPE=$(echo "$INPUT_JSON" | jq -r '.agent_type // "main"' 2>/dev/null || echo "main")
+# v6.0.0: Extract source field for consolidated SessionStart (CC 2.1.69+)
+# source: 'startup' | 'resume' | 'compact' | 'clear'
+SOURCE=$(echo "$INPUT_JSON" | jq -r '.source // "startup"' 2>/dev/null || echo "startup")
 
 # Flag file to disable other ACE hooks (per-session, temp directory)
 ACE_DISABLED_FLAG="/tmp/ace-disabled-${SESSION_ID}.flag"
-ACE_AGENT_TYPE_FILE="/tmp/ace-agent-type-${SESSION_ID}.txt"
 CACHE_FILE="/tmp/ace-update-check-$(date +%Y%m%d).txt"
 MIN_VERSION="3.10.3"
-
-# Save agent_type for other hooks (before_task.py, after_task.py)
-echo "$AGENT_TYPE" > "$ACE_AGENT_TYPE_FILE" 2>/dev/null || true
 
 # Helper: Disable ACE hooks by creating flag file
 disable_ace_hooks() {
@@ -48,34 +47,96 @@ output_warning() {
   jq -n --arg msg "$msg" '{"systemMessage": $msg}'
 }
 
-# Clear any previous disable flag (new session)
-rm -f "$ACE_DISABLED_FLAG" 2>/dev/null || true
+# Helper: Restore patterns from PreCompact temp file (compact/clear sources)
+restore_patterns_after_compact() {
+  # Resolve SESSION_ID using same source as PreCompact (ace-session file)
+  local PROJECT_ID
+  PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+  local SESSION_FILE="/tmp/ace-session-${PROJECT_ID}.txt"
+  local RESTORE_SESSION_ID="$SESSION_ID"
 
-# 1. Check if ace-cli exists (new command name)
-if ! command -v ace-cli >/dev/null 2>&1; then
-  # Fallback: Check old ce-ace command (deprecated)
-  if command -v ce-ace >/dev/null 2>&1; then
-    # Old command found - warn but allow (transition period)
-    output_warning "⚠️ [ACE] Deprecated command 'ce-ace' detected. Upgrade: npm uninstall -g @ce-dot-net/ce-ace-cli && npm install -g @ace-sdk/cli"
-    CLI_CMD="ce-ace"
-  else
-    # No CLI at all - disable ACE hooks
-    disable_ace_hooks "CLI not installed"
-    output_warning "⛔ [ACE] ace-cli not found. Install: npm install -g @ace-sdk/cli. ACE hooks DISABLED."
-    exit 0  # Exit 0 to not disrupt Claude Code (flag file disables other hooks)
+  if [ -n "$PROJECT_ID" ] && [ -f "$SESSION_FILE" ]; then
+    RESTORE_SESSION_ID=$(cat "$SESSION_FILE" 2>/dev/null || echo "$SESSION_ID")
   fi
-else
-  CLI_CMD="ace-cli"
-fi
 
-# 2. Detect old deprecated package (causes 422 errors)
-# Use grep -q for boolean check instead of grep -c which can have parsing issues
-if npm list -g @ce-dot-net/ce-ace-cli 2>/dev/null | grep -q "@ce-dot-net"; then
-  # Old package detected - disable ACE hooks and show migration instructions
-  disable_ace_hooks "Deprecated package @ce-dot-net/ce-ace-cli"
-  output_warning "⛔ [ACE] DEPRECATED: @ce-dot-net/ce-ace-cli causes 422 API errors. Migrate: npm uninstall -g @ce-dot-net/ce-ace-cli && npm install -g @ace-sdk/cli. ACE hooks DISABLED."
+  local TEMP_FILE="/tmp/ace-patterns-precompact-${RESTORE_SESSION_ID}.json"
+
+  if [ ! -f "$TEMP_FILE" ]; then
+    return 0
+  fi
+
+  local PATTERN_DATA PATTERNS COUNT
+  PATTERN_DATA=$(cat "$TEMP_FILE" 2>/dev/null || echo "{}")
+  PATTERNS=$(echo "$PATTERN_DATA" | jq -r '.patterns // ""' 2>/dev/null || echo "")
+  COUNT=$(echo "$PATTERN_DATA" | jq -r '.count // "0"' 2>/dev/null || echo "0")
+
+  rm -f "$TEMP_FILE" 2>/dev/null || true
+
+  if [ -z "$PATTERNS" ] || [ "$COUNT" = "0" ]; then
+    return 0
+  fi
+
+  jq -n \
+    --arg patterns "$PATTERNS" \
+    --arg session "$RESTORE_SESSION_ID" \
+    --arg count "$COUNT" \
+    '{
+      "systemMessage": "📚 [ACE] Restored \($count) patterns after compaction",
+      "hookSpecificOutput": {
+        "hookEventName": "SessionStart",
+        "additionalContext": "<!-- ACE Patterns (preserved from session \($session)) -->\n<ace-patterns-recalled>\n\($patterns)\n</ace-patterns-recalled>"
+      }
+    }'
+}
+
+# ======================================================================
+# Source-based routing (v6.0.0: consolidated SessionStart)
+# ======================================================================
+
+case "$SOURCE" in
+  compact)
+    # After compaction: restore patterns only (CLI already validated)
+    # ACE disable flag check
+    if [ -f "$ACE_DISABLED_FLAG" ]; then
+      exit 0
+    fi
+    restore_patterns_after_compact
+    exit 0
+    ;;
+
+  resume)
+    # Resumed session: light CLI check only (skip version/auth/config)
+    rm -f "$ACE_DISABLED_FLAG" 2>/dev/null || true
+    if ! command -v ace-cli >/dev/null 2>&1; then
+      disable_ace_hooks "CLI not installed"
+      output_warning "⛔ [ACE] ace-cli not found. Install: npm install -g @ace-sdk/cli. ACE hooks DISABLED."
+    fi
+    exit 0
+    ;;
+
+  clear)
+    # User cleared context: full CLI check + restore patterns
+    rm -f "$ACE_DISABLED_FLAG" 2>/dev/null || true
+    # Fall through to full CLI check below, then restore patterns at the end
+    ;;
+
+  *)
+    # startup or unknown: full CLI check
+    rm -f "$ACE_DISABLED_FLAG" 2>/dev/null || true
+    ;;
+esac
+
+# ======================================================================
+# Full CLI check (startup + clear sources)
+# ======================================================================
+
+# 1. Check if ace-cli exists
+if ! command -v ace-cli >/dev/null 2>&1; then
+  disable_ace_hooks "CLI not installed"
+  output_warning "⛔ [ACE] ace-cli not found. Install: npm install -g @ace-sdk/cli. ACE hooks DISABLED."
   exit 0
 fi
+CLI_CMD="ace-cli"
 
 # 3. Check version meets minimum
 CURRENT_VERSION=$($CLI_CMD --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' || echo "0.0.0")
@@ -133,6 +194,11 @@ elif [ -n "$TOKEN_STATUS" ]; then
     # Token expires in minutes - warn user
     output_warning "⚠️ [ACE] Session expires soon ($TOKEN_STATUS). Consider /ace-login."
   fi
+fi
+
+# v6.0.0: On clear source, also try to restore patterns
+if [ "$SOURCE" = "clear" ]; then
+  restore_patterns_after_compact
 fi
 
 # Success - ACE hooks can proceed (no flag file = enabled)

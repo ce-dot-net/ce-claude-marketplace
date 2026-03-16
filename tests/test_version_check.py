@@ -2,12 +2,14 @@
 """
 TDD Tests for ACE SessionStart hook VERSION CHECK logic.
 
-Tests the version check logic (sections 1-4) in
-plugins/ace/scripts/ace_install_cli.sh (lines 53-97):
-  1. CLI Detection (ace-cli vs ce-ace vs missing)
-  2. Deprecated Package Detection (@ce-dot-net/ce-ace-cli)
-  3. Version Comparison (sort -V -C against MIN_VERSION)
-  4. Daily Update Check (cache file + npm show)
+Tests the version check logic (sections 1-3) in
+plugins/ace/scripts/ace_install_cli.sh:
+  1. CLI Detection (ace-cli or missing)
+  2. Version Comparison (sort -V -C against MIN_VERSION)
+  3. Daily Update Check (cache file + npm show)
+
+v6.0.0: Legacy CLI fallback and deprecated package detection removed.
+         ace-cli is the only supported CLI command.
 
 Harness Approach:
   - Extract the relevant bash logic into a minimal test harness
@@ -15,9 +17,6 @@ Harness Approach:
     using PATH manipulation (create fake binaries in a temp bin dir)
   - Test via subprocess.run()
   - Each test is independent (creates its own temp environment)
-
-NOTE: Lines 54-56 of ace_install_cli.sh had a copy-paste bug (fixed in v5.4.27):
-  The inner check now correctly uses 'command -v ce-ace' for the deprecated fallback.
 
 Run with: pytest tests/test_version_check.py -v
 """
@@ -53,8 +52,7 @@ SCRIPT_PATH = PROJECT_ROOT / "plugins" / "ace" / "scripts" / "ace_install_cli.sh
 #
 # Stub binaries the harness expects to find (or not) in FAKE_BIN_DIR:
 #   ace-cli        - stub for the ace-cli command
-#   ce-ace         - stub for the deprecated ce-ace command
-#   npm            - stub for npm list/show commands
+#   npm            - stub for npm show commands
 #   sort           - stub for sort -V -C (optional; falls through to real sort)
 #   jq             - stub for jq (minimal, not needed for version check)
 
@@ -86,29 +84,16 @@ VERSION_CHECK_HARNESS = textwrap.dedent("""\
     # Clear any previous disable flag
     rm -f "$ACE_DISABLED_FLAG" 2>/dev/null || true
 
-    # ===== SECTION 1: CLI Detection (lines 53-68 of source) =====
+    # ===== SECTION 1: CLI Detection =====
+    # v6.0.0: ace-cli is the only supported CLI command
     if ! command -v ace-cli >/dev/null 2>&1; then
-      # Fallback: Check old ce-ace command (deprecated)
-      if command -v ce-ace >/dev/null 2>&1; then
-        output_warning "WARNING_DEPRECATED_CMD"
-        CLI_CMD="ce-ace"
-      else
-        disable_ace_hooks "CLI not installed"
-        output_warning "ERROR_CLI_NOT_FOUND"
-        exit 0
-      fi
-    else
-      CLI_CMD="ace-cli"
-    fi
-
-    # ===== SECTION 2: Deprecated Package Detection (lines 70-77) =====
-    if npm list -g @ce-dot-net/ce-ace-cli 2>/dev/null | grep -q "@ce-dot-net"; then
-      disable_ace_hooks "Deprecated package @ce-dot-net/ce-ace-cli"
-      output_warning "ERROR_DEPRECATED_PKG"
+      disable_ace_hooks "CLI not installed"
+      output_warning "ERROR_CLI_NOT_FOUND"
       exit 0
     fi
+    CLI_CMD="ace-cli"
 
-    # ===== SECTION 3: Version Comparison (lines 79-86) =====
+    # ===== SECTION 2: Version Comparison =====
     CURRENT_VERSION=$($CLI_CMD --version 2>/dev/null | grep -oE '[0-9]+\\.[0-9]+\\.[0-9]+' || echo "0.0.0")
     if ! printf '%s\\n' "$MIN_VERSION" "$CURRENT_VERSION" | sort -V -C 2>/dev/null; then
       disable_ace_hooks "CLI version $CURRENT_VERSION < $MIN_VERSION"
@@ -116,7 +101,7 @@ VERSION_CHECK_HARNESS = textwrap.dedent("""\
       exit 0
     fi
 
-    # ===== SECTION 4: Daily Update Check (lines 88-97) =====
+    # ===== SECTION 3: Daily Update Check =====
     if [ ! -f "$CACHE_FILE" ]; then
       LATEST=$(npm show @ace-sdk/cli version 2>/dev/null || echo "")
       echo "$LATEST" > "$CACHE_FILE" 2>/dev/null || true
@@ -170,17 +155,6 @@ class VersionCheckHarness:
             exit 0
         """))
 
-    def add_ce_ace(self, version: str = "3.10.3"):
-        """Add a fake ce-ace (deprecated command) that reports the given version."""
-        self._write_stub("ce-ace", textwrap.dedent(f"""\
-            #!/usr/bin/env bash
-            if [ "$1" = "--version" ]; then
-              echo "ce-ace v{version}"
-              exit 0
-            fi
-            exit 0
-        """))
-
     def add_ace_cli_broken_version(self):
         """Add an ace-cli that fails on --version (outputs garbage)."""
         self._write_stub("ace-cli", textwrap.dedent("""\
@@ -192,21 +166,15 @@ class VersionCheckHarness:
             exit 0
         """))
 
-    def add_npm(self, global_list_output: str = "", show_version: str = ""):
+    def add_npm(self, show_version: str = ""):
         """
         Add a fake npm stub.
 
         Args:
-            global_list_output: What 'npm list -g @ce-dot-net/ce-ace-cli' returns.
-                                If it contains "@ce-dot-net", deprecated pkg is detected.
             show_version: What 'npm show @ace-sdk/cli version' returns.
         """
         self._write_stub("npm", textwrap.dedent(f"""\
             #!/usr/bin/env bash
-            if [ "$1" = "list" ] && [ "$2" = "-g" ]; then
-              echo '{global_list_output}'
-              exit 0
-            fi
             if [ "$1" = "show" ] && [ "$2" = "@ace-sdk/cli" ]; then
               echo '{show_version}'
               exit 0
@@ -221,20 +189,9 @@ class VersionCheckHarness:
             exit 1
         """))
 
-    def add_npm_list_empty_show_version(self, show_version: str = ""):
-        """Add npm where list returns empty but show returns a version."""
-        self._write_stub("npm", textwrap.dedent(f"""\
-            #!/usr/bin/env bash
-            if [ "$1" = "list" ] && [ "$2" = "-g" ]; then
-              echo '(empty)'
-              exit 0
-            fi
-            if [ "$1" = "show" ] && [ "$2" = "@ace-sdk/cli" ]; then
-              echo '{show_version}'
-              exit 0
-            fi
-            exit 1
-        """))
+    def add_npm_with_show_version(self, show_version: str = ""):
+        """Add npm where show returns a specific version."""
+        self.add_npm(show_version=show_version)
 
     def set_cache_file(self, content: str):
         """Pre-populate the update check cache file."""
@@ -343,8 +300,8 @@ def harness(tmp_path):
 
 class TestCLIDetection:
     """
-    Section 1: CLI Detection (lines 53-68).
-    Tests whether ace-cli, ce-ace, or no CLI is found.
+    Section 1: CLI Detection.
+    Tests whether ace-cli is found or missing (v6.0.0: only ace-cli supported).
     """
 
     def test_ace_cli_found_sets_cli_cmd(self, harness):
@@ -376,91 +333,16 @@ class TestCLIDetection:
         error_msgs = [w for w in result["warnings"] if "ERROR_CLI_NOT_FOUND" in w]
         assert len(error_msgs) == 1
 
-    def test_only_ce_ace_found_deprecated_fallback(self, harness):
-        """
-        When only ce-ace is on PATH (deprecated command), the script should:
-        - Detect it via 'command -v ce-ace'
-        - Emit a deprecation warning
-        - Set CLI_CMD="ce-ace" and continue (transition period)
-        """
-        harness.add_ce_ace(version="3.10.3")
-        result = harness.run()
-
-        # ce-ace found as fallback - warns but does NOT disable
-        assert "WARNING_DEPRECATED_CMD" in result["warnings"]
-        assert result["disable_flag_exists"] is False
 
 
 # ===========================================================================
-# SECTION 2: Deprecated Package Detection Tests
-# ===========================================================================
-
-
-class TestDeprecatedPackageDetection:
-    """
-    Section 2: Deprecated Package Detection (lines 70-77).
-    Tests npm list -g @ce-dot-net/ce-ace-cli detection.
-    """
-
-    def test_deprecated_package_installed_disables_hooks(self, harness):
-        """When @ce-dot-net/ce-ace-cli is installed globally, hooks are disabled."""
-        harness.add_ace_cli(version="3.10.3")
-        harness.add_npm(
-            global_list_output="/usr/local/lib\n`-- @ce-dot-net/ce-ace-cli@1.0.14",
-            show_version="3.10.3",
-        )
-        result = harness.run()
-
-        assert result["exit_code"] == 0
-        assert result["disable_flag_exists"] is True
-        assert "Deprecated package" in result["disable_flag_reason"]
-        assert "ERROR_DEPRECATED_PKG" in result["warnings"]
-
-    def test_deprecated_package_not_installed_continues(self, harness):
-        """When the old package is NOT installed, script continues normally."""
-        harness.add_ace_cli(version="3.10.3")
-        harness.add_npm(
-            global_list_output="(empty)",
-            show_version="3.10.3",
-        )
-        result = harness.run()
-
-        assert result["disable_flag_exists"] is False
-        deprecated_warnings = [w for w in result["warnings"] if "DEPRECATED_PKG" in w]
-        assert len(deprecated_warnings) == 0
-
-    def test_npm_list_fails_continues_normally(self, harness):
-        """When npm list fails/errors, grep -q does not match, script continues."""
-        harness.add_ace_cli(version="3.10.3")
-        harness.add_npm_failing()
-        result = harness.run()
-
-        # npm failing means no deprecated package detected -> continue
-        # But npm show also fails -> cache file will be empty
-        assert result["disable_flag_exists"] is False
-        deprecated_warnings = [w for w in result["warnings"] if "DEPRECATED_PKG" in w]
-        assert len(deprecated_warnings) == 0
-
-    def test_npm_list_partial_match_does_not_trigger(self, harness):
-        """When npm list output does NOT contain @ce-dot-net, no disable."""
-        harness.add_ace_cli(version="3.10.3")
-        harness.add_npm(
-            global_list_output="/usr/local/lib\n`-- @ace-sdk/cli@3.10.3",
-            show_version="3.10.3",
-        )
-        result = harness.run()
-
-        assert result["disable_flag_exists"] is False
-
-
-# ===========================================================================
-# SECTION 3: Version Comparison Tests (CRITICAL)
+# SECTION 2: Version Comparison Tests (CRITICAL)
 # ===========================================================================
 
 
 class TestVersionComparison:
     """
-    Section 3: Version Comparison (lines 79-86).
+    Section 2: Version Comparison.
     Tests the sort -V -C based version comparison logic.
     This is the most critical section -- sort -V -C returns 0 when input
     is already sorted (i.e., MIN_VERSION <= CURRENT_VERSION).
@@ -547,20 +429,20 @@ class TestVersionComparison:
 
 
 # ===========================================================================
-# SECTION 4: Daily Update Check Tests
+# SECTION 3: Daily Update Check Tests
 # ===========================================================================
 
 
 class TestDailyUpdateCheck:
     """
-    Section 4: Daily Update Check (lines 88-97).
+    Section 3: Daily Update Check.
     Tests cache file creation and update-available warnings.
     """
 
     def test_no_cache_file_creates_one(self, harness):
         """When no cache file exists, it should be created with latest version."""
         harness.add_ace_cli(version="3.10.3")
-        harness.add_npm_list_empty_show_version(show_version="3.11.0")
+        harness.add_npm_with_show_version(show_version="3.11.0")
         result = harness.run()
 
         assert result["cache_file_exists"] is True
@@ -569,7 +451,7 @@ class TestDailyUpdateCheck:
     def test_cache_file_different_version_warns(self, harness):
         """When cache has a different version than current, show update warning."""
         harness.add_ace_cli(version="3.10.3")
-        harness.add_npm_list_empty_show_version(show_version="3.10.3")
+        harness.add_npm_with_show_version(show_version="3.10.3")
         harness.set_cache_file("3.11.0")
         result = harness.run()
 
@@ -580,7 +462,7 @@ class TestDailyUpdateCheck:
     def test_cache_file_same_version_no_warning(self, harness):
         """When cache version matches current version, no update warning."""
         harness.add_ace_cli(version="3.10.3")
-        harness.add_npm_list_empty_show_version(show_version="3.10.3")
+        harness.add_npm_with_show_version(show_version="3.10.3")
         harness.set_cache_file("3.10.3")
         result = harness.run()
 
@@ -590,7 +472,7 @@ class TestDailyUpdateCheck:
     def test_cache_file_empty_no_warning(self, harness):
         """When cache file exists but is empty, no update warning (empty string check)."""
         harness.add_ace_cli(version="3.10.3")
-        harness.add_npm_list_empty_show_version(show_version="3.10.3")
+        harness.add_npm_with_show_version(show_version="3.10.3")
         harness.set_cache_file("")
         result = harness.run()
 
@@ -612,7 +494,7 @@ class TestDailyUpdateCheck:
     def test_existing_cache_not_overwritten(self, harness):
         """When cache file already exists, npm show is NOT called (cache preserved)."""
         harness.add_ace_cli(version="3.10.3")
-        harness.add_npm_list_empty_show_version(show_version="9.9.9")
+        harness.add_npm_with_show_version(show_version="9.9.9")
         # Pre-populate cache with a specific value
         harness.set_cache_file("3.12.0")
         result = harness.run()
@@ -623,7 +505,7 @@ class TestDailyUpdateCheck:
     def test_new_cache_triggers_warning_if_different(self, harness):
         """When cache is freshly created with a newer version, warning is shown."""
         harness.add_ace_cli(version="3.10.3")
-        harness.add_npm_list_empty_show_version(show_version="4.0.0")
+        harness.add_npm_with_show_version(show_version="4.0.0")
         result = harness.run()
 
         assert result["cache_file_content"] == "4.0.0"
@@ -648,7 +530,7 @@ class TestIntegrationScenarios:
         Should produce clean exit with no warnings and no disable flag.
         """
         harness.add_ace_cli(version="3.10.3")
-        harness.add_npm_list_empty_show_version(show_version="3.10.3")
+        harness.add_npm_with_show_version(show_version="3.10.3")
         harness.set_cache_file("3.10.3")
         result = harness.run()
 
@@ -679,7 +561,7 @@ class TestIntegrationScenarios:
         Should show update warning but NOT disable hooks.
         """
         harness.add_ace_cli(version="3.10.3")
-        harness.add_npm_list_empty_show_version(show_version="4.0.0")
+        harness.add_npm_with_show_version(show_version="4.0.0")
         result = harness.run()
 
         assert result["exit_code"] == 0
@@ -688,30 +570,13 @@ class TestIntegrationScenarios:
         update_warnings = [w for w in result["warnings"] if "UPDATE_AVAILABLE" in w]
         assert len(update_warnings) == 1
 
-    def test_deprecated_pkg_exits_before_version_check(self, harness):
-        """
-        When deprecated package is found, script exits BEFORE version check.
-        Even with a valid ace-cli version, deprecated pkg takes precedence.
-        """
-        harness.add_ace_cli(version="3.10.3")
-        harness.add_npm(
-            global_list_output="/usr/local/lib\n`-- @ce-dot-net/ce-ace-cli@1.0.14",
-            show_version="3.10.3",
-        )
-        result = harness.run()
-
-        assert result["disable_flag_exists"] is True
-        assert "Deprecated package" in result["disable_flag_reason"]
-        # Version check output should NOT appear (exited before reaching it)
-        assert result["current_version"] == ""
-
     def test_old_version_exits_before_update_check(self, harness):
         """
         When version is too old, script exits BEFORE daily update check.
         Cache file should NOT be created.
         """
         harness.add_ace_cli(version="2.0.0")
-        harness.add_npm_list_empty_show_version(show_version="4.0.0")
+        harness.add_npm_with_show_version(show_version="4.0.0")
         result = harness.run()
 
         assert result["disable_flag_exists"] is True
@@ -809,12 +674,6 @@ class TestSourceCodeAnalysis:
             "Expected npm show to check @ace-sdk/cli package"
         )
 
-    def test_npm_list_checks_deprecated_package(self):
-        """npm list must check for @ce-dot-net/ce-ace-cli (deprecated package)."""
-        assert "npm list -g @ce-dot-net/ce-ace-cli" in self.source, (
-            "Expected npm list to check @ce-dot-net/ce-ace-cli"
-        )
-
     def test_exit_codes_are_zero(self):
         """All exit statements in the version check sections should be exit 0."""
         # The script uses exit 0 to avoid disrupting Claude Code
@@ -838,20 +697,17 @@ class TestSourceCodeAnalysis:
             "Disable flag must be cleared BEFORE CLI detection (new session)"
         )
 
-    def test_cli_detection_uses_ce_ace_fallback(self):
-        """
-        Verifies the deprecated ce-ace fallback uses 'command -v ce-ace'
-        (fixed in v5.4.27 - was previously a copy-paste bug checking ace-cli twice).
-        """
+    def test_no_legacy_cli_references(self):
+        """v6.0.0: No references to legacy CLI command in source."""
         lines = self.source.splitlines()
-        ce_ace_checks = [
-            i + 1 for i, line in enumerate(lines)
-            if "command -v ce-ace" in line and not line.strip().startswith("#")
-        ]
-        assert len(ce_ace_checks) >= 1, (
-            f"Expected 'command -v ce-ace' for deprecated fallback. "
-            f"Found none -- the fix may have regressed."
-        )
+        # Check no non-comment lines reference the old CLI command
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                continue
+            assert "command -v ce-ace" not in line, (
+                f"Line {i+1}: Found legacy CLI fallback that should be removed in v6.0.0"
+            )
 
 
 # ===========================================================================
@@ -948,7 +804,6 @@ def run_tests():
 
     test_classes = [
         TestCLIDetection,
-        TestDeprecatedPackageDetection,
         TestVersionComparison,
         TestDailyUpdateCheck,
         TestIntegrationScenarios,

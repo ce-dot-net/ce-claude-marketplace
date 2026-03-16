@@ -13,14 +13,11 @@ if [ -f "$ACE_DISABLED_FLAG" ]; then
   exit 0
 fi
 
-# CLI command detection (ace-cli preferred, ace-cli fallback)
-if command -v ace-cli >/dev/null 2>&1; then
-  CLI_CMD="ace-cli"
-elif command -v ace-cli >/dev/null 2>&1; then
-  CLI_CMD="ce-ace"
-else
+# CLI command detection
+if ! command -v ace-cli >/dev/null 2>&1; then
   exit 0  # No CLI available - exit silently
 fi
+CLI_CMD="ace-cli"
 
 # Resolve paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,7 +26,7 @@ ACCUMULATOR="${PLUGIN_ROOT}/shared-hooks/ace_tool_accumulator.py"
 LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="5.4.7"
+export ACE_PLUGIN_VERSION="6.0.0"
 
 # Parse arguments
 ENABLE_LOG=true
@@ -74,12 +71,17 @@ TOOL_INPUT=$(echo "$INPUT_JSON" | jq -c '.tool_input // {}' 2>/dev/null || echo 
 TOOL_RESPONSE=$(echo "$INPUT_JSON" | jq -c '.tool_response // {}' 2>/dev/null || echo "{}")
 TOOL_USE_ID=$(echo "$INPUT_JSON" | jq -r '.tool_use_id // empty' 2>/dev/null || echo "")
 SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // empty' 2>/dev/null || echo "")
+# v6.0.0: Capture agent_id for per-agent trajectory (CC 2.1.69+)
+AGENT_ID=$(echo "$INPUT_JSON" | jq -r '.agent_id // empty' 2>/dev/null || echo "")
 
 # Skip if missing required fields
 if [[ -z "$SESSION_ID" ]] || [[ -z "$TOOL_NAME" ]] || [[ -z "$TOOL_USE_ID" ]]; then
-  echo "{\"systemMessage\": \"\"}"
   exit 0
 fi
+
+# v6.0.0: Async output — tell Claude Code to proceed immediately
+# Tool accumulation is a fire-and-forget side effect (SQLite write)
+echo '{"async": true}'
 
 # Log PostToolUse event (for debugging/analysis)
 # v5.4.5: Disabled by default to prevent 42GB log growth
@@ -89,13 +91,14 @@ if [[ "${ACE_EVENT_LOGGING:-0}" == "1" ]] && [[ "$ENABLE_LOG" == "true" ]] && [[
 fi
 
 # Append tool to SQLite accumulator (fast, silent)
-# This is the ONLY job of PostToolUse hook in v5.3.0
+# v6.0.0: Now runs AFTER async output — Claude Code already proceeding
 APPEND_RESULT=$(uv run "$ACCUMULATOR" append \
   --session-id "$SESSION_ID" \
   --tool-name "$TOOL_NAME" \
   --tool-input "$TOOL_INPUT" \
   --tool-response "$TOOL_RESPONSE" \
   --tool-use-id "$TOOL_USE_ID" \
+  --agent-id "$AGENT_ID" \
   --working-dir "${WORKING_DIR:-$(pwd)}" 2>&1) || true
 
 # Debug logging
@@ -103,6 +106,4 @@ if [[ "${ACE_DEBUG_HOOKS:-0}" == "1" ]]; then
   echo "[PostToolUse] Appended: $TOOL_NAME ($TOOL_USE_ID) -> $APPEND_RESULT" >> /tmp/ace_hook_debug.log
 fi
 
-# Output empty response (no user-facing message)
-echo "{\"systemMessage\": \"\"}"
 exit 0

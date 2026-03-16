@@ -145,6 +145,23 @@ class ACERelevanceLogger:
 
         self._write_log(entry)
 
+    def log_compact_event(
+        self,
+        session_id: str,
+    ) -> None:
+        """
+        Log a context compaction event.
+
+        Called from PostCompact hook when Claude Code compacts the conversation.
+        """
+        entry = {
+            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'event': 'compact',
+            'session_id': session_id,
+        }
+
+        self._write_log(entry)
+
     def log_execution_metrics(
         self,
         session_id: str,
@@ -200,6 +217,11 @@ def log_search_metrics(**kwargs) -> None:
 def log_domain_shift(**kwargs) -> None:
     """Convenience function to log domain shift metrics."""
     get_relevance_logger().log_domain_shift(**kwargs)
+
+
+def log_compact_event(**kwargs) -> None:
+    """Convenience function to log compact events."""
+    get_relevance_logger().log_compact_event(**kwargs)
 
 
 def log_execution_metrics(**kwargs) -> None:
