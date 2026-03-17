@@ -27,7 +27,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.1.3"
+export ACE_PLUGIN_VERSION="6.1.4"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default

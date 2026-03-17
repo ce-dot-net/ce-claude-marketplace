@@ -26,7 +26,7 @@ ACCUMULATOR="${PLUGIN_ROOT}/shared-hooks/ace_tool_accumulator.py"
 LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.1.3"
+export ACE_PLUGIN_VERSION="6.1.4"
 
 # Parse arguments
 ENABLE_LOG=true

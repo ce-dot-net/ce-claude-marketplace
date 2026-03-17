@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "6.1.3",
-  "description": "Code Engine ACE - LOCAL DEVELOPMENT MODE - v6.1.3: Stability Revert + ACE Statusline - Uses local build instead of npm package",
+  "version": "6.1.4",
+  "description": "Code Engine ACE - LOCAL DEVELOPMENT MODE - v6.1.4: Fix Stop Hook Learning (Critical) - Uses local build instead of npm package",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
