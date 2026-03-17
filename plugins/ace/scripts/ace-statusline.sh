@@ -28,7 +28,9 @@ fi
 # ─── CONFIGURATION ───────────────────────────────────────────────────────────
 
 ACE_RELEVANCE=".claude/data/logs/ace-relevance.jsonl"
-ACE_CACHE="/tmp/ace-statusline-cache${ACE_PROJECT_ID:+-$ACE_PROJECT_ID}.json"
+# Sanitize project ID for use in file path (strip chars unsafe in filenames)
+_safe_project_id="${ACE_PROJECT_ID//[^a-zA-Z0-9_-]/}"
+ACE_CACHE="/tmp/ace-statusline-cache${_safe_project_id:+-$_safe_project_id}.json"
 ACE_CACHE_TTL=60
 
 # ─── COLOR PALETTE (ACE brand: #2CF1BE primary, #212126 dark) ────────────────
@@ -143,6 +145,8 @@ aggregate_session() {
     return 0
   fi
 
+  # Security: jq @sh encoding sanitizes all field values before eval.
+  # The relevance file is written exclusively by ACE hooks in the project directory.
   eval "$(jq -rs --arg sid "$sid" '
     [ .[] | select(.session_id == $sid) ] as $events |
     if ($events | length) == 0 then
@@ -199,6 +203,106 @@ aggregate_session() {
 
 # ─── PLAYBOOK DATA (ACE-CLI CACHE) ─────────────────────────────────────────
 
+_parse_playbook_cache() {
+  local cache_file="$1"
+  local total
+  total=$(jq -r '.playbook.total_patterns // 0' "$cache_file" 2>/dev/null)
+  PLAYBOOK_PATTERNS="${total:-0}"
+
+  local helpful
+  helpful=$(jq -r '.playbook.helpful_total // 0' "$cache_file" 2>/dev/null)
+  helpful=${helpful%%.*}  # truncate float to integer for bash arithmetic
+  local harmful
+  harmful=$(jq -r '.playbook.harmful_total // 0' "$cache_file" 2>/dev/null)
+  harmful=${harmful%%.*}  # truncate float to integer for bash arithmetic
+  local denom=$((helpful + harmful))
+  if [ "$denom" -gt 0 ]; then
+    PLAYBOOK_HEALTHY_PCT=$((helpful * 100 / denom))
+  else
+    PLAYBOOK_HEALTHY_PCT=0
+  fi
+
+  local dom_count
+  dom_count=$(jq -r '.playbook.by_domain | length // 0' "$cache_file" 2>/dev/null)
+  PLAYBOOK_DOMAINS="${dom_count:-0}"
+
+  local top
+  top=$(jq -r '.top_domains // ""' "$cache_file" 2>/dev/null)
+  PLAYBOOK_TOP_DOMAINS="${top:-}"
+
+  local oname
+  oname=$(jq -r '.ace_org_name // ""' "$cache_file" 2>/dev/null)
+  ACE_ORG_NAME="${oname:-}"
+  local pname
+  pname=$(jq -r '.ace_project_name // ""' "$cache_file" 2>/dev/null)
+  ACE_PROJECT_NAME="${pname:-}"
+
+  # Usage / consumption limits
+  local pat_used pat_limit traces_used traces_limit api_used api_limit
+  pat_used=$(jq -r '.subscription.usage.patterns.used // 0' "$cache_file" 2>/dev/null)
+  pat_limit=$(jq -r '.subscription.usage.patterns.limit // 0' "$cache_file" 2>/dev/null)
+  traces_used=$(jq -r '.subscription.usage.traces_today.used // 0' "$cache_file" 2>/dev/null)
+  traces_limit=$(jq -r '.subscription.usage.traces_today.limit // 0' "$cache_file" 2>/dev/null)
+  api_used=$(jq -r '.subscription.usage.api_calls.used // 0' "$cache_file" 2>/dev/null)
+  api_limit=$(jq -r '.subscription.usage.api_calls.limit // 0' "$cache_file" 2>/dev/null)
+  USAGE_PATTERNS_USED="${pat_used:-0}"
+  USAGE_PATTERNS_LIMIT="${pat_limit:-0}"
+  USAGE_TRACES_USED="${traces_used:-0}"
+  USAGE_TRACES_LIMIT="${traces_limit:-0}"
+  USAGE_API_USED="${api_used:-0}"
+  USAGE_API_LIMIT="${api_limit:-0}"
+  if [ "${USAGE_PATTERNS_LIMIT:-0}" -gt 0 ] 2>/dev/null; then
+    USAGE_PATTERNS_PCT=$((USAGE_PATTERNS_USED * 100 / USAGE_PATTERNS_LIMIT))
+  else
+    USAGE_PATTERNS_PCT=0
+  fi
+}
+
+_bg_refresh_cache() {
+  local cache_file="$1"
+  (
+    local status_json
+    status_json=$(ace-cli status --json 2>/dev/null) || return
+    local domains_json
+    domains_json=$(ace-cli domains --json 2>/dev/null) || return
+
+    local top5
+    top5=$(echo "$domains_json" | jq -r '[.domains[:5][].name] | join(",")' 2>/dev/null)
+
+    # Resolve org name from whoami
+    local org_name=""
+    local whoami_json
+    if whoami_json=$(ace-cli whoami --json 2>/dev/null); then
+      local cur_org
+      cur_org=$(echo "$whoami_json" | jq -r '.current_org_id // ""' 2>/dev/null)
+      if [ -n "$cur_org" ]; then
+        org_name=$(echo "$whoami_json" | jq -r --arg oid "$cur_org" \
+          '.user.organizations[] | select(.org_id == $oid) | .name // ""' 2>/dev/null)
+      fi
+    fi
+
+    # Resolve project name from projects list
+    local proj_name=""
+    local proj_id="${ACE_PROJECT_ID:-}"
+    if [ -n "$proj_id" ]; then
+      local projects_json
+      if projects_json=$(ace-cli projects --json 2>/dev/null); then
+        proj_name=$(echo "$projects_json" | jq -r --arg pid "$proj_id" \
+          '.projects[] | select(.project_id == $pid) | .project_name // ""' 2>/dev/null)
+      fi
+    fi
+
+    echo "$status_json" | jq \
+      --arg td "$top5" \
+      --arg on "$org_name" \
+      --arg pn "$proj_name" \
+      '. + {top_domains: $td, ace_org_name: $on, ace_project_name: $pn}' \
+      >"${cache_file}.tmp" 2>/dev/null &&
+      mv "${cache_file}.tmp" "$cache_file"
+  ) &
+  disown
+}
+
 # fetch_playbook_data()
 # Reads ace-cli data from cache, refreshes in background when stale.
 # Sets: PLAYBOOK_PATTERNS, PLAYBOOK_HEALTHY_PCT, PLAYBOOK_DOMAINS, PLAYBOOK_TOP_DOMAINS,
@@ -221,106 +325,6 @@ fetch_playbook_data() {
 
   local now
   now=$(date +%s)
-
-  _parse_playbook_cache() {
-    local cache_file="$1"
-    local total
-    total=$(jq -r '.playbook.total_patterns // 0' "$cache_file" 2>/dev/null)
-    PLAYBOOK_PATTERNS="${total:-0}"
-
-    local helpful
-    helpful=$(jq -r '.playbook.helpful_total // 0' "$cache_file" 2>/dev/null)
-    helpful=${helpful%%.*}  # truncate float to integer for bash arithmetic
-    local harmful
-    harmful=$(jq -r '.playbook.harmful_total // 0' "$cache_file" 2>/dev/null)
-    harmful=${harmful%%.*}  # truncate float to integer for bash arithmetic
-    local denom=$((helpful + harmful))
-    if [ "$denom" -gt 0 ]; then
-      PLAYBOOK_HEALTHY_PCT=$((helpful * 100 / denom))
-    else
-      PLAYBOOK_HEALTHY_PCT=0
-    fi
-
-    local dom_count
-    dom_count=$(jq -r '.playbook.by_domain | length // 0' "$cache_file" 2>/dev/null)
-    PLAYBOOK_DOMAINS="${dom_count:-0}"
-
-    local top
-    top=$(jq -r '.top_domains // ""' "$cache_file" 2>/dev/null)
-    PLAYBOOK_TOP_DOMAINS="${top:-}"
-
-    local oname
-    oname=$(jq -r '.ace_org_name // ""' "$cache_file" 2>/dev/null)
-    ACE_ORG_NAME="${oname:-}"
-    local pname
-    pname=$(jq -r '.ace_project_name // ""' "$cache_file" 2>/dev/null)
-    ACE_PROJECT_NAME="${pname:-}"
-
-    # Usage / consumption limits
-    local pat_used pat_limit traces_used traces_limit api_used api_limit
-    pat_used=$(jq -r '.subscription.usage.patterns.used // 0' "$cache_file" 2>/dev/null)
-    pat_limit=$(jq -r '.subscription.usage.patterns.limit // 0' "$cache_file" 2>/dev/null)
-    traces_used=$(jq -r '.subscription.usage.traces_today.used // 0' "$cache_file" 2>/dev/null)
-    traces_limit=$(jq -r '.subscription.usage.traces_today.limit // 0' "$cache_file" 2>/dev/null)
-    api_used=$(jq -r '.subscription.usage.api_calls.used // 0' "$cache_file" 2>/dev/null)
-    api_limit=$(jq -r '.subscription.usage.api_calls.limit // 0' "$cache_file" 2>/dev/null)
-    USAGE_PATTERNS_USED="${pat_used:-0}"
-    USAGE_PATTERNS_LIMIT="${pat_limit:-0}"
-    USAGE_TRACES_USED="${traces_used:-0}"
-    USAGE_TRACES_LIMIT="${traces_limit:-0}"
-    USAGE_API_USED="${api_used:-0}"
-    USAGE_API_LIMIT="${api_limit:-0}"
-    if [ "${USAGE_PATTERNS_LIMIT:-0}" -gt 0 ] 2>/dev/null; then
-      USAGE_PATTERNS_PCT=$((USAGE_PATTERNS_USED * 100 / USAGE_PATTERNS_LIMIT))
-    else
-      USAGE_PATTERNS_PCT=0
-    fi
-  }
-
-  _bg_refresh_cache() {
-    local cache_file="$1"
-    (
-      local status_json
-      status_json=$(ace-cli status --json 2>/dev/null) || return
-      local domains_json
-      domains_json=$(ace-cli domains --json 2>/dev/null) || return
-
-      local top5
-      top5=$(echo "$domains_json" | jq -r '[.domains[:5][].name] | join(",")' 2>/dev/null)
-
-      # Resolve org name from whoami
-      local org_name=""
-      local whoami_json
-      if whoami_json=$(ace-cli whoami --json 2>/dev/null); then
-        local cur_org
-        cur_org=$(echo "$whoami_json" | jq -r '.current_org_id // ""' 2>/dev/null)
-        if [ -n "$cur_org" ]; then
-          org_name=$(echo "$whoami_json" | jq -r --arg oid "$cur_org" \
-            '.user.organizations[] | select(.org_id == $oid) | .name // ""' 2>/dev/null)
-        fi
-      fi
-
-      # Resolve project name from projects list
-      local proj_name=""
-      local proj_id="${ACE_PROJECT_ID:-}"
-      if [ -n "$proj_id" ]; then
-        local projects_json
-        if projects_json=$(ace-cli projects --json 2>/dev/null); then
-          proj_name=$(echo "$projects_json" | jq -r --arg pid "$proj_id" \
-            '.projects[] | select(.project_id == $pid) | .project_name // ""' 2>/dev/null)
-        fi
-      fi
-
-      echo "$status_json" | jq \
-        --arg td "$top5" \
-        --arg on "$org_name" \
-        --arg pn "$proj_name" \
-        '. + {top_domains: $td, ace_org_name: $on, ace_project_name: $pn}' \
-        >"${cache_file}.tmp" 2>/dev/null &&
-        mv "${cache_file}.tmp" "$cache_file"
-    ) &
-    disown
-  }
 
   if [ -f "$ACE_CACHE" ]; then
     local mtime
@@ -347,12 +351,13 @@ compute_qpt() {
     learn_rate=$(jq -n "${SESSION_LEARN_SENT} / ${SESSION_LEARN_TOTAL}")
   fi
 
-  ACE_QPT=$(jq -n "
-    (${SESSION_FOCUS_PCT:-0} / 100 * 0.35 +
-     ${SESSION_CONFIDENCE:-0} * 0.30 +
-     $learn_rate * 0.20 +
-     ${SESSION_SUCCESS_RATE:-0} / 100 * 0.15) * 100 | round
-  ")
+  ACE_QPT=$(jq -n \
+    --argjson focus    "${SESSION_FOCUS_PCT:-0}" \
+    --argjson conf     "${SESSION_CONFIDENCE:-0}" \
+    --argjson learn    "$learn_rate" \
+    --argjson success  "${SESSION_SUCCESS_RATE:-0}" \
+    '($focus / 100 * 0.35 + $conf * 0.30 + $learn * 0.20 + $success / 100 * 0.15) * 100 | round'
+  )
   ACE_QPT="${ACE_QPT:-0}"
 }
 
@@ -407,7 +412,7 @@ render_sparkline() {
   fi
 
   # PAI-style: block height encodes value level, color encodes quality band
-  # 10 levels mapped to 5 block heights with distinct colors
+  # value scaled to ceiling [1,10] then mapped to 5 display tiers
   # High activity = tall green, low activity = short red
   local out=""
   for val in "${buckets[@]}"; do
@@ -457,7 +462,7 @@ bucket_events() {
   local input_file="$relevance_file"
   local tmp_file=""
   if [ "$max_lines" -gt 0 ]; then
-    tmp_file="/tmp/ace-bucket-$$"
+    tmp_file=$(mktemp /tmp/ace-bucket-XXXXXX)
     tail -n "$max_lines" "$relevance_file" >"$tmp_file" 2>/dev/null
     input_file="$tmp_file"
   fi
@@ -467,7 +472,7 @@ bucket_events() {
     --argjson bsec "$bucket_seconds" \
     --argjson nbuckets "$num_buckets" '
     [.[] | select(type == "object" and has("timestamp")) | .timestamp |
-      (sub("[.+Z].*$"; "") + "Z" | fromdateiso8601) as $ts |
+      (sub("(\\.[0-9]+)?([Z+].*)?$"; "") + "Z" | fromdateiso8601) as $ts |
       select($ts >= $start) |
       (($ts - $start) / $bsec | floor)
     ] as $indices |
@@ -599,6 +604,7 @@ if [ "${_SOURCE_ONLY:-}" != "true" ]; then
 
   input=$(cat)
 
+  # Security: input comes from Claude Code (trusted). jq @sh encoding applied before eval.
   eval "$(echo "$input" | jq -r '
     "session_id=" + (.session_id // "" | @sh) + "\n" +
     "current_dir=" + (.workspace.current_dir // .cwd // "." | @sh)
