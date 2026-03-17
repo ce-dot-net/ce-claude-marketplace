@@ -10,7 +10,7 @@
 
 set -eo pipefail
 
-ACE_PLUGIN_VERSION="6.1.6"
+ACE_PLUGIN_VERSION="6.2.0"
 
 # ACE disable flag check (set by SessionStart if CLI issues detected)
 # Official Claude Code pattern: flag file coordination between hooks

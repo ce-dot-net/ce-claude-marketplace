@@ -200,5 +200,15 @@ if [ "$SOURCE" = "clear" ]; then
   restore_patterns_after_compact
 fi
 
+# Auto-sync statusline script on plugin update (if installed)
+STATUSLINE_INSTALLED="$HOME/.claude/ace_statusline.sh"
+STATUSLINE_SOURCE="${SCRIPT_DIR}/ace_statusline.sh"
+if [ -f "$STATUSLINE_INSTALLED" ] && [ -f "$STATUSLINE_SOURCE" ]; then
+  # Compare — if plugin version is newer, overwrite
+  if ! cmp -s "$STATUSLINE_SOURCE" "$STATUSLINE_INSTALLED" 2>/dev/null; then
+    cp "$STATUSLINE_SOURCE" "$STATUSLINE_INSTALLED" 2>/dev/null && chmod +x "$STATUSLINE_INSTALLED" 2>/dev/null || true
+  fi
+fi
+
 # Success - ACE hooks can proceed (no flag file = enabled)
 exit 0
