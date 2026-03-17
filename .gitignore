@@ -62,3 +62,10 @@ Thumbs.db
 plugins/ace/shared-hooks/__pycache__/
 plugins/ace/shared-hooks/utils/__pycache__/
 plugins/ace/shared-hooks/*.pyc
+
+# Build artifacts
+__pycache__/
+*.pyc
+.agent/
+dummy_work.txt
+CLAUDE.md.ace-backup-*
