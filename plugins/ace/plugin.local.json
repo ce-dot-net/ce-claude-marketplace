@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "6.1.1",
-  "description": "Code Engine ACE - LOCAL DEVELOPMENT MODE - v6.1.1: Per-Task ACE Contribution & Statusline Fixes - Uses local build instead of npm package",
+  "version": "6.1.2",
+  "description": "Code Engine ACE - LOCAL DEVELOPMENT MODE - v6.1.2: Sync Contribution Summary at Task End - Uses local build instead of npm package",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

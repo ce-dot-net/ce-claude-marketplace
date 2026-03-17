@@ -5,6 +5,24 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.2] - 2026-03-17
+
+### Fixed
+- **Stop hook restructured**: Background learning (sends trace to server) + sync contribution summary (reads JSONL, shows at task end). No more "deferred display at next prompt" confusion.
+- **Removed deferred learning from UserPromptSubmit**: `ace_before_task.py` no longer shows learning results at task start -- contribution shows at task END via Stop hook.
+- **Background learning preserved**: `ace_after_task.py` still runs in background (5-30s), ensuring traces are sent to server without blocking.
+
+### How it works now
+1. Stop hook fires at task end
+2. Contribution summary calculated from JSONL (sync, <100ms): `[ACE] Task: 76% relevance | 25 injected . 5 domains | ~5m saved`
+3. Learning launched in background (async): sends trace to ace-cli learn -> server
+4. Learning results saved to statusline state file when done
+5. Statusline shows live metrics
+
+### Requirements
+- Claude Code >= 2.1.69
+- ace-cli >= 3.10.3
+
 ## [6.1.1] - 2026-03-17
 
 ### Added
