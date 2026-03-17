@@ -200,5 +200,46 @@ if [ "$SOURCE" = "clear" ]; then
   restore_patterns_after_compact
 fi
 
+# ======================================================================
+# Statusline hint (one-time, dismissable)
+# ======================================================================
+ACE_STATUSLINE_HINT_FLAG="${HOME}/.claude/ace-statusline-hint-dismissed"
+if [ ! -f "$ACE_STATUSLINE_HINT_FLAG" ]; then
+  # Check if user already has a statusLine configured
+  SETTINGS_FILE="${HOME}/.claude/settings.json"
+  HAS_STATUSLINE=false
+  if [ -f "$SETTINGS_FILE" ] && jq -e '.statusLine' "$SETTINGS_FILE" >/dev/null 2>&1; then
+    HAS_STATUSLINE=true
+  fi
+  if [ "$HAS_STATUSLINE" = "false" ]; then
+    output_warning "💡 [ACE] Try /ace-statusline to add ACE stats to your status bar"
+  fi
+  touch "$ACE_STATUSLINE_HINT_FLAG" 2>/dev/null || true
+fi
+
+# ======================================================================
+# Write initial ace-statusline-state.json on startup
+# ======================================================================
+USAGE_DIR="${HOME}/.claude/usage-data"
+STATE_FILE="${USAGE_DIR}/ace-statusline-state.json"
+mkdir -p "$USAGE_DIR" 2>/dev/null || true
+
+# Query ace-cli status --json for pattern counts
+ACE_STATUS=$($CLI_CMD status --json 2>/dev/null || echo '{}')
+TOTAL_PATTERNS=$(echo "$ACE_STATUS" | jq -r '.total_patterns // .patterns // 0' 2>/dev/null || echo "0")
+HELPFUL=$(echo "$ACE_STATUS" | jq -r '.helpful_total // .helpful // 0' 2>/dev/null || echo "0")
+
+jq -n \
+  --arg patterns_total "$TOTAL_PATTERNS" \
+  --arg helpful_total "$HELPFUL" \
+  '{
+    "patterns_total": ($patterns_total | tonumber),
+    "helpful_total": ($helpful_total | tonumber),
+    "last_learn_result": "",
+    "last_learn_timestamp": "",
+    "session_searches": 0,
+    "session_patterns_injected": 0
+  }' > "$STATE_FILE" 2>/dev/null || true
+
 # Success - ACE hooks can proceed (no flag file = enabled)
 exit 0

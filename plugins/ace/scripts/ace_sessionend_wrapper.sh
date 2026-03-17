@@ -25,5 +25,8 @@ fi
 rm -f "/tmp/ace-disabled-${SESSION_ID}.flag" 2>/dev/null || true
 rm -f "/tmp/ace-patterns-precompact-${SESSION_ID}.json" 2>/dev/null || true
 
+# Clean up statusline state file
+rm -f "${HOME}/.claude/usage-data/ace-statusline-state.json" 2>/dev/null || true
+
 # Always exit 0 — cleanup is best-effort
 exit 0
