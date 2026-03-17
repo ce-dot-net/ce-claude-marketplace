@@ -5,6 +5,17 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.4] - 2026-03-17
+
+### Critical Fix
+- Fixed `too many values to unpack` crash in `ace_after_task.py` that prevented ALL learning traces from being sent since v6.0.0
+- Three 4-tuple unpackings updated to handle 5-tuple `agent_id` field from `get_session_tools()`
+- Learning/traces now working again
+
+### Requirements
+- Claude Code >= 2.1.69
+- ace-cli >= 3.10.3
+
 ## [6.1.2] - 2026-03-17
 
 ### Fixed

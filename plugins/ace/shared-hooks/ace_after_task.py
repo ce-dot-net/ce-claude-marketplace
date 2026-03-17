@@ -129,7 +129,7 @@ def has_substantial_work_from_accumulated(tools: list) -> bool:
     """
     state_changing = ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit']
 
-    for tool_name, _, _, _ in tools:
+    for tool_name, _, _, _, *_ in tools:
         if any(t in tool_name for t in state_changing):
             return True
 
@@ -454,7 +454,7 @@ def main():
         # STEP 5: Build ExecutionTrace (ACE Paper compliant format)
         # Check for errors in tool responses
         has_errors = False
-        for _, _, tool_response_json, _ in tools:
+        for _, _, tool_response_json, _, *_ in tools:
             try:
                 resp = json.loads(tool_response_json) if tool_response_json else {}
                 if resp.get('error') or resp.get('stderr'):
@@ -645,7 +645,7 @@ def main():
             # Count state-changing tools for metrics
             state_changing_tools = ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit']
             state_changing_count = sum(
-                1 for tool_name, _, _, _ in tools
+                1 for tool_name, _, _, _, *_ in tools
                 if any(t in tool_name for t in state_changing_tools)
             )
 
