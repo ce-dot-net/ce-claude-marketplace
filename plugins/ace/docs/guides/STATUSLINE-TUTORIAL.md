@@ -131,7 +131,7 @@ If you see `blind spot`, don't panic — it just means ACE hasn't learned this d
 ♦ PLAYBOOK: 148 pts  Ratio: 91% healthy  Domains: 12
 ```
 
-The total number of patterns in your playbook, the percentage rated helpful versus harmful, and how many distinct domains are covered. These values come from `ace-cli status` and are cached for 60 seconds (see Section 7 for why). A healthy ratio above 85% and growing domain count is a good sign that your playbook is maturing.
+The total number of patterns in your playbook, the percentage rated helpful versus harmful, and how many distinct domains are covered. These values come from `ace-cli status` and are cached for 60 seconds (see Section 7 for why). A healthy ratio of 80% or above and growing domain count is a good sign that your playbook is maturing.
 
 ### ▪ USAGE bar
 
