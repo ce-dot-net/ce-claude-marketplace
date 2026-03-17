@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # ACE SessionStart Hook - Consolidated CLI Detection, Migration & Pattern Restoration
+# v6.0.1: Remove incorrect stale projectId warning (ace-cli manages its own projectId)
 # v6.0.0: Consolidated SessionStart (source field routing for CC 2.1.69+)
 #   - startup: Full CLI check, version validation, auth check
 #   - resume: Light CLI availability check only (already validated)
@@ -174,10 +175,8 @@ if [ -f "$NEW_CONFIG" ]; then
   fi
 fi
 
-# 5b. Stale projectId in global config (per-project field should not be in global config)
-if [ -f "$NEW_CONFIG" ] && grep -q '"projectId"' "$NEW_CONFIG" 2>/dev/null; then
-  output_warning "⚠️ [ACE] Stale projectId in global config (~/.config/ace/config.json). projectId is per-project — use ACE_PROJECT_ID in .claude/settings.json instead. Remove projectId from global config."
-fi
+# 5b. projectId in global config is managed by ace-cli itself (ace-cli config --project-id)
+# Per-project override via ACE_PROJECT_ID in .claude/settings.json takes precedence — no warning needed
 
 # 6. v5.4.13: Token expiration check (catches 48h standby scenario on new sessions)
 TOKEN_JSON=$($CLI_CMD whoami --json 2>/dev/null || echo '{}')
