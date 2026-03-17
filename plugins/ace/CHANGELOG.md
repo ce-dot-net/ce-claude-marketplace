@@ -5,6 +5,25 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.6] - 2026-03-17
+
+### Fixed
+- Statusline now shows **per-task** metrics using task boundary detection (events after last `execution` event in JSONL)
+- Previously showed cumulative session numbers because CC's session_id is per-CC-session, not per-task
+- Uses Python for reliable boundary detection (<50ms, local file only)
+
+### How it works
+- The JSONL has `execution` events written by the Stop hook when learning completes
+- The statusline counts search/injection/domain events AFTER the last execution event = current task only
+- Resets naturally after each learn cycle
+
+### Files
+- UPDATED: `plugins/ace/scripts/ace_statusline.sh` -- Per-task boundary detection via last execution event
+
+### Requirements
+- Claude Code >= 2.1.69
+- ace-cli >= 3.10.3
+
 ## [6.1.5] - 2026-03-17
 
 ### New

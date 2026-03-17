@@ -38,21 +38,38 @@ avg_relevance=0
 domains_count=0
 domain_shifts=0
 
-# ── Read per-session metrics from JSONL (strict session_id filter via jq) ──
-if [ -n "$RELEVANCE_FILE" ] && [ -f "$RELEVANCE_FILE" ] && [ -n "$session_id" ]; then
-  # Single jq pass: filter by session_id, compute all metrics at once
-  eval "$(jq -rs --arg sid "$session_id" '
-    [ .[] | select(.session_id == $sid) ] as $events |
-    [ $events[] | select(.event == "search") ] as $searches |
-    [ $events[] | select(.event == "domain_shift") ] as $shifts |
-    ([ $searches[].patterns_injected // 0 ] | add // 0) as $inj |
-    (if ($searches | length) > 0 then
-      ([ $searches[].avg_confidence // 0 ] | add) / ($searches | length) * 100 | floor
-    else 0 end) as $rel |
-    ([ $searches[].domains[]? ] | unique | length) as $doms |
-    ($shifts | length) as $shf |
-    "patterns_injected=\($inj)\navg_relevance=\($rel)\ndomains_count=\($doms)\ndomain_shifts=\($shf)"
-  ' "$RELEVANCE_FILE" 2>/dev/null)" || true
+# ── Read per-task metrics from JSONL ──
+# Task boundary: events since last "execution" event (Stop hook writes these)
+# This gives us "current task" metrics that reset after each learn cycle
+if [ -n "$RELEVANCE_FILE" ] && [ -f "$RELEVANCE_FILE" ]; then
+  # Use python for reliable task-boundary detection (fast, <50ms)
+  eval "$(python3 -c "
+import json, sys
+events = []
+with open('$RELEVANCE_FILE') as f:
+    for line in f:
+        line = line.strip()
+        if line:
+            try: events.append(json.loads(line))
+            except: pass
+# Find last execution event (= task boundary from Stop hook)
+last_exec = -1
+for i, e in enumerate(events):
+    if e.get('event') == 'execution':
+        last_exec = i
+# Current task = everything after last execution
+current = events[last_exec + 1:] if last_exec >= 0 else events
+searches = [e for e in current if e.get('event') == 'search']
+shifts = [e for e in current if e.get('event') == 'domain_shift']
+inj = sum(s.get('patterns_injected', 0) for s in searches)
+rel = int(sum(s.get('avg_confidence', 0) for s in searches) / len(searches) * 100) if searches else 0
+doms = len(set(d for s in searches for d in s.get('domains', [])))
+shf = len(shifts)
+print(f'patterns_injected={inj}')
+print(f'avg_relevance={rel}')
+print(f'domains_count={doms}')
+print(f'domain_shifts={shf}')
+" 2>/dev/null)" || true
 fi
 
 # ── Relevance % color ──
