@@ -12,6 +12,11 @@ User-facing documentation for setup, configuration, and troubleshooting.
 
 - **[CONFIGURATION.md](./CONFIGURATION.md)** - Configuration options, environment variables, and customization
 
+### Status Line
+
+- **[STATUSLINE-TUTORIAL.md](./STATUSLINE-TUTORIAL.md)** - Getting started with the ACE status line (install, first run, reading the output)
+- **[STATUSLINE.md](./STATUSLINE.md)** - Component reference: formulas, ranges, and interpretation for every metric
+
 ### Troubleshooting
 
 - **[TROUBLESHOOTING.md](./TROUBLESHOOTING.md)** - Common issues, error messages, and solutions
