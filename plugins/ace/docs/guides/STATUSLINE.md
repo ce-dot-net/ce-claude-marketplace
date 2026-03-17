@@ -5,6 +5,21 @@
 
 ---
 
+## At a Glance
+
+All metrics, their ranges, color thresholds, and what a reading means — in one place.
+
+| Metric | Range | Green | Yellow | Red | One-line meaning |
+|--------|-------|-------|--------|-----|-----------------|
+| **QPT** | 0–100 | ≥70 | 40–69 | <40 | Overall session effectiveness score |
+| **Focus** | 0–100% | ≥60% | 30–59% | <30% | Tool budget spent on writes vs. reads |
+| **Conf** | 0–100% | ≥70% | 40–69% | <40% | How well-validated the retrieved patterns are |
+| **Inj** | 0–100%+ | ≥70% | 40–69% | <40% | Fraction of injected patterns actually used |
+| **Terrain** | label | `familiar` | `exploring` | `blind spot` / `unknown` | Playbook coverage of current domains |
+| **PLAYBOOK ratio** | 0–100% | ≥80% | 60–79% | <60% | Helpful patterns as a share of all rated patterns |
+
+---
+
 ## Overview
 
 The ACE statusline is a shell script that renders a live session dashboard in Claude Code's status bar. It surfaces ACE session effectiveness metrics sourced from `ace-relevance.jsonl`.
@@ -18,18 +33,34 @@ Output is responsive: the script detects terminal width and selects one of four 
 | `.claude/data/logs/ace-relevance.jsonl` | <10 ms (local read) | Session events: searches, executions, learning outcomes |
 | `ace-cli status --json` | Network (60 s cached) | Playbook health, usage limits, org/project info |
 
+### Data Flow
+
+```
+ace-relevance.jsonl  ──▶  aggregate_session()  ──▶  Focus, Conf, Inj, LearnRate, SuccessRate
+                                                      └──▶  compute_qpt()  ──▶  QPT
+
+ace-cli status --json  ──▶  fetch_playbook_data()  ──▶  PLAYBOOK, USAGE bar
+                             (60s cache)
+
+session_domains + top_domains  ──▶  compute_terrain()  ──▶  Terrain
+```
+
+QPT is a *derived* metric — it rolls up Focus, Conf, LearnRate, and SuccessRate into a single score. The four contributing components are what to inspect when QPT drops.
+
 ---
 
 ## Responsive Display Modes
 
 The script detects terminal width using a four-tier fallback (Kitty IPC → `stty` → `tput` → `$COLUMNS`) and maps it to a mode.
 
-| Mode | Min width | Max width | ACE components shown |
-|------|-----------|-----------|----------------------|
-| `nano` | 0 | 39 cols | QPT only |
-| `micro` | 40 | 59 cols | QPT, Focus, Conf |
-| `mini` | 60 | 99 cols | QPT, Focus, Conf, Inj, playbook health ratio |
-| `normal` | 100 | — | Full dashboard: all metrics + playbook + usage bar + sparklines |
+| Mode | Min width | Max width | Components shown | What disappears vs. previous mode |
+|------|-----------|-----------|------------------|------------------------------------|
+| `nano` | 0 | 39 cols | QPT only | — |
+| `micro` | 40 | 59 cols | QPT, Focus, Conf | — |
+| `mini` | 60 | 99 cols | QPT, Focus, Conf, Inj, playbook health ratio | — |
+| `normal` | 100 | — | Full dashboard: all metrics + playbook + usage bar + sparklines | None — this is the full view |
+
+When your terminal narrows below 100 columns, Inj, Terrain, the USAGE bar, and sparklines are all suppressed. QPT, Focus, and Conf are the last metrics standing at narrow widths because they carry the most diagnostic signal per character.
 
 ---
 
@@ -37,7 +68,9 @@ The script detects terminal width using a four-tier fallback (Kitty IPC → `stt
 
 ### QPT — Quality Per Task
 
-**What it measures:** A composite score summarising how effective the current session has been at using ACE patterns to deliver value. It aggregates four orthogonal signals into a single 0–100 number.
+A single 0–100 composite score. If one number summarises whether the session is going well, this is it.
+
+**What it measures:** QPT aggregates four orthogonal signals — how efficiently Claude is executing, how well-validated the retrieved patterns are, how often learning propagates back to the server, and the overall task success rate. It is a *derived* metric computed from [Focus](#focus--focus), [Conf](#conf--confidence), LearnRate, and SuccessRate.
 
 **Formula:**
 
@@ -71,11 +104,21 @@ All inputs are normalised to [0, 1] before weighting. The result is rounded to t
 
 A score of 70+ sustained across multiple tasks indicates ACE patterns are well-calibrated for the project domain.
 
+**When to act:**
+
+- **QPT < 40**: Check [Conf](#conf--confidence) first — low pattern quality drags QPT most. Then check [Focus](#focus--focus) for exploratory execution. If both are fine, low LearnRate or SuccessRate is the cause.
+- **QPT 40–69 and not rising**: If the session is past initial exploration, this signals a playbook calibration issue. Run `/ace-search` to see what was retrieved; run `/ace-patterns` to review playbook quality.
+- **QPT ≥ 70**: No action needed. A score that stays this high across many sessions means patterns are well-matched to the project.
+
+**Notes:** QPT is 0 before the first `UserPromptSubmit` event fires (no events to aggregate yet). A single-task session with one search and one execution event will produce a meaningful but provisional score — interpret it as directional, not definitive.
+
 ---
 
 ### Focus
 
-**What it measures:** The ratio of state-changing tool calls to total tool calls in the session. High focus means Claude is spending its tool budget on writes, edits, and creates rather than reads and explorations.
+The ratio of work done to exploration. In a well-executing session, this rises as tasks progress.
+
+**What it measures:** The fraction of tool calls in the session that change state (writes, edits, creates) versus the total tool calls fired. High focus means Claude is spending its tool budget on productive work rather than reads and explorations.
 
 **Formula:**
 
@@ -88,13 +131,21 @@ Focus = (sum of state_changing_tools across execution events) /
 
 **Range:** 0–100%
 
-**Interpretation:** A high Focus score (≥60%) indicates efficient task execution. A low Focus score suggests the session is heavily exploratory — which may be appropriate early in a task but should rise as implementation proceeds. Persistently low Focus combined with low QPT often signals that injected patterns are not matching the actual work.
+**When to act:**
+
+- **< 30%**: Session is heavily exploratory. Expected at the start of a task; a concern if it persists through implementation. Check whether injected patterns are actually relevant to the work being done.
+- **30–59%**: Moderate exploration mixed with execution. Normal for tasks involving significant codebase navigation.
+- **≥ 60%**: Efficient task execution. Claude is spending the majority of its tool budget on actual changes.
+
+**Notes:** Focus is only meaningful once execution events exist in the log. It reflects the *cumulative* session ratio — a burst of exploration followed by heavy execution will average out. Monitor the trend over multiple tasks rather than reacting to a single reading.
 
 ---
 
 ### Conf — Confidence
 
-**What it measures:** How confident the ACE server is in the patterns it retrieved for the most recent search. This reflects the quality of the playbook entries: patterns that have accumulated many "helpful" votes and few "harmful" votes produce higher confidence scores.
+A quality signal for the playbook itself. Low Conf means ACE found patterns, but those patterns have not yet earned trust through real-world usage.
+
+**What it measures:** How confident the ACE server is in the patterns it retrieved for the most recent search. Confidence reflects accumulated community signal: patterns that have received many "helpful" votes and few "harmful" votes score higher.
 
 **Formula:**
 
@@ -108,11 +159,19 @@ The raw `avg_confidence` field on search events is a float in [0.0, 1.0]. The st
 
 **Range:** 0–100%
 
-**Interpretation:** Higher values mean the patterns returned have strong historical validation from real usage. A low Conf score (below 40%) suggests either the playbook is new and under-voted, the search query did not match well-validated patterns, or the current domain is a blind spot. Use `/ace-search` to inspect what was retrieved.
+**When to act:**
+
+- **< 40%**: The playbook is either new and under-voted, the search did not match well-validated patterns, or the current domain is a blind spot. Run `/ace-search` to inspect what was retrieved. If the patterns look relevant but unvoted, they will grow in confidence over time as the team uses ACE.
+- **40–69%**: Patterns have some validation. Reasonable for a project in active growth.
+- **≥ 70%**: Patterns have strong historical validation. High Conf combined with low [Inj](#inj--injection-rate) indicates retrieval is working but pattern-task alignment is off.
+
+**Notes:** Conf is always 0 before the first `UserPromptSubmit` of a session — no search event exists yet. Conf and [Inj](#inj--injection-rate) provide complementary signals: Conf measures pattern *quality*, Inj measures pattern *relevance to the actual task*. Both low together is the strongest signal of a calibration problem.
 
 ---
 
 ### Inj — Injection Rate
+
+Measures whether the right patterns were retrieved. High Inj means patterns were not just injected but actually drawn upon.
 
 **What it measures:** The fraction of injected patterns that Claude actually referenced during task execution. High injection rate means the patterns were relevant and Claude drew on them.
 
@@ -125,13 +184,21 @@ Inj (%) = (sum of patterns_used_count across execution events) /
 
 **Source:** `ace-relevance.jsonl` — field `patterns_injected` on `search` events, field `patterns_used_count` on `execution` events.
 
-**Range:** 0–100%
+**Range:** 0–100% (see note below)
 
-**Interpretation:** A high Inj rate (≥70%) indicates retrieved patterns matched the actual task well. A low Inj rate suggests patterns were injected but went unused, which may indicate over-broad retrieval or a mismatch between the query used for retrieval and the work actually performed. Combined with low Conf this can indicate a playbook calibration issue.
+**When to act:**
+
+- **< 40%**: Patterns were injected but went largely unused. Either retrieval is over-broad (query did not match actual work), or the task diverged significantly from the search query. Review what was retrieved with `/ace-search`.
+- **40–69%**: Moderate utilisation. Acceptable, especially for exploratory tasks.
+- **≥ 70%**: Retrieved patterns matched the task well. Combined with high [Conf](#conf--confidence), this is the ideal signal.
+
+**Notes:** Inj can exceed 100% when patterns injected in one search event are reused across multiple subsequent execution events. This is expected behaviour and a positive signal — it means a single retrieval is providing value across multiple tool calls. Inj should be read alongside [Conf](#conf--confidence): Conf measures whether patterns are high-quality, Inj measures whether they were the *right* patterns for the work at hand.
 
 ---
 
 ### Terrain
+
+Tells you whether ACE has useful knowledge for the current work — before you see a low QPT and wonder why.
 
 **What it measures:** The overlap between the domains encountered in the current session and the top five domains in the playbook. It answers: "does ACE have strong coverage for what Claude is doing right now?"
 
@@ -143,20 +210,26 @@ Inj (%) = (sum of patterns_used_count across execution events) /
 
 **Values:**
 
-| Value | Overlap | Meaning |
-|-------|---------|---------|
-| `familiar` | ≥70% | ACE has strong coverage of current domains |
-| `exploring` | 30–69% | Partial coverage; some domains are new territory |
-| `blind spot` | <30% | ACE has little knowledge of the current domain |
-| `unknown` | no data | No domain data available yet for this session |
+| Value | Overlap | Color | Meaning |
+|-------|---------|-------|---------|
+| `familiar` | ≥70% | Green | ACE has strong coverage of current domains |
+| `exploring` | 30–69% | Yellow | Partial coverage; some domains are new territory |
+| `blind spot` | <30% | Red | ACE has little knowledge of the current domain |
+| `unknown` | no data | Red | No domain data available yet for this session |
 
-**Color:** `familiar` renders green, `exploring` yellow, `blind spot` and `unknown` red.
+**When to act:**
 
-**Interpretation:** `blind spot` is not necessarily a problem — it means the current work is in an area where the playbook has not yet been trained. Running `/ace-bootstrap` or `/ace-learn` after completing work in that domain will bring it into the familiar range over time.
+- **`blind spot`**: Not necessarily a problem — it means the playbook has not yet been trained on this domain. Complete the work, then run `/ace-bootstrap` or `/ace-learn` to bring the domain into coverage. Expect [Conf](#conf--confidence) and [Inj](#inj--injection-rate) to be low in the same session.
+- **`exploring`**: Normal for projects expanding into new areas. Coverage will grow naturally as sessions in those domains produce learning events.
+- **`familiar`**: Optimal. Cross-reference with [Conf](#conf--confidence) to confirm that familiar domains also have well-validated patterns.
+
+**Notes:** `unknown` is the initial state of every session before any search event fires. Terrain is complementary to [Conf](#conf--confidence) and [Inj](#inj--injection-rate): Terrain tells you whether the *domain* is covered, Conf tells you whether retrieved *patterns* are high quality, and Inj tells you whether those patterns matched the *specific task*.
 
 ---
 
 ### PLAYBOOK
+
+Playbook health at a glance: how many patterns exist, how trustworthy they are, and how broadly they cover the project.
 
 **What it measures:** A snapshot of the health and size of the project's pattern playbook, fetched from `ace-cli status --json`.
 
@@ -170,7 +243,13 @@ Inj (%) = (sum of patterns_used_count across execution events) /
 
 **Caching:** Playbook data is cached in `/tmp/ace-statusline-cache[+project-id].json` for 60 seconds. When the cache is stale the script serves the previous value immediately and refreshes in the background, so the statusline never blocks on a network call.
 
-**Interpretation:** A healthy playbook has a ratio above 80% and covers the domains most active in the project. A ratio below 60% indicates accumulated harmful patterns that should be reviewed with `/ace-patterns`.
+**When to act:**
+
+- **Ratio < 60%**: Accumulated harmful patterns are degrading retrieval quality. Run `/ace-patterns` to review and prune. Expect [Conf](#conf--confidence) and [QPT](#qpt--quality-per-task) to be suppressed until harmful patterns are removed.
+- **Ratio 60–79%**: Moderate health. Normal for a growing playbook where some early patterns have been marked harmful.
+- **Ratio ≥ 80%**: Healthy playbook. The bulk of patterns are validated as useful.
+
+**Notes:** PLAYBOOK shows `--` on first render if the 60-second cache has not yet been populated. This clears after the first background refresh completes. The display requires `USAGE_PATTERNS_LIMIT > 0` for the USAGE bar (see below) but the health ratio and counts render regardless of plan type.
 
 ---
 
@@ -200,6 +279,8 @@ Empty bucket positions render in a dark neutral tone.
 
 ### LEARNING Sparklines
 
+Activity density over time. Useful for orienting yourself in a long session or confirming that ACE is actively running.
+
 **What it measures:** Event density in `ace-relevance.jsonl` over four time windows, visualised as sparkline bar charts. Each sparkline shows how much ACE activity (searches, executions, learning events) has occurred recently.
 
 **Time windows and bucket parameters:**
@@ -224,7 +305,7 @@ Each bar is a Unicode block character scaled to event count relative to the wind
 | 1–2 | `▁` | Light red | Minimal activity |
 | 0 | ` ` | Dark (empty) | No events |
 
-**Interpretation:** Sparklines reveal patterns in ACE usage over time. A dense 15m sparkline with sparse 1w bars indicates a project in active development. A flat 15m sparkline with dense 1d bars may indicate a context that is continuing work from earlier in the day.
+**Interpretation:** A dense 15m sparkline with sparse 1w bars indicates a project in active development. A flat 15m sparkline with dense 1d bars may indicate a context that is continuing work from earlier in the day.
 
 **Performance note:** For short windows (bucket size ≤60 s) the script pre-filters to the last 200 lines of the relevance file to avoid parsing the entire log. Longer windows use progressively higher line limits (500, 2000) before falling back to a full scan.
 
