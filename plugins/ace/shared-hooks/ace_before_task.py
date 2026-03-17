@@ -128,9 +128,6 @@ def check_deferred_learning():
 
 def main():
     try:
-        # Check for deferred learning results from ace-statusline-state.json
-        deferred_msg = check_deferred_learning()
-
         # Read hook event from stdin
         event = json.load(sys.stdin)
         user_prompt = event.get('prompt', '')
@@ -322,10 +319,6 @@ def main():
             user_message = "\n".join(summary_lines)
         else:
             user_message = "ℹ️  [ACE] No patterns found for this query"
-
-        # v6.0.1: Prepend deferred learning results if available
-        if deferred_msg:
-            user_message = f"{deferred_msg}\n\n{user_message}"
 
         # v5.4.13: Prepend auth warning if detected (still show patterns if found)
         if auth_warning and pattern_count > 0:

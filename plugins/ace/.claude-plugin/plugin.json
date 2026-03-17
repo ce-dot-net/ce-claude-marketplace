@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "6.1.1",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.1.1: Per-Task ACE Contribution & Statusline Fixes. Requires: Claude Code >= 2.1.69, ace-cli >= 3.10.3.",
+  "version": "6.1.2",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.1.2: Sync Contribution Summary at Task End. Requires: Claude Code >= 2.1.69, ace-cli >= 3.10.3.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
