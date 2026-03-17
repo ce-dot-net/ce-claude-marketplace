@@ -68,6 +68,11 @@ Searched:
   2. ~/.config/claude-code/marketplaces/ce-dot-net-marketplace/plugins/ace/scripts/ace-statusline.sh
   3. ~/Library/Application Support/claude-code/marketplaces/ce-dot-net-marketplace/plugins/ace/scripts/ace-statusline.sh
 
+If the ACE plugin is installed under a different marketplace directory name, the
+paths above will not match. Check the actual install location with:
+  ls ~/.config/claude-code/marketplaces/
+  ls ~/Library/Application\ Support/claude-code/marketplaces/
+
 To wire a custom location manually:
   1. Create .claude/statusline-command.sh containing:
        #!/usr/bin/env bash
@@ -89,15 +94,16 @@ grep -qF "<STATUSLINE_PATH>" .claude/statusline-command.sh 2>/dev/null && echo "
 ```
 
 **Decision**:
-- Output is `ALREADY_WIRED`: The statusline is already pointing to this exact script. Tell the user:
+- Output is `ALREADY_WIRED`: The wrapper already points to this exact script. Tell the user:
   ```
   ACE statusline is already wired.
-    Script:  <STATUSLINE_PATH>
-    Wrapper: .claude/statusline-command.sh
+    Source script : <STATUSLINE_PATH>
+    Wrapper       : .claude/statusline-command.sh
+    Settings key  : .claude/settings.local.json → statusLine.command
   No changes made.
   ```
-  Then skip to Step 5 (run the verification checks only — do not recreate files).
-- Output is `NEEDS_WIRING`: Continue to Step 4.
+  Then proceed to Step 5 (execute the verification bash block and report results — do not skip Step 5).
+- Output is `NEEDS_WIRING`: The wrapper is absent or points to a different path. Continue to Step 4.
 
 ---
 
@@ -152,16 +158,21 @@ fi
   printf '{\n  "statusLine": {\n    "command": ".claude/statusline-command.sh"\n  }\n}\n' > .claude/settings.local.json
   ```
 
-- `VALID_JSON`: Merge non-destructively (preserves all existing keys):
+- `VALID_JSON`: Merge non-destructively (preserves all existing keys). Write to a temp file first, then replace atomically:
   ```bash
   jq '.statusLine.command = ".claude/statusline-command.sh"' .claude/settings.local.json > .claude/settings.local.json.tmp \
-    && mv .claude/settings.local.json.tmp .claude/settings.local.json
+    && mv .claude/settings.local.json.tmp .claude/settings.local.json \
+    || { rm -f .claude/settings.local.json.tmp; echo "MERGE_FAILED"; }
   ```
+  If the output contains `MERGE_FAILED`, tell the user the settings file could not be updated and to check disk permissions, then **stop**.
 
-- `INVALID_JSON`: **Do not overwrite the file.** Tell the user:
+- `INVALID_JSON`: **Do not overwrite the file.** The wrapper created in Steps 4.2–4.3 has already been written. Tell the user:
   ```
   .claude/settings.local.json exists but contains invalid JSON and cannot be safely updated.
-  Please fix or delete the file manually, then run /ace-statusline-setup again.
+
+  The wrapper .claude/statusline-command.sh has been created, but the settings key
+  has NOT been set. Please fix or delete .claude/settings.local.json, then run
+  /ace-statusline-setup again to complete the wiring.
   ```
   **Stop.**
 
@@ -181,8 +192,8 @@ jq -r '.statusLine.command // "NOT_SET"' .claude/settings.local.json 2>/dev/null
 ```
 
 **Interpret results**:
-- All three show `WRAPPER_EXISTS`, `WRAPPER_EXEC`, and `.claude/statusline-command.sh` (the command value): success. Show the summary below.
-- Any line shows a failure indicator (`WRAPPER_MISSING`, `WRAPPER_NOT_EXEC`, `NOT_SET`, `SETTINGS_UNREADABLE`): tell the user which check failed and suggest running `/ace-statusline-setup` again.
+- All three show `WRAPPER_EXISTS`, `WRAPPER_EXEC`, and `.claude/statusline-command.sh` (the command value): success. Show the success summary below.
+- Any line shows a failure indicator (`WRAPPER_MISSING`, `WRAPPER_NOT_EXEC`, `NOT_SET`, `SETTINGS_UNREADABLE`): tell the user which check failed with a plain-language explanation, then suggest running `/ace-statusline-setup` again to retry.
 
 **Success summary** (fill in the resolved STATUSLINE_PATH):
 ```
@@ -201,7 +212,7 @@ This is the final step. Do not perform any additional actions after showing this
 
 ## Notes
 
-- This command is **idempotent** — safe to run multiple times. Re-running when already wired makes no changes.
-- The wrapper script is a thin shell that delegates to the installed `ace-statusline.sh`. If the ACE plugin is later updated or moved, re-run `/ace-statusline-setup` to refresh the wiring.
-- The statusline visualizes ACE session metrics (QPT score, focus, confidence, playbook health) in Claude Code's status bar.
+- This command is **idempotent** — safe to run multiple times. Re-running when already wired to the same path makes no changes.
+- If the ACE plugin is later updated or relocated, re-run `/ace-statusline-setup` to refresh the wiring; the wrapper will be overwritten with the new path.
+- The statusline visualises ACE session metrics (QPT score, focus, confidence, playbook health) in Claude Code's status bar.
 - Requires `jq` at runtime (both for this setup command and for the statusline script itself).
