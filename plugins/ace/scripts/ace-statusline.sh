@@ -487,124 +487,9 @@ bucket_events() {
   fi
 }
 
-# ─── CC (CLAUDE CODE) STATUS LINE ──────────────────────────────────────────
-
-# Colors for CC section
-CC_PRIMARY='\033[38;2;129;140;248m'     # Indigo
-CC_SECONDARY='\033[38;2;165;180;252m'   # Light indigo
-CC_BUCKET_EMPTY='\033[38;2;75;82;95m'
-
-get_cc_bucket_color() {
-  local pos=$1 max=$2
-  local pct=$((pos * 100 / max))
-  local r g b
-  if [ "$pct" -le 33 ]; then
-    r=$((74 + (250 - 74) * pct / 33))
-    g=$((222 + (204 - 222) * pct / 33))
-    b=$((128 + (21 - 128) * pct / 33))
-  elif [ "$pct" -le 66 ]; then
-    local t=$((pct - 33))
-    r=$((250 + (251 - 250) * t / 33))
-    g=$((204 + (146 - 204) * t / 33))
-    b=$((21 + (60 - 21) * t / 33))
-  else
-    local t=$((pct - 66))
-    r=$((251 + (239 - 251) * t / 34))
-    g=$((146 + (68 - 146) * t / 34))
-    b=$((60 + (68 - 60) * t / 34))
-  fi
-  printf '\033[38;2;%d;%d;%dm' "$r" "$g" "$b"
-}
-
-render_cc_context_bar() {
-  local width=$1 pct=$2
-  local output=""
-  [ "$pct" -gt 100 ] && pct=100
-  local filled=$((pct * width / 100))
-  [ "$filled" -lt 0 ] && filled=0
-  local i
-  for ((i = 1; i <= width; i++)); do
-    if [ "$i" -le "$filled" ]; then
-      local color
-      color=$(get_cc_bucket_color "$i" "$width")
-      output="${output}${color}⛁${RESET}"
-    else
-      output="${output}${CC_BUCKET_EMPTY}⛁${RESET}"
-    fi
-  done
-  echo -e "$output"
-}
-
-render_cc_status() {
-  local pct="${cc_context_pct:-0}"
-  pct="${pct%%.*}"
-  [ -z "$pct" ] && pct=0
-
-  # Context color
-  local pct_color
-  if [ "$pct" -ge 80 ]; then
-    pct_color='\033[38;2;251;113;133m'   # Rose
-  elif [ "$pct" -ge 60 ]; then
-    pct_color='\033[38;2;251;146;60m'    # Orange
-  elif [ "$pct" -ge 40 ]; then
-    pct_color='\033[38;2;251;191;36m'    # Yellow
-  else
-    pct_color="${GREEN}"                  # Green
-  fi
-
-  # Format duration
-  local dur_sec=$(( ${cc_duration_ms:-0} / 1000 ))
-  local time_display
-  if [ "$dur_sec" -ge 3600 ]; then
-    time_display="$((dur_sec / 3600))h$((dur_sec % 3600 / 60))m"
-  elif [ "$dur_sec" -ge 60 ]; then
-    time_display="$((dur_sec / 60))m$((dur_sec % 60))s"
-  else
-    time_display="${dur_sec}s"
-  fi
-
-  # Format cost
-  local cost_display
-  cost_display=$(printf '$%.2f' "${cc_cost:-0}")
-
-  case "$MODE" in
-    nano)
-      printf "${DIM}${cc_model:-?}${RESET} ${pct_color}${pct}%%${RESET} ${DIM}${cost_display}${RESET}\n"
-      ;;
-    micro)
-      printf "${CC_PRIMARY}◉${RESET} ${pct_color}${pct}%%${RESET}"
-      printf " ${DIM}${cc_model:-?}${RESET}"
-      printf " ${DIM}${cost_display}${RESET}"
-      printf " ${DIM}${time_display}${RESET}\n"
-      ;;
-    mini)
-      local bar
-      bar=$(render_cc_context_bar 20 "$pct")
-      printf "${CC_PRIMARY}◉${RESET} ${CC_SECONDARY}CTX:${RESET} ${bar} ${pct_color}${pct}%%${RESET}"
-      printf "  ${DIM}${cc_model:-?}${RESET}"
-      printf "  ${DIM}${cost_display}${RESET}"
-      printf "  ${DIM}${time_display}${RESET}\n"
-      ;;
-    normal)
-      local bar
-      bar=$(render_cc_context_bar 40 "$pct")
-      printf "${CC_PRIMARY}◉${RESET} ${CC_SECONDARY}CTX:${RESET} ${bar} ${pct_color}${pct}%%${RESET}\n"
-      printf "${CC_PRIMARY}▸${RESET} ${DIM}Model:${RESET} ${BOLD}${cc_model:-?}${RESET}"
-      printf "  ${DIM}Cost:${RESET} ${cost_display}"
-      printf "  ${DIM}Time:${RESET} ${time_display}"
-      printf "  ${DIM}CC-Lines:${RESET} +${cc_lines_added:-0}/-${cc_lines_removed:-0}"
-      [ -n "${cc_version}" ] && printf "  ${DIM}CC:${RESET} ${cc_version}"
-      printf "\n"
-      ;;
-  esac
-}
-
 # ─── RENDER OUTPUT ──────────────────────────────────────────────────────────
 
 render_output() {
-  # ── CC status first ──
-  render_cc_status
-
   local sc
   sc=$(qpt_color "${ACE_QPT:-0}")
 
@@ -716,15 +601,7 @@ if [ "${_SOURCE_ONLY:-}" != "true" ]; then
 
   eval "$(echo "$input" | jq -r '
     "session_id=" + (.session_id // "" | @sh) + "\n" +
-    "current_dir=" + (.workspace.current_dir // .cwd // "." | @sh) + "\n" +
-    "cc_model=" + (.model.display_name // "unknown" | @sh) + "\n" +
-    "cc_version=" + (.version // "" | @sh) + "\n" +
-    "cc_context_pct=" + (.context_window.used_percentage // 0 | tostring) + "\n" +
-    "cc_context_size=" + (.context_window.context_window_size // 200000 | tostring) + "\n" +
-    "cc_cost=" + (.cost.total_cost_usd // 0 | tostring) + "\n" +
-    "cc_duration_ms=" + (.cost.total_duration_ms // 0 | tostring) + "\n" +
-    "cc_lines_added=" + (.cost.total_lines_added // 0 | tostring) + "\n" +
-    "cc_lines_removed=" + (.cost.total_lines_removed // 0 | tostring)
+    "current_dir=" + (.workspace.current_dir // .cwd // "." | @sh)
   ' 2>/dev/null)" || true
 
   session_id="${session_id:-}"
