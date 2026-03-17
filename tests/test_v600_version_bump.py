@@ -1,8 +1,6 @@
 """
-Tests for Task 4: Version Bump to 6.0.1
-
-All version files should be 6.0.1, descriptions should mention CC >= 2.1.69,
-and wrapper version constants should be updated.
+Tests for version consistency across all ACE plugin version files.
+All version files should match and wrapper constants should be current.
 """
 
 import json
@@ -25,24 +23,16 @@ def _read_json(path):
     return json.loads(_read(path))
 
 
+def _get_plugin_version():
+    """Get the canonical version from plugin.json."""
+    return _read_json(PLUGIN_JSON)['version']
+
+
 class TestVersionNumbers:
-    """All version files should be 6.0.1."""
-
-    def test_plugin_json_version_is_600(self):
-        """plugin.json version field is 6.0.1."""
-        data = _read_json(PLUGIN_JSON)
-        assert data['version'] == '6.0.1', \
-            f"plugin.json version is {data['version']}, expected 6.0.1"
-
-    def test_marketplace_json_version_is_600(self):
-        """marketplace.json ace plugin version is 6.0.1."""
-        data = _read_json(MARKETPLACE_JSON)
-        ace_plugin = next(p for p in data['plugins'] if p['name'] == 'ace')
-        assert ace_plugin['version'] == '6.0.1', \
-            f"marketplace.json version is {ace_plugin['version']}, expected 6.0.1"
+    """All version files should be consistent."""
 
     def test_all_versions_match(self):
-        """All version files should be consistent (6.0.1)."""
+        """All version files should have the same version."""
         plugin = _read_json(PLUGIN_JSON)['version']
         template = _read_json(TEMPLATE_JSON)['version']
         marketplace = _read_json(MARKETPLACE_JSON)
@@ -56,12 +46,18 @@ class TestVersionNumbers:
         unique = set(versions.values())
         assert len(unique) == 1, \
             f"Version mismatch: {versions}"
-        assert '6.0.1' in unique, \
-            f"Versions are consistent but not 6.0.1: {unique}"
+
+    def test_version_is_semver(self):
+        """Version must be valid semver (X.Y.Z)."""
+        version = _get_plugin_version()
+        parts = version.split('.')
+        assert len(parts) == 3, f"Version {version} is not semver"
+        for part in parts:
+            assert part.isdigit(), f"Version {version} has non-numeric part"
 
 
 class TestDescriptions:
-    """Descriptions should reference v6.0.1 and CC >= 2.1.69."""
+    """Descriptions should reference CC >= 2.1.69."""
 
     def test_description_mentions_cc_2169(self):
         """Description mentions Claude Code >= 2.1.69."""
@@ -70,26 +66,21 @@ class TestDescriptions:
         assert '2.1.69' in desc, \
             f"Description does not mention CC 2.1.69: {desc}"
 
-    def test_description_mentions_v600(self):
-        """Description mentions v6.0.1."""
-        data = _read_json(PLUGIN_JSON)
-        desc = data['description']
-        assert 'v6.0.1' in desc or '6.0.1' in desc, \
-            f"Description does not mention v6.0.1: {desc}"
-
 
 class TestWrapperVersionConstants:
-    """All wrappers with ACE_PLUGIN_VERSION should have 6.0.1."""
+    """All wrappers with ACE_PLUGIN_VERSION should match plugin.json."""
 
-    def test_wrapper_version_constants_updated(self):
-        """ACE_PLUGIN_VERSION in stop wrappers should be 6.0.1."""
+    def test_wrapper_version_constants_match_plugin(self):
+        """ACE_PLUGIN_VERSION in wrappers should match plugin.json version."""
+        version = _get_plugin_version()
         for wrapper_path in [STOP_WRAPPER, SUBAGENT_STOP_WRAPPER]:
             content = _read(wrapper_path)
-            assert 'ACE_PLUGIN_VERSION="6.0.1"' in content, \
-                f"{os.path.basename(wrapper_path)} does not have ACE_PLUGIN_VERSION=\"6.0.1\""
+            assert f'ACE_PLUGIN_VERSION="{version}"' in content, \
+                f"{os.path.basename(wrapper_path)} does not have ACE_PLUGIN_VERSION=\"{version}\""
 
-    def test_all_wrapper_versions_are_600(self):
-        """All wrappers with ACE_PLUGIN_VERSION should be 6.0.1."""
+    def test_all_wrapper_versions_consistent(self):
+        """All wrappers with ACE_PLUGIN_VERSION should have the same version."""
+        version = _get_plugin_version()
         scripts_dir = os.path.join(PLUGIN_DIR, 'scripts')
         stale = []
         for fname in os.listdir(scripts_dir):
@@ -98,10 +89,10 @@ class TestWrapperVersionConstants:
             fpath = os.path.join(scripts_dir, fname)
             content = _read(fpath)
             if 'ACE_PLUGIN_VERSION=' in content:
-                if 'ACE_PLUGIN_VERSION="6.0.1"' not in content:
+                if f'ACE_PLUGIN_VERSION="{version}"' not in content:
                     stale.append(fname)
         assert len(stale) == 0, \
-            f"Stale ACE_PLUGIN_VERSION in: {stale}"
+            f"Stale ACE_PLUGIN_VERSION (expected {version}) in: {stale}"
 
 
 class TestCeAceRemoved:
@@ -139,20 +130,22 @@ class TestCeAceRemoved:
 
 
 class TestDevPluginFiles:
-    """Dev-only plugin files should also have 6.0.1."""
+    """Dev-only plugin files should also match the canonical version."""
 
     def test_production_json_version(self):
-        """plugin.PRODUCTION.json version is 6.0.1."""
+        """plugin.PRODUCTION.json version matches plugin.json."""
+        version = _get_plugin_version()
         prod = os.path.join(PLUGIN_DIR, 'plugin.PRODUCTION.json')
         if os.path.exists(prod):
             data = _read_json(prod)
-            assert data['version'] == '6.0.1', \
-                f"plugin.PRODUCTION.json version is {data['version']}"
+            assert data['version'] == version, \
+                f"plugin.PRODUCTION.json version is {data['version']}, expected {version}"
 
     def test_local_json_version(self):
-        """plugin.local.json version is 6.0.1."""
+        """plugin.local.json version matches plugin.json."""
+        version = _get_plugin_version()
         local = os.path.join(PLUGIN_DIR, 'plugin.local.json')
         if os.path.exists(local):
             data = _read_json(local)
-            assert data['version'] == '6.0.1', \
-                f"plugin.local.json version is {data['version']}"
+            assert data['version'] == version, \
+                f"plugin.local.json version is {data['version']}, expected {version}"

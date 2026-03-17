@@ -91,7 +91,8 @@ def expand_abbreviations(prompt: str) -> str:
 
 def check_deferred_learning():
     """Read ace-statusline-state.json for deferred learning results."""
-    state_file = Path.home() / '.claude' / 'usage-data' / 'ace-statusline-state.json'
+    # Project-relative path (matches SessionStart + Stop hook writers)
+    state_file = Path('.claude/data/logs/ace-statusline-state.json')
     if not state_file.exists():
         return None
     try:
