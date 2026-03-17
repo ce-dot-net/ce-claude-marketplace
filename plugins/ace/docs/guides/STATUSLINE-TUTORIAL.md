@@ -193,6 +193,8 @@ Understanding when the statusline refreshes helps set expectations:
 
 **First-time playbook fetch** — on a fresh session with no cache file, the PLAYBOOK line shows `--` until the background refresh completes (typically under 5 seconds). Subsequent updates use the cached file.
 
+**Platform behavior** — Claude Code runs the statusline command after every assistant response, when the permission mode changes, and when vim mode toggles. Updates are debounced at 300ms (rapid changes batch into a single run). If a new update triggers while the script is still running, the in-flight execution is cancelled. The statusline does **not** refresh on a time interval while Claude Code is idle — if you want to see updated playbook counts without sending a message, there is an open feature request for a `refreshIntervalSeconds` option ([issue #5685](https://github.com/anthropics/claude-code/issues/5685)).
+
 ---
 
 ## 8. Troubleshooting
