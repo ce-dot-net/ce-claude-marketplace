@@ -5,6 +5,29 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.0.1] - 2026-03-17
+
+### Fixed
+- **Remove incorrect stale projectId warning**: Removed the "Stale projectId in global config" warning from SessionStart. ace-cli manages its own `projectId` in `~/.config/ace/config.json` via `ace-cli config --project-id` -- this is by design, not stale. Per-project `ACE_PROJECT_ID` in `.claude/settings.json` overrides when present.
+
+### Changed
+- `plugins/ace/scripts/ace_install_cli.sh`: Replaced stale projectId warning with explanatory comment
+
+### Requirements
+- Claude Code >= 2.1.69
+- ace-cli >= 3.10.3
+
+## [6.0.0] - 2026-03-16
+
+### Added
+- **Consolidated SessionStart hook**: Single `ace_install_cli.sh` handles all SessionStart sources (`startup`, `resume`, `compact`, `clear`) via CC 2.1.69+ `source` field
+- **Native agent_type from CC events**: SessionEnd cleanup and PostCompact logging use native agent_type
+- **PostCompact pattern preservation**: Patterns saved before compaction are restored on next SessionStart
+
+### Requirements
+- Claude Code >= 2.1.69
+- ace-cli >= 3.10.3
+
 ## [5.5.2] - 2026-03-15
 
 ### Fixed
