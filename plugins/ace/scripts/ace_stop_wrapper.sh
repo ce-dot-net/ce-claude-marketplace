@@ -28,7 +28,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.2.1"
+export ACE_PLUGIN_VERSION="6.2.2"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -104,13 +104,37 @@ START_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
 # v5.3.0: ace_after_task.py queries accumulated tools from SQLite
 INPUT_JSON=$(echo "$INPUT_JSON" | jq '. + {"hook_event_name": "Stop"}')
 
-# ── Self-Evaluation: Check BEFORE learning (which deletes patterns-used file) ──
-PATTERNS_FILE=".claude/data/logs/ace-patterns-used-${SESSION_ID}.json"
+# ── Self-Evaluation: Check if patterns were injected this session ──
+# Don't rely on ace-patterns-used file (deleted by background learning race condition)
+# Instead check JSONL for search events with patterns_injected > 0
 EVAL_FLAG="/tmp/ace-eval-requested-${SESSION_ID}.flag"
 REVIEW_FILE=".claude/data/logs/ace-review-result.json"
+RELEVANCE_FILE=".claude/data/logs/ace-relevance.jsonl"
 HAS_PATTERNS=false
-if [ -f "$PATTERNS_FILE" ] || [ -f "$EVAL_FLAG" ]; then
+if [ -f "$EVAL_FLAG" ]; then
   HAS_PATTERNS=true
+elif [ -f "$RELEVANCE_FILE" ]; then
+  # Check if any patterns were injected after the last execution event (= this task)
+  INJECTED=$(python3 -c "
+import json
+events = []
+with open('$RELEVANCE_FILE') as f:
+    for line in f:
+        line = line.strip()
+        if line:
+            try: events.append(json.loads(line))
+            except: pass
+last_exec = -1
+for i, e in enumerate(events):
+    if e.get('event') == 'execution': last_exec = i
+current = events[last_exec + 1:] if last_exec >= 0 else events
+searches = [e for e in current if e.get('event') == 'search']
+total = sum(s.get('patterns_injected', 0) for s in searches)
+print(total)
+" 2>/dev/null || echo "0")
+  if [ "$INJECTED" -gt 0 ] 2>/dev/null; then
+    HAS_PATTERNS=true
+  fi
 fi
 
 # Check if async mode is enabled (Issue #3 fix)
