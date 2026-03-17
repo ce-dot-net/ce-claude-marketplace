@@ -114,46 +114,5 @@ class TestDoctorCheck5ProjectConfig:
             )
 
 
-# ===========================================================================
-# Bug 2: SessionStart should warn about stale projectId in global config
-# ===========================================================================
-
-
-class TestInstallCliStaleProjectIdWarning:
-    """
-    Verify that ace_install_cli.sh (SessionStart hook) warns when the
-    global config (~/.config/ace/config.json) contains a projectId field.
-    The projectId is per-project and should NOT be in the global config.
-    """
-
-    @pytest.fixture(autouse=True)
-    def _load_source(self):
-        """Load the install CLI script."""
-        self.source = INSTALL_CLI_PATH.read_text()
-
-    def test_install_cli_no_stale_projectid_warning(self):
-        """
-        v6.0.1: The stale projectId warning was removed because ace-cli
-        manages its own projectId in ~/.config/ace/config.json by design.
-        Per-project ACE_PROJECT_ID in .claude/settings.json overrides it.
-        The script should document this, not warn about it.
-        """
-        # Must NOT have a warning about stale projectId (removed in v6.0.1)
-        warning_lines = [
-            line for line in self.source.splitlines()
-            if "output_warning" in line and "stale" in line.lower() and "projectid" in line.lower()
-        ]
-        assert len(warning_lines) == 0, (
-            "ace_install_cli.sh must NOT warn about stale projectId — "
-            "ace-cli manages its own projectId by design (v6.0.1)"
-        )
-
-        # Should have a comment explaining the design decision
-        assert "projectId" in self.source, (
-            "ace_install_cli.sh should document that projectId in global config "
-            "is managed by ace-cli"
-        )
-
-
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

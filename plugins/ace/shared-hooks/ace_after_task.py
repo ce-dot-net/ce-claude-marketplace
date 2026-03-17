@@ -643,10 +643,10 @@ def main():
         # STEP 8.5: Log execution metrics for relevance analysis (v5.4.2)
         try:
             # Count state-changing tools for metrics
-            state_changing_tools_list = ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit']
+            state_changing_tools = ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit']
             state_changing_count = sum(
-                1 for tool_name, _, _, _, *_ in tools
-                if any(t in tool_name for t in state_changing_tools_list)
+                1 for tool_name, _, _, _ in tools
+                if any(t in tool_name for t in state_changing_tools)
             )
 
             execution_time = time.time() - execution_start_time
@@ -664,91 +664,6 @@ def main():
             )
         except Exception:
             pass  # Non-fatal: continue without metrics logging
-
-        # STEP 8.6: ACE Contribution Summary (v6.1.0)
-        # Show the user how ACE helped on THIS task
-        try:
-            relevance_file = Path('.claude/data/logs/ace-relevance.jsonl')
-            if relevance_file.exists():
-                # Read search events for this session
-                session_searches = []
-                session_shifts = []
-                for line in relevance_file.read_text().splitlines():
-                    if not line.strip():
-                        continue
-                    try:
-                        entry = json.loads(line)
-                        if entry.get('session_id') != session_id:
-                            continue
-                        if entry.get('event') == 'search':
-                            session_searches.append(entry)
-                        elif entry.get('event') == 'domain_shift':
-                            session_shifts.append(entry)
-                    except json.JSONDecodeError:
-                        continue
-
-                if session_searches:
-                    total_injected = sum(s.get('patterns_injected', 0) for s in session_searches)
-                    avg_conf = sum(s.get('avg_confidence', 0) for s in session_searches) / len(session_searches)
-                    relevance_pct = int(avg_conf * 100)
-                    all_domains = set()
-                    for s in session_searches:
-                        all_domains.update(s.get('domains', []))
-                    patterns_used_count = len(playbook_used) if playbook_used else 0
-                    num_shifts = len(session_shifts)
-
-                    # Estimate time saved: each relevant pattern saves ~30s of searching/trial-error
-                    # Conservative: only count patterns with confidence > 0.5
-                    high_conf_patterns = sum(
-                        s.get('patterns_injected', 0)
-                        for s in session_searches
-                        if s.get('avg_confidence', 0) > 0.5
-                    )
-                    est_time_saved_s = high_conf_patterns * 30  # 30s per high-confidence pattern
-                    if est_time_saved_s >= 60:
-                        est_time_saved = f"{est_time_saved_s // 60}m {est_time_saved_s % 60}s"
-                    else:
-                        est_time_saved = f"{est_time_saved_s}s"
-
-                    # Build contribution summary
-                    contrib_parts = []
-                    contrib_parts.append(f"📊 [ACE] Task contribution: {relevance_pct}% relevance")
-                    detail_parts = []
-                    if total_injected > 0:
-                        detail_parts.append(f"{total_injected} patterns injected")
-                    if patterns_used_count > 0:
-                        detail_parts.append(f"{patterns_used_count} used in learning")
-                    if len(all_domains) > 0:
-                        domain_names = sorted(all_domains)[:3]
-                        domain_str = ', '.join(domain_names)
-                        if len(all_domains) > 3:
-                            domain_str += f' (+{len(all_domains) - 3})'
-                        detail_parts.append(f"{len(all_domains)} domains ({domain_str})")
-                    if num_shifts > 0:
-                        detail_parts.append(f"{num_shifts} domain shifts")
-                    if detail_parts:
-                        contrib_parts.append(f"   {' · '.join(detail_parts)}")
-                    if est_time_saved_s > 0:
-                        contrib_parts.append(f"   ⏱️ ~{est_time_saved} estimated time saved")
-
-                    # Add to message
-                    message_lines.append("")
-                    message_lines.extend(contrib_parts)
-
-                    # Save to statusline state file
-                    state_file = Path('.claude/data/logs/ace-statusline-state.json')
-                    if state_file.exists():
-                        try:
-                            state = json.loads(state_file.read_text())
-                            state['last_task_relevance_pct'] = relevance_pct
-                            state['last_task_patterns_injected'] = total_injected
-                            state['last_task_domains'] = len(all_domains)
-                            state['last_task_time_saved'] = est_time_saved
-                            state_file.write_text(json.dumps(state))
-                        except Exception:
-                            pass
-        except Exception:
-            pass  # Non-fatal
 
         # STEP 9: Clear accumulated tools (cleanup)
         sys.path.insert(0, str(Path(__file__).parent))

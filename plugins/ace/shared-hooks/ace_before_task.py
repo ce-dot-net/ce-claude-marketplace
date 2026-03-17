@@ -16,11 +16,11 @@ v5.4.18: Granular token expiration using token_expires_in (seconds).
 """
 
 import json
+import re
 import sys
-import time
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Dict, Any
 
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent / 'utils'))
@@ -87,43 +87,6 @@ def expand_abbreviations(prompt: str) -> str:
         result = result.replace(abbrev, full)
 
     return result.strip()
-
-
-def check_deferred_learning():
-    """Read ace-statusline-state.json for deferred learning results."""
-    # Project-relative path (matches SessionStart + Stop hook writers)
-    state_file = Path('.claude/data/logs/ace-statusline-state.json')
-    if not state_file.exists():
-        return None
-    try:
-        state = json.loads(state_file.read_text())
-        last_learn = state.get('last_learn_result', '')
-        timestamp_str = state.get('last_learn_timestamp', '')
-        shown = state.get('shown', False)
-
-        if not last_learn or shown:
-            return None
-
-        # Skip stale results (max_age = 3600 seconds / 1 hour)
-        if timestamp_str:
-            from datetime import datetime
-            try:
-                ts = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-                age = time.time() - ts.timestamp()
-                if age > 3600:
-                    return None  # expired / stale
-            except Exception:
-                pass
-
-        # Mark as displayed/cleared so we don't show again
-        state['shown'] = True
-        state['displayed'] = True
-        state['cleared'] = True
-        state_file.write_text(json.dumps(state))
-
-        return last_learn
-    except Exception:
-        return None
 
 
 def main():

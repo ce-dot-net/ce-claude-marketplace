@@ -26,7 +26,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.1.2"
+export ACE_PLUGIN_VERSION="6.1.3"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -103,109 +103,54 @@ START_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
 # v5.3.0: ace_after_task.py queries accumulated tools from SQLite
 INPUT_JSON=$(echo "$INPUT_JSON" | jq '. + {"hook_event_name": "Stop"}')
 
-# v6.1.2: Background learning + sync contribution summary
-# Learning (ace-cli learn, 5-30s) runs in background
-# Contribution summary (JSONL read, <100ms) runs synchronously and shows at task end
+# Check if async mode is enabled (Issue #3 fix)
+ACE_ASYNC_LEARNING="${ACE_ASYNC_LEARNING:-1}"  # Default: enabled
 
-# Create temp files for background learning
-TEMP_INPUT=$(mktemp)
-TEMP_OUTPUT=$(mktemp)
-printf '%s\n' "$INPUT_JSON" > "$TEMP_INPUT"
+if [[ "$ACE_ASYNC_LEARNING" == "1" ]]; then
+  # === ASYNC MODE (Issue #3 fix) ===
+  # Launch ace_after_task.py in background and return immediately
 
-# Create log directory for background errors
-LOG_DIR="${HOME}/.claude/logs"
-mkdir -p "$LOG_DIR"
-LOG_FILE="$LOG_DIR/ace-background-$(date +%Y%m%d-%H%M%S)-$$.log"
+  # Create temp files (cleanup handled by subshell)
+  TEMP_INPUT=$(mktemp)
+  TEMP_OUTPUT=$(mktemp)
 
-# Launch learning in background (sends trace to server, updates playbook)
-(
-  uv run "${HOOK_SCRIPT}" < "$TEMP_INPUT" 2>&1 > "$TEMP_OUTPUT"
-  LEARN_EXIT=$?
-  if [[ $LEARN_EXIT -ne 0 ]]; then
-    echo "[ERROR] Background learning failed with exit code $LEARN_EXIT" >> "$LOG_FILE"
-    cat "$TEMP_OUTPUT" >> "$LOG_FILE"
-  fi
+  # Write INPUT_JSON to temp file (prevents injection)
+  printf '%s\n' "$INPUT_JSON" > "$TEMP_INPUT"
 
-  # Save learning results to statusline state file
-  LEARN_RESULT=$(cat "$TEMP_OUTPUT" 2>/dev/null || echo "")
-  STATE_DIR=".claude/data/logs"
-  STATUSLINE_STATE="${STATE_DIR}/ace-statusline-state.json"
-  mkdir -p "$STATE_DIR" 2>/dev/null || true
-  if [[ -n "$LEARN_RESULT" ]]; then
-    LEARN_MSG=$(echo "$LEARN_RESULT" | jq -r '.systemMessage // ""' 2>/dev/null || echo "")
-    TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-    EXISTING_STATE="{}"
-    if [[ -f "$STATUSLINE_STATE" ]]; then
-      EXISTING_STATE=$(cat "$STATUSLINE_STATE" 2>/dev/null || echo "{}")
+  # Create log directory for background errors
+  LOG_DIR="${HOME}/.claude/logs"
+  mkdir -p "$LOG_DIR"
+  LOG_FILE="$LOG_DIR/ace-background-$(date +%Y%m%d-%H%M%S)-$$.log"
+
+  # Launch in background with proper error logging
+  (
+    uv run "${HOOK_SCRIPT}" < "$TEMP_INPUT" 2>&1 > "$TEMP_OUTPUT"
+    LEARN_EXIT=$?
+    if [[ $LEARN_EXIT -ne 0 ]]; then
+      echo "[ERROR] Background learning failed with exit code $LEARN_EXIT" >> "$LOG_FILE"
+      cat "$TEMP_OUTPUT" >> "$LOG_FILE"
     fi
-    echo "$EXISTING_STATE" | jq \
-      --arg result "$LEARN_MSG" \
-      --arg timestamp "$TIMESTAMP" \
-      '. + {"last_learn_result": $result, "last_learn_timestamp": $timestamp, "shown": false}' \
-      > "$STATUSLINE_STATE" 2>/dev/null || true
-  fi
+    rm -f "$TEMP_INPUT" "$TEMP_OUTPUT"
+  ) &
 
-  rm -f "$TEMP_INPUT" "$TEMP_OUTPUT"
-) &
+  # Return immediate feedback
+  RESULT='{"continue": true, "systemMessage": "✅ [ACE] Learning started in background"}'
+  EXIT_CODE=0
 
-# === Sync: Build ACE contribution summary from JSONL (fast, local) ===
-SESSION_ID_FROM_EVENT=$(echo "$INPUT_JSON" | jq -r '.session_id // empty' 2>/dev/null || echo "")
-RELEVANCE_FILE=".claude/data/logs/ace-relevance.jsonl"
-CONTRIB_MSG=""
+  # Calculate execution time (should be <1s)
+  END_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
+  EXECUTION_TIME=$((END_TIME - START_TIME))
 
-if [[ -n "$SESSION_ID_FROM_EVENT" ]] && [[ -f "$RELEVANCE_FILE" ]]; then
-  # Read this session's search stats from JSONL (milliseconds, no network)
-  CONTRIB_MSG=$(python3 -c "
-import json, sys
-session_id = '$SESSION_ID_FROM_EVENT'
-searches, shifts = [], []
-try:
-    with open('$RELEVANCE_FILE') as f:
-        for line in f:
-            line = line.strip()
-            if not line or session_id not in line:
-                continue
-            try:
-                e = json.loads(line)
-                if e.get('session_id') != session_id:
-                    continue
-                if e.get('event') == 'search':
-                    searches.append(e)
-                elif e.get('event') == 'domain_shift':
-                    shifts.append(e)
-            except: pass
-except: pass
-
-if searches:
-    total_inj = sum(s.get('patterns_injected', 0) for s in searches)
-    avg_conf = sum(s.get('avg_confidence', 0) for s in searches) / len(searches)
-    rel_pct = int(avg_conf * 100)
-    domains = set()
-    for s in searches:
-        domains.update(s.get('domains', []))
-    hi = sum(s.get('patterns_injected', 0) for s in searches if s.get('avg_confidence', 0) > 0.5)
-    est_s = hi * 30
-    est = f'{est_s // 60}m {est_s % 60}s' if est_s >= 60 else f'{est_s}s'
-    parts = [f'{total_inj} injected']
-    if domains: parts.append(f'{len(domains)} domains')
-    if shifts: parts.append(f'{len(shifts)} shifts')
-    detail = ' · '.join(parts)
-    msg = f'📊 [ACE] Task: {rel_pct}% relevance | {detail}'
-    if est_s > 0: msg += f' | ~{est} saved'
-    print(msg)
-" 2>/dev/null || echo "")
-fi
-
-# Build result with contribution summary
-if [[ -n "$CONTRIB_MSG" ]]; then
-  RESULT=$(jq -n --arg msg "✅ [ACE] Learning in background\n${CONTRIB_MSG}" '{"continue": true, "systemMessage": $msg}')
 else
-  RESULT='{"continue": true, "systemMessage": "✅ [ACE] Learning in background"}'
-fi
-EXIT_CODE=0
+  # === SYNC MODE (original behavior) ===
+  # Forward to ace_after_task.py and wait for completion
+  RESULT=$(echo "$INPUT_JSON" | uv run "${HOOK_SCRIPT}" 2>&1)
+  EXIT_CODE=$?
 
-END_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
-EXECUTION_TIME=$((END_TIME - START_TIME))
+  # Calculate execution time (cross-platform milliseconds)
+  END_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
+  EXECUTION_TIME=$((END_TIME - START_TIME))
+fi
 
 # Log event END with result
 # v5.4.5: Disabled by default to prevent 42GB log growth
