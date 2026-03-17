@@ -7,10 +7,7 @@
 
 ## Overview
 
-The ACE statusline is a shell script that renders a live session dashboard in Claude Code's status bar. It has two logical sections:
-
-- **ACE section** — session effectiveness metrics sourced from `ace-relevance.jsonl`
-- **CC section** — Claude Code runtime metrics sourced from the input JSON
+The ACE statusline is a shell script that renders a live session dashboard in Claude Code's status bar. It surfaces ACE session effectiveness metrics sourced from `ace-relevance.jsonl`.
 
 Output is responsive: the script detects terminal width and selects one of four display modes, from a single score to a full multi-line dashboard.
 
@@ -20,7 +17,6 @@ Output is responsive: the script detects terminal width and selects one of four 
 |--------|---------|----------|
 | `.claude/data/logs/ace-relevance.jsonl` | <10 ms (local read) | Session events: searches, executions, learning outcomes |
 | `ace-cli status --json` | Network (60 s cached) | Playbook health, usage limits, org/project info |
-| Input JSON (stdin) | Immediate | CC model, context usage, cost, duration, line counts |
 
 ---
 
@@ -28,12 +24,12 @@ Output is responsive: the script detects terminal width and selects one of four 
 
 The script detects terminal width using a four-tier fallback (Kitty IPC → `stty` → `tput` → `$COLUMNS`) and maps it to a mode.
 
-| Mode | Min width | Max width | ACE components shown | CC components shown |
-|------|-----------|-----------|----------------------|---------------------|
-| `nano` | 0 | 39 cols | QPT only | Model, context %, cost |
-| `micro` | 40 | 59 cols | QPT, Focus, Conf | Context %, model, cost, time |
-| `mini` | 60 | 99 cols | QPT, Focus, Conf, Inj, playbook health ratio | Context bar (20), %, model, cost, time |
-| `normal` | 100 | — | Full dashboard: all metrics + playbook + usage bar + sparklines | Context bar (40), model, cost, time, CC-Lines |
+| Mode | Min width | Max width | ACE components shown |
+|------|-----------|-----------|----------------------|
+| `nano` | 0 | 39 cols | QPT only |
+| `micro` | 40 | 59 cols | QPT, Focus, Conf |
+| `mini` | 60 | 99 cols | QPT, Focus, Conf, Inj, playbook health ratio |
+| `normal` | 100 | — | Full dashboard: all metrics + playbook + usage bar + sparklines |
 
 ---
 
@@ -231,75 +227,6 @@ Each bar is a Unicode block character scaled to event count relative to the wind
 **Interpretation:** Sparklines reveal patterns in ACE usage over time. A dense 15m sparkline with sparse 1w bars indicates a project in active development. A flat 15m sparkline with dense 1d bars may indicate a context that is continuing work from earlier in the day.
 
 **Performance note:** For short windows (bucket size ≤60 s) the script pre-filters to the last 200 lines of the relevance file to avoid parsing the entire log. Longer windows use progressively higher line limits (500, 2000) before falling back to a full scan.
-
----
-
-## CC Section Components
-
-The CC section surfaces Claude Code runtime metrics from the JSON payload passed to the script on stdin.
-
-### Context Bar
-
-**What it measures:** Percentage of the active context window consumed.
-
-**Source:** `context_window.used_percentage` from the input JSON.
-
-**Color thresholds:**
-
-| Range | Color |
-|-------|-------|
-| <40% | Green |
-| 40–59% | Yellow |
-| 60–79% | Orange |
-| ≥80% | Rose |
-
-In `mini` mode the bar renders at 20 characters wide; in `normal` mode at 40 characters. The same green-to-red gradient used for the USAGE bar applies here.
-
----
-
-### Model
-
-**What it measures:** The display name of the active Claude model.
-
-**Source:** `model.display_name` from the input JSON.
-
----
-
-### Cost
-
-**What it measures:** Cumulative API cost for the session in USD.
-
-**Source:** `cost.total_cost_usd` from the input JSON.
-
-**Format:** `$X.XX` (always two decimal places).
-
----
-
-### Time
-
-**What it measures:** Total wall-clock duration of the session.
-
-**Source:** `cost.total_duration_ms` from the input JSON.
-
-**Format:**
-
-| Duration | Format |
-|----------|--------|
-| <60 s | `Xs` |
-| 60 s – 1 h | `Xm Xs` |
-| ≥1 h | `Xh Xm` |
-
----
-
-### CC-Lines
-
-**What it measures:** Net code change in the session, expressed as lines added and removed.
-
-**Source:** `cost.total_lines_added` and `cost.total_lines_removed` from the input JSON.
-
-**Format:** `+<added>/-<removed>`
-
-**Visibility:** Only rendered in `normal` mode.
 
 ---
 

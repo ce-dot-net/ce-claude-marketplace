@@ -138,21 +138,6 @@ Each row is a sparkline showing ACE hook event density over time. The height and
 
 The counts above the sparklines (15m, 60m, 1d, 1w) are the total number of events in each window.
 
-### CC section
-
-```
-◉ CTX: ⛁⛁⛁⛁⛁⛁⛁⛁⛁⛁⛁ 28%
-▸ Model: claude-sonnet-4-5  Cost: $0.12  Time: 3m42s  CC-Lines: +127/-34
-```
-
-The CC section is Claude Code's own session information. It is separate from ACE metrics and is always shown regardless of ACE data availability.
-
-- **CTX bar** — context window usage (green = plenty of room, red = approaching limit).
-- **Model** — the model that responded.
-- **Cost** — cumulative API cost for the session.
-- **Time** — total wall time since session start.
-- **CC-Lines** — lines added/removed by Claude Code across the session.
-
 ---
 
 ## 6. Why All Zeros? (Common Confusion)
