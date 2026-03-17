@@ -4,12 +4,14 @@
 set -euo pipefail
 trap 'exit 0' ERR
 
-# ACE disable flag check (set by SessionStart if CLI issues detected)
-# Official Claude Code pattern: flag file coordination between hooks
+# Read stdin early (can only be read once) for session_id
+INPUT_JSON=$(cat)
+SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // empty' 2>/dev/null || echo "")
 SESSION_ID="${SESSION_ID:-default}"
+
+# ACE disable flag check (set by SessionStart if CLI issues detected)
 ACE_DISABLED_FLAG="/tmp/ace-disabled-${SESSION_ID}.flag"
 if [ -f "$ACE_DISABLED_FLAG" ]; then
-  # ACE is disabled for this session - exit silently
   exit 0
 fi
 
@@ -26,7 +28,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.2.0"
+export ACE_PLUGIN_VERSION="6.2.1"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -65,8 +67,7 @@ fi
   exit 0
 }
 
-# Read stdin
-INPUT_JSON=$(cat)
+# stdin already read at top for session_id
 
 # Extract working directory from event and cd to it
 # This ensures ace_after_task.py can find .claude/settings.json
@@ -102,6 +103,15 @@ START_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
 # CRITICAL: Inject hook_event_name into event JSON
 # v5.3.0: ace_after_task.py queries accumulated tools from SQLite
 INPUT_JSON=$(echo "$INPUT_JSON" | jq '. + {"hook_event_name": "Stop"}')
+
+# ── Self-Evaluation: Check BEFORE learning (which deletes patterns-used file) ──
+PATTERNS_FILE=".claude/data/logs/ace-patterns-used-${SESSION_ID}.json"
+EVAL_FLAG="/tmp/ace-eval-requested-${SESSION_ID}.flag"
+REVIEW_FILE=".claude/data/logs/ace-review-result.json"
+HAS_PATTERNS=false
+if [ -f "$PATTERNS_FILE" ] || [ -f "$EVAL_FLAG" ]; then
+  HAS_PATTERNS=true
+fi
 
 # Check if async mode is enabled (Issue #3 fix)
 ACE_ASYNC_LEARNING="${ACE_ASYNC_LEARNING:-1}"  # Default: enabled
@@ -184,13 +194,8 @@ if [[ "$ENABLE_NOTIFY" == "true" ]] && [[ $EXIT_CODE -eq 0 ]]; then
   echo "✅ ACE learning captured" >&2
 fi
 
-# ── Self-Evaluation Logic ──
-# Check if patterns were injected (ace-patterns-used-{session_id}.json)
-PATTERNS_FILE=".claude/data/logs/ace-patterns-used-${SESSION_ID}.json"
-EVAL_FLAG="/tmp/ace-eval-requested-${SESSION_ID}.flag"
-REVIEW_FILE=".claude/data/logs/ace-review-result.json"
-
-if [ -f "$PATTERNS_FILE" ]; then
+# ── Self-Evaluation Logic (uses HAS_PATTERNS from pre-check above) ──
+if [ "$HAS_PATTERNS" = "true" ]; then
   if [ ! -f "$EVAL_FLAG" ]; then
     # First stop: block and ask for self-evaluation
     touch "$EVAL_FLAG"

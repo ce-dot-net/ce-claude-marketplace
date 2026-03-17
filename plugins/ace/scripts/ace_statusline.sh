@@ -37,6 +37,8 @@ patterns_injected=0
 avg_relevance=0
 domains_count=0
 domain_shifts=0
+helpful_pct=0
+time_saved=""
 
 # ── Read per-task metrics from JSONL ──
 # Task boundary: events since last "execution" event (Stop hook writes these)
@@ -66,39 +68,11 @@ rel = int(sum(s.get('avg_confidence', 0) for s in searches) / len(searches) * 10
 doms = len(set(d for s in searches for d in s.get('domains', [])))
 shf = len(shifts)
 
-# Last task outcome (execution event from Stop hook)
-# Shows PREVIOUS task result (current task hasn't ended yet)
-last_ex = events[last_exec] if last_exec >= 0 else None
-used = last_ex.get('patterns_used_count', 0) if last_ex else 0
-
-# Helpfulness: what % of injected patterns were actually used
-# Get injections from the PREVIOUS task (before last execution)
-if last_exec >= 1:
-    prev_start = -1
-    for j in range(last_exec - 1, -1, -1):
-        if events[j].get('event') == 'execution':
-            prev_start = j
-            break
-    prev_task = events[prev_start + 1:last_exec]
-    prev_searches = [e for e in prev_task if e.get('event') == 'search']
-    prev_inj = sum(s.get('patterns_injected', 0) for s in prev_searches)
-    helpful_pct = int(used / prev_inj * 100) if prev_inj > 0 else 0
-    # Time saved: ~12s per used pattern (avoids manual search/debug/trial-error)
-    time_saved_s = used * 12
-    if time_saved_s >= 60:
-        time_saved = f'{time_saved_s // 60}m{time_saved_s % 60}s'
-    else:
-        time_saved = f'{time_saved_s}s'
-else:
-    helpful_pct = 0
-    time_saved = ''
-
+# No fake helpfulness — only real self-eval from ace-review-result.json
 print(f'patterns_injected={inj}')
 print(f'avg_relevance={rel}')
 print(f'domains_count={doms}')
 print(f'domain_shifts={shf}')
-print(f'helpful_pct={helpful_pct}')
-print(f'time_saved={time_saved}')
 " 2>/dev/null)" || true
 fi
 
