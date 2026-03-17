@@ -5,6 +5,32 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.0] - 2026-03-17
+
+### Added
+- **ACE Statusline** (`/ace-statusline`): Native Claude Code statusline integration showing live ACE stats (pattern count, helpful score, learning results, context usage). Zero network calls -- reads from local state files.
+- **Deferred Learning Display**: Async learning results now saved to state file and shown on next UserPromptSubmit instead of being silently discarded.
+- **SessionStart Status**: On startup, queries `ace-cli status --json` and writes initial state for statusline. One-time hint suggests installing statusline if not configured.
+
+### Changed
+- State file (`ace-statusline-state.json`) shared between statusline, Stop hook, and UserPromptSubmit
+- SessionEnd cleanup of state files
+- Stale result detection (>1 hour auto-skip)
+
+### Fixed
+- Updated stale test expectations from v6.0.0 to v6.0.1
+- Removed obsolete stale projectId warning test
+
+### New Files
+- `plugins/ace/scripts/ace_statusline.sh` -- Statusline script (reads CC JSON stdin + ACE state)
+- `plugins/ace/commands/ace-statusline.md` -- Install command
+- `tests/test_ace_statusline.py` -- 19 tests
+- `tests/test_deferred_learning.py` -- 14 tests
+
+### Requirements
+- Claude Code >= 2.1.69
+- ace-cli >= 3.10.3
+
 ## [6.0.1] - 2026-03-17
 
 ### Fixed

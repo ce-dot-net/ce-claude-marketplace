@@ -26,7 +26,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.0.0"
+export ACE_PLUGIN_VERSION="6.1.0"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -130,6 +130,27 @@ if [[ "$ACE_ASYNC_LEARNING" == "1" ]]; then
       echo "[ERROR] Background learning failed with exit code $LEARN_EXIT" >> "$LOG_FILE"
       cat "$TEMP_OUTPUT" >> "$LOG_FILE"
     fi
+
+    # Save learning results to ace-statusline-state.json for deferred display
+    LEARN_RESULT=$(cat "$TEMP_OUTPUT" 2>/dev/null || echo "")
+    USAGE_DIR="${HOME}/.claude/usage-data"
+    STATUSLINE_STATE="${USAGE_DIR}/ace-statusline-state.json"
+    mkdir -p "$USAGE_DIR" 2>/dev/null || true
+    if [[ -n "$LEARN_RESULT" ]]; then
+      LEARN_MSG=$(echo "$LEARN_RESULT" | jq -r '.systemMessage // ""' 2>/dev/null || echo "")
+      TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+      # Read existing state or create new
+      EXISTING_STATE="{}"
+      if [[ -f "$STATUSLINE_STATE" ]]; then
+        EXISTING_STATE=$(cat "$STATUSLINE_STATE" 2>/dev/null || echo "{}")
+      fi
+      echo "$EXISTING_STATE" | jq \
+        --arg result "$LEARN_MSG" \
+        --arg timestamp "$TIMESTAMP" \
+        '. + {"last_learn_result": $result, "last_learn_timestamp": $timestamp}' \
+        > "$STATUSLINE_STATE" 2>/dev/null || true
+    fi
+
     rm -f "$TEMP_INPUT" "$TEMP_OUTPUT"
   ) &
 

@@ -131,38 +131,27 @@ class TestInstallCliStaleProjectIdWarning:
         """Load the install CLI script."""
         self.source = INSTALL_CLI_PATH.read_text()
 
-    def test_install_cli_warns_stale_projectid(self):
+    def test_install_cli_no_stale_projectid_warning(self):
         """
-        The SessionStart hook must check for and warn about a stale
-        projectId field in the global config (~/.config/ace/config.json).
-        This follows the same pattern as the existing deprecated config
-        warnings in section 5 of the script.
+        v6.0.1: The stale projectId warning was removed because ace-cli
+        manages its own projectId in ~/.config/ace/config.json by design.
+        Per-project ACE_PROJECT_ID in .claude/settings.json overrides it.
+        The script should document this, not warn about it.
         """
-        # The script must contain a check for projectId in global config
-        assert "projectId" in self.source, (
-            "ace_install_cli.sh must check for stale projectId in global config"
-        )
-
-        # Specifically, it should grep or jq for projectId in NEW_CONFIG
-        # (the global config at ~/.config/ace/config.json)
-        has_projectid_check = (
-            ('grep' in self.source and '"projectId"' in self.source)
-            or ('jq' in self.source and '.projectId' in self.source)
-        )
-        assert has_projectid_check, (
-            "ace_install_cli.sh must check for 'projectId' in global config "
-            "using grep or jq"
-        )
-
-        # Must have a warning message about stale/per-project projectId
-        # Look for output_warning call that mentions projectId
+        # Must NOT have a warning about stale projectId (removed in v6.0.1)
         warning_lines = [
             line for line in self.source.splitlines()
-            if "output_warning" in line and "projectid" in line.lower()
+            if "output_warning" in line and "stale" in line.lower() and "projectid" in line.lower()
         ]
-        assert len(warning_lines) >= 1, (
-            "ace_install_cli.sh must emit a warning about stale projectId "
-            "in global config via output_warning()"
+        assert len(warning_lines) == 0, (
+            "ace_install_cli.sh must NOT warn about stale projectId — "
+            "ace-cli manages its own projectId by design (v6.0.1)"
+        )
+
+        # Should have a comment explaining the design decision
+        assert "projectId" in self.source, (
+            "ace_install_cli.sh should document that projectId in global config "
+            "is managed by ace-cli"
         )
 
 

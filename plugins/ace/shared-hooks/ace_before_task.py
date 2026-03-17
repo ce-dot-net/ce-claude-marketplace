@@ -16,11 +16,11 @@ v5.4.18: Granular token expiration using token_expires_in (seconds).
 """
 
 import json
-import re
 import sys
+import time
 import uuid
 from pathlib import Path
-from typing import Dict, Any
+from typing import Any
 
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent / 'utils'))
@@ -89,8 +89,47 @@ def expand_abbreviations(prompt: str) -> str:
     return result.strip()
 
 
+def check_deferred_learning():
+    """Read ace-statusline-state.json for deferred learning results."""
+    state_file = Path.home() / '.claude' / 'usage-data' / 'ace-statusline-state.json'
+    if not state_file.exists():
+        return None
+    try:
+        state = json.loads(state_file.read_text())
+        last_learn = state.get('last_learn_result', '')
+        timestamp_str = state.get('last_learn_timestamp', '')
+        shown = state.get('shown', False)
+
+        if not last_learn or shown:
+            return None
+
+        # Skip stale results (max_age = 3600 seconds / 1 hour)
+        if timestamp_str:
+            from datetime import datetime
+            try:
+                ts = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
+                age = time.time() - ts.timestamp()
+                if age > 3600:
+                    return None  # expired / stale
+            except Exception:
+                pass
+
+        # Mark as displayed/cleared so we don't show again
+        state['shown'] = True
+        state['displayed'] = True
+        state['cleared'] = True
+        state_file.write_text(json.dumps(state))
+
+        return last_learn
+    except Exception:
+        return None
+
+
 def main():
     try:
+        # Check for deferred learning results from ace-statusline-state.json
+        deferred_msg = check_deferred_learning()
+
         # Read hook event from stdin
         event = json.load(sys.stdin)
         user_prompt = event.get('prompt', '')
@@ -282,6 +321,10 @@ def main():
             user_message = "\n".join(summary_lines)
         else:
             user_message = "ℹ️  [ACE] No patterns found for this query"
+
+        # v6.0.1: Prepend deferred learning results if available
+        if deferred_msg:
+            user_message = f"{deferred_msg}\n\n{user_message}"
 
         # v5.4.13: Prepend auth warning if detected (still show patterns if found)
         if auth_warning and pattern_count > 0:
