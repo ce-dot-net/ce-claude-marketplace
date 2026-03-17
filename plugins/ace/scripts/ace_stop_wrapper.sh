@@ -26,7 +26,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.1.6"
+export ACE_PLUGIN_VERSION="6.2.0"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -184,6 +184,42 @@ if [[ "$ENABLE_NOTIFY" == "true" ]] && [[ $EXIT_CODE -eq 0 ]]; then
   echo "✅ ACE learning captured" >&2
 fi
 
-# Output result
+# ── Self-Evaluation Logic ──
+# Check if patterns were injected (ace-patterns-used-{session_id}.json)
+PATTERNS_FILE=".claude/data/logs/ace-patterns-used-${SESSION_ID}.json"
+EVAL_FLAG="/tmp/ace-eval-requested-${SESSION_ID}.flag"
+REVIEW_FILE=".claude/data/logs/ace-review-result.json"
+
+if [ -f "$PATTERNS_FILE" ]; then
+  if [ ! -f "$EVAL_FLAG" ]; then
+    # First stop: block and ask for self-evaluation
+    touch "$EVAL_FLAG"
+    echo '{"decision": "block", "reason": "Before completing, rate how helpful the <ace-patterns> knowledge was for this task and estimate time saved. Reply with exactly: ACE_REVIEW: N% | Xm saved | brief reason"}'
+    exit 0
+  else
+    # Second stop: eval was requested, parse last_assistant_message for ACE_REVIEW
+    LAST_MSG=$(echo "$INPUT_JSON" | jq -r '.last_assistant_message // ""')
+    HELPFUL_PCT=$(echo "$LAST_MSG" | grep -oE 'ACE_REVIEW:[[:space:]]*[0-9]+' | grep -oE '[0-9]+' | head -1)
+    HELPFUL_PCT="${HELPFUL_PCT:-0}"
+    # Parse time saved (e.g., "5m saved" or "30s saved")
+    TIME_SAVED=$(echo "$LAST_MSG" | grep -oE '[0-9]+m[0-9]*s? saved|[0-9]+s saved|[0-9]+ ?min' | head -1 | sed 's/ saved//')
+    TIME_SAVED="${TIME_SAVED:-}"
+    # Write result to review file
+    mkdir -p "$(dirname "$REVIEW_FILE")"
+    jq -n --arg pct "$HELPFUL_PCT" --arg time "$TIME_SAVED" \
+      '{helpful_pct: ($pct | tonumber), time_saved: $time}' > "$REVIEW_FILE" 2>/dev/null \
+      || echo "{\"helpful_pct\": ${HELPFUL_PCT}, \"time_saved\": \"${TIME_SAVED}\"}" > "$REVIEW_FILE"
+    # Clean up eval flag
+    rm -f "$EVAL_FLAG"
+    # Approve with helpfulness in systemMessage
+    SYS_MSG="✅ [ACE] ${HELPFUL_PCT}% helpful"
+    if [ -n "$TIME_SAVED" ]; then SYS_MSG="${SYS_MSG} | ~${TIME_SAVED} saved"; fi
+    SYS_MSG="${SYS_MSG} | Learning in background"
+    echo '{"decision": "approve", "systemMessage": "'"${SYS_MSG}"'"}'
+    exit 0
+  fi
+fi
+
+# Output result (no patterns — approve immediately)
 echo "$RESULT"
 exit $EXIT_CODE

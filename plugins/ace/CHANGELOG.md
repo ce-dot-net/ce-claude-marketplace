@@ -5,6 +5,37 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.2.0] - 2026-03-17
+
+### New
+- **ACE Self-Evaluation** -- At task end, Claude rates how helpful the injected ACE patterns were (0-100%) and estimates time saved. Real assessment, not fake metrics.
+- **Auto-sync statusline** -- Plugin updates automatically sync the statusline script. No manual update needed.
+- **Statusline shows real helpfulness** -- Displays Claude's self-assessed helpfulness % and estimated time saved.
+
+### How it works
+1. Patterns injected at task start (existing)
+2. Task runs normally (existing)
+3. At task end: Stop hook blocks once, asks Claude to self-evaluate
+4. Claude responds with: `ACE_REVIEW: 72% | 5m saved | patterns guided the investigation`
+5. Stop hook parses response, writes to state file, approves
+6. Statusline shows: `72% helpful ~5m saved`
+7. systemMessage shows: `[ACE] 72% helpful | ~5m saved | Learning in background`
+
+### Skips evaluation when
+- No patterns were injected (simple chat, no ACE involvement)
+- Trivial tasks with no substantial work
+
+### Files
+- UPDATED: `plugins/ace/scripts/ace_stop_wrapper.sh` -- Self-evaluation block/approve logic, parse ACE_REVIEW, write review result
+- UPDATED: `plugins/ace/scripts/ace_statusline.sh` -- Read review result (helpful_pct + time_saved)
+- UPDATED: `plugins/ace/scripts/ace_install_cli.sh` -- Auto-sync statusline on SessionStart
+- UPDATED: `plugins/ace/scripts/ace_sessionend_wrapper.sh` -- Clean up eval flag
+- NEW: `tests/test_ace_self_eval.py` -- 16 tests for self-evaluation
+
+### Requirements
+- Claude Code >= 2.1.69
+- ace-cli >= 3.10.3
+
 ## [6.1.6] - 2026-03-17
 
 ### Fixed
