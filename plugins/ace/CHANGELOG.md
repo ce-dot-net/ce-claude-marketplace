@@ -5,6 +5,21 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.5] - 2026-03-17
+
+### New
+- **User-friendly ACE statusline** -- Run `/ace-statusline-setup` to install. Shows per-task metrics: context%, patterns injected, relevance%, domains, domain shifts. Clean and simple.
+- **Per-session filtering** -- Statusline uses jq with strict session_id match (not grep substring), showing metrics for current task only
+- **Install/Update/Uninstall** -- `/ace-statusline-setup`, `/ace-statusline-setup update`, `/ace-statusline-setup uninstall`
+
+### Files
+- NEW: `plugins/ace/scripts/ace_statusline.sh` -- Simple statusline script users install
+- UPDATED: `plugins/ace/commands/ace-statusline-setup.md` -- Simplified to 3-step install/update/uninstall
+
+### Requirements
+- Claude Code >= 2.1.69
+- ace-cli >= 3.10.3
+
 ## [6.1.4] - 2026-03-17
 
 ### Critical Fix
