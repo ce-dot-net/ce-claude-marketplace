@@ -5,6 +5,29 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.1.1] - 2026-03-17
+
+### Added
+- **Per-task ACE contribution summary** at task end: shows relevance %, patterns injected/used, domains, estimated time saved
+- **`/ace-statusline update` and `/ace-statusline uninstall`** commands for managing statusline lifecycle
+- **`session_id` in state file**: SessionStart writes session_id for per-session filtering
+
+### Fixed
+- **State file path mismatch**: All writers (SessionStart, Stop hook) and readers (statusline, ace_before_task.py, SessionEnd) now consistently use `.claude/data/logs/ace-statusline-state.json` (project-relative). Previously Stop hook wrote to `~/.claude/usage-data/` while statusline read from `.claude/data/logs/`
+- **Cumulative counting**: Statusline now filters JSONL by `session_id` -- shows current session only, not all-time totals
+- **JSONL grep pattern**: Fixed `"event":"search"` to `"event": "search"` (with spaces) to match actual JSONL format
+- **`ace-cli status` field paths**: Fixed `.playbook.total_patterns` (was `.total_patterns`)
+
+### Improved
+- **Statusline redesign**: Pure ACE-focused, no CC defaults duplicated. Shows: context% | ACE patterns | injected/relevance | domains/shifts
+- **Better colors**: Magenta badge, blue injections, colored relevance %, cyan domains, yellow shifts
+- **SessionStart caches** `ace-cli status` and `ace-cli usage` data for statusline
+- **Version consistency tests** are now dynamic (check consistency, not hardcoded version)
+
+### Requirements
+- Claude Code >= 2.1.69
+- ace-cli >= 3.10.3
+
 ## [6.1.0] - 2026-03-17
 
 ### Added

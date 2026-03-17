@@ -132,11 +132,10 @@ class TestStatuslineStateSchema:
         # - ace_before_task.py (reader for deferred display)
         required_fields = [
             'patterns_total',
-            'helpful_total',
             'last_learn_result',
             'last_learn_timestamp',
-            'session_searches',
-            'session_patterns_injected',
+            'patterns_injected',
+            'avg_relevance',
         ]
         # Read the statusline script to verify it reads these fields
         script = SCRIPTS_DIR / 'ace_statusline.sh'

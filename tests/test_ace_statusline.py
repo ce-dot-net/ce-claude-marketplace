@@ -66,10 +66,12 @@ class TestStatuslineScript:
         """Statusline must be fast — no ace-cli or curl calls (all from local files)"""
         script = SCRIPTS_DIR / 'ace_statusline.sh'
         content = script.read_text()
-        # Should not call ace-cli (too slow for statusline refresh)
-        assert 'ace-cli' not in content, \
+        # Filter out comments — only check executable lines
+        executable_lines = [l for l in content.splitlines() if l.strip() and not l.strip().startswith('#')]
+        exec_content = '\n'.join(executable_lines)
+        assert 'ace-cli' not in exec_content, \
             "Statusline must not call ace-cli (too slow, use cached state)"
-        assert 'curl' not in content, \
+        assert 'curl' not in exec_content, \
             "Statusline must not make network calls"
 
     def test_statusline_handles_missing_state_gracefully(self):
@@ -80,19 +82,19 @@ class TestStatuslineScript:
         assert any(p in content for p in ['-f ', '[ -f', 'test -f', 'if [', '2>/dev/null']), \
             "Script must handle missing state file gracefully"
 
-    def test_statusline_displays_context_usage(self):
-        """Must show CC context window usage from stdin JSON"""
+    def test_statusline_shows_per_task_relevance(self):
+        """Must show per-task relevance % from search confidence"""
         script = SCRIPTS_DIR / 'ace_statusline.sh'
         content = script.read_text()
-        assert any(p in content for p in ['context_window', 'used_percentage', 'remaining']), \
-            "Script must display context window usage from CC JSON"
+        assert any(p in content for p in ['avg_confidence', 'avg_relevance', 'relevance']), \
+            "Script must show per-task relevance from search confidence"
 
-    def test_statusline_displays_model_info(self):
-        """Must show current model from stdin JSON"""
+    def test_statusline_shows_domains(self):
+        """Must show domain count or domain shifts"""
         script = SCRIPTS_DIR / 'ace_statusline.sh'
         content = script.read_text()
-        assert any(p in content for p in ['display_name', 'model', 'MODEL']), \
-            "Script must display model info from CC JSON"
+        assert any(p in content for p in ['domains', 'domain_shift', 'shifts']), \
+            "Script must show domain activity"
 
 
 class TestStatuslineCommand:

@@ -219,22 +219,46 @@ fi
 
 # ======================================================================
 # Write initial ace-statusline-state.json on startup
+# Cache ace-cli status + usage data so statusline reads locally (no network per refresh)
 # ======================================================================
-USAGE_DIR="${HOME}/.claude/usage-data"
-STATE_FILE="${USAGE_DIR}/ace-statusline-state.json"
-mkdir -p "$USAGE_DIR" 2>/dev/null || true
+STATE_DIR=".claude/data/logs"
+STATE_FILE="${STATE_DIR}/ace-statusline-state.json"
+mkdir -p "$STATE_DIR" 2>/dev/null || true
 
-# Query ace-cli status --json for pattern counts
+# Query ace-cli status --json for playbook stats
 ACE_STATUS=$($CLI_CMD status --json 2>/dev/null || echo '{}')
-TOTAL_PATTERNS=$(echo "$ACE_STATUS" | jq -r '.total_patterns // .patterns // 0' 2>/dev/null || echo "0")
-HELPFUL=$(echo "$ACE_STATUS" | jq -r '.helpful_total // .helpful // 0' 2>/dev/null || echo "0")
+TOTAL_PATTERNS=$(echo "$ACE_STATUS" | jq -r '.playbook.total_patterns // 0' 2>/dev/null || echo "0")
+HELPFUL=$(echo "$ACE_STATUS" | jq -r '.playbook.helpful_total // 0' 2>/dev/null || echo "0")
+HARMFUL=$(echo "$ACE_STATUS" | jq -r '.playbook.harmful_total // 0' 2>/dev/null || echo "0")
+PLAN=$(echo "$ACE_STATUS" | jq -r '.subscription.plan // "free"' 2>/dev/null || echo "free")
+API_USED=$(echo "$ACE_STATUS" | jq -r '.subscription.usage.api_calls.used // 0' 2>/dev/null || echo "0")
+API_LIMIT=$(echo "$ACE_STATUS" | jq -r '.subscription.usage.api_calls.limit // 0' 2>/dev/null || echo "0")
+
+# Query ace-cli usage --json --window 1d for recent activity
+ACE_USAGE=$($CLI_CMD usage --json --window 1d 2>/dev/null || echo '{}')
+USAGE_SEARCHES=$(echo "$ACE_USAGE" | jq -r '.searches // .search_count // 0' 2>/dev/null || echo "0")
+USAGE_LEARNS=$(echo "$ACE_USAGE" | jq -r '.learns // .learn_count // 0' 2>/dev/null || echo "0")
 
 jq -n \
+  --arg session_id "$SESSION_ID" \
   --arg patterns_total "$TOTAL_PATTERNS" \
   --arg helpful_total "$HELPFUL" \
+  --arg harmful_total "$HARMFUL" \
+  --arg plan "$PLAN" \
+  --arg api_used "$API_USED" \
+  --arg api_limit "$API_LIMIT" \
+  --arg usage_searches_1d "$USAGE_SEARCHES" \
+  --arg usage_learns_1d "$USAGE_LEARNS" \
   '{
+    "session_id": $session_id,
     "patterns_total": ($patterns_total | tonumber),
     "helpful_total": ($helpful_total | tonumber),
+    "harmful_total": ($harmful_total | tonumber),
+    "plan": $plan,
+    "api_used": ($api_used | tonumber),
+    "api_limit": ($api_limit | tonumber),
+    "usage_searches_1d": ($usage_searches_1d | tonumber),
+    "usage_learns_1d": ($usage_learns_1d | tonumber),
     "last_learn_result": "",
     "last_learn_timestamp": "",
     "session_searches": 0,

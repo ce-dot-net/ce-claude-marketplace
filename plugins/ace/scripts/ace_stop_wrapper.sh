@@ -26,7 +26,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.1.0"
+export ACE_PLUGIN_VERSION="6.1.1"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -133,9 +133,9 @@ if [[ "$ACE_ASYNC_LEARNING" == "1" ]]; then
 
     # Save learning results to ace-statusline-state.json for deferred display
     LEARN_RESULT=$(cat "$TEMP_OUTPUT" 2>/dev/null || echo "")
-    USAGE_DIR="${HOME}/.claude/usage-data"
-    STATUSLINE_STATE="${USAGE_DIR}/ace-statusline-state.json"
-    mkdir -p "$USAGE_DIR" 2>/dev/null || true
+    STATE_DIR=".claude/data/logs"
+    STATUSLINE_STATE="${STATE_DIR}/ace-statusline-state.json"
+    mkdir -p "$STATE_DIR" 2>/dev/null || true
     if [[ -n "$LEARN_RESULT" ]]; then
       LEARN_MSG=$(echo "$LEARN_RESULT" | jq -r '.systemMessage // ""' 2>/dev/null || echo "")
       TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
