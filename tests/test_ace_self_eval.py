@@ -32,27 +32,19 @@ class TestStopHookBlockForEval:
         assert any(p in content for p in ['ACE_REVIEW', 'ace_review', 'helpfulness', 'helpful']), \
             "Block reason must ask Claude to evaluate helpfulness"
 
-    def test_stop_wrapper_has_approve_on_second_stop(self):
-        """Must approve on second stop (after evaluation received)."""
+    def test_stop_wrapper_continues_on_second_stop(self):
+        """Must continue normally on second stop (after evaluation received)."""
         content = STOP_WRAPPER.read_text()
-        assert '"approve"' in content, \
-            "Stop wrapper must approve on second stop"
+        # On second stop, eval flag exists → parse review → continue with learning
+        assert 'EVAL_FLAG' in content and 'REVIEW_FILE' in content, \
+            "Stop wrapper must handle second stop with eval parsing"
 
     def test_stop_wrapper_skips_eval_when_no_patterns(self):
-        """Must skip evaluation (approve immediately) when no patterns injected."""
+        """Must skip evaluation when no patterns injected."""
         content = STOP_WRAPPER.read_text()
-        # Should have a fast-path for no patterns
-        lines = content.splitlines()
-        has_skip_logic = any(
-            ('approve' in line and ('no_pattern' in line.lower() or 'skip' in line.lower() or '0' in line))
-            or ('PATTERNS_INJECTED' in line and '0' in line)
-            or ('ace-patterns-used' in line and 'not' in line.lower())
-            for line in lines
-        )
-        # Alternative: check for conditional around the block
-        has_conditional_block = 'if' in content and ('block' in content) and ('approve' in content)
-        assert has_skip_logic or has_conditional_block, \
-            "Stop wrapper must skip eval when no patterns were injected"
+        # HAS_PATTERNS conditional gates the block
+        assert 'HAS_PATTERNS' in content and '"block"' in content, \
+            "Stop wrapper must conditionally block only when patterns exist"
 
 
 class TestStopHookParsesResponse:

@@ -5,6 +5,16 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.2.3] - 2026-03-18
+
+### Fixed
+- **Double learning fix**: Self-evaluation no longer triggers background learning twice per task. Block happens before learning launch, not after.
+- **Cleaner Stop hook flow**: block -> eval -> parse -> learn (sequential, not parallel). Removed duplicate eval logic.
+
+### Files
+- UPDATED: `plugins/ace/scripts/ace_stop_wrapper.sh` -- restructured: block before learning, parse before learning
+- UPDATED: `tests/test_ace_self_eval.py` -- updated 2 tests for new flow
+
 ## [6.2.0] - 2026-03-17
 
 ### New

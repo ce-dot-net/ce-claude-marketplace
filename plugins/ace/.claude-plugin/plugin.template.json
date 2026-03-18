@@ -1,6 +1,6 @@
 {
   "name": "ace",
-  "version": "6.2.2",
+  "version": "6.2.3",
   "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.2.0: Self-Evaluation - Real Helpfulness % + Time Saved. Requires: Claude Code >= 2.1.69, ace-cli >= 3.10.3.",
   "author": {
     "name": "ACE Team",
