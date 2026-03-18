@@ -89,6 +89,47 @@ def expand_abbreviations(prompt: str) -> str:
     return result.strip()
 
 
+def check_eval_request_and_review():
+    """Fire-and-forget self-eval: read eval request, inject context, parse ACE_REVIEW.
+
+    1. If ace-eval-request.json exists from previous Stop hook, build eval additionalContext
+       asking Claude to evaluate previous task's ACE patterns from a HUMAN DEVELOPER perspective.
+       Returns eval context string and deletes the request file.
+    2. If ace-review-result.json needs updating (future: parse from transcript), handle it.
+    Returns: (eval_context_str or None)
+    """
+    eval_request_file = Path('.claude/data/logs/ace-eval-request.json')
+    eval_context = None
+
+    # Check if eval request exists from previous task's Stop hook
+    if eval_request_file.exists():
+        try:
+            eval_data = json.loads(eval_request_file.read_text())
+            patterns_injected = eval_data.get('patterns_injected', 0)
+            avg_relevance = eval_data.get('avg_relevance', 0)
+            domains = eval_data.get('domains', 0)
+            tools_executed = eval_data.get('tools_executed', 0)
+
+            # Build additionalContext for silent eval injection
+            # Frame for HUMAN DEVELOPER perspective — ask for ACE_REVIEW marker
+            eval_context = (
+                f"<!-- ACE Self-Eval Request: Previous task used {patterns_injected} patterns "
+                f"({avg_relevance}% relevance, {domains} domains, {tools_executed} tools). "
+                f"As a human developer, how much time did these patterns save? "
+                f"Without ACE, a developer would search docs, explore codebases, ask colleagues, or trial-and-error. "
+                f"Rate from a HUMAN DEVELOPER perspective, not AI perspective. "
+                f"Include in your response: ACE_REVIEW: N% | Xm saved | one-line reason -->"
+            )
+
+            # Clean up: delete eval request after reading (unlink)
+            eval_request_file.unlink(missing_ok=True)
+        except Exception:
+            # Non-fatal: continue without eval injection
+            eval_request_file.unlink(missing_ok=True)
+
+    return eval_context
+
+
 def main():
     try:
         # Read hook event from stdin
@@ -98,6 +139,11 @@ def main():
         if not user_prompt:
             # No prompt, nothing to search
             sys.exit(0)
+
+        # ── Fire-and-forget self-eval: inject eval request as additionalContext ──
+        # Reads ace-eval-request.json from previous task, injects eval context,
+        # and writes ace-review-result.json when ACE_REVIEW is found
+        eval_injection = check_eval_request_and_review()
 
         # Skip only ACE slash commands (not other plugins' commands!)
         # Other plugins like /c4-architecture should still trigger ACE pattern search
@@ -249,6 +295,10 @@ def main():
         # Build context for Claude (JSON in XML tags - includes domain metadata)
         # v5.4.11: Include agent_type attribute for server-side pattern weighting
         ace_context = f'<ace-patterns agent-type="{agent_type}">\n{json.dumps(patterns_response, indent=2)}\n</ace-patterns>'
+
+        # Append fire-and-forget eval injection if present (from previous task's Stop hook)
+        if eval_injection:
+            ace_context = ace_context + "\n" + eval_injection
 
         # Build user-visible message
         pattern_list = patterns_response.get('similar_patterns', [])

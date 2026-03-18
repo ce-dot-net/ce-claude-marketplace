@@ -5,6 +5,27 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.2.8] - 2026-03-18
+
+### Changed
+- **Fire-and-forget self-eval**: Removed `decision: block` entirely -- no more "Stop hook error" display
+- Stop hook writes eval request to `ace-eval-request.json` after learning completes
+- Next `UserPromptSubmit` reads request, injects via `additionalContext` (silent, invisible to user)
+- Claude evaluates previous task's patterns naturally as part of responding to next prompt
+- Stop hook parses `ACE_REVIEW` from `last_assistant_message` and writes `ace-review-result.json`
+- One-task delay but completely silent -- no error, no blocking
+
+### Fixed
+- Removed PostCompact from hooks.json (CC 2.1.78 schema regression)
+- SessionStart + SessionEnd clean stale eval files
+
+### Files
+- UPDATED: `plugins/ace/scripts/ace_stop_wrapper.sh` -- fire-and-forget eval, writes request + parses ACE_REVIEW
+- UPDATED: `plugins/ace/shared-hooks/ace_before_task.py` -- reads eval request, injects additionalContext
+- UPDATED: `plugins/ace/scripts/ace_install_cli.sh` -- cleans ace-eval-request.json on startup
+- UPDATED: `plugins/ace/scripts/ace_sessionend_wrapper.sh` -- cleans ace-eval-request.json
+- UPDATED: `tests/test_ace_self_eval.py` -- 14 tests for new approach
+
 ## [6.2.6] - 2026-03-18
 
 ### Fixed
