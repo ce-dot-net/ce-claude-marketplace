@@ -28,7 +28,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.2.4"
+export ACE_PLUGIN_VERSION="6.2.5"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -239,7 +239,7 @@ fi
 if [ "$HAS_PATTERNS" = "true" ] && [ ! -f "$EVAL_FLAG" ] && [ ! -f "$REVIEW_FILE" ]; then
   # First stop: inject eval request via systemMessage (Claude sees it, responds naturally)
   touch "$EVAL_FLAG"
-  EVAL_MSG="✅ [ACE] Learning in background. Before finishing, briefly evaluate: considering a human developer working without ACE pattern knowledge, how helpful was the injected <ace-patterns> knowledge for this task? Include in your response: ACE_REVIEW: N% | Xm saved | one-line reason"
+  EVAL_MSG="✅ [ACE] Learning in background. Rate how much time the injected <ace-patterns> saved a HUMAN DEVELOPER on this task. Without ACE, they would need to search docs, explore codebases, ask colleagues, or trial-and-error. Do NOT rate from your AI perspective — rate from a human developer's perspective. Include: ACE_REVIEW: N% | Xm saved | one-line reason"
   echo "{\"continue\": true, \"systemMessage\": \"${EVAL_MSG}\"}"
 elif [ -f "$REVIEW_FILE" ]; then
   # Review was parsed — show result
