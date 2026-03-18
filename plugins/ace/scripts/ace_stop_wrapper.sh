@@ -28,7 +28,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.2.7"
+export ACE_PLUGIN_VERSION="6.2.8"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -104,16 +104,18 @@ START_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
 # v5.3.0: ace_after_task.py queries accumulated tools from SQLite
 INPUT_JSON=$(echo "$INPUT_JSON" | jq '. + {"hook_event_name": "Stop"}')
 
-# ── Self-Evaluation via systemMessage (no blocking, no "error") ──
-# On first stop: systemMessage asks Claude to include ACE_REVIEW in response
-# On second stop: parse last_assistant_message for ACE_REVIEW and write to state file
-EVAL_FLAG="/tmp/ace-eval-requested-${SESSION_ID}.flag"
+# ── Fire-and-Forget Self-Evaluation ──
+# Stop hook writes eval request to state file (NO blocking, NO decision:block)
+# Next UserPromptSubmit reads eval request, injects via additionalContext (silent)
+# Claude evaluates previous task's patterns naturally in its response
+# Stop hook parses ACE_REVIEW from last_assistant_message and writes review file
+EVAL_REQUEST_FILE=".claude/data/logs/ace-eval-request.json"
 REVIEW_FILE=".claude/data/logs/ace-review-result.json"
 RELEVANCE_FILE=".claude/data/logs/ace-relevance.jsonl"
 
-# Check if we're on second stop (eval was requested, now parse the response)
-if [ -f "$EVAL_FLAG" ]; then
-  LAST_MSG=$(echo "$INPUT_JSON" | jq -r '.last_assistant_message // ""')
+# Check if last_assistant_message contains ACE_REVIEW (from previous eval injection)
+LAST_MSG=$(echo "$INPUT_JSON" | jq -r '.last_assistant_message // ""')
+if echo "$LAST_MSG" | grep -qE 'ACE_REVIEW:'; then
   HELPFUL_PCT=$(echo "$LAST_MSG" | grep -oE 'ACE_REVIEW:[[:space:]]*[0-9]+' | grep -oE '[0-9]+' | head -1)
   HELPFUL_PCT="${HELPFUL_PCT:-0}"
   TIME_SAVED=$(echo "$LAST_MSG" | grep -oE '[0-9]+m[0-9]*s? saved|[0-9]+s saved|[0-9]+ ?min' | head -1 | sed 's/ saved//')
@@ -122,7 +124,6 @@ if [ -f "$EVAL_FLAG" ]; then
   jq -n --arg pct "$HELPFUL_PCT" --arg time "$TIME_SAVED" \
     '{helpful_pct: ($pct | tonumber), time_saved: $time}' > "$REVIEW_FILE" 2>/dev/null \
     || echo "{\"helpful_pct\": ${HELPFUL_PCT}, \"time_saved\": \"${TIME_SAVED}\"}" > "$REVIEW_FILE"
-  rm -f "$EVAL_FLAG"
 fi
 
 # Check if async mode is enabled (Issue #3 fix)
@@ -206,15 +207,18 @@ if [[ "$ENABLE_NOTIFY" == "true" ]] && [[ $EXIT_CODE -eq 0 ]]; then
   echo "✅ ACE learning captured" >&2
 fi
 
-# ── Output: systemMessage-based self-eval (no blocking, no "error") ──
-# First stop with patterns: ask Claude via systemMessage to include ACE_REVIEW
-# Second stop: review was parsed above, show result
-# No patterns: normal output
+# ── Write eval request for next task (fire-and-forget, no blocking) ──
+# Check if patterns were injected this task (from JSONL) and write eval request
+# Next UserPromptSubmit will read this and inject eval via additionalContext
 
-# Check if patterns were injected this task (from JSONL)
 HAS_PATTERNS=false
+INJECTED=0
+AVG_REL=0
+DOMAINS_COUNT=0
+TOOLS_EXECUTED=0
+
 if [ -f "$RELEVANCE_FILE" ]; then
-  INJECTED=$(python3 -c "
+  eval "$(python3 -c "
 import json
 events = []
 with open('$RELEVANCE_FILE') as f:
@@ -228,20 +232,35 @@ for i, e in enumerate(events):
     if e.get('event') == 'execution': last_exec = i
 current = events[last_exec + 1:] if last_exec >= 0 else events
 searches = [e for e in current if e.get('event') == 'search']
-total = sum(s.get('patterns_injected', 0) for s in searches)
-print(total)
-" 2>/dev/null || echo "0")
+execs = [e for e in current if e.get('event') == 'execution']
+inj = sum(s.get('patterns_injected', 0) for s in searches)
+rel = int(sum(s.get('avg_confidence', 0) for s in searches) / len(searches) * 100) if searches else 0
+doms = len(set(d for s in searches for d in s.get('domains', [])))
+tools = sum(e.get('tools_executed', 0) for e in execs) if execs else 0
+print(f'INJECTED={inj}')
+print(f'AVG_REL={rel}')
+print(f'DOMAINS_COUNT={doms}')
+print(f'TOOLS_EXECUTED={tools}')
+" 2>/dev/null)" || true
   if [ "$INJECTED" -gt 0 ] 2>/dev/null; then
     HAS_PATTERNS=true
   fi
 fi
 
-if [ "$HAS_PATTERNS" = "true" ] && [ ! -f "$EVAL_FLAG" ] && [ ! -f "$REVIEW_FILE" ]; then
-  # First stop: silent block — suppressOutput hides from user, reason goes to Claude
-  touch "$EVAL_FLAG"
-  echo '{"decision": "block", "reason": "Rate how much time the injected <ace-patterns> saved a HUMAN DEVELOPER on this task. Without ACE, they would need to search docs, explore codebases, ask colleagues, or trial-and-error. Do NOT rate from your AI perspective — rate from a human developer perspective who would do this task manually. Include in your response: ACE_REVIEW: N% | Xm saved | one-line reason", "suppressOutput": true}'
-  exit 0
-elif [ -f "$REVIEW_FILE" ]; then
+if [ "$HAS_PATTERNS" = "true" ]; then
+  # Write eval request for next UserPromptSubmit to pick up
+  mkdir -p "$(dirname "$EVAL_REQUEST_FILE")"
+  jq -n \
+    --arg pi "$INJECTED" \
+    --arg ar "$AVG_REL" \
+    --arg dc "$DOMAINS_COUNT" \
+    --arg te "$TOOLS_EXECUTED" \
+    --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    '{patterns_injected: ($pi | tonumber), avg_relevance: ($ar | tonumber), domains: ($dc | tonumber), tools_executed: ($te | tonumber), success: true, timestamp: $ts}' \
+    > "$EVAL_REQUEST_FILE" 2>/dev/null || true
+fi
+
+if [ -f "$REVIEW_FILE" ]; then
   # Review was parsed — show result
   REVIEW_PCT=$(jq -r '.helpful_pct // 0' "$REVIEW_FILE" 2>/dev/null || echo "0")
   REVIEW_TIME=$(jq -r '.time_saved // ""' "$REVIEW_FILE" 2>/dev/null || echo "")

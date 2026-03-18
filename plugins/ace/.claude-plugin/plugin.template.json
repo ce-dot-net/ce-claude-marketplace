@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "6.2.7",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.2.7: Silent self-eval (no error display), stale state cleanup, learning-after-eval. Requires: Claude Code >= 2.1.69, ace-cli >= 3.10.3.",
+  "version": "6.2.8",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.2.8: Fire-and-forget self-eval (no blocking, no error display). Requires: Claude Code >= 2.1.69, ace-cli >= 3.10.3.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
