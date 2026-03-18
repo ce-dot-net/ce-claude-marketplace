@@ -10,7 +10,7 @@
 set -euo pipefail
 trap 'exit 0' ERR
 
-ACE_PLUGIN_VERSION="6.2.2"
+ACE_PLUGIN_VERSION="6.2.3"
 
 # ACE disable flag check (set by SessionStart if CLI issues detected)
 # Official Claude Code pattern: flag file coordination between hooks
