@@ -200,6 +200,11 @@ if [ "$SOURCE" = "clear" ]; then
   restore_patterns_after_compact
 fi
 
+# Clean stale self-eval state from previous session
+# ace-eval-requested flags and ace-review-result.json should not persist across sessions
+rm -f /tmp/ace-eval-requested-*.flag 2>/dev/null || true
+rm -f .claude/data/logs/ace-review-result.json 2>/dev/null || true
+
 # Auto-sync statusline script on plugin update (if installed)
 STATUSLINE_INSTALLED="$HOME/.claude/ace_statusline.sh"
 STATUSLINE_SOURCE="${SCRIPT_DIR}/ace_statusline.sh"

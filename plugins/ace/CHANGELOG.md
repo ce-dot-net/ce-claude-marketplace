@@ -5,6 +5,28 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.2.6] - 2026-03-18
+
+### Fixed
+- **Silent self-eval**: Uses `decision: block` + `suppressOutput: true` + exit 0 -- no "error" label shown to user in UI
+- **Stale state cleanup**: SessionStart cleans `/tmp/ace-eval-requested-*.flag` and `ace-review-result.json` on startup (prevents stale data from previous sessions)
+- **Learning timing**: First stop exits BEFORE launching background learning (no double learning on eval flow)
+
+### Changed
+- Replaced broken `systemMessage` approach (Claude doesn't respond to systemMessage on Stop) with `decision: block` + `suppressOutput: true`
+- Added `suppressOutput: true` to block output -- hides from user, reason goes only to Claude
+
+### How It Works
+1. Stop fires -- checks patterns injected -- blocks silently with suppressOutput
+2. Claude sees reason, responds with `ACE_REVIEW: N% | Xm saved | reason`
+3. Stop fires again -- parses response -- writes ace-review-result.json -- approves
+4. Statusline shows real helpfulness %
+
+### Files
+- UPDATED: `plugins/ace/scripts/ace_stop_wrapper.sh` -- decision:block + suppressOutput, exit 0
+- UPDATED: `plugins/ace/scripts/ace_install_cli.sh` -- stale state cleanup on startup
+- UPDATED: `tests/test_ace_self_eval.py` -- 19 tests updated for new approach
+
 ## [6.2.5] - 2026-03-18
 
 ### Changed
