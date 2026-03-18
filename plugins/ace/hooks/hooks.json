@@ -96,18 +96,6 @@
         ]
       }
     ],
-    "PostCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_postcompact_wrapper.sh",
-            "timeout": 5000
-          }
-        ]
-      }
-    ],
     "SubagentStop": [
       {
         "matcher": "",

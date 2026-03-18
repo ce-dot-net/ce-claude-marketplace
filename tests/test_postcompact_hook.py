@@ -23,11 +23,13 @@ def _read(path):
 class TestHooksJsonPostCompact:
     """hooks.json should have a PostCompact event."""
 
-    def test_hooks_json_has_postcompact(self):
-        """PostCompact event exists in hooks.json."""
+    def test_postcompact_not_in_hooks_json(self):
+        """PostCompact removed from hooks.json — CC 2.1.78 plugin schema doesn't support it.
+        Pattern restoration handled by SessionStart(compact) source routing instead.
+        Script remains in repo for when CC adds PostCompact to plugin schema."""
         hooks = json.loads(_read(HOOKS_JSON))
-        assert 'PostCompact' in hooks['hooks'], \
-            "hooks.json missing PostCompact event"
+        assert 'PostCompact' not in hooks['hooks'], \
+            "PostCompact should not be in hooks.json (CC 2.1.78 rejects it)"
 
 
 class TestPostCompactWrapper:
