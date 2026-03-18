@@ -5,6 +5,15 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.2.5] - 2026-03-18
+
+### Changed
+- **Human developer perspective eval**: Self-eval prompt now explicitly asks for human developer time savings perspective -- "Without ACE, they would need to search docs, explore codebases, ask colleagues, or trial-and-error"
+- **Cache cleanup**: Removed 12 old plugin cache versions
+
+### Files
+- UPDATED: `plugins/ace/scripts/ace_stop_wrapper.sh` -- reframed EVAL_MSG prompt for human developer perspective
+
 ## [6.2.4] - 2026-03-18
 
 ### Changed
