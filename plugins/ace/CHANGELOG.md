@@ -5,6 +5,17 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.2.4] - 2026-03-18
+
+### Changed
+- **Non-blocking self-eval**: Self-eval now uses `systemMessage` instead of `decision: block` -- no more "Stop hook blocking error" displayed to users.
+- **Human-framed evaluation**: Evaluation framed for human developer time savings, not AI self-assessment.
+- Same two-stop flow but without error display.
+
+### Files
+- UPDATED: `plugins/ace/scripts/ace_stop_wrapper.sh` -- replaced decision:block with systemMessage approach
+- UPDATED: `tests/test_ace_self_eval.py` -- updated tests for systemMessage approach
+
 ## [6.2.3] - 2026-03-18
 
 ### Fixed

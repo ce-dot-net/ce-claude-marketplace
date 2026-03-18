@@ -104,48 +104,14 @@ START_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
 # v5.3.0: ace_after_task.py queries accumulated tools from SQLite
 INPUT_JSON=$(echo "$INPUT_JSON" | jq '. + {"hook_event_name": "Stop"}')
 
-# ── Self-Evaluation: Check if patterns were injected this session ──
-# Don't rely on ace-patterns-used file (deleted by background learning race condition)
-# Instead check JSONL for search events with patterns_injected > 0
+# ── Self-Evaluation via systemMessage (no blocking, no "error") ──
+# On first stop: systemMessage asks Claude to include ACE_REVIEW in response
+# On second stop: parse last_assistant_message for ACE_REVIEW and write to state file
 EVAL_FLAG="/tmp/ace-eval-requested-${SESSION_ID}.flag"
 REVIEW_FILE=".claude/data/logs/ace-review-result.json"
 RELEVANCE_FILE=".claude/data/logs/ace-relevance.jsonl"
-HAS_PATTERNS=false
-if [ -f "$EVAL_FLAG" ]; then
-  HAS_PATTERNS=true
-elif [ -f "$RELEVANCE_FILE" ]; then
-  # Check if any patterns were injected after the last execution event (= this task)
-  INJECTED=$(python3 -c "
-import json
-events = []
-with open('$RELEVANCE_FILE') as f:
-    for line in f:
-        line = line.strip()
-        if line:
-            try: events.append(json.loads(line))
-            except: pass
-last_exec = -1
-for i, e in enumerate(events):
-    if e.get('event') == 'execution': last_exec = i
-current = events[last_exec + 1:] if last_exec >= 0 else events
-searches = [e for e in current if e.get('event') == 'search']
-total = sum(s.get('patterns_injected', 0) for s in searches)
-print(total)
-" 2>/dev/null || echo "0")
-  if [ "$INJECTED" -gt 0 ] 2>/dev/null; then
-    HAS_PATTERNS=true
-  fi
-fi
 
-# Skip learning on first stop if we're about to block for self-eval
-# Learning will run on second stop (after eval received)
-if [ "$HAS_PATTERNS" = "true" ] && [ ! -f "$EVAL_FLAG" ]; then
-  touch "$EVAL_FLAG"
-  echo '{"decision": "block", "reason": "Before completing, rate how helpful the <ace-patterns> knowledge was for this task and estimate time saved. Reply with exactly: ACE_REVIEW: N% | Xm saved | brief reason"}'
-  exit 0
-fi
-
-# If eval was requested (second stop), parse the response BEFORE learning
+# Check if we're on second stop (eval was requested, now parse the response)
 if [ -f "$EVAL_FLAG" ]; then
   LAST_MSG=$(echo "$INPUT_JSON" | jq -r '.last_assistant_message // ""')
   HELPFUL_PCT=$(echo "$LAST_MSG" | grep -oE 'ACE_REVIEW:[[:space:]]*[0-9]+' | grep -oE '[0-9]+' | head -1)
@@ -240,12 +206,47 @@ if [[ "$ENABLE_NOTIFY" == "true" ]] && [[ $EXIT_CODE -eq 0 ]]; then
   echo "✅ ACE learning captured" >&2
 fi
 
-# Output result — include helpfulness if review was just completed
-if [ -f "$REVIEW_FILE" ]; then
+# ── Output: systemMessage-based self-eval (no blocking, no "error") ──
+# First stop with patterns: ask Claude via systemMessage to include ACE_REVIEW
+# Second stop: review was parsed above, show result
+# No patterns: normal output
+
+# Check if patterns were injected this task (from JSONL)
+HAS_PATTERNS=false
+if [ -f "$RELEVANCE_FILE" ]; then
+  INJECTED=$(python3 -c "
+import json
+events = []
+with open('$RELEVANCE_FILE') as f:
+    for line in f:
+        line = line.strip()
+        if line:
+            try: events.append(json.loads(line))
+            except: pass
+last_exec = -1
+for i, e in enumerate(events):
+    if e.get('event') == 'execution': last_exec = i
+current = events[last_exec + 1:] if last_exec >= 0 else events
+searches = [e for e in current if e.get('event') == 'search']
+total = sum(s.get('patterns_injected', 0) for s in searches)
+print(total)
+" 2>/dev/null || echo "0")
+  if [ "$INJECTED" -gt 0 ] 2>/dev/null; then
+    HAS_PATTERNS=true
+  fi
+fi
+
+if [ "$HAS_PATTERNS" = "true" ] && [ ! -f "$EVAL_FLAG" ] && [ ! -f "$REVIEW_FILE" ]; then
+  # First stop: inject eval request via systemMessage (Claude sees it, responds naturally)
+  touch "$EVAL_FLAG"
+  EVAL_MSG="✅ [ACE] Learning in background. Before finishing, briefly evaluate: considering a human developer working without ACE pattern knowledge, how helpful was the injected <ace-patterns> knowledge for this task? Include in your response: ACE_REVIEW: N% | Xm saved | one-line reason"
+  echo "{\"continue\": true, \"systemMessage\": \"${EVAL_MSG}\"}"
+elif [ -f "$REVIEW_FILE" ]; then
+  # Review was parsed — show result
   REVIEW_PCT=$(jq -r '.helpful_pct // 0' "$REVIEW_FILE" 2>/dev/null || echo "0")
   REVIEW_TIME=$(jq -r '.time_saved // ""' "$REVIEW_FILE" 2>/dev/null || echo "")
   SYS_MSG="✅ [ACE] ${REVIEW_PCT}% helpful"
-  if [ -n "$REVIEW_TIME" ] && [ "$REVIEW_TIME" != "null" ]; then SYS_MSG="${SYS_MSG} | ~${REVIEW_TIME} saved"; fi
+  if [ -n "$REVIEW_TIME" ] && [ "$REVIEW_TIME" != "null" ] && [ "$REVIEW_TIME" != "" ]; then SYS_MSG="${SYS_MSG} | ~${REVIEW_TIME} saved"; fi
   SYS_MSG="${SYS_MSG} | Learning in background"
   echo "{\"continue\": true, \"systemMessage\": \"${SYS_MSG}\"}"
 else

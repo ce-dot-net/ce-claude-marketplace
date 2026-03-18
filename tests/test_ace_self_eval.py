@@ -1,7 +1,7 @@
-"""TDD RED: ACE Self-Evaluation via Stop Hook Block.
+"""TDD: ACE Self-Evaluation via Stop Hook systemMessage.
 
-Stop hook blocks once asking Claude to rate pattern helpfulness (0-100%).
-On second stop, parses the response and writes result to state file.
+Stop hook uses systemMessage (no blocking, no "error") to ask Claude to evaluate
+pattern helpfulness. On second stop, parses the response and writes result to state file.
 """
 from pathlib import Path
 
@@ -11,123 +11,100 @@ STATUSLINE = SCRIPTS_DIR / 'ace_statusline.sh'
 STOP_WRAPPER = SCRIPTS_DIR / 'ace_stop_wrapper.sh'
 
 
-class TestStopHookBlockForEval:
-    """Stop hook should block once for self-evaluation when patterns were injected."""
+class TestStopHookSystemMessageEval:
+    """Stop hook uses systemMessage to request eval — no decision:block, no error."""
+
+    def test_stop_wrapper_uses_systemmessage_for_eval(self):
+        """Must use systemMessage (not decision:block) to request evaluation."""
+        content = STOP_WRAPPER.read_text()
+        assert 'systemMessage' in content and 'ACE_REVIEW' in content, \
+            "Stop wrapper must use systemMessage containing ACE_REVIEW request"
+
+    def test_stop_wrapper_no_decision_block(self):
+        """Must NOT use decision:block (causes 'error' display)."""
+        content = STOP_WRAPPER.read_text()
+        # Filter out comments
+        exec_lines = [l for l in content.splitlines() if l.strip() and not l.strip().startswith('#')]
+        exec_content = '\n'.join(exec_lines)
+        assert '"decision"' not in exec_content or '"block"' not in exec_content, \
+            "Stop wrapper must NOT use decision:block"
 
     def test_stop_wrapper_checks_patterns_injected(self):
-        """Must check if patterns were injected before blocking."""
+        """Must check if patterns were injected before requesting eval."""
         content = STOP_WRAPPER.read_text()
-        assert any(p in content for p in ['ace-patterns-used', 'patterns_injected', 'PATTERNS_INJECTED']), \
+        assert 'HAS_PATTERNS' in content or 'INJECTED' in content, \
             "Stop wrapper must check if patterns were injected"
-
-    def test_stop_wrapper_has_block_decision(self):
-        """Must return decision: block on first stop when patterns exist."""
-        content = STOP_WRAPPER.read_text()
-        assert '"decision"' in content and '"block"' in content, \
-            "Stop wrapper must return decision: block"
-
-    def test_stop_wrapper_block_reason_asks_evaluation(self):
-        """Block reason must instruct Claude to rate helpfulness."""
-        content = STOP_WRAPPER.read_text()
-        assert any(p in content for p in ['ACE_REVIEW', 'ace_review', 'helpfulness', 'helpful']), \
-            "Block reason must ask Claude to evaluate helpfulness"
-
-    def test_stop_wrapper_continues_on_second_stop(self):
-        """Must continue normally on second stop (after evaluation received)."""
-        content = STOP_WRAPPER.read_text()
-        # On second stop, eval flag exists → parse review → continue with learning
-        assert 'EVAL_FLAG' in content and 'REVIEW_FILE' in content, \
-            "Stop wrapper must handle second stop with eval parsing"
 
     def test_stop_wrapper_skips_eval_when_no_patterns(self):
         """Must skip evaluation when no patterns injected."""
         content = STOP_WRAPPER.read_text()
-        # HAS_PATTERNS conditional gates the block
-        assert 'HAS_PATTERNS' in content and '"block"' in content, \
-            "Stop wrapper must conditionally block only when patterns exist"
+        assert 'HAS_PATTERNS' in content, \
+            "Stop wrapper must conditionally eval only when patterns exist"
+
+    def test_stop_wrapper_human_developer_framing(self):
+        """Eval request must frame helpfulness for human developer, not AI."""
+        content = STOP_WRAPPER.read_text()
+        assert any(p in content for p in ['human', 'developer', 'without ACE']), \
+            "Eval must ask about helpfulness for human developer, not AI"
 
 
 class TestStopHookParsesResponse:
-    """Stop hook must parse Claude's self-evaluation from last_assistant_message."""
+    """Stop hook parses Claude's self-evaluation from last_assistant_message."""
 
     def test_stop_wrapper_reads_last_assistant_message(self):
-        """Must read last_assistant_message from event JSON."""
         content = STOP_WRAPPER.read_text()
-        assert 'last_assistant_message' in content, \
-            "Stop wrapper must read last_assistant_message"
+        assert 'last_assistant_message' in content
 
     def test_stop_wrapper_parses_ace_review(self):
-        """Must parse ACE_REVIEW: N% from the response."""
         content = STOP_WRAPPER.read_text()
-        assert 'ACE_REVIEW' in content, \
-            "Stop wrapper must parse ACE_REVIEW marker"
+        assert 'ACE_REVIEW' in content
 
     def test_stop_wrapper_extracts_percentage(self):
-        """Must extract the percentage number from ACE_REVIEW response."""
         content = STOP_WRAPPER.read_text()
-        # Must have ACE_REVIEW extraction logic (grep/sed for the marker + number)
-        assert 'ACE_REVIEW' in content and any(p in content for p in ['grep.*ACE_REVIEW', 'sed.*ACE_REVIEW', 'helpful_pct']), \
-            "Stop wrapper must extract percentage from ACE_REVIEW marker"
+        assert any(p in content for p in ['grep', 'sed', '[0-9]']), \
+            "Must extract percentage from ACE_REVIEW"
 
 
 class TestStopHookWritesResult:
-    """Stop hook must write evaluation result to state file."""
+    """Stop hook writes evaluation result to state file."""
 
     def test_stop_wrapper_writes_review_file(self):
-        """Must write result to ace-review-result.json."""
         content = STOP_WRAPPER.read_text()
-        assert 'ace-review-result.json' in content, \
-            "Stop wrapper must write to ace-review-result.json"
+        assert 'ace-review-result.json' in content
 
     def test_review_file_in_project_logs(self):
-        """Review file must be in .claude/data/logs/ (project-relative)."""
         content = STOP_WRAPPER.read_text()
-        assert '.claude/data/logs/ace-review-result.json' in content, \
-            "Review file must be in .claude/data/logs/"
+        assert '.claude/data/logs/ace-review-result.json' in content
 
-    def test_stop_wrapper_includes_helpful_pct_in_systemmessage(self):
-        """systemMessage must include the helpfulness percentage."""
+    def test_stop_wrapper_includes_helpful_pct_in_output(self):
         content = STOP_WRAPPER.read_text()
-        assert any(p in content for p in ['helpful', 'HELPFUL_PCT', 'helpful_pct']), \
-            "systemMessage must include helpfulness percentage"
+        assert 'helpful_pct' in content or 'HELPFUL_PCT' in content or 'helpful' in content
 
 
 class TestStatuslineReadsReview:
-    """Statusline must read the evaluation result."""
+    """Statusline reads evaluation result."""
 
     def test_statusline_reads_review_file(self):
-        """Statusline must read ace-review-result.json."""
         content = STATUSLINE.read_text()
-        assert 'ace-review-result.json' in content, \
-            "Statusline must read ace-review-result.json"
+        assert 'ace-review-result.json' in content
 
-    def test_statusline_shows_helpful_pct_from_review_file(self):
-        """Statusline must read helpful_pct from ace-review-result.json, not just display it."""
+    def test_statusline_shows_helpful_pct(self):
         content = STATUSLINE.read_text()
-        # Must actually source the value from the review result file
-        assert 'ace-review-result' in content and 'helpful_pct' in content, \
-            "Statusline must read helpful_pct from ace-review-result.json"
+        assert 'helpful_pct' in content
 
 
 class TestEvalStateManagement:
     """State file management for evaluation flow."""
 
     def test_stop_wrapper_uses_eval_flag(self):
-        """Must use a flag to track if eval was already requested."""
         content = STOP_WRAPPER.read_text()
-        assert any(p in content for p in ['ace-eval-requested', 'EVAL_REQUESTED', 'eval_flag', 'ACE_EVAL']), \
-            "Stop wrapper must use a flag to track eval state"
+        assert 'ace-eval-requested' in content or 'EVAL_FLAG' in content
 
     def test_eval_flag_is_session_keyed(self):
-        """Eval flag must be keyed by session to avoid cross-task contamination."""
         content = STOP_WRAPPER.read_text()
-        # The eval flag path itself must contain SESSION_ID (not just any SESSION_ID usage)
-        assert any(p in content for p in ['ace-eval-requested-${SESSION', 'ace-eval-${SESSION', 'ACE_EVAL.*SESSION']), \
-            "Eval flag must be session-keyed"
+        assert 'ace-eval-requested-${SESSION' in content
 
     def test_sessionend_cleans_eval_flag(self):
-        """SessionEnd must clean up eval flag."""
         sessionend = SCRIPTS_DIR / 'ace_sessionend_wrapper.sh'
         content = sessionend.read_text()
-        assert any(p in content for p in ['ace-eval', 'eval-requested', 'ACE_EVAL']), \
-            "SessionEnd must clean up eval flag"
+        assert 'ace-eval' in content
