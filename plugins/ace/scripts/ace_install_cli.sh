@@ -216,5 +216,11 @@ if [ -f "$STATUSLINE_INSTALLED" ] && [ -f "$STATUSLINE_SOURCE" ]; then
   fi
 fi
 
+# Set ACE_CLIENT_ID for per-extension analytics tracking (ace-sdk 2.12.0+)
+# Only set if not already configured (respect user/ace-configure override)
+if [ -n "$CLAUDE_ENV_FILE" ] && [ -z "${ACE_CLIENT_ID:-}" ]; then
+  echo 'export ACE_CLIENT_ID="claude-code"' >> "$CLAUDE_ENV_FILE"
+fi
+
 # Success - ACE hooks can proceed (no flag file = enabled)
 exit 0
