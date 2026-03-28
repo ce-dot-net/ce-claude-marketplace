@@ -11,11 +11,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Client analytics tracking**: Sets `ACE_CLIENT_ID=claude-code` automatically on session start via `$CLAUDE_ENV_FILE`
 - ACE server can now distinguish Claude Code plugin traffic from other clients (VS Code, Cursor)
 - Respects user override if `ACE_CLIENT_ID` is already set (via ace-configure or manual export)
-- Automatic for all users -- takes effect on next CC session start, no reinstall needed
+- **Compact indicator**: Statusline now shows "Compact X%" label like default CC statusline
+- All wrapper scripts updated to version 6.2.9
 
 ### Files
-- UPDATED: `plugins/ace/scripts/ace_install_cli.sh` -- 4 lines added for ACE_CLIENT_ID injection
+- UPDATED: `plugins/ace/scripts/ace_install_cli.sh` -- ACE_CLIENT_ID via CLAUDE_ENV_FILE
+- UPDATED: `plugins/ace/scripts/ace_statusline.sh` -- "Compact" label added
+- UPDATED: All wrapper scripts -- version bumped to 6.2.9
 - NEW: `tests/test_client_id.py` -- 4 tests for client ID behavior
+- NEW: `tests/test_statusline_compact.py` -- 2 tests for compact indicator
 
 ## [6.2.8] - 2026-03-18
 
