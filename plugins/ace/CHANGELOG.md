@@ -5,6 +5,18 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.2.9] - 2026-03-28
+
+### New
+- **Client analytics tracking**: Sets `ACE_CLIENT_ID=claude-code` automatically on session start via `$CLAUDE_ENV_FILE`
+- ACE server can now distinguish Claude Code plugin traffic from other clients (VS Code, Cursor)
+- Respects user override if `ACE_CLIENT_ID` is already set (via ace-configure or manual export)
+- Automatic for all users -- takes effect on next CC session start, no reinstall needed
+
+### Files
+- UPDATED: `plugins/ace/scripts/ace_install_cli.sh` -- 4 lines added for ACE_CLIENT_ID injection
+- NEW: `tests/test_client_id.py` -- 4 tests for client ID behavior
+
 ## [6.2.8] - 2026-03-18
 
 ### Changed
