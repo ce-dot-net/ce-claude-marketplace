@@ -86,8 +86,8 @@ else REL_C="$RED"; fi
 # ═══════════════════════════════════════
 OUT=""
 
-# Context %
-OUT+="${CTX_C}${B}${used_pct}%${R}"
+# Context % with Compact label (like default CC statusline)
+OUT+="${D}Compact${R} ${CTX_C}${B}${used_pct}%${R}"
 OUT+=" ${D}⋮${R} "
 
 # ACE badge
