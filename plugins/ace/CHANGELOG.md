@@ -5,6 +5,19 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.2.10] - 2026-03-29
+
+### Fixed
+- **Pattern ID tracking**: `ace_before_task.py` now APPENDS pattern IDs to `ace-patterns-used-{session_id}.json` instead of overwriting
+- Previously each search overwrote the file -- if a task had multiple searches (main agent + subagents, domain shifts), only the LAST search's pattern IDs survived
+- Now all pattern IDs from all searches within a task accumulate with deduplication
+- Fixes `patterns_used_count: 0` in execution events where patterns were actually injected
+- All wrapper scripts updated to version 6.2.10
+
+### Files
+- UPDATED: `plugins/ace/shared-hooks/ace_before_task.py` -- append + deduplicate pattern IDs
+- UPDATED: All wrapper scripts -- version bumped to 6.2.10
+
 ## [6.2.9] - 2026-03-28
 
 ### New

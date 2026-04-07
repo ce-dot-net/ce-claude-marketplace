@@ -266,7 +266,21 @@ def main():
                     state_dir = Path('.claude/data/logs')
                     state_dir.mkdir(parents=True, exist_ok=True)
                     state_file = state_dir / f"ace-patterns-used-{session_id}.json"
-                    state_file.write_text(json.dumps(pattern_ids))
+                    # Append, don't overwrite — a task can have multiple searches
+                    # (main agent + subagents, multiple prompts in same task)
+                    existing = []
+                    if state_file.exists():
+                        try:
+                            existing = json.loads(state_file.read_text())
+                        except Exception:
+                            existing = []
+                    # Deduplicate while preserving order
+                    seen = set(existing)
+                    for pid in pattern_ids:
+                        if pid not in seen:
+                            existing.append(pid)
+                            seen.add(pid)
+                    state_file.write_text(json.dumps(existing))
             except Exception:
                 # Non-fatal: continue without pattern tracking
                 pass
