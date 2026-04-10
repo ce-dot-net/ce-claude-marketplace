@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ace_posttooluse_wrapper.sh - PostToolUse hook with tool accumulation
 # v5.4.7: Flag file check + ace-cli/ace-cli detection
-set -euo pipefail
-trap 'exit 0' ERR
+set -eo pipefail
+trap 'echo "[ERROR] ACE hook failed: $(basename $0) line $LINENO" >&2; exit 0' ERR
 
 # ACE disable flag check (set by SessionStart if CLI issues detected)
 # Official Claude Code pattern: flag file coordination between hooks
@@ -26,7 +26,7 @@ ACCUMULATOR="${PLUGIN_ROOT}/shared-hooks/ace_tool_accumulator.py"
 LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.2.11"
+export ACE_PLUGIN_VERSION="6.2.12"
 
 # Parse arguments
 ENABLE_LOG=true

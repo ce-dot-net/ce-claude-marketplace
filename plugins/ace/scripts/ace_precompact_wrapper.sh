@@ -7,10 +7,10 @@
 # 2. Calls ace-cli cache recall to get pinned patterns
 # 3. Saves them to temp file for SessionStart(compact) to inject
 
-set -euo pipefail
-trap 'exit 0' ERR
+set -eo pipefail
+trap 'echo "[ERROR] ACE hook failed: $(basename $0) line $LINENO" >&2; exit 0' ERR
 
-ACE_PLUGIN_VERSION="6.2.11"
+ACE_PLUGIN_VERSION="6.2.12"
 
 # Read stdin once (stdin can only be consumed once)
 INPUT_JSON=$(cat 2>/dev/null || echo "{}")

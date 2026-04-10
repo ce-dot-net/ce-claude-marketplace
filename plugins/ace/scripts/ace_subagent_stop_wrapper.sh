@@ -2,8 +2,8 @@
 # ace_subagent_stop_wrapper.sh - SubagentStop hook with comprehensive logging
 # v5.4.7: Flag file check + ace-cli/ace-cli detection
 # Fires when Task agents complete - perfect for capturing learning after substantial work
-set -euo pipefail
-trap 'exit 0' ERR
+set -eo pipefail
+trap 'echo "[ERROR] ACE hook failed: $(basename $0) line $LINENO" >&2; exit 0' ERR
 
 # ACE disable flag check (set by SessionStart if CLI issues detected)
 # Official Claude Code pattern: flag file coordination between hooks
@@ -27,7 +27,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.2.11"
+export ACE_PLUGIN_VERSION="6.2.12"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default

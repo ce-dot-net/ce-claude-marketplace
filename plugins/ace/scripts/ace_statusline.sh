@@ -45,7 +45,7 @@ time_saved=""
 # This gives us "current task" metrics that reset after each learn cycle
 if [ -n "$RELEVANCE_FILE" ] && [ -f "$RELEVANCE_FILE" ]; then
   # Use python for reliable task-boundary detection (fast, <50ms)
-  eval "$(python3 -c "
+  METRICS=$(python3 -c "
 import json, sys
 events = []
 with open('$RELEVANCE_FILE') as f:
@@ -73,7 +73,16 @@ print(f'patterns_injected={inj}')
 print(f'avg_relevance={rel}')
 print(f'domains_count={doms}')
 print(f'domain_shifts={shf}')
-" 2>/dev/null)" || true
+" 2>/dev/null || echo "")
+  patterns_injected=$(echo "$METRICS" | grep '^patterns_injected=' | cut -d= -f2)
+  avg_relevance=$(echo "$METRICS" | grep '^avg_relevance=' | cut -d= -f2)
+  domains_count=$(echo "$METRICS" | grep '^domains_count=' | cut -d= -f2)
+  domain_shifts=$(echo "$METRICS" | grep '^domain_shifts=' | cut -d= -f2)
+  # Ensure defaults if parsing failed
+  patterns_injected="${patterns_injected:-0}"
+  avg_relevance="${avg_relevance:-0}"
+  domains_count="${domains_count:-0}"
+  domain_shifts="${domain_shifts:-0}"
 fi
 
 # ── Relevance % color ──

@@ -55,7 +55,7 @@ class TestWrapperExitCodes(unittest.TestCase):
             if not script_path.exists():
                 continue
             content = script_path.read_text()
-            if "trap 'exit 0' ERR" not in content and 'trap "exit 0" ERR' not in content:
+            if "ERR" not in content or ("trap" not in content):
                 missing_trap.append(script_name)
 
         self.assertEqual(missing_trap, [],

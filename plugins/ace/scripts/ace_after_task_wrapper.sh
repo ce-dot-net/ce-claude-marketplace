@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ACE After Task Wrapper - Forwards to shared-hooks/ace_after_task.py
-set -euo pipefail
-trap 'exit 0' ERR
+set -eo pipefail
+trap 'echo "[ERROR] ACE hook failed: $(basename $0) line $LINENO" >&2; exit 0' ERR
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"

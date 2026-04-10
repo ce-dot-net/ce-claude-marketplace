@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -eo pipefail
+trap 'echo "[ERROR] ACE hook failed: $(basename $0) line $LINENO" >&2; exit 0' ERR
 
 # ACE Permission Request Wrapper
 # Auto-approves safe ACE CLI commands, denies dangerous ones
