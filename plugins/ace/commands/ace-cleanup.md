@@ -1,6 +1,7 @@
 ---
 description: Manage ACE log files and event logging toggle
 argument-hint: "[--days N] [--status] [--enable-logging] [--disable-logging]"
+allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(rm:*), Bash(ls:*), Read
 ---
 
 # ACE Log Cleanup & Event Logging Toggle

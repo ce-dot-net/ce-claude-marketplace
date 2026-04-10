@@ -10,7 +10,13 @@
 set -euo pipefail
 trap 'exit 0' ERR
 
-ACE_PLUGIN_VERSION="6.2.10"
+ACE_PLUGIN_VERSION="6.2.11"
+
+# Read stdin once (stdin can only be consumed once)
+INPUT_JSON=$(cat 2>/dev/null || echo "{}")
+
+# Extract session_id from the event JSON
+SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // empty' 2>/dev/null || echo "")
 
 # ACE disable flag check (set by SessionStart if CLI issues detected)
 # Official Claude Code pattern: flag file coordination between hooks
@@ -37,12 +43,13 @@ if [ -z "$PROJECT_ID" ]; then
   exit 0
 fi
 
-# Read session ID from UserPromptSubmit hook
+# Read session ID from UserPromptSubmit hook (fallback if not in event JSON)
 SESSION_FILE="/tmp/ace-session-${PROJECT_ID}.txt"
-if [ ! -f "$SESSION_FILE" ]; then
+if [ -z "$SESSION_ID" ] && [ -f "$SESSION_FILE" ]; then
+  SESSION_ID=$(cat "$SESSION_FILE")
+elif [ -z "$SESSION_ID" ]; then
   exit 0  # No session, nothing to recall
 fi
-SESSION_ID=$(cat "$SESSION_FILE")
 
 # CLI already verified by flag file check above
 

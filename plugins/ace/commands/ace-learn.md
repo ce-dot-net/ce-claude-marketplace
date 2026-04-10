@@ -1,5 +1,6 @@
 ---
 description: Capture learning from completed work interactively
+allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(git:*), Read
 ---
 
 # ACE Learn

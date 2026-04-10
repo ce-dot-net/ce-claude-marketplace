@@ -20,6 +20,9 @@
 set -eo pipefail
 trap 'exit 0' ERR
 
+# Resolve script directory for auto-sync statusline
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
 # Read stdin JSON (Claude Code 2.1.69+ provides source, agent_type, agent_id)
 INPUT_JSON=$(cat 2>/dev/null || echo "{}")
 

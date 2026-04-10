@@ -1,6 +1,7 @@
 ---
 description: Configure ACE server connection settings interactively
 argument-hint: [--global] [--project]
+allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(mkdir:*), Bash(cat:*), Bash(git:*), Read
 ---
 
 # Configure ACE Connection (v5.4.18)

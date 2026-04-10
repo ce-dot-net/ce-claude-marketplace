@@ -1,6 +1,7 @@
 ---
 description: Install and verify ace-cli tool (smart, non-noisy installation wizard)
 argument-hint:
+allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(pnpm:*), Bash(yarn:*), Bash(curl:*), Read
 ---
 
 # ACE CLI Installation Wizard
