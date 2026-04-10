@@ -12,4 +12,4 @@ HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
   exit 0
 }
 
-exec uv run "${HOOK_SCRIPT}" "$@"
+exec python3 "${HOOK_SCRIPT}" "$@"

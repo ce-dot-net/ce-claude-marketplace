@@ -27,7 +27,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.2.12"
+export ACE_PLUGIN_VERSION="6.2.13"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -80,29 +80,29 @@ fi
 
 # Log event START
 if [[ "$ENABLE_LOG" == "true" ]]; then
-  echo "$INPUT_JSON" | uv run "$LOGGER" --event-type SubagentStop --phase start >/dev/null 2>&1 || {
+  echo "$INPUT_JSON" | python3 "$LOGGER" --event-type SubagentStop --phase start >/dev/null 2>&1 || {
     echo "[WARN] Failed to log start event" >&2
   }
 fi
 
 # Record start time (cross-platform milliseconds)
-START_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
+START_TIME=$(($(date +%s) * 1000))
 
 # CRITICAL: Inject hook_event_name into event JSON
 # v5.2.0: ace_after_task.py uses this to select agent_transcript_path
 INPUT_JSON=$(echo "$INPUT_JSON" | jq '. + {"hook_event_name": "SubagentStop"}')
 
 # Forward to ace_after_task.py (captures learning from subagent work)
-RESULT=$(echo "$INPUT_JSON" | uv run "${HOOK_SCRIPT}" 2>&1)
+RESULT=$(echo "$INPUT_JSON" | python3 "${HOOK_SCRIPT}" 2>&1)
 EXIT_CODE=$?
 
 # Calculate execution time (cross-platform milliseconds)
-END_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
+END_TIME=$(($(date +%s) * 1000))
 EXECUTION_TIME=$((END_TIME - START_TIME))
 
 # Log event END with result
 if [[ "$ENABLE_LOG" == "true" ]]; then
-  echo "$RESULT" | uv run "$LOGGER" \
+  echo "$RESULT" | python3 "$LOGGER" \
     --event-type SubagentStop \
     --phase end \
     --exit-code "$EXIT_CODE" \

@@ -26,6 +26,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Read stdin JSON (Claude Code 2.1.69+ provides source, agent_type, agent_id)
 INPUT_JSON=$(cat 2>/dev/null || echo "{}")
 
+# ── Dependency check: jq (required before any JSON parsing) ──
+if ! command -v jq >/dev/null 2>&1; then
+  # Can't use output_warning or disable_ace_hooks (both need jq/SESSION_ID) — output raw JSON
+  echo '{"systemMessage": "⚠️ [ACE] jq is required but not installed. Install: brew install jq (macOS) or apt install jq (Linux)"}'
+  echo "jq not installed" > "/tmp/ace-disabled-default.flag"
+  exit 0
+fi
+
 # Extract session_id from input (fall back to default)
 SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // empty' 2>/dev/null || echo "")
 SESSION_ID="${SESSION_ID:-default}"
@@ -92,6 +100,19 @@ restore_patterns_after_compact() {
       }
     }'
 }
+
+# ── Dependency check: python3 (required for shared hooks) ──
+PYTHON_CMD=""
+if command -v python3 >/dev/null 2>&1; then
+  PYTHON_CMD="python3"
+elif command -v python >/dev/null 2>&1; then
+  PYTHON_CMD="python"
+fi
+if [ -z "$PYTHON_CMD" ]; then
+  output_warning "⚠️ [ACE] python3 is required but not installed. Install Python 3.11+ from python.org"
+  disable_ace_hooks "python3 not installed"
+  exit 0
+fi
 
 # ======================================================================
 # Source-based routing (v6.0.0: consolidated SessionStart)

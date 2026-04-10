@@ -34,4 +34,4 @@ if [[ -n "$WORKING_DIR" ]] && [[ -d "$WORKING_DIR" ]]; then
 fi
 
 # Pass INPUT_JSON to ace_before_task.py via stdin
-echo "$INPUT_JSON" | exec uv run "${HOOK_SCRIPT}" "$@"
+echo "$INPUT_JSON" | exec python3 "${HOOK_SCRIPT}" "$@"

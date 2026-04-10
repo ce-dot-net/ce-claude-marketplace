@@ -36,7 +36,7 @@ class TestAsyncPostToolUse:
             "PostToolUse wrapper should output async flag"
 
     def test_async_output_before_accumulator_run(self):
-        """Async output must be emitted BEFORE the accumulator uv run."""
+        """Async output must be emitted BEFORE the accumulator python3 run."""
         content = _read(POSTTOOLUSE_WRAPPER)
         lines = content.splitlines()
         async_line = None
@@ -44,7 +44,7 @@ class TestAsyncPostToolUse:
         for i, line in enumerate(lines):
             if '"async"' in line and 'echo' in line.lower():
                 async_line = i
-            if 'uv run' in line and 'ACCUMULATOR' in line:
+            if 'python3' in line and 'ACCUMULATOR' in line:
                 accumulator_run_line = i
         assert async_line is not None, "No async echo found"
         assert accumulator_run_line is not None, "No accumulator call found"

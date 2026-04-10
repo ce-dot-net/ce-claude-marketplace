@@ -28,7 +28,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.2.12"
+export ACE_PLUGIN_VERSION="6.2.13"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -92,13 +92,13 @@ fi
 # v5.4.5: Disabled by default to prevent 42GB log growth
 # Enable with: export ACE_EVENT_LOGGING=1
 if [[ "${ACE_EVENT_LOGGING:-0}" == "1" ]] && [[ "$ENABLE_LOG" == "true" ]]; then
-  echo "$INPUT_JSON" | uv run "$LOGGER" --event-type Stop --phase start >/dev/null 2>&1 || {
+  echo "$INPUT_JSON" | python3 "$LOGGER" --event-type Stop --phase start >/dev/null 2>&1 || {
     echo "[WARN] Failed to log start event" >&2
   }
 fi
 
 # Record start time (cross-platform milliseconds)
-START_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
+START_TIME=$(($(date +%s) * 1000))
 
 # CRITICAL: Inject hook_event_name into event JSON
 # v5.3.0: ace_after_task.py queries accumulated tools from SQLite
@@ -147,7 +147,7 @@ if [[ "$ACE_ASYNC_LEARNING" == "1" ]]; then
 
   # Launch in background with proper error logging
   (
-    uv run "${HOOK_SCRIPT}" < "$TEMP_INPUT" 2>&1 > "$TEMP_OUTPUT"
+    python3 "${HOOK_SCRIPT}" < "$TEMP_INPUT" 2>&1 > "$TEMP_OUTPUT"
     LEARN_EXIT=$?
     if [[ $LEARN_EXIT -ne 0 ]]; then
       echo "[ERROR] Background learning failed with exit code $LEARN_EXIT" >> "$LOG_FILE"
@@ -161,24 +161,24 @@ if [[ "$ACE_ASYNC_LEARNING" == "1" ]]; then
   EXIT_CODE=0
 
   # Calculate execution time (should be <1s)
-  END_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
+  END_TIME=$(($(date +%s) * 1000))
   EXECUTION_TIME=$((END_TIME - START_TIME))
 
 else
   # === SYNC MODE (original behavior) ===
   # Forward to ace_after_task.py and wait for completion
-  RESULT=$(echo "$INPUT_JSON" | uv run "${HOOK_SCRIPT}" 2>&1)
+  RESULT=$(echo "$INPUT_JSON" | python3 "${HOOK_SCRIPT}" 2>&1)
   EXIT_CODE=$?
 
   # Calculate execution time (cross-platform milliseconds)
-  END_TIME=$(python3 -c 'import time; print(int(time.time() * 1000))')
+  END_TIME=$(($(date +%s) * 1000))
   EXECUTION_TIME=$((END_TIME - START_TIME))
 fi
 
 # Log event END with result
 # v5.4.5: Disabled by default to prevent 42GB log growth
 if [[ "${ACE_EVENT_LOGGING:-0}" == "1" ]] && [[ "$ENABLE_LOG" == "true" ]]; then
-  echo "$RESULT" | uv run "$LOGGER" \
+  echo "$RESULT" | python3 "$LOGGER" \
     --event-type Stop \
     --phase end \
     --exit-code "$EXIT_CODE" \

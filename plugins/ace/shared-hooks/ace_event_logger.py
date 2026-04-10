@@ -1,8 +1,4 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.11"
-# dependencies = []
-# ///
+#!/usr/bin/env python3
 
 """
 ACE Event Logger - Core logging utility for ACE hooks
@@ -11,8 +7,8 @@ Logs all hook events to .claude/data/logs/ in JSONL format.
 Provides full visibility into hook execution, performance, and errors.
 
 Usage:
-    echo '{"event": "data"}' | uv run ace_event_logger.py --event-type Stop --phase start
-    echo '{"result": "data"}' | uv run ace_event_logger.py --event-type Stop --phase end --exit-code 0
+    echo '{"event": "data"}' | python3 ace_event_logger.py --event-type Stop --phase start
+    echo '{"result": "data"}' | python3 ace_event_logger.py --event-type Stop --phase end --exit-code 0
 """
 
 import argparse
