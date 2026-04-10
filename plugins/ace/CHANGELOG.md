@@ -5,6 +5,33 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.2.13] - 2026-03-29
+
+### Changed
+- Removed `uv` dependency -- all hooks now use `python3` directly (zero external Python deps)
+- All 6 wrapper scripts: `uv run` replaced with `python3`
+- All 6 Python files: shebangs changed from `#!/usr/bin/env -S uv run --script` to `#!/usr/bin/env python3`
+- Removed PEP 723 metadata blocks (dependencies were always `[]`)
+- Timestamps use POSIX `date +%s` instead of `python3 -c time` in stop wrappers
+
+### Added
+- SessionStart (`ace_install_cli.sh`) checks for `jq` availability -- warns and disables ACE if missing
+- SessionStart checks for `python3` availability with fallback to `python` -- warns and disables if neither found
+- Clear install instructions in warning messages (brew/apt)
+
+### Compatibility
+- macOS: Works out of the box (jq via brew, python3 via Xcode CLT)
+- Linux: Requires `apt install jq python3` (common in dev environments)
+
+### Files
+- UPDATED: 6 wrapper scripts in `plugins/ace/scripts/` (uv run -> python3)
+- UPDATED: 6 Python files in `plugins/ace/shared-hooks/` (shebangs + PEP 723 removal)
+- UPDATED: `plugins/ace/scripts/ace_install_cli.sh` (jq + python3 checks)
+- UPDATED: `plugins/ace/scripts/ace_stop_wrapper.sh` (date timestamps)
+- UPDATED: `plugins/ace/scripts/ace_subagent_stop_wrapper.sh` (date timestamps)
+- UPDATED: `tests/test_v600_enhancements.py` (updated for python3)
+- UPDATED: All version files to 6.2.13
+
 ## [6.2.12] - 2026-03-29
 
 ### Security

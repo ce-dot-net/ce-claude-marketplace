@@ -1,24 +1,20 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.11"
-# dependencies = []
-# ///
+#!/usr/bin/env python3
 
 """
 ACE Log Analyzer - Diagnostic tool for analyzing hook logs
 
 Usage:
     # View last 10 Stop hook events
-    uv run ace_log_analyzer.py --event-type Stop --last 10
+    python3 ace_log_analyzer.py --event-type Stop --last 10
 
     # Show Stop hook fire rate
-    uv run ace_log_analyzer.py --event-type Stop --stats
+    python3 ace_log_analyzer.py --event-type Stop --stats
 
     # Find errors in last 24 hours
-    uv run ace_log_analyzer.py --errors --hours 24
+    python3 ace_log_analyzer.py --errors --hours 24
 
     # Export to CSV
-    uv run ace_log_analyzer.py --event-type Stop --export stop_hooks.csv
+    python3 ace_log_analyzer.py --event-type Stop --export stop_hooks.csv
 """
 
 import argparse
