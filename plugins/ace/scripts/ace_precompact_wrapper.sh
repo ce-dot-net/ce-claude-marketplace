@@ -10,7 +10,7 @@
 set -eo pipefail
 trap 'echo "[ERROR] ACE hook failed: $(basename $0) line $LINENO" >&2; exit 0' ERR
 
-ACE_PLUGIN_VERSION="6.2.13"
+ACE_PLUGIN_VERSION="6.2.14"
 
 # Read stdin once (stdin can only be consumed once)
 INPUT_JSON=$(cat 2>/dev/null || echo "{}")
