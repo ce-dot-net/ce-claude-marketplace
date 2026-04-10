@@ -2,7 +2,7 @@
 # ACE PostCompact Hook - Log compaction events for insights
 # v6.0.0: Track when context compaction occurs (CC 2.1.76+)
 set -eo pipefail
-trap 'exit 0' ERR
+trap 'echo "[ERROR] ACE hook failed: $(basename $0) line $LINENO" >&2; exit 0' ERR
 
 # Resolve paths
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

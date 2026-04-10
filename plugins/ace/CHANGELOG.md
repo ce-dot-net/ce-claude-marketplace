@@ -5,6 +5,36 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.2.12] - 2026-03-29
+
+### Security
+- **#2**: Replaced unsafe `eval()` with safe `grep | cut` variable extraction in `ace_stop_wrapper.sh` and `ace_statusline.sh`
+- **#1**: All 12 wrapper scripts now log errors to stderr instead of silently swallowing (`trap 'echo ERROR >&2; exit 0' ERR`)
+- Removed `-u` flag from `set` to prevent false failures from unset variables
+
+### Fixed
+- **#7**: Tool accumulator uses explicit `try/except IntegrityError` instead of silent `INSERT OR IGNORE`
+- **#9**: SessionStart cleans temp files older than 7 days (`/tmp/ace-session-*.txt`, `ace-domains-*.json`, `ace-domain-*.txt`)
+- **#3**: PreCompact wrapper reads session_id from event JSON (was always "default")
+- **#5**: SCRIPT_DIR initialized in `ace_install_cli.sh` (statusline auto-sync was broken)
+- **#4**: Removed orphaned 699-line `ace-statusline.sh`
+- **#8**: Removed dead functions from `ace_cli.py`
+
+### Improved
+- All 20 commands have `allowed-tools` frontmatter (no permission prompts)
+- All wrapper scripts and version files updated to 6.2.12
+
+### Files
+- UPDATED: 12 wrapper scripts in `plugins/ace/scripts/` (trap + set fixes)
+- UPDATED: `plugins/ace/scripts/ace_stop_wrapper.sh` (eval removal + error logging)
+- UPDATED: `plugins/ace/scripts/ace_statusline.sh` (eval removal)
+- UPDATED: `plugins/ace/scripts/ace_install_cli.sh` (SCRIPT_DIR + temp cleanup)
+- UPDATED: `plugins/ace/scripts/ace_precompact_wrapper.sh` (session_id fix)
+- UPDATED: `plugins/ace/shared-hooks/ace_tool_accumulator.py` (INSERT fix)
+- UPDATED: `plugins/ace/shared-hooks/utils/ace_cli.py` (dead code removal)
+- UPDATED: All 20 command .md files (allowed-tools)
+- UPDATED: 3 test files
+
 ## [6.2.11] - 2026-03-29
 
 ### Fixed

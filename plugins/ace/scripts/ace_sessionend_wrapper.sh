@@ -5,7 +5,7 @@
 #
 # SessionEnd provides: session_id, reason ('clear'|'logout'|'prompt_input_exit'|'other')
 set -eo pipefail
-trap 'exit 0' ERR
+trap 'echo "[ERROR] ACE hook failed: $(basename $0) line $LINENO" >&2; exit 0' ERR
 
 # Read stdin JSON
 INPUT_JSON=$(cat 2>/dev/null || echo "{}")

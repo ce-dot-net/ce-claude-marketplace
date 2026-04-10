@@ -18,7 +18,7 @@
 # - Never use continue:false (blocks entire Claude Code session)
 
 set -eo pipefail
-trap 'exit 0' ERR
+trap 'echo "[ERROR] ACE hook failed: $(basename $0) line $LINENO" >&2; exit 0' ERR
 
 # Resolve script directory for auto-sync statusline
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -224,6 +224,11 @@ fi
 if [ -n "$CLAUDE_ENV_FILE" ] && [ -z "${ACE_CLIENT_ID:-}" ]; then
   echo 'export ACE_CLIENT_ID="claude-code"' >> "$CLAUDE_ENV_FILE"
 fi
+
+# Clean project-keyed temp files older than 7 days
+find /tmp -maxdepth 1 -name "ace-session-*.txt" -mtime +7 -delete 2>/dev/null || true
+find /tmp -maxdepth 1 -name "ace-domains-*.json" -mtime +7 -delete 2>/dev/null || true
+find /tmp -maxdepth 1 -name "ace-domain-*.txt" -mtime +7 -delete 2>/dev/null || true
 
 # Success - ACE hooks can proceed (no flag file = enabled)
 exit 0

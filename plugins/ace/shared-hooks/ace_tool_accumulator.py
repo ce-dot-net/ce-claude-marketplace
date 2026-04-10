@@ -90,18 +90,21 @@ def append_tool(session_id: str, tool_name: str, tool_input: dict,
         db_path = get_db_path(working_dir)
         conn = init_db(db_path)
 
-        conn.execute('''
-            INSERT OR IGNORE INTO tool_uses
-            (session_id, tool_name, tool_input, tool_response, tool_use_id, agent_id, timestamp)
-            VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
-        ''', (
-            session_id,
-            tool_name,
-            json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input),
-            json.dumps(tool_response) if isinstance(tool_response, dict) else str(tool_response),
-            tool_use_id,
-            agent_id or None
-        ))
+        try:
+            conn.execute('''
+                INSERT INTO tool_uses
+                (session_id, tool_name, tool_input, tool_response, tool_use_id, agent_id, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+            ''', (
+                session_id,
+                tool_name,
+                json.dumps(tool_input) if isinstance(tool_input, dict) else str(tool_input),
+                json.dumps(tool_response) if isinstance(tool_response, dict) else str(tool_response),
+                tool_use_id,
+                agent_id or None
+            ))
+        except sqlite3.IntegrityError:
+            pass  # Duplicate tool_use_id — normal for hook retries
         conn.commit()
         conn.close()
         return True

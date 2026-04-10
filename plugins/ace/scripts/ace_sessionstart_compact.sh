@@ -10,7 +10,8 @@
 # - SessionStart hooks DO support hookSpecificOutput.additionalContext
 # - This is the official pattern for preserving context through compaction
 
-set -euo pipefail
+set -eo pipefail
+trap 'echo "[ERROR] ACE hook failed: $(basename $0) line $LINENO" >&2; exit 0' ERR
 
 # Read stdin JSON (SessionStart provides session_id)
 INPUT_JSON=$(cat 2>/dev/null || echo "{}")

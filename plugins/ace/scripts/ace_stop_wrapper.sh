@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # ace_stop_wrapper.sh - Stop hook with comprehensive logging
 # v5.4.7: Flag file check + ace-cli/ace-cli detection
-set -euo pipefail
-trap 'exit 0' ERR
+set -eo pipefail
+trap 'echo "[ERROR] ACE hook failed: $(basename $0) line $LINENO" >&2; exit 0' ERR
 
 # Read stdin early (can only be read once) for session_id
 INPUT_JSON=$(cat)
@@ -28,7 +28,7 @@ LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
 # Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.2.11"
+export ACE_PLUGIN_VERSION="6.2.12"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -218,7 +218,7 @@ DOMAINS_COUNT=0
 TOOLS_EXECUTED=0
 
 if [ -f "$RELEVANCE_FILE" ]; then
-  eval "$(python3 -c "
+  METRICS=$(python3 -c "
 import json
 events = []
 with open('$RELEVANCE_FILE') as f:
@@ -241,7 +241,11 @@ print(f'INJECTED={inj}')
 print(f'AVG_REL={rel}')
 print(f'DOMAINS_COUNT={doms}')
 print(f'TOOLS_EXECUTED={tools}')
-" 2>/dev/null)" || true
+" 2>/dev/null || echo "")
+  INJECTED=$(echo "$METRICS" | grep '^INJECTED=' | cut -d= -f2)
+  AVG_REL=$(echo "$METRICS" | grep '^AVG_REL=' | cut -d= -f2)
+  DOMAINS_COUNT=$(echo "$METRICS" | grep '^DOMAINS_COUNT=' | cut -d= -f2)
+  TOOLS_EXECUTED=$(echo "$METRICS" | grep '^TOOLS_EXECUTED=' | cut -d= -f2)
   if [ "$INJECTED" -gt 0 ] 2>/dev/null; then
     HAS_PATTERNS=true
   fi

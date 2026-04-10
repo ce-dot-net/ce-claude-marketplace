@@ -1505,15 +1505,15 @@ class TestEdgeCases:
         result = sessionstart.run()
         assert result["exit_code"] == 0
 
-    def test_precompact_set_euo_pipefail(self):
-        """PreCompact must use set -euo pipefail for safety."""
+    def test_precompact_set_eo_pipefail(self):
+        """PreCompact must use set -eo pipefail for safety (no -u to avoid false failures)."""
         source = PRECOMPACT_SCRIPT.read_text()
-        assert "set -euo pipefail" in source
+        assert "set -eo pipefail" in source
 
-    def test_sessionstart_set_euo_pipefail(self):
-        """SessionStart compact must use set -euo pipefail for safety."""
+    def test_sessionstart_set_eo_pipefail(self):
+        """SessionStart compact must use set -eo pipefail for safety (no -u to avoid false failures)."""
         source = SESSIONSTART_COMPACT_SCRIPT.read_text()
-        assert "set -euo pipefail" in source
+        assert "set -eo pipefail" in source
 
     def test_both_scripts_have_version_comment(self):
         """Both scripts should reference v5.4.28 and Issue #17."""

@@ -61,9 +61,9 @@ class TestSessionEndWrapper:
             "ace_sessionend_wrapper.sh has 'exit 1' — should always exit 0"
 
     def test_sessionend_wrapper_has_err_trap(self):
-        """Script has error trap consistent with ACE pattern."""
+        """Script has error trap consistent with ACE pattern (with error logging)."""
         content = _read(WRAPPER)
-        assert "trap 'exit 0' ERR" in content or 'trap "exit 0" ERR' in content, \
+        assert "trap 'echo" in content and "ERR" in content, \
             "ace_sessionend_wrapper.sh missing ERR trap"
 
     def test_sessionend_only_cleans_session_keyed_files(self):
