@@ -1,5 +1,6 @@
 ---
 description: Export ACE playbook to JSON for backup or sharing
+allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Export Playbook

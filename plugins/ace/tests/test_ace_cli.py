@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch, MagicMock
 # Add shared-hooks to path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'shared-hooks' / 'utils'))
 
-from ace_cli import run_search, run_learn, run_status
+from ace_cli import run_search
 
 
 def test_run_search_success():
@@ -99,75 +99,6 @@ def test_run_search_invalid_json():
         print("✅ test_run_search_invalid_json passed")
 
 
-def test_run_learn_success():
-    """Test successful learn call with context passed via environment"""
-    mock_result = MagicMock()
-    mock_result.returncode = 0
-    mock_result.stdout = json.dumps({'status': 'ok', 'patterns_learned': 1}).encode('utf-8')
-
-    with patch('subprocess.run', return_value=mock_result) as mock_run:
-        result = run_learn(
-            task='Test task',
-            trajectory='Step 1, Step 2',
-            success=True,
-            org='org_123',
-            project='prj_456'
-        )
-
-        assert result is not None
-        assert result.get('status') == 'ok'
-
-        # Verify subprocess call - uses ace-cli (renamed from ce-ace in v5.4.7)
-        args, kwargs = mock_run.call_args
-        assert args[0] == ['ace-cli', 'learn', '--stdin', '--json']
-        assert 'env' in kwargs
-        assert kwargs['env']['ACE_ORG_ID'] == 'org_123'
-        assert kwargs['env']['ACE_PROJECT_ID'] == 'prj_456'
-
-        print("✅ test_run_learn_success passed")
-
-
-def test_run_learn_failure():
-    """Test learn call with non-zero exit code"""
-    mock_result = MagicMock()
-    mock_result.returncode = 1
-
-    with patch('subprocess.run', return_value=mock_result):
-        result = run_learn(
-            task='Test task',
-            trajectory='Steps',
-            success=True
-        )
-
-        assert result is None  # Now returns None on failure (not False)
-        print("✅ test_run_learn_failure passed")
-
-
-def test_run_status_success():
-    """Test successful status call with context passed via environment"""
-    mock_result = MagicMock()
-    mock_result.returncode = 0
-    mock_result.stdout = json.dumps({
-        'total_patterns': 42,
-        'sections': {}
-    }).encode('utf-8')
-
-    with patch('subprocess.run', return_value=mock_result) as mock_run:
-        result = run_status(org='org_123', project='prj_456')
-
-        assert result is not None
-        assert result['total_patterns'] == 42
-
-        # Verify subprocess call - uses ace-cli (renamed from ce-ace in v5.4.7)
-        args, kwargs = mock_run.call_args
-        assert args[0] == ['ace-cli', 'status', '--json']
-        assert 'env' in kwargs
-        assert kwargs['env']['ACE_ORG_ID'] == 'org_123'
-        assert kwargs['env']['ACE_PROJECT_ID'] == 'prj_456'
-
-        print("✅ test_run_status_success passed")
-
-
 if __name__ == '__main__':
     print("Running ace_cli tests (mocked)...")
     print()
@@ -177,9 +108,6 @@ if __name__ == '__main__':
     test_run_search_auth_failure()
     test_run_search_timeout()
     test_run_search_invalid_json()
-    test_run_learn_success()
-    test_run_learn_failure()
-    test_run_status_success()
 
     print()
     print("✅ All tests passed!")

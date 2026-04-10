@@ -5,6 +5,27 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.2.11] - 2026-03-29
+
+### Fixed
+- **#3 MEDIUM**: SESSION_ID_FOR_FLAG in `ace_precompact_wrapper.sh` now reads from event JSON (was always "default")
+- **#4 MEDIUM**: Removed orphaned `ace-statusline.sh` (699 lines, PR #20 version never installed)
+- **#5 MEDIUM**: Added SCRIPT_DIR initialization in `ace_install_cli.sh` (statusline auto-sync was broken)
+- **#8 LOW**: Removed dead functions from `ace_cli.py` (`run_learn`, `run_status`, `run_domains` -- 167 lines)
+
+### Improved
+- **All 20 commands** now have `allowed-tools` frontmatter -- no more permission prompts when running ace-cli, jq, npm etc.
+- All wrapper scripts and version files updated to 6.2.11
+
+### Files
+- UPDATED: `plugins/ace/scripts/ace_precompact_wrapper.sh` -- read session_id from stdin
+- UPDATED: `plugins/ace/scripts/ace_install_cli.sh` -- added SCRIPT_DIR
+- DELETED: `plugins/ace/scripts/ace-statusline.sh` -- orphaned 699-line script
+- UPDATED: `plugins/ace/shared-hooks/utils/ace_cli.py` -- removed dead functions
+- UPDATED: `plugins/ace/tests/test_ace_cli.py` -- removed tests for dead functions
+- UPDATED: All 20 files in `plugins/ace/commands/` -- added allowed-tools frontmatter
+- UPDATED: All wrapper scripts -- version bumped to 6.2.11
+
 ## [6.2.10] - 2026-03-29
 
 ### Fixed

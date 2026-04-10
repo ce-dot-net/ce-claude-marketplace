@@ -1,5 +1,6 @@
 ---
 description: Comprehensive ACE installation and health diagnostic
+allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(curl:*), Bash(ls:*), Bash(test:*), Read
 ---
 
 # ACE Doctor - Installation & Health Diagnostic

@@ -1,5 +1,6 @@
 ---
 description: Manual pattern management - add, update, or remove patterns in the ACE playbook
+allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Delta Operations

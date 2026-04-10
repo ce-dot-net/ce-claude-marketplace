@@ -1,6 +1,7 @@
 ---
 description: List available pattern domains for filtering
 argument-hint: "[--min-patterns N]"
+allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # List Available Domains

@@ -1,5 +1,6 @@
 ---
 description: Get highest-rated ACE patterns by helpful score
+allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Top Patterns
