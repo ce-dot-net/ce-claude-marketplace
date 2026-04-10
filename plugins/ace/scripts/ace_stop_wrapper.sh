@@ -154,7 +154,7 @@ if [[ "$ACE_ASYNC_LEARNING" == "1" ]]; then
       cat "$TEMP_OUTPUT" >> "$LOG_FILE"
     fi
     rm -f "$TEMP_INPUT" "$TEMP_OUTPUT"
-  ) &
+  ) > /dev/null 2>&1 &
 
   # Return immediate feedback
   RESULT='{"continue": true, "systemMessage": "✅ [ACE] Learning started in background"}'

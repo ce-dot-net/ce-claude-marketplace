@@ -5,6 +5,18 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.2.14] - 2026-03-29
+
+### Fixed - Critical Performance
+- **Stop hook no longer blocks for 2+ minutes** -- background learning subshell now properly detaches stdout/stderr from parent pipe
+- Root cause: `( ... ) &` kept parent's stdout pipe open, so CC waited for pipe to close, causing user to see "running stop hook - 2m 17s"
+- Fix: `( ... ) > /dev/null 2>&1 &` -- one line change, detaches pipe immediately
+- Stop hook now returns in <0.3s regardless of learning time
+
+### Files
+- UPDATED: `plugins/ace/scripts/ace_stop_wrapper.sh` -- line 157: added `> /dev/null 2>&1` before `&`
+- UPDATED: All version files to 6.2.14
+
 ## [6.2.13] - 2026-03-29
 
 ### Changed
