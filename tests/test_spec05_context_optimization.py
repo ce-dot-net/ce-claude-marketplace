@@ -42,15 +42,16 @@ def _parse_ast(path: Path) -> ast.Module:
 # Fields that MUST be stripped before injection (internal / server-only metadata)
 FIELDS_TO_STRIP = {
     'created_at', 'updated_at', 'last_used', 'impressions',
-    'retrieval_count', 'root_cause', 'error_context', 'source',
+    'retrieval_count', 'source',
     'source_project_id', 'source_project_name', 'local_helpful',
     'local_harmful', 'match_factors', 'observations', 'name',
 }
 
 # Fields that MUST survive stripping (essential for Claude context)
+# root_cause and error_context are conditionally kept (only when non-empty)
 FIELDS_TO_KEEP = {
     'id', 'domain', 'content', 'confidence', 'helpful', 'harmful',
-    'section', 'evidence',
+    'section', 'evidence', 'root_cause', 'error_context',
 }
 
 
