@@ -1,7 +1,7 @@
 {
   "name": "ace",
   "version": "6.3.0",
-  "description": "Code Engine ACE - LOCAL DEVELOPMENT MODE - v6.1.4: Fix Stop Hook Learning (Critical) - Uses local build instead of npm package",
+  "description": "Code Engine ACE - LOCAL DEVELOPMENT MODE - v6.3.0: Context injection optimization (~45% fewer tokens)",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
