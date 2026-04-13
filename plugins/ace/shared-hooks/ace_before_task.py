@@ -307,10 +307,10 @@ def main():
         # 'impressions', 'retrieval_count', 'root_cause', 'error_context', 'source',
         # 'source_project_id', 'source_project_name', 'local_helpful', 'local_harmful',
         # 'match_factors', 'observations', 'name'
-        useful_fields = {'id', 'domain', 'content', 'confidence', 'helpful', 'harmful', 'section', 'evidence'}
+        useful_fields = {'id', 'domain', 'content', 'confidence', 'helpful', 'harmful', 'section', 'evidence', 'root_cause', 'error_context'}
         if 'similar_patterns' in patterns_response:
             patterns_response['similar_patterns'] = [
-                {k: v for k, v in p.items() if k in useful_fields}
+                {k: v for k, v in p.items() if k in useful_fields and (v or k not in ('root_cause', 'error_context'))}
                 for p in patterns_response['similar_patterns']
             ]
 
