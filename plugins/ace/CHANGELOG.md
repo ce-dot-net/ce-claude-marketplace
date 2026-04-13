@@ -5,6 +5,33 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.3.0] - 2026-03-29
+
+### New Features
+- **sessionTitle**: CC tab shows "ACE: 5 patterns . bash, git, ace-cli" when patterns are injected (UserPromptSubmit hookSpecificOutput.sessionTitle)
+- **refreshInterval**: Statusline setup now configures 5-second auto-refresh
+- **Pattern content in JSONL**: Search event logs now include truncated pattern content for /ace-insights analysis
+
+### Optimized -- Context Injection
+- **Skip empty injection**: No more `<ace-patterns>` injected when count == 0 (saves ~50 tokens per empty search)
+- **Strip metadata**: 15 internal fields removed from patterns before injection (created_at, updated_at, match_factors, etc.). Keeps only id, domain, content, confidence, helpful, harmful, section, evidence. ~33% token savings.
+- **Compact JSON**: No more indent=2 whitespace. ~21% additional token savings.
+- **Total savings**: ~45% fewer tokens per pattern injection
+
+### Verified
+- All CC features live-tested in installed plugin cache on CC v2.1.100
+- `if: "Read(*)"` verified working on PostToolUse
+- `matcher: "Read"` verified working as separate entry
+- `sessionTitle` JSON format verified
+- `refreshInterval` verified working
+
+### Files
+- UPDATED: `plugins/ace/shared-hooks/ace_before_task.py` -- A1+A2+A3+B1 (skip empty, strip metadata, compact JSON, sessionTitle)
+- UPDATED: `plugins/ace/shared-hooks/utils/ace_relevance_logger.py` -- A5 (log pattern content)
+- UPDATED: `plugins/ace/commands/ace-statusline-setup.md` -- B3 (refreshInterval)
+- NEW: `tests/test_spec05_context_optimization.py` -- 15 tests
+- UPDATED: All version files to 6.3.0
+
 ## [6.2.14] - 2026-03-29
 
 ### Fixed - Critical Performance

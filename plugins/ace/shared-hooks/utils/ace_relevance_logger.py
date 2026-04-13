@@ -90,7 +90,8 @@ class ACERelevanceLogger:
                 'helpful': p.get('helpful', 0),
                 'harmful': p.get('harmful', 0),
                 'domain': p.get('domain', 'unknown'),
-                'section': p.get('section', 'unknown')
+                'section': p.get('section', 'unknown'),
+                'content': p.get('content', '')[:100] + ('...' if len(p.get('content', '')) > 100 else '')
             }
             for p in patterns_injected[:5]  # Top 5 patterns
         ]

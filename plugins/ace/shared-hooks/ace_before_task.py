@@ -302,9 +302,21 @@ def main():
                 # Non-fatal: continue without domain tracking
                 pass
 
+        # Strip internal metadata fields from patterns before injection (reduce token usage)
+        # These server-internal fields are stripped: 'created_at', 'updated_at', 'last_used',
+        # 'impressions', 'retrieval_count', 'root_cause', 'error_context', 'source',
+        # 'source_project_id', 'source_project_name', 'local_helpful', 'local_harmful',
+        # 'match_factors', 'observations', 'name'
+        useful_fields = {'id', 'domain', 'content', 'confidence', 'helpful', 'harmful', 'section', 'evidence'}
+        if 'similar_patterns' in patterns_response:
+            patterns_response['similar_patterns'] = [
+                {k: v for k, v in p.items() if k in useful_fields}
+                for p in patterns_response['similar_patterns']
+            ]
+
         # Build context for Claude (JSON in XML tags - includes domain metadata)
         # v5.4.11: Include agent_type attribute for server-side pattern weighting
-        ace_context = f'<ace-patterns agent-type="{agent_type}">\n{json.dumps(patterns_response, indent=2)}\n</ace-patterns>'
+        ace_context = f'<ace-patterns agent-type="{agent_type}">\n{json.dumps(patterns_response)}\n</ace-patterns>'
 
         # Append fire-and-forget eval injection if present (from previous task's Stop hook)
         if eval_injection:
@@ -348,13 +360,23 @@ def main():
             user_message = f"{auth_warning}\n\n{user_message}"
 
         # Output JSON with both user message and Claude context
-        output = {
-            "systemMessage": user_message,
-            "hookSpecificOutput": {
-                "hookEventName": "UserPromptSubmit",
-                "additionalContext": ace_context
+        if pattern_count == 0:
+            output = {"systemMessage": user_message}
+        else:
+            # Build session title from domains
+            domains_list = sorted(set(p.get('domain', '') for p in pattern_list if p.get('domain')))[:3]
+            session_title = f"ACE: {pattern_count} patterns"
+            if domains_list:
+                session_title += f" · {', '.join(domains_list)}"
+
+            output = {
+                "systemMessage": user_message,
+                "hookSpecificOutput": {
+                    "hookEventName": "UserPromptSubmit",
+                    "additionalContext": ace_context,
+                    "sessionTitle": session_title
+                }
             }
-        }
         print(json.dumps(output))
         sys.exit(0)
 
