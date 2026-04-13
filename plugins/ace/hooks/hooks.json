@@ -56,6 +56,12 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_posttooluse_wrapper.sh --log",
             "timeout": 15000
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_posttooluse_domain_inject.sh",
+            "timeout": 5000,
+            "if": "Read(*)"
           }
         ]
       }

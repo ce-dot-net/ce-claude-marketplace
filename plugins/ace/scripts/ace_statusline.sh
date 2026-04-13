@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ACE Statusline — Per-task metrics, user-friendly
+# ACE Statusline — 2-line: CC session info + per-task ACE metrics
 # Reads CC JSON stdin + ace-relevance.jsonl (local, no network calls)
 set -eo pipefail
 
@@ -20,11 +20,25 @@ INPUT_JSON=$(cat 2>/dev/null || echo "{}")
 cwd=$(echo "$INPUT_JSON" | jq -r '.cwd // ""' 2>/dev/null || echo "")
 used_pct=$(echo "$INPUT_JSON" | jq -r '.context_window.used_percentage // 0' 2>/dev/null || echo "0")
 session_id=$(echo "$INPUT_JSON" | jq -r '.session_id // ""' 2>/dev/null || echo "")
+model_name=$(echo "$INPUT_JSON" | jq -r '.model.display_name // ""' 2>/dev/null || echo "")
 
 # ── Context % color ──
 if [ "$used_pct" -ge 80 ] 2>/dev/null; then CTX_C="$RED"
 elif [ "$used_pct" -ge 50 ] 2>/dev/null; then CTX_C="$YEL"
 else CTX_C="$GRN"; fi
+
+# ── Context bar (15 chars wide) ──
+BAR_WIDTH=15
+filled=$(( used_pct * BAR_WIDTH / 100 ))
+empty=$(( BAR_WIDTH - filled ))
+# Clamp
+[ "$filled" -lt 0 ] 2>/dev/null && filled=0
+[ "$filled" -gt "$BAR_WIDTH" ] 2>/dev/null && filled=$BAR_WIDTH
+[ "$empty" -lt 0 ] 2>/dev/null && empty=0
+bar_filled=""
+bar_empty=""
+for (( i=0; i<filled; i++ )); do bar_filled+="█"; done
+for (( i=0; i<empty; i++ )); do bar_empty+="░"; done
 
 # ── Locate relevance log ──
 RELEVANCE_FILE=""
@@ -90,38 +104,6 @@ if [ "$avg_relevance" -ge 70 ] 2>/dev/null; then REL_C="$GRN"
 elif [ "$avg_relevance" -ge 40 ] 2>/dev/null; then REL_C="$YEL"
 else REL_C="$RED"; fi
 
-# ═══════════════════════════════════════
-# BUILD OUTPUT — Line 1: metrics
-# ═══════════════════════════════════════
-OUT=""
-
-# Context % with Compact label (like default CC statusline)
-OUT+="${D}Compact${R} ${CTX_C}${B}${used_pct}%${R}"
-OUT+=" ${D}⋮${R} "
-
-# ACE badge
-OUT+="${B}${MAG}◆ ACE${R}"
-
-# Patterns injected
-if [ "$patterns_injected" != "0" ]; then
-  OUT+="  ${D}⋮${R} ${B}${BLU}${patterns_injected}${R}${D} injected${R}"
-fi
-
-# Relevance %
-if [ "$avg_relevance" != "0" ] && [ "$avg_relevance" != "" ]; then
-  OUT+=" ${REL_C}${B}${avg_relevance}%${R}"
-fi
-
-# Domains
-if [ "$domains_count" != "0" ] && [ "$domains_count" != "" ]; then
-  OUT+="  ${D}⋮${R} ${CYN}${B}${domains_count}${R}${D} domains${R}"
-fi
-
-# Domain shifts
-if [ "$domain_shifts" != "0" ]; then
-  OUT+=" ${YEL}${B}${domain_shifts}${R}${D} shifts${R}"
-fi
-
 # ── Read self-eval review result (ace-review-result.json) ──
 REVIEW_FILE=""
 if [ -n "$cwd" ] && [ -f "${cwd}/.claude/data/logs/ace-review-result.json" ]; then
@@ -136,15 +118,55 @@ if [ -n "$cwd" ] && [ -f "${cwd}/.claude/data/logs/ace-review-result.json" ]; th
   fi
 fi
 
-# ── Last task: how helpful was ACE? (shows after Stop hook fires) ──
+# ═══════════════════════════════════════
+# BUILD OUTPUT — Line 1: Model · context bar · context%
+# ═══════════════════════════════════════
+LINE1=""
+if [ -n "$model_name" ] && [ "$model_name" != "null" ]; then
+  LINE1+="${CYN}${B}${model_name}${R}"
+else
+  LINE1+="${CYN}${B}Claude${R}"
+fi
+LINE1+=" ${D}·${R} ${CTX_C}${bar_filled}${D}${bar_empty}${R} ${CTX_C}${B}${used_pct}%${R}"
+
+# ═══════════════════════════════════════
+# BUILD OUTPUT — Line 2: ACE metrics
+# ═══════════════════════════════════════
+LINE2=""
+
+# ACE badge
+LINE2+="${B}${MAG}◆ ACE${R}"
+
+# Patterns injected
+if [ "$patterns_injected" != "0" ]; then
+  LINE2+="  ${D}⋮${R} ${B}${BLU}${patterns_injected}${R}${D} injected${R}"
+fi
+
+# Relevance %
+if [ "$avg_relevance" != "0" ] && [ "$avg_relevance" != "" ]; then
+  LINE2+=" ${REL_C}${B}${avg_relevance}%${R}"
+fi
+
+# Domains
+if [ "$domains_count" != "0" ] && [ "$domains_count" != "" ]; then
+  LINE2+="  ${D}⋮${R} ${CYN}${B}${domains_count}${R}${D} domains${R}"
+fi
+
+# Domain shifts
+if [ "$domain_shifts" != "0" ]; then
+  LINE2+=" ${YEL}${B}${domain_shifts}${R}${D} shifts${R}"
+fi
+
+# Helpful % + time saved
 if [ "$helpful_pct" != "0" ] && [ "$helpful_pct" != "" ]; then
   if [ "$helpful_pct" -ge 70 ] 2>/dev/null; then H_C="$GRN"
   elif [ "$helpful_pct" -ge 40 ] 2>/dev/null; then H_C="$YEL"
   else H_C="$RED"; fi
-  OUT+="  ${D}⋮${R} ${H_C}${B}${helpful_pct}% helpful${R}"
+  LINE2+="  ${D}⋮${R} ${H_C}${B}${helpful_pct}% helpful${R}"
   if [ -n "$time_saved" ] && [ "$time_saved" != "" ]; then
-    OUT+=" ${D}~${time_saved} saved${R}"
+    LINE2+=" ${D}~${time_saved}${R}"
   fi
 fi
 
-echo -e "$OUT"
+echo -e "$LINE1"
+echo -e "$LINE2"
