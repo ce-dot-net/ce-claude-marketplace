@@ -22,7 +22,7 @@ chmod +x ~/.claude/ace_statusline.sh
 
 2. Configure statusLine in `~/.claude/settings.json`:
 ```bash
-jq '.statusLine = {"type": "command", "command": "~/.claude/ace_statusline.sh"}' ~/.claude/settings.json > ~/.claude/settings.json.tmp \
+jq '.statusLine = {"type": "command", "command": "~/.claude/ace_statusline.sh", "refreshInterval": 5}' ~/.claude/settings.json > ~/.claude/settings.json.tmp \
   && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
 ```
 
