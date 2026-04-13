@@ -5,6 +5,23 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.3.1] - 2026-04-13
+
+### Added
+- **root_cause field**: Conditionally included in pattern injection when non-empty (Reflector-generated debugging context)
+- **error_context field**: Conditionally included in pattern injection when non-empty (error analysis from trace)
+- Both fields are now typed in ace-sdk@3.14.3 across all 5 SDKs
+
+### Changed
+- `useful_fields` in `ace_before_task.py` expanded to include `root_cause` and `error_context`
+- Conditional filter: fields only injected when non-empty (`v or k not in ('root_cause', 'error_context')`)
+- Test expectations updated: `root_cause` and `error_context` moved from FIELDS_TO_STRIP to FIELDS_TO_KEEP
+
+### Files
+- UPDATED: `plugins/ace/shared-hooks/ace_before_task.py` -- root_cause/error_context in useful_fields with conditional inclusion
+- UPDATED: `tests/test_spec05_context_optimization.py` -- updated field sets for root_cause/error_context
+- UPDATED: All version files to 6.3.1
+
 ## [6.3.0] - 2026-03-29
 
 ### New Features
