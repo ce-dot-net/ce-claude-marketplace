@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "6.3.0",
-  "description": "Code Engine ACE - LOCAL DEVELOPMENT MODE - v6.3.0: Context injection optimization (~45% fewer tokens)",
+  "version": "6.3.1",
+  "description": "Code Engine ACE - LOCAL DEVELOPMENT MODE - v6.3.1: Confirmed root_cause/error_context pattern fields",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
