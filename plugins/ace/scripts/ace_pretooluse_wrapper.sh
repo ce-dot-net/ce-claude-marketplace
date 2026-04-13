@@ -163,11 +163,13 @@ if [ "$MATCHED_DOMAIN" != "$LAST_DOMAIN" ] && [ -n "$LAST_DOMAIN" ]; then
     exit 0
   fi
 
-  # 1. Build search query for the new domain
-  # Use first word of domain + "patterns" for best semantic match
-  # "troubleshooting-and-pitfalls" → "troubleshooting patterns"
-  FIRST_WORD=$(echo "$MATCHED_DOMAIN" | cut -d'-' -f1)
-  SEARCH_QUERY="${FIRST_WORD} patterns"
+  # 1. Build query from domain + file basename for more relevant results
+  # "cache" + "redis-config.ts" → "cache redis-config"
+  FILE_BASENAME=$(basename "$FILE_PATH" 2>/dev/null | sed 's/\.[^.]*$//' || echo "")
+  SEARCH_QUERY="${MATCHED_DOMAIN}"
+  if [ -n "$FILE_BASENAME" ]; then
+    SEARCH_QUERY="${MATCHED_DOMAIN} ${FILE_BASENAME}"
+  fi
 
   # 2. Call ace-cli search with domain filter (env vars for context)
   export ACE_ORG_ID="$ORG_ID"
