@@ -59,6 +59,31 @@ done
 # Read stdin
 INPUT_JSON=$(cat)
 
+# v6.4.0: Resolve working dir early so we can write spawn log into project's log dir
+WORKING_DIR_EARLY=$(echo "$INPUT_JSON" | jq -r '.cwd // .working_directory // .workingDirectory // empty' 2>/dev/null || echo "")
+if [[ -z "$WORKING_DIR_EARLY" ]]; then
+  _TP=$(echo "$INPUT_JSON" | jq -r '.transcript_path // empty' 2>/dev/null || echo "")
+  if [[ -n "$_TP" ]]; then
+    WORKING_DIR_EARLY=$(cd "$(dirname "$_TP")/../.." 2>/dev/null && pwd || echo "")
+  fi
+fi
+if [[ -n "$WORKING_DIR_EARLY" ]] && [[ -d "$WORKING_DIR_EARLY" ]]; then
+  cd "$WORKING_DIR_EARLY" 2>/dev/null || true
+fi
+
+# v6.4.0: Log subagent completion for parent-child attribution tracking.
+# ace_after_task.py reads this spawn log to resolve parent_agent_id.
+CHILD_AGENT_ID=$(echo "$INPUT_JSON" | jq -r '.agent_id // empty' 2>/dev/null || echo "")
+CHILD_SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // empty' 2>/dev/null || echo "")
+if [ -n "$CHILD_AGENT_ID" ] && [ -n "$CHILD_SESSION_ID" ]; then
+  LOG_DIR=".claude/data/logs"
+  mkdir -p "$LOG_DIR" 2>/dev/null || true
+  TS=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  jq -nc --arg ts "$TS" --arg sid "$CHILD_SESSION_ID" --arg cid "$CHILD_AGENT_ID" \
+    '{timestamp: $ts, event: "subagent_done", session_id: $sid, child_agent_id: $cid, parent_agent_id: "main"}' \
+    >> "$LOG_DIR/ace-spawn-log.jsonl" 2>/dev/null || true
+fi
+
 # Extract working directory from event and cd to it
 # This ensures ace_after_task.py can find .claude/settings.json
 WORKING_DIR=$(echo "$INPUT_JSON" | jq -r '.cwd // .working_directory // .workingDirectory // empty')

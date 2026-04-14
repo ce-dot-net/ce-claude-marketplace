@@ -38,7 +38,7 @@ sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 from ace_context import get_context
 from ace_cli import recall_session
 from utils.git_utils import get_git_context, detect_commits_in_session
-from ace_relevance_logger import log_execution_metrics
+from ace_relevance_logger import log_execution_metrics, log_hook_error
 
 # Add plugin utils to path for validation
 sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
@@ -239,20 +239,113 @@ def summarize_tool_response(tool_name: str, tool_response: dict) -> str:
         return response_str
 
 
-def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = None) -> tuple:
+def parse_agent_transcript(path: str) -> list:
     """
-    Build REAL trajectory from PostToolUse accumulated data.
+    Parse a per-agent transcript JSONL file (CC's agent_transcript_path).
 
-    This is GROUND TRUTH - actual tool execution data.
-    No transcript parsing required!
+    CC writes a dedicated transcript per subagent at agent_transcript_path.
+    Each line is a JSON message; tool_use / tool_result blocks live inside
+    message.content[].
 
-    Per ACE Research Paper (arXiv:2510.04618v1):
-    - Page 5: Generator produces trajectories
-    - Page 19: Trajectory contains tool calls with inputs and outputs
+    Returns:
+        List of tuples compatible with get_session_tools:
+        (tool_name, tool_input_json, tool_response_json, tool_use_id, agent_id)
+
+    Raises:
+        Exceptions are propagated to caller so it can fall back.
+    """
+    tool_uses = {}   # tool_use_id -> (tool_name, tool_input_json)
+    tool_results = {}  # tool_use_id -> tool_response_json
+    order = []  # preserve encounter order by tool_use_id
+
+    transcript_file = Path(path).expanduser()
+    with open(transcript_file, 'r') as f:
+        for line in f:
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+
+            message = entry.get('message') or {}
+            content = message.get('content')
+            if not isinstance(content, list):
+                continue
+
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get('type')
+                if btype == 'tool_use':
+                    tu_id = block.get('id') or ''
+                    tname = block.get('name', '')
+                    tinput = block.get('input', {})
+                    try:
+                        tinput_json = json.dumps(tinput)
+                    except (TypeError, ValueError):
+                        tinput_json = '{}'
+                    if tu_id and tu_id not in tool_uses:
+                        tool_uses[tu_id] = (tname, tinput_json)
+                        order.append(tu_id)
+                elif btype == 'tool_result':
+                    tu_id = block.get('tool_use_id') or ''
+                    tcontent = block.get('content', '')
+                    if isinstance(tcontent, list):
+                        parts = []
+                        for c in tcontent:
+                            if isinstance(c, dict) and c.get('type') == 'text':
+                                parts.append(c.get('text', ''))
+                            elif isinstance(c, str):
+                                parts.append(c)
+                        tresp = {'content': '\n'.join(parts)}
+                        if block.get('is_error'):
+                            tresp['error'] = tresp.get('content', '')
+                        try:
+                            tresp_json = json.dumps(tresp)
+                        except (TypeError, ValueError):
+                            tresp_json = '{}'
+                    elif isinstance(tcontent, str):
+                        payload = {'content': tcontent}
+                        if block.get('is_error'):
+                            payload['error'] = tcontent
+                        tresp_json = json.dumps(payload)
+                    else:
+                        try:
+                            tresp_json = json.dumps(tcontent)
+                        except (TypeError, ValueError):
+                            tresp_json = '{}'
+                    if tu_id:
+                        tool_results[tu_id] = tresp_json
+
+    # Derive agent_id from filename: agent-{uuid}.jsonl
+    agent_id = None
+    try:
+        stem = Path(path).stem
+        if stem.startswith('agent-'):
+            agent_id = stem[len('agent-'):] or None
+    except Exception:
+        agent_id = None
+
+    results = []
+    for tu_id in order:
+        tname, tinput_json = tool_uses[tu_id]
+        tresp_json = tool_results.get(tu_id, '{}')
+        results.append((tname, tinput_json, tresp_json, tu_id, agent_id))
+    return results
+
+
+def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = None, agent_transcript_path: str = None) -> tuple:
+    """
+    Build REAL trajectory from PostToolUse accumulated data or per-agent transcript.
+
+    Per-agent transcript (CC's agent_transcript_path) is preferred when present
+    because the session-wide SQLite accumulator cross-contaminates subagents.
 
     Args:
         session_id: Claude Code session ID
         working_dir: Project working directory (optional)
+        agent_transcript_path: CC per-agent transcript path (optional)
 
     Returns:
         Tuple of (trajectory_list, tools_list)
@@ -261,7 +354,28 @@ def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = 
     sys.path.insert(0, str(Path(__file__).parent))
     from ace_tool_accumulator import get_session_tools, clear_session
 
-    tools = get_session_tools(session_id, working_dir)
+    tools = None
+    if agent_transcript_path:
+        try:
+            p = Path(agent_transcript_path).expanduser()
+            if p.exists():
+                tools = parse_agent_transcript(agent_transcript_path)
+        except Exception as _e:
+            try:
+                log_hook_error(
+                    location="agent_transcript_parse_failed",
+                    session_id=session_id,
+                    project_id=None,
+                    hook="Stop",
+                    error=_e,
+                    extra={"agent_transcript_path": agent_transcript_path},
+                )
+            except Exception:
+                pass
+            tools = None
+
+    if tools is None:
+        tools = get_session_tools(session_id, working_dir)
     trajectory = []
 
     for i, (tool_name, tool_input_json, tool_response_json, tool_use_id, agent_id) in enumerate(tools, 1):
@@ -419,8 +533,14 @@ def main():
         # v5.3.0: POSTTOOLUSE ACCUMULATION ARCHITECTURE
         # =======================================================================
 
+        # v6.4.0: Prefer CC's per-agent transcript (agent_transcript_path) to avoid
+        # cross-agent contamination from the session-wide SQLite accumulator.
+        agent_transcript_path = event.get('agent_transcript_path') or None
+
         # STEP 1: Build trajectory from accumulated tools (GROUND TRUTH)
-        trajectory, tools = build_trajectory_from_accumulated_tools(session_id, working_dir)
+        trajectory, tools = build_trajectory_from_accumulated_tools(
+            session_id, working_dir, agent_transcript_path=agent_transcript_path
+        )
 
         if os.environ.get('ACE_DEBUG_HOOKS') == '1':
             with open('/tmp/ace_hook_debug.log', 'a') as f:
@@ -459,21 +579,60 @@ def main():
             except Exception:
                 pass
 
-        # Load pattern IDs for reinforcement learning
+        # v6.0.0: Read agent_type natively from hook event (CC 2.1.69+)
+        # agent_type identifies subagent type: "main", "refactorer", "coder", etc.
+        agent_type = event.get('agent_type', 'main')
+        # v6.4.0: Per-agent scope — None for main agent, UUID for subagents
+        agent_id = event.get('agent_id') or None
+
+        # v6.4.0: Resolve parent_agent_id from spawn log (best-effort).
+        # SubagentStop wrapper writes {event: "subagent_done", child_agent_id, parent_agent_id}
+        # BEFORE invoking ace_after_task.py, so the entry is present at read time.
+        parent_agent_id = None
+        if agent_id:
+            try:
+                spawn_log_path = Path('.claude/data/logs/ace-spawn-log.jsonl')
+                if spawn_log_path.exists():
+                    with open(spawn_log_path) as _sl:
+                        for _line in reversed(list(_sl)):
+                            try:
+                                _sp = json.loads(_line)
+                                if (_sp.get('event') == 'subagent_done'
+                                        and _sp.get('child_agent_id') == agent_id):
+                                    parent_agent_id = _sp.get('parent_agent_id')
+                                    break
+                            except Exception:
+                                continue
+            except Exception:
+                pass  # non-fatal
+
+        # Load pattern IDs for reinforcement learning (per-agent scope in v6.4.0)
         playbook_used = []
         if session_id:
+            agent_suffix = agent_id if agent_id else 'main'
+            state_file = Path(f'.claude/data/logs/ace-patterns-used-{session_id}-{agent_suffix}.json')
             try:
-                state_file = Path(f'.claude/data/logs/ace-patterns-used-{session_id}.json')
                 if state_file.exists():
                     playbook_used_raw = json.loads(state_file.read_text())
                     playbook_used = [pid for pid in playbook_used_raw if isinstance(pid, str) and is_valid_pattern_id(pid)]
                     state_file.unlink()  # One-time use
-            except Exception:
-                pass
-
-        # v6.0.0: Read agent_type natively from hook event (CC 2.1.69+)
-        # agent_type identifies subagent type: "main", "refactorer", "coder", etc.
-        agent_type = event.get('agent_type', 'main')
+            except Exception as _e:
+                # GAP3 self-heal: log error + cleanup corrupt file
+                try:
+                    log_hook_error(
+                        location="load_playbook_used",
+                        session_id=session_id,
+                        project_id=None,
+                        hook="Stop",
+                        error=_e,
+                        extra={"state_file": str(state_file)},
+                    )
+                except Exception:
+                    pass
+                try:
+                    state_file.unlink(missing_ok=True)
+                except Exception:
+                    pass
 
         # Build the trace
         trace = {
@@ -488,6 +647,12 @@ def main():
             "timestamp": datetime.now().isoformat(),
             "agent_type": agent_type  # v5.4.11: Attribute learning to agent type
         }
+        # v6.4.0: Always set session_id; conditionally set agent_id + parent_agent_id
+        trace["session_id"] = session_id
+        if agent_id:
+            trace["agent_id"] = agent_id
+        if parent_agent_id:
+            trace["parent_agent_id"] = parent_agent_id
 
         # STEP 5.5: Git context capture (Issue #6)
         # Extract git context for AI-Trail correlation
