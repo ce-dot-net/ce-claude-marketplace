@@ -19,12 +19,21 @@ import re
 from typing import Optional
 
 
+_UUID_RE = re.compile(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
+)
+_CTX_SUFFIX_RE = re.compile(r'^[a-z0-9]+(-[a-z0-9]+)*$')
+
+
 def validate_pattern_id(pattern_id: str) -> tuple[bool, Optional[str]]:
     """
     Validate ACE pattern ID format.
 
-    Pattern IDs should follow the format: "ctx-" prefix followed by
-    alphanumeric characters (lowercase letters and numbers).
+    Two accepted formats (both first-class, permanent per server contract):
+      1. Legacy ctx- prefix: "ctx-" followed by lowercase alphanumeric,
+         optionally with hyphen-separated segments (e.g. ctx-1234567890-abcd).
+      2. UUID v4/v5 (post spec-06 Qdrant migration, 2026-03-29):
+         8-4-4-4-12 hex, case-insensitive (server may send mixed case).
 
     Args:
         pattern_id: The pattern ID to validate
@@ -38,11 +47,14 @@ def validate_pattern_id(pattern_id: str) -> tuple[bool, Optional[str]]:
         >>> validate_pattern_id("ctx-abc123")
         (True, None)
 
-        >>> validate_pattern_id("invalid")
-        (False, "Pattern ID must start with 'ctx-' prefix")
+        >>> validate_pattern_id("326df3ab-4d4c-5f16-8f63-3847cb2b9ac3")
+        (True, None)
 
-        >>> validate_pattern_id("ctx-ABC")
-        (False, "Pattern ID must contain only lowercase letters and numbers after 'ctx-' prefix")
+        >>> validate_pattern_id("invalid")[0]
+        False
+
+        >>> validate_pattern_id("ctx-ABC")[0]
+        False
     """
     # Check if pattern_id is a string
     if not isinstance(pattern_id, str):
@@ -52,20 +64,19 @@ def validate_pattern_id(pattern_id: str) -> tuple[bool, Optional[str]]:
     if not pattern_id:
         return False, "Pattern ID cannot be empty"
 
-    # Check for "ctx-" prefix
+    # UUID v4/v5 path (case-insensitive) — post-Qdrant migration format
+    if _UUID_RE.match(pattern_id):
+        return True, None
+
+    # Legacy ctx- prefix path
     if not pattern_id.startswith("ctx-"):
-        return False, "Pattern ID must start with 'ctx-' prefix"
+        return False, "Pattern ID must start with 'ctx-' prefix or be a UUID"
 
-    # Extract the part after "ctx-"
     suffix = pattern_id[4:]
-
-    # Check if suffix is empty
     if not suffix:
         return False, "Pattern ID must have content after 'ctx-' prefix"
 
-    # Check if suffix contains only lowercase letters, numbers, and hyphens
-    # Valid formats: ctx-abc123, ctx-1234567890-abcd, ctx-abc-123-def
-    if not re.match(r'^[a-z0-9]+(-[a-z0-9]+)*$', suffix):
+    if not _CTX_SUFFIX_RE.match(suffix):
         return False, "Pattern ID must contain only lowercase letters, numbers, and hyphens after 'ctx-' prefix"
 
     return True, None
