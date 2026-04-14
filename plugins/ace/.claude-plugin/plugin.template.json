@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "6.4.0",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.4.0: Multi-agent attribution fix + UX + hardening. Fixes subagent state-file-steal bug discovered via external benchmark validation. State-driven sessionTitle, per-agent state files, agent_id/parent_agent_id in trace payload, GAP3 self-heal, stop_hook_active check, CWD strict mode. No breaking changes. Requires: Claude Code >= 2.1.100, ace-cli >= 3.15.0.",
+  "version": "6.4.1",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.4.1: JSONL corruption fix — domain_shift/domain_search events now write compact single-line JSON (was pretty-printed multi-line, corrupting ace-relevance.jsonl). Impact: analysis tools that parse the jsonl line-by-line now work reliably. Empirically verified against installed cache. Requires: Claude Code >= 2.1.100, ace-cli >= 3.15.0.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
