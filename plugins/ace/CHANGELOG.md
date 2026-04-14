@@ -5,6 +5,41 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.4.0] - 2026-04-13
+
+### Headline
+Multi-agent attribution fix (critical) + UX improvements + defensive hardening.
+
+### Added
+- **agent_id / parent_agent_id / session_id** in top-level POST /traces payload (per ACE-SDK contract confirmation)
+- **Per-agent state file**: `ace-patterns-used-{session_id}-{agent_id or 'main'}.json` -- fixes subagent state-file-steal bug
+- **agent_transcript_path parsing**: per-agent trajectory from CC native per-agent transcripts
+- **Spawn log via SubagentStop hook**: replaces PreToolUse=Task (which does not fire) for parent_agent_id resolution
+- **log_hook_error helper**: errors flow to canonical `ace-relevance.jsonl` stream
+- **State-driven sessionTitle**: `ACE ready . topic . +15m` replaces cryptic `ACE.59@82%.ace+20`
+
+### Changed
+- **hooks.json matchers**: PreToolUse + PostToolUse `""` -> `"*"` per official CC docs
+- **CWD strict mode**: removed `$(pwd)` fallback -- prevents `ace-tools.db` leak to parent directories
+
+### Fixed
+- **GAP3 corrupt state file self-heal**: delete + log via log_hook_error
+- **stop_hook_active check**: skip continuation stop hooks (no more empty traces)
+- **Subagent state-file-steal**: per-agent state files isolate trajectories
+
+### Credits
+Discovered via external ACE-Benchmark team validation (vanilla_vs_ace project). Fixed via collaborative debug with the ACE server team (server deployed parallel with canonical `retrieval_count`, `impressions` hard-removed, race-fix deployed same day). ACE-SDK team confirmed top-level payload + `--agent-type` flag.
+
+### Upgrade
+- `/plugin` then `/reload-plugins`
+- Server team recommended version deployed same-day for full `parent_agent_id` support
+- No breaking changes -- all payload fields additive/optional
+
+### Tests
+- 19 new tests green (agent_transcript_parse, cwd_strict, gap3_self_heal, hooks_json_matcher, log_hook_error, parent_agent_resolution, per_agent_state, session_title, spawn_log_subagent, stop_hook_active, trace_payload_v640)
+- 539 pre-existing tests passing
+- No regressions
+
 ## [6.3.1] - 2026-04-13
 
 ### Added
