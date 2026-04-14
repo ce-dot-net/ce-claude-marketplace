@@ -5,6 +5,28 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.4.1] - 2026-04-13
+
+### Headline
+JSONL corruption fix — `domain_shift` and `domain_search` events now write compact single-line JSON.
+
+### Fixed
+- `jq -n` → `jq -nc` in 2 wrapper scripts across 4 appends-to-jsonl sites:
+  - `ace_pretooluse_wrapper.sh:198` — domain_shift (search succeeded)
+  - `ace_pretooluse_wrapper.sh:239` — domain_shift (search failed)
+  - `ace_cwdchanged_wrapper.sh:136` — domain_shift
+  - `ace_cwdchanged_wrapper.sh:190` — domain_search
+- `ace-relevance.jsonl` and `ace-search-events.jsonl` no longer contain multi-line JSON entries
+
+### Impact
+Analysis tools that parse the jsonl line-by-line now work reliably.
+
+### Verification
+Cache-verified: triggered 5 new events post-fix, 0 corrupt lines.
+
+### Upgrade
+`/plugin` + `/reload-plugins`
+
 ## [6.4.0] - 2026-04-13
 
 ### Headline
