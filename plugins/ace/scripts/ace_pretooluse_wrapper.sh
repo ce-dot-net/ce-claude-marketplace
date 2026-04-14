@@ -195,7 +195,7 @@ ${SEARCH_RESULT}
     mkdir -p "$LOG_DIR" 2>/dev/null || true
     SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // "unknown"')
     TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    jq -n --arg ts "$TIMESTAMP" \
+    jq -nc --arg ts "$TIMESTAMP" \
           --arg hook "PreToolUse" \
           --arg sid "$SESSION_ID" \
           --arg pid "$PROJECT_ID" \
@@ -236,7 +236,7 @@ ${SEARCH_RESULT}
     mkdir -p "$LOG_DIR" 2>/dev/null || true
     SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // "unknown"')
     TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    jq -n --arg ts "$TIMESTAMP" \
+    jq -nc --arg ts "$TIMESTAMP" \
           --arg hook "PreToolUse" \
           --arg sid "$SESSION_ID" \
           --arg pid "$PROJECT_ID" \

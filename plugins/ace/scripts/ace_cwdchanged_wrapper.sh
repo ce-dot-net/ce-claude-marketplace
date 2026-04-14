@@ -133,7 +133,7 @@ echo "$MATCHED_DOMAIN" > "$DOMAIN_FILE"
 LOG_DIR=".claude/data/logs"
 mkdir -p "$LOG_DIR" 2>/dev/null || true
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-jq -n --arg ts "$TIMESTAMP" \
+jq -nc --arg ts "$TIMESTAMP" \
       --arg hook "CwdChanged" \
       --arg sid "$SESSION_ID" \
       --arg pid "$PROJECT_ID" \
@@ -187,7 +187,7 @@ print(json.dumps(d))
 " 2>/dev/null || echo "$SEARCH_RESULT")
 
     # Log the search result
-    jq -n --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+    jq -nc --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
           --arg hook "CwdChanged" \
           --arg sid "$SESSION_ID" \
           --arg pid "$PROJECT_ID" \
