@@ -198,6 +198,48 @@ class ACERelevanceLogger:
 
         self._write_log(entry)
 
+    def log_hook_error(
+        self,
+        location: str,
+        session_id: Optional[str],
+        project_id: Optional[str],
+        hook: str,
+        error: Exception,
+        extra: Optional[Dict[str, Any]] = None
+    ) -> None:
+        """
+        Log a structured hook error event to ace-relevance.jsonl.
+
+        Replaces silent `except: pass` blocks with visible telemetry
+        consumed by server, statusline, and ace-doctor.
+        """
+        try:
+            error_message = str(error)
+            if len(error_message) > 500:
+                error_message = error_message[:500]
+
+            entry: Dict[str, Any] = {}
+            if extra:
+                try:
+                    entry.update(extra)
+                except Exception:
+                    pass
+
+            # Required fields — set after extra so they cannot be clobbered
+            entry['timestamp'] = datetime.now(timezone.utc).isoformat()
+            entry['event'] = 'error'
+            entry['hook'] = hook
+            entry['location'] = location
+            entry['session_id'] = session_id
+            entry['project_id'] = project_id
+            entry['error_type'] = type(error).__name__
+            entry['error_message'] = error_message
+
+            self._write_log(entry)
+        except Exception:
+            # Graceful degradation — never raise from error logger
+            pass
+
 
 # Singleton instance for easy import
 _logger = None
@@ -228,6 +270,28 @@ def log_compact_event(**kwargs) -> None:
 def log_execution_metrics(**kwargs) -> None:
     """Convenience function to log execution metrics."""
     get_relevance_logger().log_execution_metrics(**kwargs)
+
+
+def log_hook_error(
+    location: str,
+    session_id: Optional[str],
+    project_id: Optional[str],
+    hook: str,
+    error: Exception,
+    extra: Optional[Dict[str, Any]] = None
+) -> None:
+    """Convenience function to log a hook error event."""
+    try:
+        get_relevance_logger().log_hook_error(
+            location=location,
+            session_id=session_id,
+            project_id=project_id,
+            hook=hook,
+            error=error,
+            extra=extra,
+        )
+    except Exception:
+        pass
 
 
 if __name__ == '__main__':

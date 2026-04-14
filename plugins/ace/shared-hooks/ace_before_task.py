@@ -54,6 +54,62 @@ from ace_context import get_context
 from ace_relevance_logger import log_search_metrics
 
 
+def build_session_title(pattern_list, pattern_count, agent_type, review_file=None):
+    """Build CC sessionTitle from pattern state + optional ROI suffix.
+
+    State machine (verified in installed cache v6.3.2):
+      - pattern_count == 0         → None (caller omits sessionTitle key)
+      - agent_type != 'main'       → "ACE/sub · {count}"
+      - avg_conf < 0.50            → "ACE low · {count}"
+      - 5+ patterns, conf>=0.70,
+        top-domain helpful>=20     → "ACE ready · {topic}[ · +{Nm}]"
+      - otherwise                  → "ACE · {count} · {topic}[ · +{Nm}]"
+
+    ROI suffix: parses time_saved (e.g. "15m", "~45m") from
+    .claude/data/logs/ace-review-result.json. Missing/zero → no suffix.
+    """
+    if pattern_count == 0 or not pattern_list:
+        return None
+
+    # Aggregate helpful by domain, pick top
+    domain_helpful = {}
+    for p in pattern_list:
+        d = p.get('domain', '')
+        if d:
+            domain_helpful[d] = domain_helpful.get(d, 0) + p.get('helpful', 0)
+    top_domains = sorted(domain_helpful.items(), key=lambda x: -x[1])
+
+    avg_conf = sum(p.get('confidence', 0) for p in pattern_list) / len(pattern_list) if pattern_list else 0
+    top_helpful = top_domains[0][1] if top_domains else 0
+    top_short = top_domains[0][0].split('-')[0] if top_domains else ''
+
+    # ROI signal: parse time_saved from last task's ACE_REVIEW (self-eval result)
+    # File format: {"helpful_pct": N, "time_saved": "15m"}
+    roi_suffix = ''
+    try:
+        rf = Path(review_file) if review_file else Path('.claude/data/logs/ace-review-result.json')
+        if rf.exists():
+            review_data = json.loads(rf.read_text())
+            ts = review_data.get('time_saved', '').strip()
+            # Extract leading digits (handles "15m", "~4m", "20m", etc)
+            m = re.search(r'(\d+)\s*m', ts)
+            if m and int(m.group(1)) > 0:
+                roi_suffix = f" · +{m.group(1)}m"
+    except Exception:
+        pass  # non-fatal, ROI suffix stays empty
+
+    # State machine
+    if agent_type and agent_type != 'main':
+        return f"ACE/sub · {pattern_count}"
+    if avg_conf < 0.50:
+        return f"ACE low · {pattern_count}"
+    if pattern_count >= 5 and avg_conf >= 0.70 and top_helpful >= 20:
+        base = f"ACE ready · {top_short}" if top_short else f"ACE ready · {pattern_count}"
+        return base + roi_suffix
+    base = f"ACE · {pattern_count} · {top_short}" if top_short else f"ACE · {pattern_count}"
+    return base + roi_suffix
+
+
 def expand_abbreviations(prompt: str) -> str:
     """
     Minimal query enhancement: Expand ONLY common abbreviations for clarity.
@@ -261,7 +317,10 @@ def main():
                 if pattern_ids:
                     state_dir = Path('.claude/data/logs')
                     state_dir.mkdir(parents=True, exist_ok=True)
-                    state_file = state_dir / f"ace-patterns-used-{session_id}.json"
+                    # v6.4.0: Per-agent state file keyed by agent_id (or 'main')
+                    agent_id = event.get('agent_id') if isinstance(event, dict) else None
+                    agent_suffix = agent_id if agent_id else 'main'
+                    state_file = state_dir / f"ace-patterns-used-{session_id}-{agent_suffix}.json"
                     # Append, don't overwrite — a task can have multiple searches
                     # (main agent + subagents, multiple prompts in same task)
                     existing = []
@@ -363,11 +422,13 @@ def main():
         if pattern_count == 0:
             output = {"systemMessage": user_message}
         else:
-            # Build session title from domains
-            domains_list = sorted(set(p.get('domain', '') for p in pattern_list if p.get('domain')))[:3]
-            session_title = f"ACE: {pattern_count} patterns"
-            if domains_list:
-                session_title += f" · {', '.join(domains_list)}"
+            # Build session title — state + topic + ROI signal (UX pro max v3)
+            # Shows VALUE (time saved from previous task's self-eval) not inventory.
+            session_title = build_session_title(
+                pattern_list=pattern_list,
+                pattern_count=pattern_count,
+                agent_type=agent_type,
+            )
 
             output = {
                 "systemMessage": user_message,

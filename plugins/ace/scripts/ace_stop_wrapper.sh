@@ -9,6 +9,13 @@ INPUT_JSON=$(cat)
 SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // empty' 2>/dev/null || echo "")
 SESSION_ID="${SESSION_ID:-default}"
 
+# v6.4.0: Skip continuation stops (CC fires multiple Stops per session with subagents)
+STOP_ACTIVE=$(echo "$INPUT_JSON" | jq -r '.stop_hook_active // false' 2>/dev/null || echo "false")
+if [ "$STOP_ACTIVE" = "true" ]; then
+  echo '{"continue": true, "systemMessage": "[ACE] Skipped continuation stop"}'
+  exit 0
+fi
+
 # ACE disable flag check (set by SessionStart if CLI issues detected)
 ACE_DISABLED_FLAG="/tmp/ace-disabled-${SESSION_ID}.flag"
 if [ -f "$ACE_DISABLED_FLAG" ]; then

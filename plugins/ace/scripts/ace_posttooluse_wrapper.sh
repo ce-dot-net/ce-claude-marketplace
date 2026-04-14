@@ -90,6 +90,16 @@ if [[ "${ACE_EVENT_LOGGING:-0}" == "1" ]] && [[ "$ENABLE_LOG" == "true" ]] && [[
   echo "$INPUT_JSON" | python3 "$LOGGER" --event-type PostToolUse --phase start >/dev/null 2>&1 || true
 fi
 
+# v6.4.0: CWD strict mode — no $(pwd) fallback.
+# Build conditional --working-dir arg only when the event provided a legitimate cwd.
+# This prevents state-file leaks into the hook process CWD (e.g. repo root).
+WORKING_DIR_ARG=""
+if [ -n "$WORKING_DIR" ]; then
+  WORKING_DIR_ARG="--working-dir $WORKING_DIR"
+else
+  echo "[ACE WARN] No WORKING_DIR from hook event — using accumulator's default cwd" >&2
+fi
+
 # Append tool to SQLite accumulator (fast, silent)
 # v6.0.0: Now runs AFTER async output — Claude Code already proceeding
 APPEND_RESULT=$(python3 "$ACCUMULATOR" append \
@@ -99,7 +109,7 @@ APPEND_RESULT=$(python3 "$ACCUMULATOR" append \
   --tool-response "$TOOL_RESPONSE" \
   --tool-use-id "$TOOL_USE_ID" \
   --agent-id "$AGENT_ID" \
-  --working-dir "${WORKING_DIR:-$(pwd)}" 2>&1) || true
+  $WORKING_DIR_ARG 2>&1) || true
 
 # Debug logging
 if [[ "${ACE_DEBUG_HOOKS:-0}" == "1" ]]; then
