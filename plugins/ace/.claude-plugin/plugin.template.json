@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "6.4.2",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.4.2: Silent-failure telemetry for ace-cli subprocess errors (non-zero exit, JSON parse failure, timeout) now logged to canonical ace-relevance.jsonl stream as event=error. Diagnostics-only; no behavior change. Requires: Claude Code >= 2.1.100, ace-cli >= 3.15.0.",
+  "version": "6.4.3",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.4.3: Fresh-session relevance log rotation. On fresh CC session start (SessionStart source=startup), ace-relevance.jsonl archives to ace-relevance.prev.jsonl; resume/compact/clear preserve continuity. One generation kept for inspection. Requires: Claude Code >= 2.1.100, ace-cli >= 3.15.0.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
