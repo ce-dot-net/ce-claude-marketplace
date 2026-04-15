@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "6.4.1",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.4.1: JSONL corruption fix — domain_shift/domain_search events now write compact single-line JSON (was pretty-printed multi-line, corrupting ace-relevance.jsonl). Impact: analysis tools that parse the jsonl line-by-line now work reliably. Empirically verified against installed cache. Requires: Claude Code >= 2.1.100, ace-cli >= 3.15.0.",
+  "version": "6.4.2",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.4.2: Silent-failure telemetry for ace-cli subprocess errors (non-zero exit, JSON parse failure, timeout) now logged to canonical ace-relevance.jsonl stream as event=error. Diagnostics-only; no behavior change. Requires: Claude Code >= 2.1.100, ace-cli >= 3.15.0.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

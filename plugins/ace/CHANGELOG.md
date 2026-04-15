@@ -5,6 +5,27 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.4.2] - 2026-04-15
+
+### Headline
+Silent-failure telemetry for ace-cli subprocess errors.
+
+### Added
+- `_log_cli_error()` helper in `plugins/ace/shared-hooks/utils/ace_cli.py` writes `event=error` entries to canonical `.claude/data/logs/ace-relevance.jsonl` when ace-cli subprocess fails.
+- Wired into three previously-silent failure paths:
+  - Non-zero exit (location: `ace_cli_nonzero_exit`)
+  - JSONDecodeError on stdout (location: `ace_cli_json_parse_failed`)
+  - TimeoutExpired (location: `ace_cli_timeout`)
+
+### Impact
+Diagnostics-only; no behavior change for success paths. Previously silent CLI failures are now visible in telemetry, making issues like server-side indexing warmup diagnosable.
+
+### Verification
+Cache-patched version tested with mocked subprocess returning returncode=2 + invalid JSON → error event correctly logged to ace-relevance.jsonl with location, returncode, stdout_sample, stderr_sample.
+
+### Upgrade
+`/plugin` + `/reload-plugins`
+
 ## [6.4.1] - 2026-04-13
 
 ### Headline
