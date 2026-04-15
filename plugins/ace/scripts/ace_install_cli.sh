@@ -59,6 +59,16 @@ output_warning() {
   jq -n --arg msg "$msg" '{"systemMessage": $msg}'
 }
 
+# v6.4.3: Archive ace-relevance.jsonl on fresh CC session start.
+# Why: a new CC session is a fresh analytical context; carrying the previous
+# session's relevance signals into statusline / ace-doctor / ace-insights
+# pollutes per-session analysis. One generation kept as .prev for inspection.
+archive_relevance_log() {
+  local log_file=".claude/data/logs/ace-relevance.jsonl"
+  [ -s "$log_file" ] || return 0
+  mv -f "$log_file" "${log_file%.jsonl}.prev.jsonl" 2>/dev/null || true
+}
+
 # Helper: Restore patterns from PreCompact temp file (compact/clear sources)
 restore_patterns_after_compact() {
   # Resolve SESSION_ID using same source as PreCompact (ace-session file)
@@ -146,8 +156,9 @@ case "$SOURCE" in
     ;;
 
   *)
-    # startup or unknown: full CLI check
+    # startup or unknown: full CLI check + fresh relevance log
     rm -f "$ACE_DISABLED_FLAG" 2>/dev/null || true
+    archive_relevance_log
     ;;
 esac
 

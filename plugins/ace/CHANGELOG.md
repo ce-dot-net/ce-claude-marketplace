@@ -5,6 +5,25 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.4.3] - 2026-04-15
+
+### Headline
+Fresh-session relevance log rotation.
+
+### Added
+- `archive_relevance_log()` in `plugins/ace/scripts/ace_install_cli.sh` renames `.claude/data/logs/ace-relevance.jsonl` → `ace-relevance.prev.jsonl` on fresh CC session start (SessionStart source=startup only). One generation kept for inspection.
+- `resume`/`compact`/`clear` sources do NOT archive — they preserve continuity.
+- `/ace-cleanup` docs updated: "Preserved" section documents the rotation and lists `.prev.jsonl` as preserved.
+
+### Why
+A new CC session is a fresh analytical context. Carrying previous session's relevance signals into statusline/ace-doctor/ace-insights pollutes per-session analysis. Each session now gets a clean slate while keeping the previous run inspectable.
+
+### Verification
+Cache-patched + empirical: startup archives correctly, empty file skipped (no spurious zero-byte `.prev.jsonl`), resume/compact/clear leave the log intact, no downstream consumer reads `.prev.jsonl`, and `/ace-cleanup --days` patterns don't match it.
+
+### Upgrade
+`/plugin` + `/reload-plugins`
+
 ## [6.4.2] - 2026-04-15
 
 ### Headline

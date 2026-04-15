@@ -187,7 +187,8 @@ done
 - `ace-errors*.jsonl` - Error logs
 
 **Preserved** (useful for analysis):
-- `ace-relevance.jsonl` - Pattern metrics (has rotation)
+- `ace-relevance.jsonl` - Pattern metrics (archived to `ace-relevance.prev.jsonl` on fresh CC session start)
+- `ace-relevance.prev.jsonl` - Previous session's metrics (one generation kept for inspection)
 - `ace-tools.db` - SQLite (auto-cleaned after each task)
 
 ## Event Logging
