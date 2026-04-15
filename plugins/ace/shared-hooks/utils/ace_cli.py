@@ -4,11 +4,42 @@
 import subprocess
 import json
 import os
+from pathlib import Path
+from datetime import datetime
 from typing import Optional, Dict, Any
 
 
 # v6.0.0: Legacy CLI removed, ace-cli is the only supported command
 CLI_CMD = 'ace-cli'
+
+
+def _log_cli_error(location: str, returncode: int, stdout_sample: str, stderr_sample: str,
+                    query: str = None, project_id: str = None, extra: dict = None) -> None:
+    """v6.4.2: Log ace-cli failures to canonical telemetry stream.
+
+    Previously these failures returned None silently — plugin logged
+    patterns_returned=0 with no signal that the CLI actually failed.
+    """
+    try:
+        entry = {
+            "timestamp": datetime.now().isoformat(),
+            "event": "error",
+            "hook": "UserPromptSubmit",
+            "location": location,
+            "project_id": project_id,
+            "returncode": returncode,
+            "stdout_sample": stdout_sample[:300] if stdout_sample else '',
+            "stderr_sample": stderr_sample[:300] if stderr_sample else '',
+            "query_sample": query[:100] if query else '',
+        }
+        if extra:
+            entry.update(extra)
+        log_path = Path('.claude/data/logs/ace-relevance.jsonl')
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, 'a') as f:
+            f.write(json.dumps(entry) + '\n')
+    except Exception:
+        pass  # Logging must not fail the caller
 
 
 def run_search(query: str, org: str = None, project: str = None, session_id: str = None) -> Optional[Dict[str, Any]]:
@@ -78,14 +109,43 @@ def run_search(query: str, org: str = None, project: str = None, session_id: str
                 return {"error": "not_authenticated", "message": "Not logged in. Run /ace-login first."}
 
             # Other failures
+            _log_cli_error(
+                location="ace_cli_nonzero_exit",
+                returncode=result.returncode,
+                stdout_sample=stdout,
+                stderr_sample=stderr,
+                query=query,
+                project_id=project,
+            )
             return None
 
-        return json.loads(result.stdout)
+        try:
+            return json.loads(result.stdout)
+        except json.JSONDecodeError as _je:
+            # v6.4.2: Previously silent — now visible in telemetry.
+            _stdout_txt = result.stdout.decode('utf-8', errors='replace') if result.stdout else ''
+            _stderr_txt = result.stderr.decode('utf-8', errors='replace') if result.stderr else ''
+            _log_cli_error(
+                location="ace_cli_json_parse_failed",
+                returncode=result.returncode,
+                stdout_sample=_stdout_txt,
+                stderr_sample=_stderr_txt,
+                query=query,
+                project_id=project,
+                extra={"parse_error": str(_je)[:200], "stdout_bytes": len(result.stdout) if result.stdout else 0},
+            )
+            return None
 
     except subprocess.TimeoutExpired:
+        _log_cli_error(
+            location="ace_cli_timeout",
+            returncode=-1,
+            stdout_sample='',
+            stderr_sample='',
+            query=query,
+            project_id=project,
+        )
         return {"error": "timeout", "message": "Search timed out. Check your connection."}
-    except json.JSONDecodeError:
-        return None  # Invalid JSON response
     except FileNotFoundError:
         return {"error": "cli_not_found", "message": "ace-cli not found. Run: npm install -g @ace-sdk/cli"}
 
