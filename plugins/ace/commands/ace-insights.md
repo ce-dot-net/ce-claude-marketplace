@@ -35,8 +35,28 @@ if not log_path.exists():
     print('Try running a few tasks with ACE enabled first!')
     sys.exit(0)
 
-analyzer_path = Path(os.environ.get('CLAUDE_PLUGIN_ROOT', '')) / 'shared-hooks' / 'utils' / 'ace_insights_analyzer.py'
-if not analyzer_path.exists():
+def _resolve_analyzer():
+    import glob
+    root = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
+    if root:
+        cand = Path(root) / 'shared-hooks' / 'utils' / 'ace_insights_analyzer.py'
+        if cand.exists():
+            return cand
+    home = Path.home()
+    patterns = [
+        str(home / '.claude/plugins/cache/*/ace/*/shared-hooks/utils/ace_insights_analyzer.py'),
+        str(home / '.claude/plugins/marketplaces/*/plugins/ace/shared-hooks/utils/ace_insights_analyzer.py'),
+    ]
+    matches = []
+    for pat in patterns:
+        matches.extend(glob.glob(pat))
+    if not matches:
+        return None
+    matches.sort(key=lambda m: os.path.getmtime(m), reverse=True)
+    return Path(matches[0])
+
+analyzer_path = _resolve_analyzer()
+if analyzer_path is None:
     print('ACE insights analyzer not found. Re-install the ACE plugin.')
     sys.exit(1)
 
@@ -108,8 +128,28 @@ from pathlib import Path
 hours = int(sys.argv[1]) if len(sys.argv) > 1 else 24
 log_path = Path('.claude/data/logs/ace-relevance.jsonl')
 
-analyzer_path = Path(os.environ.get('CLAUDE_PLUGIN_ROOT', '')) / 'shared-hooks' / 'utils' / 'ace_insights_analyzer.py'
-if not analyzer_path.exists():
+def _resolve_analyzer():
+    import glob
+    root = os.environ.get('CLAUDE_PLUGIN_ROOT', '')
+    if root:
+        cand = Path(root) / 'shared-hooks' / 'utils' / 'ace_insights_analyzer.py'
+        if cand.exists():
+            return cand
+    home = Path.home()
+    patterns = [
+        str(home / '.claude/plugins/cache/*/ace/*/shared-hooks/utils/ace_insights_analyzer.py'),
+        str(home / '.claude/plugins/marketplaces/*/plugins/ace/shared-hooks/utils/ace_insights_analyzer.py'),
+    ]
+    matches = []
+    for pat in patterns:
+        matches.extend(glob.glob(pat))
+    if not matches:
+        return None
+    matches.sort(key=lambda m: os.path.getmtime(m), reverse=True)
+    return Path(matches[0])
+
+analyzer_path = _resolve_analyzer()
+if analyzer_path is None:
     print('ACE insights analyzer not found. Re-install the ACE plugin.')
     sys.exit(1)
 

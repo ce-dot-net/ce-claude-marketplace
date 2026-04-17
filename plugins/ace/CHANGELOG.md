@@ -5,6 +5,27 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.4.4] - 2026-04-17
+
+### Headline
+Fix `/ace:ace-insights` for users without `CLAUDE_PLUGIN_ROOT` in the hook env + per-agent analytics.
+
+### Fixed
+- **`CLAUDE_PLUGIN_ROOT` fallback** (`plugins/ace/commands/ace-insights.md`, Step 1 + Step 3 inline `python3 -c` blocks): CC does not propagate `CLAUDE_PLUGIN_ROOT` to Bash-tool subshells driven by the main LLM (only to hook subprocesses). Replaced bare `os.environ.get('CLAUDE_PLUGIN_ROOT', '')` with a resolver that falls back to globbing `~/.claude/plugins/cache/*/ace/*/shared-hooks/utils/` and `~/.claude/plugins/marketplaces/*/plugins/ace/shared-hooks/utils/`, picking newest. User-visible: eliminates "analyzer not found" error reported by other users.
+- **Diagnostic empty-state** (`plugins/ace/shared-hooks/utils/ace_insights_analyzer.py`): `_empty_tasks_message()` helper replaces the unhelpful "No tasks recorded yet" when the log has entries but zero `event:execution` rows. Now says "N log entries found (M search-only clusters) but zero completed tasks. The Stop hook that writes `event: execution` entries may be failing silently. Run `/ace:ace-doctor` to check." (spec-06 silent-failure surface.)
+
+### Added
+- **Per-task agent badge** (`_agent_badge_html()` + CSS in `ace_insights_analyzer.py`): Each task card header now shows a colored badge for the agent that ran it (`main` = gray, subagents get hash-stable colors from a 7-color palette).
+- **"By Agent" rollup table** (`generate_evaluated_html` in `ace_insights_analyzer.py`): Per-agent aggregates (tasks, helpfulness avg, tool count) rendered between the stats row and the Tasks list. Suppressed for main-only sessions to avoid noise. Agents with <50% avg helpfulness get a warning marker so ACE coverage gaps are obvious.
+
+### Verification
+- Python syntax validated (`ast.parse`).
+- Test script `tests/test_ace_insights_fix.sh` — 9/9 pass (covers resolver, empty-log, search-only, main-only suppression, subagent-present rollup, badge rendering, low-helpfulness warning marker).
+- End-to-end: `/ace:ace-insights --hours 168` run against a main-only session → 12.8KB HTML, main badge renders, By Agent table correctly suppressed, 80% helpfulness score shown.
+
+### Upgrade
+`/plugin` + `/reload-plugins`
+
 ## [6.4.3] - 2026-04-15
 
 ### Headline

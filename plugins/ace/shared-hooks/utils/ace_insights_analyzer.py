@@ -435,6 +435,40 @@ def extract_task_data_for_evaluation(
     }
 
 
+_AGENT_PALETTE = ["#58a6ff", "#bc8cff", "#3fb950", "#f59e0b", "#e879f9", "#22d3ee", "#f97316"]
+
+
+def _agent_badge_html(agent: str) -> str:
+    """Render a colored badge for an agent_type. `main` uses a neutral style."""
+    if not agent or agent == "main":
+        return '<span class="agent-badge agent-main">main</span>'
+    import hashlib
+    idx = int(hashlib.md5(agent.encode("utf-8")).hexdigest(), 16) % len(_AGENT_PALETTE)
+    color = _AGENT_PALETTE[idx]
+    safe = _html_escape(agent)
+    return (
+        f'<span class="agent-badge" style="background:{color}22;'
+        f'color:{color};border:1px solid {color}55">{safe}</span>'
+    )
+
+
+def _empty_tasks_message(total_entries: int, search_only_count: int) -> str:
+    """Produce a diagnostic empty-state string for the Tasks section."""
+    if total_entries == 0:
+        return '<div class="empty">No relevance metrics logged yet in this window.</div>'
+    if search_only_count > 0:
+        return (
+            f'<div class="empty"><strong>{total_entries} log entries found '
+            f'({search_only_count} search-only clusters) but zero completed tasks.</strong> '
+            f'The Stop hook that writes <code>event: execution</code> entries may be '
+            f'failing silently. Run <code>/ace:ace-doctor</code> to check.</div>'
+        )
+    return (
+        f'<div class="empty">{total_entries} log entries found but no complete tasks '
+        f'could be assembled in this window.</div>'
+    )
+
+
 def generate_evaluated_html(
     task_data: dict,
     evaluations: dict,
@@ -472,6 +506,8 @@ def generate_evaluated_html(
     metadata = task_data.get("metadata", {})
     top_patterns = task_data.get("top_patterns", [])
     total_tasks = len(tasks)
+    search_only_count = task_data.get("search_only_count", 0)
+    total_entries = metadata.get("total_entries", 0)
     generated = metadata.get("generated_at", datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"))
 
     # Sort tasks newest first by start_time
@@ -483,6 +519,50 @@ def generate_evaluated_html(
             return datetime.min.replace(tzinfo=timezone.utc)
 
     tasks_sorted = sorted(tasks, key=_sort_key, reverse=True)
+
+    # Per-agent aggregates (v6.4.4)
+    from collections import defaultdict
+    agent_stats: Dict[str, Dict[str, float]] = defaultdict(
+        lambda: {"tasks": 0, "help_sum": 0.0, "help_count": 0, "tools": 0}
+    )
+    for t in tasks_sorted:
+        at = t.get("agent_type") or "main"
+        s = agent_stats[at]
+        s["tasks"] += 1
+        s["tools"] += t.get("tools_executed", 0)
+        ev = eval_by_id.get(t.get("task_id"))
+        if ev is not None:
+            s["help_sum"] += ev.get("helpfulness_pct", 0)
+            s["help_count"] += 1
+
+    # Render per-agent table only when there's more than one agent
+    # (always show if any subagent ran, even once)
+    non_main_agents = [a for a in agent_stats if a != "main"]
+    if agent_stats and (len(agent_stats) > 1 or non_main_agents):
+        agent_rows_html = ""
+        for agent, s in sorted(
+            agent_stats.items(), key=lambda kv: (-kv[1]["tasks"], kv[0])
+        ):
+            badge = _agent_badge_html(agent)
+            if s["help_count"]:
+                avg = round(s["help_sum"] / s["help_count"])
+                warn = ' <span class="warn">⚠</span>' if avg < 50 else ""
+                help_cell = f"{avg}%{warn}"
+            else:
+                help_cell = "&mdash;"
+            agent_rows_html += (
+                f"<tr><td>{badge}</td><td>{int(s['tasks'])}</td>"
+                f"<td>{help_cell}</td><td>{int(s['tools'])}</td></tr>"
+            )
+        agent_section_html = (
+            '<h2>By Agent</h2>'
+            '<div class="agent-table-card"><table class="agent-table">'
+            '<thead><tr><th>Agent</th><th>Tasks</th>'
+            '<th>Helpfulness</th><th>Tools</th></tr></thead>'
+            f'<tbody>{agent_rows_html}</tbody></table></div>'
+        )
+    else:
+        agent_section_html = ""
 
     # Overall helpfulness color
     if overall_pct > 70:
@@ -542,10 +622,12 @@ def generate_evaluated_html(
         else:
             help_bar = '<div class="not-evaluated">Not evaluated</div>'
 
+        agent_badge = _agent_badge_html(t.get("agent_type") or "main")
         task_cards_html += f"""
         <div class="task-card">
           <div class="task-header">
             <span class="task-prompt">{prompt}</span>
+            {agent_badge}
             <span class="task-duration">({dur_str})</span>
           </div>
           <div class="task-badges">
@@ -638,6 +720,15 @@ def generate_evaluated_html(
     .bar-sessions {{ width: 32px; font-size: 11px; color: #8b949e; text-align: right; }}
 
     .empty {{ color: #6e7681; font-size: 13px; padding: 12px 0; }}
+    .empty code {{ background: #21262d; padding: 1px 6px; border-radius: 3px; font-family: monospace; font-size: 12px; color: #c9d1d9; }}
+    .agent-badge {{ display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 4px; font-weight: 600; line-height: 1.4; }}
+    .agent-main {{ background: #21262d; color: #8b949e; }}
+    .agent-table-card {{ background: #161b22; border: 1px solid #30363d; border-radius: 8px; padding: 8px 16px; margin-bottom: 24px; }}
+    .agent-table {{ width: 100%; border-collapse: collapse; font-size: 13px; }}
+    .agent-table th {{ text-align: left; color: #8b949e; font-weight: 600; padding: 10px 12px; border-bottom: 1px solid #30363d; text-transform: uppercase; font-size: 11px; letter-spacing: 0.5px; }}
+    .agent-table td {{ padding: 10px 12px; border-bottom: 1px solid #21262d; color: #c9d1d9; }}
+    .agent-table tr:last-child td {{ border-bottom: none; }}
+    .warn {{ color: #f59e0b; font-size: 14px; }}
     .footer {{ margin-top: 48px; padding-top: 24px; border-top: 1px solid #30363d; font-size: 12px; color: #6e7681; text-align: center; }}
   </style>
 </head>
@@ -657,8 +748,10 @@ def generate_evaluated_html(
     <div class="stat"><div class="stat-value">{overall_pct}%</div><div class="stat-label">Helpfulness</div></div>
   </div>
 
+  {agent_section_html}
+
   <h2>Tasks</h2>
-  {task_cards_html if task_cards_html else '<div class="empty">No tasks recorded yet</div>'}
+  {task_cards_html if task_cards_html else _empty_tasks_message(total_entries, search_only_count)}
 
   <h2>Top Patterns</h2>
   <div class="chart-card">
