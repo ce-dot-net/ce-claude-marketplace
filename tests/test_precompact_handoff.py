@@ -1527,16 +1527,21 @@ class TestEdgeCases:
         )
 
     def test_precompact_all_exit_codes_are_zero(self):
-        """All exit statements in PreCompact must be exit 0."""
+        """All exit statements in PreCompact must be exit 0 OR exit 2 (decision:block).
+
+        v6.5.0 update (Item #5): PreCompact may emit `exit 2` together with a
+        `decision:block` JSON object to delay compaction while ACE's Stop-hook
+        learn pipeline is in flight. Any other non-zero exit is still forbidden.
+        """
         source = PRECOMPACT_SCRIPT.read_text()
         lines = source.splitlines()
         for i, line in enumerate(lines):
             stripped = line.strip()
             if stripped.startswith("exit ") and not stripped.startswith("#"):
                 code_part = stripped.split("#")[0].strip()
-                assert code_part == "exit 0", (
-                    f"Line {i + 1}: Expected 'exit 0' but found '{code_part}'. "
-                    f"Non-zero exits would disrupt Claude Code."
+                assert code_part in ("exit 0", "exit 2"), (
+                    f"Line {i + 1}: Expected 'exit 0' or 'exit 2' but found '{code_part}'. "
+                    f"Non-zero exits other than 2 would disrupt Claude Code."
                 )
 
     def test_sessionstart_all_exit_codes_are_zero(self):

@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "6.4.4",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.4.4: Fix /ace:ace-insights + per-agent analytics. CLAUDE_PLUGIN_ROOT fallback resolver (works for users whose hook env lacks the var), diagnostic empty-state messaging, per-task agent badges, and 'By Agent' rollup table. Requires: Claude Code >= 2.1.100, ace-cli >= 3.15.0.",
+  "version": "6.5.0",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.5.0: CC 2.1.140 adoption (duration_ms/start_ms/end_ms trajectory, PreCompact decision:block lock, PermissionDenied boundary-signal, Bash-error troubleshooting via updatedToolOutput, ${CLAUDE_PLUGIN_DATA} migration, statusline rate_limits/effort/worktree, X-ACE-Client header from plugin.json, model: haiku on 11 read-only commands, /ace-recap). Requires: Claude Code >= 2.1.139, ace-cli >= 2.18.0.",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

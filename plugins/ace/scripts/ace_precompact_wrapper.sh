@@ -10,7 +10,7 @@
 set -eo pipefail
 trap 'echo "[ERROR] ACE hook failed: $(basename $0) line $LINENO" >&2; exit 0' ERR
 
-ACE_PLUGIN_VERSION="6.3.0"
+source "${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/scripts/_ace_env.sh"
 
 # Read stdin once (stdin can only be consumed once)
 INPUT_JSON=$(cat 2>/dev/null || echo "{}")
@@ -49,6 +49,21 @@ if [ -z "$SESSION_ID" ] && [ -f "$SESSION_FILE" ]; then
   SESSION_ID=$(cat "$SESSION_FILE")
 elif [ -z "$SESSION_ID" ]; then
   exit 0  # No session, nothing to recall
+fi
+
+# v6.5.0 Item #5: block compaction while Stop-hook learn is in flight.
+# Stop-hook writes /tmp/ace-learn-inflight-${SESSION_ID}.lock before launching
+# its async ace_after_task.py subprocess; lock is removed when learn returns.
+# If a lock exists AND is younger than 10 minutes, block compaction so the
+# learn pipeline can finish saving patterns without truncation.
+# PR-review I4: raised from 2min → 10min because large subagent_stop traces
+# with 100+ trajectory steps can exceed 2 minutes on slow networks; the prior
+# threshold caused false self-heal and compaction-during-learn races.
+# `-mmin -10` still self-heals stale locks from crashed processes.
+LEARN_LOCK="/tmp/ace-learn-inflight-${SESSION_ID}.lock"
+if [ -f "$LEARN_LOCK" ] && find "$LEARN_LOCK" -mmin -10 -print 2>/dev/null | grep -q .; then
+  jq -n '{decision: "block", reason: "ACE pattern save in progress (Stop-hook learn). Retry compact in a moment."}'
+  exit 2
 fi
 
 # CLI already verified by flag file check above

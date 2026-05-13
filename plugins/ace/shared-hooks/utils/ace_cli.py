@@ -75,6 +75,23 @@ def run_search(query: str, org: str = None, project: str = None, session_id: str
         Returns {"error": "not_authenticated", "message": "..."} on auth failure
         instead of None, enabling better error messages to users.
     """
+    # v6.5.0 Item #17: LRU cache for repeat queries within a single Python process
+    # (60s TTL, 100-entry capacity). Cache key includes (query, org, project) so
+    # multi-project hooks segment correctly; session_id intentionally excluded so
+    # pinning doesn't fragment the cache. PR-review I1: variadic key — additional
+    # callers (e.g. Item #6 Bash-error troubleshooting) can pass --section as
+    # an extra discriminator without colliding with general searches.
+    try:
+        from utils.ace_search_cache import get_global_cache, AceSearchCache  # type: ignore
+        _cache = get_global_cache()
+        _cache_key = AceSearchCache.make_key("search", query, org, project)
+        _cached = _cache.get(_cache_key)
+        if _cached is not None:
+            return _cached
+    except Exception:  # noqa: BLE001 — cache must NEVER break the search path
+        _cache = None
+        _cache_key = None
+
     try:
         # Build environment with context
         env = os.environ.copy()
@@ -120,7 +137,14 @@ def run_search(query: str, org: str = None, project: str = None, session_id: str
             return None
 
         try:
-            return json.loads(result.stdout)
+            _parsed = json.loads(result.stdout)
+            # v6.5.0 Item #17: store result for 60s LRU reuse
+            if _cache is not None and _cache_key is not None:
+                try:
+                    _cache.put(_cache_key, _parsed)
+                except Exception:  # noqa: BLE001
+                    pass
+            return _parsed
         except json.JSONDecodeError as _je:
             # v6.4.2: Previously silent — now visible in telemetry.
             _stdout_txt = result.stdout.decode('utf-8', errors='replace') if result.stdout else ''

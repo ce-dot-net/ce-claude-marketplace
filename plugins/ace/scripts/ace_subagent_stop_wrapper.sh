@@ -26,8 +26,8 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
-# Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.3.0"
+# Plugin version + X-ACE-Client header — loaded dynamically from plugin.json
+source "${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/scripts/_ace_env.sh"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default

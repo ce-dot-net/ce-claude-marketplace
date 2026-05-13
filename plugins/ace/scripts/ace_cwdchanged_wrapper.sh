@@ -14,7 +14,7 @@
 set -eo pipefail
 trap 'echo "[ERROR] ACE CwdChanged: $(basename $0) line $LINENO" >&2; exit 0' ERR
 
-ACE_PLUGIN_VERSION="6.3.0"
+source "${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/scripts/_ace_env.sh"
 
 # Read input JSON from stdin
 INPUT_JSON=$(cat 2>/dev/null || echo "{}")

@@ -1,4 +1,5 @@
 ---
+model: claude-haiku-4-5
 description: Show ACE playbook statistics and learning status
 argument-hint:
 allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(curl:*), Read

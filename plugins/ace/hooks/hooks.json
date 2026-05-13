@@ -78,6 +78,18 @@
         ]
       }
     ],
+    "PermissionDenied": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_permission_denied_wrapper.sh",
+            "timeout": 5000
+          }
+        ]
+      }
+    ],
     "Stop": [
       {
         "matcher": "",

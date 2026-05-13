@@ -5,6 +5,56 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.5.0] - 2026-05-13
+
+### Headline
+CC 2.1.139/2.1.140 adoption — timing fields, monitor scripts, `/ace-recap`, security hardening, and dynamic version loading.
+
+### Floors
+- Claude Code >= 2.1.139
+- ace-cli >= 2.18.0
+
+### Added
+- **Item #1 - Timing fields** (`plugins/ace/shared-hooks/ace_after_task.py` + `ace_tool_accumulator.py`): Tool execution captures `started_at`/`ended_at`/`duration_ms` columns, plumbed through to `event:execution` records. Surfaces in insights/per-task analytics.
+- **Item #2 - `${CLAUDE_PLUGIN_DATA}` migration** (`plugins/ace/shared-hooks/utils/plugin_data_dir.py`): New resolver with lazy-migrate wiring in `ace_tool_accumulator.py`. Honors CC 2.1.139 plugin-data directory while preserving legacy paths.
+- **Item #3 - Statusline upgrades** (`plugins/ace/scripts/ace_statusline.sh`): `rate_limits`, `effort`, and `worktree` fields rendered. Fixed exit-code regression (now `exit 0` on success).
+- **Item #5 - PreCompact block lock** (`plugins/ace/scripts/ace_precompact_wrapper.sh`): Atomic lock file with 10-minute self-heal prevents racy concurrent compactions.
+- **Item #6 - Bash-error troubleshooting** (`plugins/ace/scripts/ace_posttooluse_wrapper.sh`): Bash failures route to troubleshooting capture for ACE learning.
+- **Item #9 - Effort logging** (`ace_after_task.py`): `effort_level` captured per task for analytics.
+- **Item #11 - `/ace-recap`** (`plugins/ace/commands/ace-recap.md` + `ace_insights_analyzer.py --mode recap`): New command showing top patterns + last session summary on return to a session.
+- **Item #15 - `PermissionDenied` boundary-signal** (`plugins/ace/hooks/hooks.json` + `ace_permission_denied_wrapper.sh` + `ace_permission_denied.py`): Captures denied tool attempts as boundary signals for the playbook.
+- **Item #16 - Trace truncation** (`plugins/ace/shared-hooks/utils/trace_truncate.py`): Sub-2MB trace truncation prevents oversized payloads breaking the learning pipeline.
+- **Item #17 - Search LRU cache** (`plugins/ace/shared-hooks/utils/ace_search_cache.py` + wired into `utils/ace_cli.py::run_search`): Reduces redundant search calls within a task.
+- **Item #18 - Dynamic version loading** (`plugins/ace/scripts/_ace_env.sh`): Shared env loader; all 7 wrapper scripts now source it instead of hardcoded `ACE_PLUGIN_VERSION="X.Y.Z"`. Future version bumps touch one file only.
+- **Item #8 - `model: haiku` on 11 commands**: Diagnostic/list commands moved to Haiku for cost/latency.
+- **Item #13 - release-manager update** (`.claude/agents/release-manager.md`): Integrates `claude plugin tag` workflow (CC 2.1.118+).
+- New monitor scripts shipped (manifest entry deferred until CC documents schema): `ace_monitor_log_reaper.sh`, `ace_monitor_stale_reaper.sh`.
+
+### Security
+- **B1 fix - `PermissionDenied` no longer leaks `tool_input`**: PR-review BLOCKER resolved. Trace payload sanitized before write.
+
+### Changed
+- Plugin description updated in `plugin.json` + `plugin.template.json`.
+- `argument-hint` quote fixes across 15 command files.
+- `effort: high` set on 2 commands where reasoning depth matters.
+
+### Removed
+- `plugins/ace/plugin.PRODUCTION.json` (stale at 6.4.1, replaced by `plugin.template.json` workflow).
+
+### Rolled back
+- **Item #7 - `args[]` migration**: CC validator rejected the schema. Deferred until CC publishes spec.
+- **Item #10 - Monitors manifest entry**: Scripts shipped, but `hooks.json` integration deferred (schema not yet documented).
+
+### Verification
+- 551 existing pytest tests pass (1 archived with explicit `pytest.mark.skip` rationale).
+- 122/122 custom v6.5.0 validators pass.
+- `claude plugin validate plugins/ace` -> passes.
+- Live `/reload-plugins` against installed cache: 30 plugins, 26 hooks, 0 errors.
+- PR-review pass: 2 BLOCKERS + 5 IMPORTANT findings all fixed (B1 security verified live).
+
+### Upgrade
+`/plugin` + `/reload-plugins`
+
 ## [6.4.4] - 2026-04-17
 
 ### Headline

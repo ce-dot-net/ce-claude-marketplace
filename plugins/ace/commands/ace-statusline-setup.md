@@ -1,4 +1,5 @@
 ---
+model: claude-haiku-4-5
 description: Install, update, or uninstall ACE statusline. Use '/ace-statusline-setup' to install, '/ace-statusline-setup update' to update, '/ace-statusline-setup uninstall' to remove.
 argument-hint: "[update|uninstall]"
 allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(cp:*), Bash(chmod:*), Bash(rm:*), Bash(mv:*), Read

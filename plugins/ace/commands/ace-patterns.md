@@ -1,6 +1,7 @@
 ---
+model: claude-haiku-4-5
 description: View ACE playbook organized by section (strategies, snippets, troubleshooting, APIs)
-argument-hint: [section] [min-helpful]
+argument-hint: "[section] [min-helpful]"
 allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 

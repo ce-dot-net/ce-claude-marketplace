@@ -1,4 +1,5 @@
 ---
+model: claude-haiku-4-5
 description: Verify ACE plugin is properly configured and operational
 argument-hint:
 allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read

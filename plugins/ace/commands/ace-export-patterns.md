@@ -1,4 +1,5 @@
 ---
+model: claude-haiku-4-5
 description: Export ACE playbook to JSON for backup or sharing
 allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---

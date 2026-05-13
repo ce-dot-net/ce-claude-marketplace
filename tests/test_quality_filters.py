@@ -1,125 +1,95 @@
 #!/usr/bin/env python3
-"""
-Test file to verify ACE v5.1.22 quality filters work correctly.
+"""ACE quality filter unit tests.
 
-This is a REAL implementation task that should:
-1. Trigger PostToolUse hook (multiple tools used)
-2. Pass quality filters (state-changing tools: Write, Edit)
-3. NOT be filtered as trivial (actual implementation work)
+Originally written for v5.1.22 transcript-parsing era. Updated for v5.3.0+
+SQLite accumulator architecture: `has_substantial_work` was renamed to
+`has_substantial_work_from_accumulated` and now takes a list of tool tuples
+(from `ace_tool_accumulator.get_session_tools`) instead of a trace dict.
+
+What's covered:
+  - `is_trivial_task(task_description)` — filters ACE meta-commands, greetings,
+    Claude Code system prompts so they don't leak into pattern learning
+  - `has_substantial_work_from_accumulated(tools)` — verifies state-changing
+    tools (Edit, Write, Bash, MCP, NotebookEdit) were used, indicating
+    meaningful execution feedback per the ACE research paper.
 """
 
 import sys
-sys.path.insert(0, 'shared-hooks')
-sys.path.insert(0, 'shared-hooks/utils')
+from pathlib import Path
 
-from ace_after_task import is_trivial_task, has_substantial_work
+# Make plugin shared-hooks importable from the test (consistent with peers)
+_PLUGIN_HOOKS = Path(__file__).parent.parent / "plugins/ace/shared-hooks"
+sys.path.insert(0, str(_PLUGIN_HOOKS))
+sys.path.insert(0, str(_PLUGIN_HOOKS / "utils"))
 
-
-def test_trivial_task_filter():
-    """Test that trivial tasks are filtered correctly."""
-
-    # These should be FILTERED (return True)
-    trivial_cases = [
-        "User request: <command-message>ace:ace-status is running</command-message>",
-        "/ace-status",
-        "ace:ace-patterns",
-        "what is this?",
-        "thanks",
-        "Caveat: The messages below were generated",
-    ]
-
-    # These should NOT be filtered (return False)
-    substantial_cases = [
-        "User request: implement JWT authentication",
-        "User request: fix the bug in login flow",
-        "User request: create test file for quality filters",
-    ]
-
-    print("=== Testing is_trivial_task() ===\n")
-
-    all_passed = True
-
-    for case in trivial_cases:
-        result = is_trivial_task(case)
-        status = "✅ PASS" if result else "❌ FAIL"
-        if not result:
-            all_passed = False
-        print(f"{status}: Should filter: {case[:50]}...")
-
-    print()
-
-    for case in substantial_cases:
-        result = is_trivial_task(case)
-        status = "✅ PASS" if not result else "❌ FAIL"
-        if result:
-            all_passed = False
-        print(f"{status}: Should NOT filter: {case[:50]}...")
-
-    return all_passed
+from ace_after_task import (  # noqa: E402
+    is_trivial_task,
+    has_substantial_work_from_accumulated,
+)
 
 
-def test_substantial_work_filter():
-    """Test that substantial work detection works correctly."""
+# --- is_trivial_task ---------------------------------------------------------
 
-    print("\n=== Testing has_substantial_work() ===\n")
+TRIVIAL_CASES = [
+    "User request: <command-message>ace:ace-status is running</command-message>",
+    "/ace-status",
+    "ace:ace-patterns",
+    "what is this?",
+    "thanks",
+    "Caveat: The messages below were generated",
+]
 
-    # Should be REJECTED (return False)
-    not_substantial = [
-        {
-            "task": "Session work",
-            "trajectory": [{"action": "test"}],
-            "result": {"output": "short"}
-        },
-        {
-            "task": "User request: check status",
-            "trajectory": [{"action": "Conversation with 5 exchanges", "result": "Discussion completed"}],
-            "result": {"output": "chat"}
-        },
-    ]
-
-    # Should be ACCEPTED (return True)
-    substantial = [
-        {
-            "task": "User request: implement feature",
-            "trajectory": [
-                {"action": "Read file", "tool": "Read"},
-                {"action": "Edit code", "tool": "Edit"},
-                {"action": "Run tests", "tool": "Bash"}
-            ],
-            "result": {"output": "Feature implemented successfully"}
-        },
-    ]
-
-    all_passed = True
-
-    for trace in not_substantial:
-        result = has_substantial_work(trace)
-        status = "✅ PASS" if not result else "❌ FAIL"
-        if result:
-            all_passed = False
-        print(f"{status}: Should reject: {trace['task'][:40]}...")
-
-    for trace in substantial:
-        result = has_substantial_work(trace)
-        status = "✅ PASS" if result else "❌ FAIL"
-        if not result:
-            all_passed = False
-        print(f"{status}: Should accept: {trace['task'][:40]}...")
-
-    return all_passed
+SUBSTANTIAL_CASES = [
+    "User request: implement JWT authentication",
+    "User request: fix the bug in login flow",
+    "User request: create test file for quality filters",
+]
 
 
-if __name__ == "__main__":
-    print("ACE v5.1.22 Quality Filter Tests")
-    print("=" * 50)
+def test_is_trivial_task_filters_meta_and_chitchat():
+    for case in TRIVIAL_CASES:
+        assert is_trivial_task(case), f"Expected trivial, got substantial: {case!r}"
 
-    test1 = test_trivial_task_filter()
-    test2 = test_substantial_work_filter()
 
-    print("\n" + "=" * 50)
-    if test1 and test2:
-        print("✅ ALL TESTS PASSED")
-        sys.exit(0)
-    else:
-        print("❌ SOME TESTS FAILED")
-        sys.exit(1)
+def test_is_trivial_task_keeps_real_requests():
+    for case in SUBSTANTIAL_CASES:
+        assert not is_trivial_task(case), f"Expected substantial, got trivial: {case!r}"
+
+
+# --- has_substantial_work_from_accumulated -----------------------------------
+
+# Tuple shape: (tool_name, tool_input_json, tool_response_json, tool_use_id, ...)
+# Only `tool_name` (index 0) matters for the state-changing check.
+
+
+def _tool(name: str) -> tuple:
+    return (name, "{}", "{}", f"tu_{name}", None)
+
+
+def test_has_substantial_work_rejects_read_only():
+    tools = [_tool("Read"), _tool("Grep"), _tool("Glob")]
+    assert has_substantial_work_from_accumulated(tools) is False
+
+
+def test_has_substantial_work_accepts_edit():
+    tools = [_tool("Read"), _tool("Edit")]
+    assert has_substantial_work_from_accumulated(tools) is True
+
+
+def test_has_substantial_work_accepts_write():
+    tools = [_tool("Write")]
+    assert has_substantial_work_from_accumulated(tools) is True
+
+
+def test_has_substantial_work_accepts_bash():
+    tools = [_tool("Bash"), _tool("Read")]
+    assert has_substantial_work_from_accumulated(tools) is True
+
+
+def test_has_substantial_work_accepts_mcp_prefix():
+    tools = [_tool("mcp__github__create_issue")]
+    assert has_substantial_work_from_accumulated(tools) is True
+
+
+def test_has_substantial_work_empty_list():
+    assert has_substantial_work_from_accumulated([]) is False

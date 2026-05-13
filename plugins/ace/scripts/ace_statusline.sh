@@ -22,6 +22,16 @@ used_pct=$(echo "$INPUT_JSON" | jq -r '.context_window.used_percentage // 0' 2>/
 session_id=$(echo "$INPUT_JSON" | jq -r '.session_id // ""' 2>/dev/null || echo "")
 model_name=$(echo "$INPUT_JSON" | jq -r '.model.display_name // ""' 2>/dev/null || echo "")
 
+# v6.5.0 Item #3 — newer CC stdin fields (CC 2.1.97/2.1.119/2.1.80 …).
+# All empty/zero when running on older CC → conditional rendering keeps backward-compat.
+effort_level=$(echo "$INPUT_JSON" | jq -r '.effort.level // ""' 2>/dev/null || echo "")
+thinking_enabled=$(echo "$INPUT_JSON" | jq -r '.thinking.enabled // false' 2>/dev/null || echo "false")
+git_worktree=$(echo "$INPUT_JSON" | jq -r '.workspace.git_worktree // ""' 2>/dev/null || echo "")
+rl_5h_pct=$(echo "$INPUT_JSON" | jq -r '.rate_limits.five_hour.used_percentage // 0' 2>/dev/null || echo "0")
+rl_5h_resets=$(echo "$INPUT_JSON" | jq -r '.rate_limits.five_hour.resets_at // ""' 2>/dev/null || echo "")
+rl_7d_pct=$(echo "$INPUT_JSON" | jq -r '.rate_limits.seven_day.used_percentage // 0' 2>/dev/null || echo "0")
+rl_7d_resets=$(echo "$INPUT_JSON" | jq -r '.rate_limits.seven_day.resets_at // ""' 2>/dev/null || echo "")
+
 # ── Context % color ──
 if [ "$used_pct" -ge 80 ] 2>/dev/null; then CTX_C="$RED"
 elif [ "$used_pct" -ge 50 ] 2>/dev/null; then CTX_C="$YEL"
@@ -129,6 +139,19 @@ else
 fi
 LINE1+=" ${D}·${R} ${CTX_C}${bar_filled}${D}${bar_empty}${R} ${CTX_C}${B}${used_pct}%${R}"
 
+# v6.5.0 Item #3: append effort/thinking/worktree indicators (suppress when empty)
+if [ "$thinking_enabled" = "true" ]; then
+  LINE1+=" ${YEL}${B}[thinking]${R}"
+fi
+case "$effort_level" in
+  high|xhigh|max)
+    LINE1+=" ${MAG}${B}[${effort_level}]${R}"
+    ;;
+esac
+if [ -n "$git_worktree" ] && [ "$git_worktree" != "null" ]; then
+  LINE1+=" ${CYN}${D}[wt:$(basename "$git_worktree")]${R}"
+fi
+
 # ═══════════════════════════════════════
 # BUILD OUTPUT — Line 2: ACE metrics
 # ═══════════════════════════════════════
@@ -168,5 +191,28 @@ if [ "$helpful_pct" != "0" ] && [ "$helpful_pct" != "" ]; then
   fi
 fi
 
+# v6.5.0 Item #3: rate-limit LINE3 (suppressed when both percentages are 0 — backward-compat).
+LINE3=""
+if [ "$rl_5h_pct" != "0" ] || [ "$rl_7d_pct" != "0" ]; then
+  RL_C="$GRN"
+  if [ "$rl_5h_pct" -ge 80 ] 2>/dev/null || [ "$rl_7d_pct" -ge 80 ] 2>/dev/null; then
+    RL_C="$RED"
+  elif [ "$rl_5h_pct" -ge 50 ] 2>/dev/null || [ "$rl_7d_pct" -ge 50 ] 2>/dev/null; then
+    RL_C="$YEL"
+  fi
+  LINE3="${D}limits${R} 5h:${RL_C}${B}${rl_5h_pct}%${R}"
+  if [ -n "$rl_5h_resets" ] && [ "$rl_5h_resets" != "null" ]; then
+    LINE3+="${D} →${rl_5h_resets}${R}"
+  fi
+  LINE3+="  7d:${RL_C}${B}${rl_7d_pct}%${R}"
+  if [ -n "$rl_7d_resets" ] && [ "$rl_7d_resets" != "null" ]; then
+    LINE3+="${D} →${rl_7d_resets}${R}"
+  fi
+fi
+
 echo -e "$LINE1"
 echo -e "$LINE2"
+if [ -n "$LINE3" ]; then
+  echo -e "$LINE3"
+fi
+exit 0
