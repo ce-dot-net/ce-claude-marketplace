@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "6.5.0",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.5.0: CC 2.1.140 adoption (duration_ms/start_ms/end_ms trajectory, PreCompact decision:block lock, PermissionDenied boundary-signal, Bash-error troubleshooting via updatedToolOutput, ${CLAUDE_PLUGIN_DATA} migration, statusline rate_limits/effort/worktree, X-ACE-Client header from plugin.json, model: haiku on 11 read-only commands, /ace-recap). Requires: Claude Code >= 2.1.139, ace-cli >= 2.18.0.",
+  "version": "6.5.1",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.5.1: CLI floor fix — v6.5.0 description said 'ace-cli >= 2.18.0' (the @ace-sdk/core library version) but the floor for the ace-cli binary is >= 3.17.0. No code changes. Same v6.5.0 features: CC 2.1.140 adoption (duration_ms/start_ms/end_ms trajectory, PreCompact decision:block lock, PermissionDenied boundary-signal, Bash-error troubleshooting via updatedToolOutput, ${CLAUDE_PLUGIN_DATA} migration, statusline rate_limits/effort/worktree, X-ACE-Client header, model: haiku on 11 read-only commands, /ace-recap). Requires: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"

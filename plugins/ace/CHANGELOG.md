@@ -5,14 +5,29 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.5.1] - 2026-05-13
+
+### Fixed
+- **Floor declaration:** v6.5.0 plugin.json/template.json/marketplace.json described the
+  CLI requirement as `ace-cli >= 2.18.0`, which was actually the
+  `@ace-sdk/core` library version. The published `ace-cli` binary is on the
+  3.x line — the correct floor is `ace-cli >= 3.17.0` (matching
+  `@ace-sdk/core >= 2.19.0`, which the SDK team published alongside).
+  No functional change; only the description text was misleading.
+
+### Floors (corrected)
+- Claude Code >= 2.1.139
+- ace-cli >= 3.17.0
+- @ace-sdk/core >= 2.19.0
+
 ## [6.5.0] - 2026-05-13
 
 ### Headline
 CC 2.1.139/2.1.140 adoption — timing fields, monitor scripts, `/ace-recap`, security hardening, and dynamic version loading.
 
-### Floors
+### Floors (as published; superseded by 6.5.1 corrections)
 - Claude Code >= 2.1.139
-- ace-cli >= 2.18.0
+- ace-cli >= 2.18.0  *(corrected to >= 3.17.0 in 6.5.1)*
 
 ### Added
 - **Item #1 - Timing fields** (`plugins/ace/shared-hooks/ace_after_task.py` + `ace_tool_accumulator.py`): Tool execution captures `started_at`/`ended_at`/`duration_ms` columns, plumbed through to `event:execution` records. Surfaces in insights/per-task analytics.
