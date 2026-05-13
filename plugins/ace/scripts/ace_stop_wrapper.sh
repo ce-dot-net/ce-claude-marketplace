@@ -34,8 +34,8 @@ PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 LOGGER="${PLUGIN_ROOT}/shared-hooks/ace_event_logger.py"
 HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_after_task.py"
 
-# Export plugin version for logger
-export ACE_PLUGIN_VERSION="6.3.0"
+# Plugin version + X-ACE-Client header — loaded dynamically from plugin.json
+source "${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/scripts/_ace_env.sh"
 
 # Parse arguments
 ENABLE_LOG=true  # Always log by default
@@ -152,6 +152,12 @@ if [[ "$ACE_ASYNC_LEARNING" == "1" ]]; then
   mkdir -p "$LOG_DIR"
   LOG_FILE="$LOG_DIR/ace-background-$(date +%Y%m%d-%H%M%S)-$$.log"
 
+  # v6.5.0 Item #5: in-flight lock so PreCompact can block while learn is running.
+  # Written BEFORE bg launch, removed at end of bg subshell after learn completes.
+  # Stale locks are self-healed by PreCompact's `find -mmin -2` age guard.
+  LEARN_LOCK="/tmp/ace-learn-inflight-${SESSION_ID:-unknown}.lock"
+  touch "$LEARN_LOCK"
+
   # Launch in background with proper error logging
   (
     python3 "${HOOK_SCRIPT}" < "$TEMP_INPUT" 2>&1 > "$TEMP_OUTPUT"
@@ -160,7 +166,7 @@ if [[ "$ACE_ASYNC_LEARNING" == "1" ]]; then
       echo "[ERROR] Background learning failed with exit code $LEARN_EXIT" >> "$LOG_FILE"
       cat "$TEMP_OUTPUT" >> "$LOG_FILE"
     fi
-    rm -f "$TEMP_INPUT" "$TEMP_OUTPUT"
+    rm -f "$TEMP_INPUT" "$TEMP_OUTPUT" "$LEARN_LOCK"
   ) > /dev/null 2>&1 &
 
   # Return immediate feedback

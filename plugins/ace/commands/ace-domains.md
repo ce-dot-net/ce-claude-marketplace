@@ -1,4 +1,5 @@
 ---
+model: claude-haiku-4-5
 description: List available pattern domains for filtering
 argument-hint: "[--min-patterns N]"
 allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read

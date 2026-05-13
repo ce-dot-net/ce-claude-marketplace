@@ -378,7 +378,7 @@ def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = 
         tools = get_session_tools(session_id, working_dir)
     trajectory = []
 
-    for i, (tool_name, tool_input_json, tool_response_json, tool_use_id, agent_id) in enumerate(tools, 1):
+    for i, (tool_name, tool_input_json, tool_response_json, tool_use_id, agent_id, start_ms, end_ms, duration_ms) in enumerate(tools, 1):
         try:
             tool_input = json.loads(tool_input_json) if tool_input_json else {}
         except json.JSONDecodeError:
@@ -390,12 +390,20 @@ def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = 
             tool_response = {}
 
         # Build trajectory step with REAL data
-        trajectory.append({
+        step = {
             "step": i,
             "tool": tool_name,
             "action": summarize_tool_action(tool_name, tool_input),
-            "result": summarize_tool_response(tool_name, tool_response)
-        })
+            "result": summarize_tool_response(tool_name, tool_response),
+        }
+        # v6.5.0 Item #1: include timing fields when available (SDK confirmed all 3 additive)
+        if start_ms is not None:
+            step["start_ms"] = start_ms
+        if end_ms is not None:
+            step["end_ms"] = end_ms
+        if duration_ms is not None:
+            step["duration_ms"] = duration_ms
+        trajectory.append(step)
 
     return trajectory, tools
 
@@ -654,6 +662,19 @@ def main():
         if parent_agent_id:
             trace["parent_agent_id"] = parent_agent_id
 
+        # v6.5.0 Item #9: effort level signal (CC 2.1.133+ provides this in hook input).
+        # Plugin-side weight mapping per SDK-team guidance (Q4):
+        # auto/low/normal → 1.0 (baseline), high → 1.5, xhigh/max → 2.0
+        # Initially logged-only; Curator scoring planned for later release.
+        _EFFORT_WEIGHT = {
+            "auto": 1.0, "low": 1.0, "normal": 1.0,
+            "high": 1.5,
+            "xhigh": 2.0, "max": 2.0,
+        }
+        effort_level = event.get("effort", os.environ.get("CLAUDE_EFFORT", "normal"))
+        trace["effort_level"] = effort_level
+        trace["effort_weight"] = _EFFORT_WEIGHT.get(effort_level, 1.0)
+
         # STEP 5.5: Git context capture (Issue #6)
         # Extract git context for AI-Trail correlation
         git_context = None
@@ -687,6 +708,19 @@ def main():
 
         # STEP 7: Build user-visible message (output depends on verbosity setting)
         message_lines = []
+
+        # v6.5.0 Item #16 (PR-review I2): truncate large traces before wire-send.
+        # Target <2MB; preserves all failed steps + last 50 trajectory steps;
+        # drops base64 blobs and oversized tool_response payloads.
+        try:
+            import sys as _sys
+            _self_dir = os.path.dirname(os.path.abspath(__file__))
+            if _self_dir not in _sys.path:
+                _sys.path.insert(0, _self_dir)
+            from utils.trace_truncate import truncate_trace
+            trace = truncate_trace(trace)
+        except Exception:
+            pass  # never fail the learn pipeline on truncation issues
 
         # STEP 8: Send to ace-cli learn --stdin
         try:

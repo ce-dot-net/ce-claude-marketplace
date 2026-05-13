@@ -76,7 +76,14 @@ If anything shows as modified → ADD IT!
 git push
 
 # 2. Tag AFTER commit is pushed
-git tag v{VERSION}
+# v6.5.0+: prefer `claude plugin tag` — it reads version from plugin.json
+# and refuses to tag on version mismatch (catches forgotten bumps).
+# Falls back to manual git tag if claude plugin tag is unavailable.
+if command -v claude >/dev/null 2>&1; then
+  claude plugin tag         # auto-reads plugin.json, validates, creates annotated tag
+else
+  git tag v{VERSION}
+fi
 git push --tags
 
 # 3. Create GitHub release
@@ -187,7 +194,16 @@ For this plugin specifically:
 
 **Files to IGNORE** (old/unused):
 - `plugins/ace/plugin.local.json` (dev only)
-- `plugins/ace/plugin.PRODUCTION.json` (old/unused)
+
+**Note:** v6.5.0 removed the legacy production manifest (only `plugin.local.json` remains as
+the dev-only variant). The corresponding test uses an `os.path.exists()` guard so it skips
+cleanly when no longer present.
+
+**Hardcoded versions to AUDIT before tag** (v6.5.0+: should be ZERO):
+```bash
+# Any non-zero output indicates stale version strings that need _ace_env.sh sourcing.
+grep -rn 'ACE_PLUGIN_VERSION=["][0-9]' plugins/ace/scripts/ | grep -v _ace_env.sh
+```
 
 ## Red Flags I Watch For
 

@@ -397,8 +397,10 @@ class TestPatternIdGeneration:
             try:
                 content = shfile.read_text(encoding='utf-8')
                 for i, line in enumerate(content.splitlines(), 1):
-                    # Look for pattern_ being generated or assigned
-                    if re.search(r'pattern_[a-f0-9]', line):
+                    # Look for pattern_ being generated or assigned.
+                    # Real pattern IDs are pattern_<12-hex>; require ≥4 hex chars
+                    # to avoid false positives on identifiers like `pattern_details`.
+                    if re.search(r'pattern_[a-f0-9]{4,}', line):
                         violations.append(
                             f"{shfile.relative_to(PROJECT_ROOT)}:{i}: {line.strip()}"
                         )

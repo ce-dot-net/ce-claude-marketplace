@@ -9,8 +9,12 @@
 # domain-specific patterns available BEFORE reading unfamiliar code.
 
 set -eo pipefail
+# PR-review B2: ERR trap so an internal failure doesn't propagate to CC.
+# PreToolUse fires BEFORE the tool runs — a non-zero exit here blocks the
+# user's tool call. We must NEVER block user work because of an ACE bug.
+trap 'echo "[ERROR] ACE hook failed: $(basename $0) line $LINENO" >&2; exit 0' ERR
 
-ACE_PLUGIN_VERSION="6.3.0"
+source "${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/scripts/_ace_env.sh"
 
 # ACE disable flag check (set by SessionStart if CLI issues detected)
 # Official Claude Code pattern: flag file coordination between hooks

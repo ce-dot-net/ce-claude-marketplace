@@ -1933,3 +1933,133 @@ def format_insights_html(
 </div>
 </body>
 </html>"""
+
+
+# v6.5.0 Item #11: CLI entry for /ace-recap (text-mode digest).
+# Keeps the big HTML report path untouched; recap is a separate render mode.
+def generate_text_report(entries, hours: int = 12) -> str:
+    """Plain-text recap: last task summary + top patterns + session totals.
+
+    Designed for /ace-recap slash command (model: haiku, cheap).
+    """
+    import json as _json
+    from datetime import datetime as _dt, timedelta as _td
+
+    if not entries:
+        return "[ACE Recap] No telemetry events found."
+
+    # Filter to last N hours
+    cutoff = _dt.now().astimezone() - _td(hours=hours)
+    recent = []
+    for e in entries:
+        ts = e.get("timestamp") or e.get("ts")
+        if not ts:
+            continue
+        try:
+            t = _parse_timestamp(ts)
+        except Exception:
+            continue
+        if t >= cutoff:
+            recent.append(e)
+
+    if not recent:
+        return f"[ACE Recap] No events in last {hours}h."
+
+    lines = [f"[ACE Recap] Last {hours}h ({len(recent)} events)\n"]
+
+    # Last task / execution
+    executions = [e for e in recent if e.get("event") == "execution"]
+    if executions:
+        last = executions[-1]
+        task = (last.get("task") or last.get("prompt") or "")[:200]
+        success = last.get("success")
+        lines.append(f"Last task: {task}")
+        if success is not None:
+            lines.append(f"  outcome: {'✅ success' if success else '⚠ partial/error'}")
+
+    # Top patterns
+    try:
+        top = get_top_patterns(recent, limit=5)
+        if top:
+            lines.append("\nTop patterns:")
+            for i, p in enumerate(top, 1):
+                content = (p.get("content") or "")[:120]
+                helpful = p.get("helpful", 0)
+                lines.append(f"  {i}. (h={helpful}) {content}")
+    except Exception as _exc:
+        lines.append(f"  (top-patterns unavailable: {_exc})")
+
+    # Session totals
+    try:
+        sess = analyze_sessions(recent, hours=hours)
+        inj = sess.get("patterns_injected", 0)
+        relv = sess.get("avg_relevance", 0)
+        doms = sess.get("domains_count", 0)
+        lines.append(f"\nSession totals: {inj} injected · {relv}% rel · {doms} domains")
+    except Exception:
+        pass
+
+    return "\n".join(lines)
+
+
+def _load_relevance_log(path):
+    """Read JSONL events; silent on missing/corrupt files."""
+    import json as _json
+    out = []
+    try:
+        with open(path) as fp:
+            for line in fp:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    out.append(_json.loads(line))
+                except _json.JSONDecodeError:
+                    continue
+    except OSError:
+        pass
+    return out
+
+
+def _resolve_relevance_path():
+    """Try ${CLAUDE_PLUGIN_DATA}/projects/<id>/ace-relevance.jsonl first, then .claude/data/logs/."""
+    import os as _os
+    from pathlib import Path as _Path
+
+    if _os.environ.get("CLAUDE_PLUGIN_DATA"):
+        try:
+            from utils.plugin_data_dir import get_project_data_dir
+            p = get_project_data_dir(create=False) / "ace-relevance.jsonl"
+            if p.exists():
+                return p
+        except Exception:
+            pass
+
+    legacy = _Path(".claude/data/logs/ace-relevance.jsonl")
+    if legacy.exists():
+        return legacy
+    return None
+
+
+if __name__ == "__main__":
+    import argparse
+    import sys as _sys
+
+    ap = argparse.ArgumentParser(description="ACE Insights / Recap CLI")
+    ap.add_argument("--mode", choices=["recap", "text", "html"], default="recap")
+    ap.add_argument("--hours", type=int, default=12)
+    args = ap.parse_args()
+
+    path = _resolve_relevance_path()
+    if not path:
+        print("[ACE Recap] No ace-relevance.jsonl found.")
+        _sys.exit(0)
+
+    events = _load_relevance_log(path)
+
+    if args.mode in ("recap", "text"):
+        print(generate_text_report(events, hours=args.hours))
+    else:
+        # HTML mode is the existing path; users should run /ace-insights, not /ace-recap.
+        print("[ACE] HTML mode is served by /ace-insights, not /ace-recap.")
+        _sys.exit(2)

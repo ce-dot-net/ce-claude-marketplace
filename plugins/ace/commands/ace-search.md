@@ -1,4 +1,5 @@
 ---
+model: claude-haiku-4-5
 description: Semantic search for ACE patterns using natural language query
 allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---

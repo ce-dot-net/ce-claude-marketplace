@@ -69,14 +69,19 @@ class TestVersionNumbers:
 
 
 class TestDescriptions:
-    """Descriptions should reference the current version and CC >= 2.1.69."""
+    """Descriptions should reference the current version and a Claude Code floor."""
 
     def test_description_mentions_cc_2169(self):
-        """Description mentions Claude Code >= 2.1.69."""
+        """Description mentions a Claude Code floor.
+
+        v6.5.0 update: changed from hard-coded '2.1.69' check to floor pattern,
+        since each plugin release tracks a different CC floor (v6.5.0 → 2.1.139).
+        """
         data = _read_json(PLUGIN_JSON)
         desc = data['description']
-        assert '2.1.69' in desc, \
-            f"Description does not mention CC 2.1.69: {desc}"
+        import re as _re
+        assert _re.search(r"Claude Code\s*>=\s*\d+\.\d+\.\d+", desc), \
+            f"Description does not mention 'Claude Code >= X.Y.Z': {desc}"
 
     def test_description_mentions_current_version(self):
         """Description mentions the current version."""
@@ -88,31 +93,37 @@ class TestDescriptions:
 
 
 class TestWrapperVersionConstants:
-    """All wrappers with ACE_PLUGIN_VERSION should match plugin.json."""
+    """v6.5.0+: Wrappers source _ace_env.sh which reads plugin.json dynamically.
+
+    Previously each wrapper hardcoded ACE_PLUGIN_VERSION="X.Y.Z"; these tests
+    now verify the dynamic-loading invariant (Item #18). The legacy
+    hardcoded-string assertion was retired as part of the v6.5.0 release.
+    """
 
     def test_wrapper_version_constants_updated(self):
-        """ACE_PLUGIN_VERSION in stop wrappers should match plugin.json."""
-        expected = _current_version()
+        """Stop wrappers source _ace_env.sh for dynamic version loading."""
         for wrapper_path in [STOP_WRAPPER, SUBAGENT_STOP_WRAPPER]:
             content = _read(wrapper_path)
-            assert f'ACE_PLUGIN_VERSION="{expected}"' in content, \
-                f"{os.path.basename(wrapper_path)} does not have ACE_PLUGIN_VERSION=\"{expected}\""
+            assert "_ace_env.sh" in content, \
+                f"{os.path.basename(wrapper_path)} does not source _ace_env.sh"
 
     def test_all_wrapper_versions_match(self):
-        """All wrappers with ACE_PLUGIN_VERSION should match plugin.json."""
-        expected = _current_version()
+        """No wrapper should hardcode ACE_PLUGIN_VERSION (except _ace_env.sh, the loader)."""
         scripts_dir = os.path.join(PLUGIN_DIR, 'scripts')
-        stale = []
+        hardcoded = []
         for fname in os.listdir(scripts_dir):
             if not fname.endswith('.sh'):
                 continue
+            if fname == "_ace_env.sh":
+                continue  # the loader itself legitimately mentions ACE_PLUGIN_VERSION
             fpath = os.path.join(scripts_dir, fname)
             content = _read(fpath)
-            if 'ACE_PLUGIN_VERSION=' in content:
-                if f'ACE_PLUGIN_VERSION="{expected}"' not in content:
-                    stale.append(fname)
-        assert len(stale) == 0, \
-            f"Stale ACE_PLUGIN_VERSION in: {stale}"
+            # Look for ACE_PLUGIN_VERSION= assignments with a literal version string
+            import re as _re
+            if _re.search(r'ACE_PLUGIN_VERSION=["\']\d', content):
+                hardcoded.append(fname)
+        assert len(hardcoded) == 0, \
+            f"Hardcoded ACE_PLUGIN_VERSION in (should be dynamic via _ace_env.sh): {hardcoded}"
 
 
 class TestCeAceRemoved:
