@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 from validation import is_valid_pattern_id
+from patterns_used_state import append_patterns_used
 
 
 def sanitize_unicode(text: str) -> str:
@@ -315,27 +316,12 @@ def main():
             try:
                 pattern_ids = [p.get('id') for p in pattern_list if p.get('id') and is_valid_pattern_id(p.get('id'))]
                 if pattern_ids:
-                    state_dir = Path('.claude/data/logs')
-                    state_dir.mkdir(parents=True, exist_ok=True)
-                    # v6.4.0: Per-agent state file keyed by agent_id (or 'main')
+                    # v6.4.0: Per-agent state file keyed by agent_id (or 'main').
+                    # Delegated to patterns_used_state.append_patterns_used (the
+                    # single source of truth). Behavior-identical: validates IDs,
+                    # appends+dedupes, writes the relative per-agent file.
                     agent_id = event.get('agent_id') if isinstance(event, dict) else None
-                    agent_suffix = agent_id if agent_id else 'main'
-                    state_file = state_dir / f"ace-patterns-used-{session_id}-{agent_suffix}.json"
-                    # Append, don't overwrite — a task can have multiple searches
-                    # (main agent + subagents, multiple prompts in same task)
-                    existing = []
-                    if state_file.exists():
-                        try:
-                            existing = json.loads(state_file.read_text())
-                        except Exception:
-                            existing = []
-                    # Deduplicate while preserving order
-                    seen = set(existing)
-                    for pid in pattern_ids:
-                        if pid not in seen:
-                            existing.append(pid)
-                            seen.add(pid)
-                    state_file.write_text(json.dumps(existing))
+                    append_patterns_used(session_id, agent_id, pattern_ids)
             except Exception:
                 # Non-fatal: continue without pattern tracking
                 pass

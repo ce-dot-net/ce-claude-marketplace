@@ -39,6 +39,7 @@ from ace_context import get_context
 from ace_cli import recall_session
 from utils.git_utils import get_git_context, detect_commits_in_session
 from ace_relevance_logger import log_execution_metrics, log_hook_error
+from patterns_used_state import load_playbook_used
 
 # Add plugin utils to path for validation
 sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
@@ -614,33 +615,47 @@ def main():
             except Exception:
                 pass  # non-fatal
 
-        # Load pattern IDs for reinforcement learning (per-agent scope in v6.4.0)
-        playbook_used = []
-        if session_id:
-            agent_suffix = agent_id if agent_id else 'main'
-            state_file = Path(f'.claude/data/logs/ace-patterns-used-{session_id}-{agent_suffix}.json')
-            try:
-                if state_file.exists():
-                    playbook_used_raw = json.loads(state_file.read_text())
-                    playbook_used = [pid for pid in playbook_used_raw if isinstance(pid, str) and is_valid_pattern_id(pid)]
-                    state_file.unlink()  # One-time use
-            except Exception as _e:
-                # GAP3 self-heal: log error + cleanup corrupt file
-                try:
-                    log_hook_error(
-                        location="load_playbook_used",
-                        session_id=session_id,
-                        project_id=None,
-                        hook="Stop",
-                        error=_e,
-                        extra={"state_file": str(state_file)},
-                    )
-                except Exception:
-                    pass
-                try:
-                    state_file.unlink(missing_ok=True)
-                except Exception:
-                    pass
+        # Load pattern IDs for reinforcement learning (per-agent scope in v6.4.0).
+        # Delegated to patterns_used_state.load_playbook_used (single source of
+        # truth). PER-AGENT-PURE — each agent owns its own trace, never merged:
+        # the terminal main Stop reads ONLY -{session}-main.json (forces the 'main'
+        # suffix, ignoring any agent_id CC stamps on Stop, which fixes the agent_id
+        # asymmetry); a SubagentStop reads ONLY its own -{agent_id} file. Neither
+        # consumes another agent's file (no state steal, no cross-agent merge);
+        # orphans are reaped by the SessionEnd GC. GAP3 self-heal: a per-file error
+        # routes to log_hook_error via on_error.
+        playbook_used = load_playbook_used(
+            session_id,
+            agent_id,
+            hook_event_name,
+            on_error=lambda f, e: log_hook_error(
+                location="load_playbook_used",
+                session_id=session_id,
+                project_id=None,
+                hook=hook_event_name,
+                error=e,
+                extra={"state_file": str(f)},
+            ),
+        )
+
+        # agent_id-contract proof: record which agent_id the READ side used and how
+        # many IDs it recovered. Diffing this against the wrapper's write-side
+        # 'agent_id' on ace-relevance.jsonl proves per-agent attribution end-to-end
+        # on a live subagent session. Guarded + non-fatal — never fail the learn pipeline.
+        try:
+            _rel = Path('.claude/data/logs')
+            _rel.mkdir(parents=True, exist_ok=True)
+            with open(_rel / 'ace-relevance.jsonl', 'a') as _rf:
+                _rf.write(json.dumps({
+                    "timestamp": datetime.now().isoformat(),
+                    "event": "playbook_load",
+                    "hook": hook_event_name,
+                    "session_id": session_id,
+                    "agent_id": agent_id,
+                    "count": len(playbook_used),
+                }) + "\n")
+        except Exception:
+            pass  # non-fatal
 
         # Build the trace
         trace = {

@@ -5,6 +5,52 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.6.0] - 2026-06-04
+
+### Headline
+Per-agent ACE tracking — every subagent gets its own search→learn cycle (fixes cold LinUCB bandit).
+
+### Floors
+- Claude Code >= 2.1.139
+- ace-cli >= 3.17.0
+- @ace-sdk/core >= 2.19.0
+
+### Fixed
+- **Subagent traces shipped `playbook_used=[]` → server LinUCB bandit stayed cold (no reward).**
+  Live-verified on a real session: 23 subagents, 20/20 recorded subagent traces empty,
+  0 per-subagent state files, 97 PreToolUse domain-shift searches surfacing 1337 patterns
+  all untracked.
+
+### Root cause
+- The patterns-used state file had exactly **one writer** — `ace_before_task.py`
+  (`UserPromptSubmit` = main-agent only). Subagents (`Task`-spawned) never fire
+  `UserPromptSubmit` → never wrote a per-agent state file → their `SubagentStop` read a
+  non-existent `-{agent_id}.json` → empty.
+
+### Added / Changed
+- **NEW `plugins/ace/shared-hooks/utils/patterns_used_state.py`** — single source of truth:
+  `append_patterns_used` + `load_playbook_used` + `state_file_path` + CLI entrypoint.
+- **Per-agent-pure reader.** Terminal `Stop` reads `-{session}-main` deterministically
+  (fixes an `agent_id` asymmetry); `SubagentStop` reads ONLY its own `-{agent_id}`
+  (no cross-agent merge / no state-file steal). `ace_before_task.py` + `ace_after_task.py`
+  refactored to delegate (behavior-preserving).
+- **PreToolUse writer (Option B)** (`ace_pretooluse_wrapper.sh`): per-agent domain history
+  (`/tmp/ace-domain-{proj}-{agent_suffix}.txt`) + search on FIRST domain entry → writes
+  `-{agent_id}.json`. Every agent (main + each subagent) now runs its own
+  search → domain-shift → learn cycle, keyed to its own `agent_id`, with its own trace and
+  bandit arm.
+- **SessionEnd GC** (`ace_sessionend_wrapper.sh`): cleans up orphan
+  `ace-patterns-used-{session}-*.json`.
+- **Self-instrumentation:** write-side (PreToolUse) and read-side (`after_task`
+  playbook_load) `agent_id` → `ace-relevance.jsonl`.
+
+### Verified
+- `agent_id` WRITE↔READ contract verified from prod telemetry: 373 subagent tool calls carry
+  `agent_id`; 22/22 distinct subagent ids match the `SubagentStop` spawn-log exactly.
+- 562 pytest pass, 1 skipped (pre-existing/unrelated).
+- `bash -n` clean on `ace_pretooluse_wrapper.sh` + `ace_sessionend_wrapper.sh`.
+- Client-side only — no server/SDK change needed.
+
 ## [6.5.1] - 2026-05-13
 
 ### Fixed

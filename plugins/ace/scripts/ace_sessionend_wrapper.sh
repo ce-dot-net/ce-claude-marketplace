@@ -28,5 +28,20 @@ rm -f "/tmp/ace-eval-requested-${SESSION_ID}.flag" 2>/dev/null || true
 # Clean fire-and-forget eval state files (ace-eval-request.json, ace-review-result.json)
 rm -f .claude/data/logs/ace-eval-request.json 2>/dev/null || true
 
+# Option B GC: reap per-agent patterns-used state files for this session. These are
+# written by ace_before_task.py (main) and the PreToolUse wrapper (subagents) and
+# reaped by ace_after_task.py on Stop/SubagentStop; this sweeps any orphan suffixes
+# (e.g. a subagent that searched but never reached SubagentStop). Glob covers -main
+# and every -{uuid}. Guarded + best-effort.
+rm -f ".claude/data/logs/ace-patterns-used-${SESSION_ID}-"*.json 2>/dev/null || true
+
+# Option B GC: per-agent domain-history files are project-keyed (not session-keyed),
+# so derive PROJECT_ID the same way the PreToolUse wrapper does. Guarded; if PROJECT_ID
+# can't be resolved we skip the tmp sweep rather than risk a too-broad glob.
+PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+if [ -n "$PROJECT_ID" ]; then
+  rm -f "/tmp/ace-domain-${PROJECT_ID}-"*.txt 2>/dev/null || true
+fi
+
 # Always exit 0 — cleanup is best-effort
 exit 0
