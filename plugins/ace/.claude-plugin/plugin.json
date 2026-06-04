@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "6.6.0",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.6.0: Per-agent ACE tracking — every subagent now gets its own search→learn cycle (fixes cold LinUCB bandit). Previously subagent traces shipped playbook_used=[] (no reward signal) because the patterns-used state file had one writer (UserPromptSubmit = main-agent only); Task-spawned subagents never wrote a per-agent state file. New utils/patterns_used_state.py is the single source of truth; reader is per-agent-pure (terminal Stop reads -main, SubagentStop reads only its own -{agent_id}); PreToolUse writes per-agent domain history + search on first domain entry; SessionEnd GCs orphan state files. Requires: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).",
+  "version": "6.6.1",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.6.1: Test-quality patch — GAP3 self-heal regression test now exercises the real patterns_used_state.load_playbook_used reader (with production on_error wiring) instead of an inline copy; no runtime change. Same v6.6.0 features: Per-agent ACE tracking — every subagent now gets its own search→learn cycle (fixes cold LinUCB bandit). Previously subagent traces shipped playbook_used=[] (no reward signal) because the patterns-used state file had one writer (UserPromptSubmit = main-agent only); Task-spawned subagents never wrote a per-agent state file. New utils/patterns_used_state.py is the single source of truth; reader is per-agent-pure (terminal Stop reads -main, SubagentStop reads only its own -{agent_id}); PreToolUse writes per-agent domain history + search on first domain entry; SessionEnd GCs orphan state files. Requires: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
