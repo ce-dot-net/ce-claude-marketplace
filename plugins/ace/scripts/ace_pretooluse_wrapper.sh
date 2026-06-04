@@ -92,6 +92,12 @@ match_domain_to_path() {
 # Read hook input from stdin
 INPUT_JSON=$(cat)
 
+# Extract the agent identity ONCE. agent_id is empty for the main agent and the
+# child UUID for a subagent (v6.4.0 contract). AGENT_SUFFIX keys per-agent state
+# files so each agent (main + each subagent) owns its OWN domain history.
+AGENT_ID=$(echo "$INPUT_JSON" | jq -r '.agent_id // empty' 2>/dev/null || echo "")
+AGENT_SUFFIX="${AGENT_ID:-main}"
+
 # Extract tool name and file path
 TOOL_NAME=$(echo "$INPUT_JSON" | jq -r '.tool_name // empty')
 FILE_PATH=$(echo "$INPUT_JSON" | jq -r '.tool_input.file_path // .tool_input.path // .tool_input.pattern // empty')
@@ -144,8 +150,9 @@ if [ -z "$MATCHED_DOMAIN" ]; then
   exit 0
 fi
 
-# Track domain shifts
-DOMAIN_FILE="/tmp/ace-domain-${PROJECT_ID}.txt"
+# Track domain shifts — PER-AGENT so a subagent entering main's domain is a
+# 'first entry' for THAT agent (main's history no longer suppresses it).
+DOMAIN_FILE="/tmp/ace-domain-${PROJECT_ID}-${AGENT_SUFFIX}.txt"
 LAST_DOMAIN=""
 if [ -f "$DOMAIN_FILE" ]; then
   LAST_DOMAIN=$(cat "$DOMAIN_FILE" 2>/dev/null | tr '[:upper:]' '[:lower:]' || echo "")
@@ -154,9 +161,11 @@ fi
 # Update current domain
 echo "$MATCHED_DOMAIN" > "$DOMAIN_FILE"
 
-# Only take action on domain SHIFT (not first time or same domain)
-if [ "$MATCHED_DOMAIN" != "$LAST_DOMAIN" ] && [ -n "$LAST_DOMAIN" ]; then
-  # Domain shift detected! AUTO-SEARCH and inject patterns
+# Take action on domain ENTRY or SHIFT. LAST_DOMAIN is empty on an agent's FIRST
+# touch (per-agent history) — Option B: the first domain per agent now searches,
+# giving every subagent a guaranteed recall for ITS OWN task under ITS OWN id.
+if [ "$MATCHED_DOMAIN" != "$LAST_DOMAIN" ]; then
+  # Domain entry/shift detected! AUTO-SEARCH and inject patterns
 
   # 0. Get org context for search
   ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
@@ -206,6 +215,7 @@ ${SEARCH_RESULT}
           --arg from "$LAST_DOMAIN" \
           --arg to "$MATCHED_DOMAIN" \
           --arg path "$FILE_PATH" \
+          --arg aid "$AGENT_ID" \
           --argjson count "$PATTERN_COUNT" \
           --argjson success true \
       '{
@@ -214,12 +224,21 @@ ${SEARCH_RESULT}
         hook: $hook,
         session_id: $sid,
         project_id: $pid,
+        agent_id: $aid,
         from_domain: $from,
         to_domain: $to,
         file_path: ($path | if length > 200 then .[:200] else . end),
         patterns_found: $count,
         search_succeeded: $success
       }' >> "$LOG_DIR/ace-relevance.jsonl" 2>/dev/null || true
+
+    # 4.6: Track injected patterns for reinforcement learning (close subagent gap).
+    # Subagents search here (domain-shift) but never fire UserPromptSubmit, so the
+    # patterns-used state file was never written for them. Append the injected IDs
+    # under THIS agent's id (AGENT_ID, extracted once at the top) so
+    # ace_after_task.py (SubagentStop/Stop) reports them in playbook_used.
+    # Guarded, non-fatal, stdout-suppressed — MUST NOT corrupt the hook's JSON.
+    echo "$SEARCH_RESULT" | python3 "${_ACE_PLUGIN_ROOT}/shared-hooks/utils/patterns_used_state.py" --session "$SESSION_ID" --agent-id "$AGENT_ID" >/dev/null 2>&1 || true
 
     # 5. Output with additionalContext (patterns injected into Claude's context)
     jq -n \
@@ -247,6 +266,7 @@ ${SEARCH_RESULT}
           --arg from "$LAST_DOMAIN" \
           --arg to "$MATCHED_DOMAIN" \
           --arg path "$FILE_PATH" \
+          --arg aid "$AGENT_ID" \
           --argjson count 0 \
           --argjson success false \
       '{
@@ -255,6 +275,7 @@ ${SEARCH_RESULT}
         hook: $hook,
         session_id: $sid,
         project_id: $pid,
+        agent_id: $aid,
         from_domain: $from,
         to_domain: $to,
         file_path: ($path | if length > 200 then .[:200] else . end),

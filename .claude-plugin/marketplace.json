@@ -13,8 +13,8 @@
     {
       "name": "ace",
       "source": "./plugins/ace",
-      "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.4.4: Fix /ace:ace-insights + per-agent analytics. CLAUDE_PLUGIN_ROOT fallback resolver (works for users whose hook env lacks the var), diagnostic empty-state messaging, per-task agent badges, and 'By Agent' rollup table. Requires: Claude Code >= 2.1.100, ace-cli >= 3.15.0.",
-      "version": "6.5.1",
+      "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.6.0: Per-agent ACE tracking — every subagent now gets its own search→learn cycle. Fixes cold LinUCB bandit where subagent traces shipped empty playbook_used=[] (no reward signal). Per-agent-pure state files keyed to agent_id, PreToolUse domain-shift search per agent, SessionEnd GC for orphan state. Requires: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).",
+      "version": "6.6.0",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"

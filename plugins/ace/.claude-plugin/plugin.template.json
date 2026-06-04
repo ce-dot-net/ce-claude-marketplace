@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "6.5.1",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.5.1: CLI floor fix — v6.5.0 description said 'ace-cli >= 2.18.0' (the @ace-sdk/core library version) but the floor for the ace-cli binary is >= 3.17.0. No code changes. Same v6.5.0 features: CC 2.1.140 adoption (duration_ms/start_ms/end_ms trajectory, PreCompact decision:block lock, PermissionDenied boundary-signal, Bash-error troubleshooting via updatedToolOutput, ${CLAUDE_PLUGIN_DATA} migration, statusline rate_limits/effort/worktree, X-ACE-Client header, model: haiku on 11 read-only commands, /ace-recap). Requires: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).",
+  "version": "6.6.0",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.6.0: Per-agent ACE tracking — every subagent now gets its own search→learn cycle (fixes cold LinUCB bandit). Previously subagent traces shipped playbook_used=[] (no reward signal) because the patterns-used state file had one writer (UserPromptSubmit = main-agent only); Task-spawned subagents never wrote a per-agent state file. New utils/patterns_used_state.py is the single source of truth; reader is per-agent-pure (terminal Stop reads -main, SubagentStop reads only its own -{agent_id}); PreToolUse writes per-agent domain history + search on first domain entry; SessionEnd GCs orphan state files. Requires: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
