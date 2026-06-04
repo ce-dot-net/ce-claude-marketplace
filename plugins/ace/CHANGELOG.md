@@ -5,6 +5,42 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.6.5] - 2026-06-04
+
+### Headline
+Fix `after_task` crash on the effort signal (CC 2.1.133+ sends effort as a dict) — learns now reach the server.
+
+### Fixed
+- **`after_task` crashed on the effort signal, killing the learn before the trace was sent (long-standing, the primary reason traces weren't reaching the server).**
+  `ace_after_task.py` did `effort_level = event.get("effort", os.environ.get("CLAUDE_EFFORT", "normal"))`
+  then `_EFFORT_WEIGHT.get(effort_level)`. CC 2.1.133+ delivers `effort` as a **dict**
+  `{"level": "high"}`, so using it as a dict key raised
+  `TypeError: unhashable type: 'dict'` and killed `after_task` BEFORE the
+  `ExecutionTrace` was sent — for BOTH main (`Stop`) and subagent (`SubagentStop`)
+  events, on every event carrying an effort dict (i.e. essentially every event on
+  CC >= 2.1.133). The crash sits at the line between `playbook_load` logging and the
+  `learn` call, which is exactly why traces reached the read step but never the server.
+
+### Changed
+- **New `_resolve_effort_level(event)`** resolves the effort signal to a hashable
+  string — handles effort-as-dict (`{"level": ...}`), effort-as-string, absent (falls
+  back to the `CLAUDE_EFFORT` env, then `"normal"`), and any non-string garbage.
+  `main()` now calls it instead of using the raw event value as a dict key.
+
+### Tests
+- `tests/test_effort_level_resolution.py` — regression coverage for effort-as-dict
+  (extracts `level`, key lookup no longer raises), effort-as-string, absent, and
+  garbage/empty fallbacks. Full pytest suite: 567 passed, 1 skipped.
+
+### Impact
+- `after_task` completes through to `ace-cli learn` again → main and subagent
+  `ExecutionTrace`s actually reach the server. Completes the chain with v6.6.0
+  (subagent writer), v6.6.2 (8-vs-5 crash), v6.6.3 (64KB stdin), and v6.6.4
+  (subagent async).
+
+### Notes
+- Floors unchanged: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).
+
 ## [6.6.4] - 2026-06-04
 
 ### Headline

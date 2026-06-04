@@ -491,6 +491,22 @@ def get_user_prompt_from_transcript(transcript_path: str) -> str:
         return "No user prompt found"
 
 
+def _resolve_effort_level(event):
+    """Resolve the effort signal to a hashable STRING for the weight lookup.
+
+    CC 2.1.133+ delivers effort as a dict {"level": "high"} in the hook event;
+    older versions and the CLAUDE_EFFORT env give a bare string. Using the raw
+    dict as a dict key raised `TypeError: unhashable type: 'dict'` and killed
+    after_task BEFORE the trace was sent. Always returns a non-empty string.
+    """
+    raw = event.get("effort") if isinstance(event, dict) else None
+    if isinstance(raw, dict):
+        raw = raw.get("level")
+    if raw is None:
+        raw = os.environ.get("CLAUDE_EFFORT", "normal")
+    return raw if isinstance(raw, str) and raw else "normal"
+
+
 def _learn_via_transcript(trace, env=None, verbosity='detailed', timeout=300, cli_cmd=CLI_CMD):
     """Submit an ExecutionTrace to `ace-cli learn` via a temp file + --transcript.
 
@@ -721,7 +737,10 @@ def main():
             "high": 1.5,
             "xhigh": 2.0, "max": 2.0,
         }
-        effort_level = event.get("effort", os.environ.get("CLAUDE_EFFORT", "normal"))
+        # v6.6.5: CC 2.1.133+ sends effort as a dict {"level": ...}; resolve to a
+        # hashable string (using the raw dict as a key crashed after_task before
+        # the trace was ever sent — for main and subagent stops alike).
+        effort_level = _resolve_effort_level(event)
         trace["effort_level"] = effort_level
         trace["effort_weight"] = _EFFORT_WEIGHT.get(effort_level, 1.0)
 
