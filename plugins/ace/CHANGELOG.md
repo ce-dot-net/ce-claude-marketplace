@@ -5,6 +5,45 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.6.4] - 2026-06-04
+
+### Headline
+Fix subagent learning never reaching the server — run `SubagentStop` `after_task` async in the background.
+
+### Fixed
+- **Subagent learning traces never reached the server (long-standing bug).**
+  `ace_stop_wrapper.sh` runs `ace_after_task.py` ASYNC in the background
+  (`ACE_ASYNC_LEARNING=1`) so its `ace-cli learn` SSE stream to the server survives
+  after the hook returns. But `ace_subagent_stop_wrapper.sh` ran `after_task`
+  SYNCHRONOUSLY (`RESULT=$(... python3 ...)`), so it was bound by the `SubagentStop`
+  hook timeout — Claude Code killed `ace-cli` MID-STREAM before it reached the
+  server. Result: subagent `ExecutionTrace`s never landed.
+
+### Evidence
+- From this session's telemetry: of 87 `after_task`s that reached the read step
+  (`playbook_load` logged), only 3 ever completed the `learn` (all main/Stop);
+  **ZERO** subagents completed.
+
+### Changed
+- **`ace_subagent_stop_wrapper.sh` now runs `after_task` async in the background**,
+  mirroring `ace_stop_wrapper.sh`: write `INPUT_JSON` to a temp file, launch
+  `python3 ace_after_task.py < tmp &` detached, drop an in-flight lock, and return
+  immediately. The subagent `ace-cli learn` now finishes talking to the server
+  instead of being killed.
+
+### Tests
+- No test files in this change — shell-wrapper behavior fix, verified with `bash -n`
+  plus the proven async pattern already shipping in `ace_stop_wrapper.sh`. Full
+  pytest suite unaffected (565 passed, 1 skipped).
+
+### Impact
+- Subagent `ExecutionTrace`s now actually reach the server → subagent reward/bandit
+  warming finally works end-to-end. Completes the chain alongside v6.6.0 (subagent
+  writer), v6.6.2 (subagent transcript crash), and v6.6.3 (large-trace `--transcript`).
+
+### Notes
+- Floors unchanged: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).
+
 ## [6.6.3] - 2026-06-04
 
 ### Headline

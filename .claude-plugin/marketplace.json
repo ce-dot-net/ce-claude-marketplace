@@ -13,8 +13,8 @@
     {
       "name": "ace",
       "source": "./plugins/ace",
-      "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.6.3: Bugfix — large traces now learn reliably. ace_after_task.py sent the ExecutionTrace to ace-cli learn via --stdin, but learn --stdin cannot read payloads larger than the ~64KB OS pipe buffer (errors 'Failed to read from stdin' + BrokenPipe) → ANY trace over ~64KB silently failed to learn (main AND subagent). Fix: new _learn_via_transcript() writes the trace to a temp file and invokes ace-cli learn --transcript (no pipe-buffer limit); temp file always unlinked. Large/complex sessions now learn — a likely contributor to under-warmed bandits, alongside v6.6.0 and v6.6.2. Requires: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).",
-      "version": "6.6.3",
+      "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.6.4: Bugfix — subagent learning now actually reaches the server. ace_stop_wrapper.sh runs after_task ASYNC in the background so its `ace-cli learn` SSE stream survives past the hook return, but ace_subagent_stop_wrapper.sh ran after_task SYNCHRONOUSLY — bound by the SubagentStop hook timeout, so Claude Code killed ace-cli MID-STREAM before it reached the server. Evidence: of 87 after_tasks that reached the read step, only 3 ever completed the learn (all main/Stop); ZERO subagents. Fix: add the same ACE_ASYNC_LEARNING background block to ace_subagent_stop_wrapper.sh (write input to a temp file, launch python3 ace_after_task.py detached, drop an in-flight lock, return immediately). Subagent ExecutionTraces now reach the server → subagent reward/bandit warming finally works end-to-end (completes the v6.6.0/6.6.2/6.6.3 chain). Requires: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).",
+      "version": "6.6.4",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"

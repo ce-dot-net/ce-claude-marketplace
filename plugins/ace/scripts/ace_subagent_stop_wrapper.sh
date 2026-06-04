@@ -118,8 +118,32 @@ START_TIME=$(($(date +%s) * 1000))
 INPUT_JSON=$(echo "$INPUT_JSON" | jq '. + {"hook_event_name": "SubagentStop"}')
 
 # Forward to ace_after_task.py (captures learning from subagent work)
-RESULT=$(echo "$INPUT_JSON" | python3 "${HOOK_SCRIPT}" 2>&1)
-EXIT_CODE=$?
+# v6.6.4: async-background learning (mirror ace_stop_wrapper.sh). after_task calls
+# `ace-cli learn`, which SSE-streams the trace to the server. Running it SYNCHRONOUSLY
+# meant the SubagentStop hook timeout killed ace-cli BEFORE it reached the server —
+# 0 subagent learns ever completed (84/87 after_tasks died between read and send).
+# Background it so ace-cli finishes talking to the server; return immediately.
+ACE_ASYNC_LEARNING="${ACE_ASYNC_LEARNING:-1}"
+if [[ "$ACE_ASYNC_LEARNING" == "1" ]]; then
+  _ASID=$(echo "$INPUT_JSON" | jq -r '.session_id // "unknown"' 2>/dev/null || echo "unknown")
+  TEMP_INPUT=$(mktemp)
+  printf '%s\n' "$INPUT_JSON" > "$TEMP_INPUT"
+  LOG_DIR="${HOME}/.claude/logs"
+  mkdir -p "$LOG_DIR"
+  LOG_FILE="$LOG_DIR/ace-background-subagent-$(date +%Y%m%d-%H%M%S)-$$.log"
+  # In-flight lock so PreCompact can wait for an in-progress subagent learn.
+  LEARN_LOCK="/tmp/ace-learn-inflight-${_ASID}.lock"
+  touch "$LEARN_LOCK" 2>/dev/null || true
+  (
+    python3 "${HOOK_SCRIPT}" < "$TEMP_INPUT" > /dev/null 2>>"$LOG_FILE"
+    rm -f "$TEMP_INPUT" "$LEARN_LOCK"
+  ) > /dev/null 2>&1 &
+  RESULT='{"continue": true, "systemMessage": "✅ [ACE] Subagent learning started in background"}'
+  EXIT_CODE=0
+else
+  RESULT=$(echo "$INPUT_JSON" | python3 "${HOOK_SCRIPT}" 2>&1)
+  EXIT_CODE=$?
+fi
 
 # Calculate execution time (cross-platform milliseconds)
 END_TIME=$(($(date +%s) * 1000))
