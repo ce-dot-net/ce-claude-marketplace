@@ -13,8 +13,8 @@
     {
       "name": "ace",
       "source": "./plugins/ace",
-      "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.6.0: Per-agent ACE tracking — every subagent now gets its own search→learn cycle. Fixes cold LinUCB bandit where subagent traces shipped empty playbook_used=[] (no reward signal). Per-agent-pure state files keyed to agent_id, PreToolUse domain-shift search per agent, SessionEnd GC for orphan state. Requires: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).",
-      "version": "6.6.0",
+      "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.6.1: Test-quality patch — GAP3 self-heal regression test now exercises the real load_playbook_used reader (no runtime change). Same v6.6.0 features: Per-agent ACE tracking — every subagent gets its own search→learn cycle. Fixes cold LinUCB bandit where subagent traces shipped empty playbook_used=[] (no reward signal). Per-agent-pure state files keyed to agent_id, PreToolUse domain-shift search per agent, SessionEnd GC for orphan state. Requires: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).",
+      "version": "6.6.1",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"

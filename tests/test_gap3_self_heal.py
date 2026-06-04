@@ -35,28 +35,29 @@ def test_corrupt_state_file_is_logged_and_deleted(tmp_path, monkeypatch):
     # Reset the relevance logger singleton so it writes to our cwd
     import ace_relevance_logger as arl
     arl._logger = None
+    from ace_relevance_logger import log_hook_error
 
-    # Simulate the logic block with the v6.4.0 self-heal
-    playbook_used = []
-    agent_id = None
-    try:
-        if state_file.exists():
-            playbook_used = json.loads(state_file.read_text())
-            state_file.unlink()
-    except Exception as _e:
-        from ace_relevance_logger import log_hook_error
-        log_hook_error(
+    # Exercise the REAL reader (single source of truth) with the SAME on_error
+    # wiring production uses in ace_after_task.py — a terminal Stop (agent_id=None)
+    # reads the corrupt -main file, self-heals, and must not propagate.
+    from patterns_used_state import load_playbook_used
+
+    hook_event_name = "Stop"
+    playbook_used = load_playbook_used(
+        session_id,
+        None,  # agent_id None -> terminal main Stop -> reads -{session}-main.json
+        hook_event_name,
+        on_error=lambda f, e: log_hook_error(
             location="load_playbook_used",
             session_id=session_id,
             project_id=None,
-            hook="Stop",
-            error=_e,
-            extra={"state_file": str(state_file)},
-        )
-        try:
-            state_file.unlink(missing_ok=True)
-        except Exception:
-            pass
+            hook=hook_event_name,
+            error=e,
+            extra={"state_file": str(f)},
+        ),
+    )
+
+    assert playbook_used == [], "Corrupt file -> empty result, no exception propagated"
 
     assert not state_file.exists(), "Corrupt state file must be deleted"
 

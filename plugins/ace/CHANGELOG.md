@@ -5,6 +5,24 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.6.1] - 2026-06-04
+
+### Headline
+Test: GAP3 self-heal regression test now exercises the real `load_playbook_used` path (no runtime change).
+
+### Changed
+- **`tests/test_gap3_self_heal.py` now calls the shipped reader instead of a copy.**
+  The corrupt-file/self-heal regression test previously re-implemented the
+  corrupt-state-file read/unlink logic inline, so it tested a duplicate of the
+  production code rather than the code that actually ships. It now invokes the
+  real `patterns_used_state.load_playbook_used(...)` with the same `on_error`
+  wiring `ace_after_task.py` uses in production (terminal Stop, `agent_id=None`,
+  reads `-{session}-main.json`). This makes the test catch future regressions in
+  the per-agent reader's corrupt-file self-heal.
+
+### Notes
+- Test-quality improvement only. No production/runtime code changed.
+
 ## [6.6.0] - 2026-06-04
 
 ### Headline
