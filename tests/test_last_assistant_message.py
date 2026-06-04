@@ -60,12 +60,25 @@ class TestLastAssistantMessage(unittest.TestCase):
              patch('sys.stdin', StringIO(json.dumps(event))), \
              patch('builtins.print') as mock_print:
 
-            # Make subprocess.run return success
-            mock_run.return_value = MagicMock(
-                returncode=0,
-                stdout=json.dumps({"learning_statistics": {"patterns_created": 1}}),
-                stderr=""
-            )
+            # v6.6.3: the trace is sent via `ace-cli learn --transcript <tempfile>`
+            # (not --stdin), and _learn_via_transcript deletes that file right after
+            # the call returns — so capture its contents DURING the mocked call.
+            captured = {}
+
+            def _capture_run(argv, **kwargs):
+                if '--transcript' in argv:
+                    ti = argv.index('--transcript')
+                    with open(argv[ti + 1]) as _f:
+                        captured['trace'] = json.load(_f)
+                elif kwargs.get('input'):  # back-compat with the old --stdin path
+                    captured['trace'] = json.loads(kwargs['input'])
+                return MagicMock(
+                    returncode=0,
+                    stdout=json.dumps({"learning_statistics": {"patterns_created": 1}}),
+                    stderr=""
+                )
+
+            mock_run.side_effect = _capture_run
 
             # Import and run main
             from ace_after_task import main
@@ -74,11 +87,7 @@ class TestLastAssistantMessage(unittest.TestCase):
             except SystemExit:
                 pass
 
-            # Extract the trace from subprocess.run call
-            if mock_run.called:
-                call_kwargs = mock_run.call_args
-                trace_json = call_kwargs.kwargs.get('input') or call_kwargs[1].get('input', '')
-                return json.loads(trace_json)
+            return captured.get('trace')
 
         return None
 

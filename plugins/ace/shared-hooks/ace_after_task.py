@@ -491,6 +491,37 @@ def get_user_prompt_from_transcript(transcript_path: str) -> str:
         return "No user prompt found"
 
 
+def _learn_via_transcript(trace, env=None, verbosity='detailed', timeout=300, cli_cmd=CLI_CMD):
+    """Submit an ExecutionTrace to `ace-cli learn` via a temp file + --transcript.
+
+    ace-cli `learn --stdin` cannot read payloads larger than the ~64KB OS pipe
+    buffer — it errors {"message":"Failed to read from stdin"} and the producer
+    side gets a BrokenPipe, so ANY trace over ~64KB silently fails to learn
+    (empirically: 64KB ok, 80KB fails; a 3.25MB --transcript file succeeds).
+    A transcript file has no such limit, so traces of any size (up to the 2MB
+    truncate cap) submit reliably. Returns the subprocess.CompletedProcess; the
+    temp file is always removed.
+    """
+    import tempfile
+    fd, path = tempfile.mkstemp(prefix='ace-trace-', suffix='.json')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            json.dump(trace, f)
+        return subprocess.run(
+            [cli_cmd, 'learn', '--transcript', path, '--json',
+             '--timeout', '300000', '--verbosity', verbosity],
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+            env=env,
+        )
+    finally:
+        try:
+            os.unlink(path)
+        except Exception:
+            pass
+
+
 def main():
     """
     ACE After Task Hook - PostToolUse Accumulation Architecture (v5.3.0)
@@ -741,7 +772,7 @@ def main():
         except Exception:
             pass  # never fail the learn pipeline on truncation issues
 
-        # STEP 8: Send to ace-cli learn --stdin
+        # STEP 8: Send to ace-cli learn via --transcript (temp file)
         try:
             env = os.environ.copy()
             if context['org']:
@@ -752,14 +783,10 @@ def main():
             # Get verbosity from env, default to 'detailed' for meaningful feedback
             verbosity = os.environ.get('ACE_VERBOSITY', 'detailed')
 
-            result = subprocess.run(
-                [CLI_CMD, 'learn', '--stdin', '--json', '--timeout', '300000', '--verbosity', verbosity],
-                input=json.dumps(trace),
-                text=True,
-                capture_output=True,
-                timeout=300,  # 5 min safety margin for SSE streaming
-                env=env
-            )
+            # v6.6.3: --transcript (temp file), NOT --stdin. ace-cli learn --stdin
+            # cannot read payloads > ~64KB (OS pipe buffer) -> "Failed to read from
+            # stdin" + BrokenPipe -> any trace over ~64KB silently failed to learn.
+            result = _learn_via_transcript(trace, env=env, verbosity=verbosity)
 
             if result.returncode == 0:
                 try:
