@@ -5,6 +5,50 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.6.3] - 2026-06-04
+
+### Headline
+Fix learning for large traces — send via `--transcript` file instead of `--stdin` (64KB pipe-buffer limit).
+
+### Fixed
+- **Any ExecutionTrace over ~64KB silently failed to learn (main AND subagent).**
+  `ace_after_task.py` STEP 8 sent the trace to `ace-cli learn` via `--stdin`
+  (`subprocess.run(..., input=json.dumps(trace))`). `ace-cli learn --stdin` cannot
+  read payloads larger than the ~64KB OS pipe buffer — it errors
+  `{"message":"Failed to read from stdin"}` and the producer side gets a
+  `BrokenPipe` — so any trace over ~64KB never reached the server. This was a
+  long-standing bug. `truncate_trace`'s 2MB cap sits far above the ~64KB cliff, so
+  it never mitigated this. Empirically confirmed: 64KB stored OK, 80KB fails;
+  1/2/4MB fail; a 3.25MB `--transcript` **file** stores OK.
+
+### Root cause
+- `ace-cli learn --stdin` does not drain large stdin payloads (blocks past the
+  ~64KB pipe buffer). That is an **SDK-side bug** (to report separately). The
+  `--transcript <file>` path has no pipe-buffer limit and is the complete
+  client-side workaround — no SDK change required to ship this fix.
+
+### Changed
+- **New `_learn_via_transcript(trace, env, verbosity)`** — writes the trace to a
+  temp file (`tempfile.mkstemp`) and invokes
+  `ace-cli learn --transcript <file> --json --timeout 300000 --verbosity <v>`;
+  the temp file is **always** unlinked in a `finally` block.
+- **STEP 8 in `main()` now calls `_learn_via_transcript()`** instead of
+  `subprocess.run([..., 'learn', '--stdin', ...], input=json.dumps(trace))`.
+
+### Tests
+- **NEW `tests/test_learn_transcript_not_stdin.py`** — regression test asserting
+  the `learn` invocation uses `--transcript` and **not** `--stdin`.
+- **Updated `tests/test_last_assistant_message.py`** — trace-capture switched from
+  `input=` (stdin) to reading the `--transcript` tempfile.
+
+### Impact
+- Large/complex sessions (many tools or large tool responses) now learn reliably.
+  A likely contributor to under-warmed bandits for complex orgs, alongside v6.6.0
+  (subagent writer) and v6.6.2 (subagent transcript crash).
+
+### Notes
+- Floors unchanged: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).
+
 ## [6.6.2] - 2026-06-04
 
 ### Headline

@@ -13,8 +13,8 @@
     {
       "name": "ace",
       "source": "./plugins/ace",
-      "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.6.2: Crash fix — subagent learning no longer dies on the per-agent transcript (8-vs-5 tuple). On SubagentStop, parse_agent_transcript() returned 5-tuples while build_trajectory_from_accumulated_tools unpacks 8 → ValueError crashed the whole subagent learning trace before ace-cli learn (pre-existing since v6.4.0). Fix: parse_agent_transcript() returns 8-tuples matching get_session_tools() (timing fields padded None). Completes the per-agent subagent learning from v6.6.0 — subagents now run their full search→learn cycle (live-verified). Requires: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).",
-      "version": "6.6.2",
+      "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.6.3: Bugfix — large traces now learn reliably. ace_after_task.py sent the ExecutionTrace to ace-cli learn via --stdin, but learn --stdin cannot read payloads larger than the ~64KB OS pipe buffer (errors 'Failed to read from stdin' + BrokenPipe) → ANY trace over ~64KB silently failed to learn (main AND subagent). Fix: new _learn_via_transcript() writes the trace to a temp file and invokes ace-cli learn --transcript (no pipe-buffer limit); temp file always unlinked. Large/complex sessions now learn — a likely contributor to under-warmed bandits, alongside v6.6.0 and v6.6.2. Requires: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).",
+      "version": "6.6.3",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"
