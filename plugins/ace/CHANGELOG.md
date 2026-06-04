@@ -5,6 +5,47 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.6.2] - 2026-06-04
+
+### Headline
+Fix subagent learning crash — `after_task` no longer dies on the per-agent transcript (8-vs-5 tuple).
+
+### Fixed
+- **Subagent learning crashed with `ValueError: not enough values to unpack (expected 8, got 5)`.**
+  On `SubagentStop`, `ace_after_task.py` parsed the per-agent transcript
+  (`event.agent_transcript_path`) via `parse_agent_transcript()`, which returned
+  5-tuples, while `build_trajectory_from_accumulated_tools` (`ace_after_task.py:382`)
+  unpacks 8 values (`…, agent_id, start_ms, end_ms, duration_ms`). The mismatch
+  crashed the **entire** subagent learning trace **before** `load_playbook_used` /
+  `ace-cli learn` — so subagents never learned (the whole trace was lost, not merely
+  an empty `playbook_used`). Pre-existing since v6.4.0 (NOT introduced by v6.6.0).
+  The stale `tests/test_agent_transcript_parse.py` had asserted the wrong 5-tuple
+  shape, which is why it shipped.
+
+### Root cause
+- `parse_agent_transcript()` returned 5-tuples
+  `(tool_name, tool_input_json, tool_response_json, tool_use_id, agent_id)` while the
+  rest of the pipeline expects the 8-tuple shape produced by `get_session_tools()`.
+
+### Changed
+- **`parse_agent_transcript()` now returns 8-tuples** matching `get_session_tools()`;
+  the timing fields (`start_ms`/`end_ms`/`duration_ms`) are padded with `None`
+  (`build_trajectory` already skips `None`). One-line behavioral change + docstring.
+
+### Tests
+- **NEW `tests/test_subagent_transcript_tuple.py`** — reproduces the crash via
+  `build_trajectory_from_accumulated_tools` on a transcript path and asserts 8-tuples.
+- **Corrected `tests/test_agent_transcript_parse.py`** — stale 5-tuple assertion → 8-tuple.
+
+### Impact
+- Completes the per-agent subagent learning shipped in v6.6.0 — subagents now run their
+  full search→learn cycle. Live-verified end-to-end on a real subagent: fixed
+  `after_task` → state file consumed → `playbook_load(SubagentStop, count=5)` →
+  "✅ [ACE] Learning captured!" (`ace-cli learn` sent the populated subagent trace).
+
+### Notes
+- Floors unchanged: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).
+
 ## [6.6.1] - 2026-06-04
 
 ### Headline

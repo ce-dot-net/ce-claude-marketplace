@@ -249,8 +249,10 @@ def parse_agent_transcript(path: str) -> list:
     message.content[].
 
     Returns:
-        List of tuples compatible with get_session_tools:
-        (tool_name, tool_input_json, tool_response_json, tool_use_id, agent_id)
+        List of 8-tuples compatible with get_session_tools (timing fields are
+        not available from the transcript, so they are padded with None):
+        (tool_name, tool_input_json, tool_response_json, tool_use_id, agent_id,
+         start_ms, end_ms, duration_ms)
 
     Raises:
         Exceptions are propagated to caller so it can fall back.
@@ -332,7 +334,9 @@ def parse_agent_transcript(path: str) -> list:
     for tu_id in order:
         tname, tinput_json = tool_uses[tu_id]
         tresp_json = tool_results.get(tu_id, '{}')
-        results.append((tname, tinput_json, tresp_json, tu_id, agent_id))
+        # 8-tuple to match get_session_tools(); transcript has no timing data,
+        # so start_ms/end_ms/duration_ms are None (build_trajectory skips None).
+        results.append((tname, tinput_json, tresp_json, tu_id, agent_id, None, None, None))
     return results
 
 

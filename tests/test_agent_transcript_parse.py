@@ -66,10 +66,13 @@ def test_parse_agent_transcript_happy_path(tmp_path):
     assert len(results) == 2
     names = [r[0] for r in results]
     assert names == ["Read", "Bash"]
-    # tuple shape: (name, input_json, response_json, tool_use_id, agent_id)
+    # tuple shape: (name, input_json, response_json, tool_use_id, agent_id,
+    # start_ms, end_ms, duration_ms) — 8-tuple matching get_session_tools;
+    # timing fields padded with None (not available from the transcript).
     for r in results:
-        assert len(r) == 5
+        assert len(r) == 8
         assert r[4] == agent_id
+        assert r[5:] == (None, None, None)
     # input JSON round-trip
     assert json.loads(results[0][1]) == {"file_path": "/tmp/a"}
     # response JSON round-trip (string content)
