@@ -7,11 +7,16 @@ where agent_suffix = agent_id (for subagents) or 'main' (for the main agent).
 
 This module centralizes the read/write/cleanup logic that was previously
 duplicated inline in ace_before_task.py (writer) and ace_after_task.py (reader).
-The path scheme stays RELATIVE (STATE_DIR_DEFAULT = '.claude/data/logs'); hook
-wrappers cd to event.cwd so the relative path resolves to the project root.
-Do NOT anchor to $CLAUDE_PROJECT_DIR.
+The path anchors to $CLAUDE_PROJECT_DIR/.claude/data/logs when CC provides it
+(confirmed available to hooks since CC 2.1.141), so the writer (before_task /
+PreToolUse) and the reader (after_task) resolve the SAME ABSOLUTE path regardless
+of each hook process's cwd — robust to any mid-session cwd change. It falls back
+to the relative '.claude/data/logs' (resolved against the wrapper's cd-to-event.cwd)
+when CLAUDE_PROJECT_DIR is unset. All consumers go through _state_dir() so writer
+and reader stay consistent by construction.
 """
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -27,7 +32,14 @@ STATE_DIR_DEFAULT = '.claude/data/logs'
 
 
 def _state_dir(state_dir=None):
-    return Path(state_dir) if state_dir is not None else Path(STATE_DIR_DEFAULT)
+    if state_dir is not None:
+        return Path(state_dir)
+    # v6.6.6: anchor to $CLAUDE_PROJECT_DIR (CC provides it to hooks since 2.1.141)
+    # so writer + reader hit the SAME absolute dir even if a hook's cwd differs.
+    proj = os.environ.get('CLAUDE_PROJECT_DIR')
+    if proj:
+        return Path(proj) / STATE_DIR_DEFAULT
+    return Path(STATE_DIR_DEFAULT)
 
 
 def state_file_path(session_id, agent_id, state_dir=None):

@@ -5,6 +5,36 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [6.6.6] - 2026-06-05
+
+### Headline
+`$CLAUDE_PROJECT_DIR` state-file anchor + additive `background_tasks` telemetry. Both degrade gracefully when the CC field/env is absent. No CC/ace-cli floor change.
+
+### Changed
+- **State-file path now anchors to `$CLAUDE_PROJECT_DIR/.claude/data/logs`** when Claude
+  Code provides it (CC 2.1.141+), with the relative `.claude/data/logs` fallback preserved
+  when unset. This makes the patterns-used **writer** (`UserPromptSubmit`/`PreToolUse`) and
+  **reader** (`Stop`/`SubagentStop`) resolve the **same absolute path** regardless of each
+  hook's cwd — hardening `playbook_used` delivery for cwd-complex and subagent-heavy sessions.
+  (`plugins/ace/shared-hooks/utils/patterns_used_state.py`)
+
+### Added
+- **`background_tasks` telemetry (CC 2.1.145)** — the `Stop` and `SubagentStop` wrappers
+  emit a `hook_stop_telemetry` record (background-task count + learn-lock state) to
+  `ace-relevance.jsonl`. Backgrounded and triple-guarded: never gates a decision, never
+  touches the in-flight learn-lock, never raises. New `log_stop_telemetry()` is additive and
+  never raises. (`ace_stop_wrapper.sh`, `ace_subagent_stop_wrapper.sh`,
+  `shared-hooks/utils/ace_relevance_logger.py`)
+
+### Tests
+- `tests/test_state_dir_anchor.py` (+4) and `tests/test_background_tasks_telemetry.py` (+17).
+  Full pytest suite: 588 passed, 1 skipped.
+
+### Notes
+- No CC/ace-cli floor change. Requires: Claude Code >= 2.1.139, ace-cli >= 3.17.0
+  (@ace-sdk/core >= 2.19.0). Both new features degrade gracefully when their CC field/env is
+  absent (anchor has a relative fallback; telemetry is guarded).
+
 ## [6.6.5] - 2026-06-04
 
 ### Headline
