@@ -39,7 +39,7 @@ from ace_context import get_context
 from ace_cli import recall_session
 from utils.git_utils import get_git_context, detect_commits_in_session
 from ace_relevance_logger import log_execution_metrics, log_hook_error
-from patterns_used_state import load_playbook_used
+from patterns_used_state import load_playbook_used, reap_patterns_used, load_retrieval_ids
 
 # Add plugin utils to path for validation
 sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
@@ -418,12 +418,29 @@ def skip_learning(reason, event=None):
     Skip learning with user feedback.
 
     Per ACE Research Paper: Users should understand when learning is skipped.
+
+    v6.6.7: also reaps this agent's patterns-used state file (per-agent-pure)
+    so a skipped (sub)agent doesn't leave an orphan until the SessionEnd GC.
+    This path fires NO learn, so reaping here can never strip IDs from a trace
+    that is sent to the server. Best-effort: a reap failure never breaks the
+    skip. The suffix is derived from `event` because agent_id is not yet in
+    scope at the skip sites (they run before it is computed).
     """
     if os.environ.get('ACE_DEBUG_HOOKS') == '1':
         with open('/tmp/ace_hook_debug.log', 'a') as f:
             f.write(f"ACE: Skipping learning - {reason}\n")
             if event:
                 f.write(f"  Event: {json.dumps(event, default=str)[:500]}\n")
+
+    if event:
+        try:
+            reap_patterns_used(
+                event.get('session_id', ''),
+                event.get('agent_id') or None,
+                event.get('hook_event_name', 'Stop'),
+            )
+        except Exception:
+            pass  # reaping is best-effort; never break the skip path
 
     return {
         "continue": True,
@@ -507,7 +524,8 @@ def _resolve_effort_level(event):
     return raw if isinstance(raw, str) and raw else "normal"
 
 
-def _learn_via_transcript(trace, env=None, verbosity='detailed', timeout=300, cli_cmd=CLI_CMD):
+def _learn_via_transcript(trace, env=None, verbosity='detailed', timeout=300, cli_cmd=CLI_CMD,
+                          retrieval_id=None, applied_log_ids=None):
     """Submit an ExecutionTrace to `ace-cli learn` via a temp file + --transcript.
 
     ace-cli `learn --stdin` cannot read payloads larger than the ~64KB OS pipe
@@ -517,15 +535,23 @@ def _learn_via_transcript(trace, env=None, verbosity='detailed', timeout=300, cl
     A transcript file has no such limit, so traces of any size (up to the 2MB
     truncate cap) submit reliably. Returns the subprocess.CompletedProcess; the
     temp file is always removed.
+
+    F-080: retrieval_id and applied_log_ids are passed as --retrieval-id and
+    --applied-log-ids flags to ace-cli learn when present/non-empty.
     """
     import tempfile
     fd, path = tempfile.mkstemp(prefix='ace-trace-', suffix='.json')
     try:
         with os.fdopen(fd, 'w') as f:
             json.dump(trace, f)
+        cmd = [cli_cmd, 'learn', '--transcript', path, '--json',
+               '--timeout', '300000', '--verbosity', verbosity]
+        if retrieval_id:
+            cmd += ['--retrieval-id', retrieval_id]
+        if applied_log_ids:
+            cmd += ['--applied-log-ids', ','.join(str(x) for x in applied_log_ids)]
         return subprocess.run(
-            [cli_cmd, 'learn', '--transcript', path, '--json',
-             '--timeout', '300000', '--verbosity', verbosity],
+            cmd,
             text=True,
             capture_output=True,
             timeout=timeout,
@@ -666,6 +692,20 @@ def main():
             except Exception:
                 pass  # non-fatal
 
+        # F-080: Read retrieval metadata BEFORE load_playbook_used unlinks the file.
+        # load_retrieval_ids is read-only (does NOT unlink). Must call it first so
+        # the state file is still present when load_playbook_used later unlinks it.
+        retrieval_log_map = load_retrieval_ids(session_id, agent_id, hook_event_name)
+        # Also read retrieval_id directly from the state file (before unlink).
+        _retrieval_id_from_state = None
+        try:
+            from patterns_used_state import _read_state_file, state_file_path
+            _sf = state_file_path(session_id, agent_id if hook_event_name == 'SubagentStop' else None)
+            if _sf.exists():
+                _, _retrieval_id_from_state, _ = _read_state_file(_sf)
+        except Exception:
+            pass  # non-fatal
+
         # Load pattern IDs for reinforcement learning (per-agent scope in v6.4.0).
         # Delegated to patterns_used_state.load_playbook_used (single source of
         # truth). PER-AGENT-PURE — each agent owns its own trace, never merged:
@@ -688,6 +728,14 @@ def main():
                 extra={"state_file": str(f)},
             ),
         )
+
+        # F-080: Compute applied_log_ids = intersection of playbook_used with retrieval_log_map.
+        # Order follows playbook_used (not the map). Only ints (no bools).
+        applied_log_ids = [
+            retrieval_log_map[pid] for pid in playbook_used if pid in retrieval_log_map
+        ]
+        # Use retrieval_id read from state file (before load_playbook_used unlinked it).
+        retrieval_id = _retrieval_id_from_state
 
         # agent_id-contract proof: record which agent_id the READ side used and how
         # many IDs it recovered. Diffing this against the wrapper's write-side
@@ -727,6 +775,11 @@ def main():
             trace["agent_id"] = agent_id
         if parent_agent_id:
             trace["parent_agent_id"] = parent_agent_id
+        # F-080: Enrich trace with retrieval provenance (omit keys when absent/empty).
+        if retrieval_id:
+            trace["retrieval_id"] = retrieval_id
+        if applied_log_ids:
+            trace["applied_log_ids"] = applied_log_ids
 
         # v6.5.0 Item #9: effort level signal (CC 2.1.133+ provides this in hook input).
         # Plugin-side weight mapping per SDK-team guidance (Q4):
@@ -805,7 +858,12 @@ def main():
             # v6.6.3: --transcript (temp file), NOT --stdin. ace-cli learn --stdin
             # cannot read payloads > ~64KB (OS pipe buffer) -> "Failed to read from
             # stdin" + BrokenPipe -> any trace over ~64KB silently failed to learn.
-            result = _learn_via_transcript(trace, env=env, verbosity=verbosity)
+            # F-080: pass retrieval_id + applied_log_ids flags when present.
+            result = _learn_via_transcript(
+                trace, env=env, verbosity=verbosity,
+                retrieval_id=retrieval_id,
+                applied_log_ids=applied_log_ids,
+            )
 
             if result.returncode == 0:
                 try:
@@ -821,9 +879,12 @@ def main():
                     if stats:
                         created = stats.get('patterns_created', 0)
                         updated = stats.get('patterns_updated', 0)
-                        merged = stats.get('patterns_merged', 0)
+                        # F-080: ace-cli 4.0.1 uses patterns_deduplicated; 4.0.0 used patterns_merged
+                        merged = stats.get('patterns_deduplicated', stats.get('patterns_merged', 0))
                         pruned = stats.get('patterns_pruned', 0)
                         conf = stats.get('average_confidence', 0)
+                        # F-080: cumulative_v15_reward_delta is PRIMARY; helpful_delta is fallback
+                        _v15 = stats.get('cumulative_v15_reward_delta')
                         helpful_delta = stats.get('helpful_delta', 0)
                         by_section = stats.get('by_section', {})
                         analysis_time = stats.get('analysis_time_seconds', 0)
@@ -861,13 +922,15 @@ def main():
                                 if line1_parts:
                                     message_lines.append(f"   {'  '.join(line1_parts)}")
 
-                                # Line 2: quality & helpful
+                                # Line 2: quality & reward/helpful delta
                                 line2_parts = []
                                 if conf > 0:
                                     line2_parts.append(f"⭐ {int(conf * 100)}% quality")
-                                if helpful_delta != 0:
-                                    sign = '+' if helpful_delta > 0 else ''
-                                    line2_parts.append(f"👍 {sign}{helpful_delta} helpful")
+                                # F-080: cumulative_v15_reward_delta is PRIMARY display metric
+                                if _v15 is not None:
+                                    line2_parts.append(f"📈 {_v15:+.1f} reward delta")
+                                elif helpful_delta != 0:
+                                    line2_parts.append(f"📈 {helpful_delta:+d} reward delta")
                                 if line2_parts:
                                     message_lines.append(f"   {'  '.join(line2_parts)}")
 

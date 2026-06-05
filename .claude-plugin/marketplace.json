@@ -13,8 +13,8 @@
     {
       "name": "ace",
       "source": "./plugins/ace",
-      "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v6.6.6: Hardening + telemetry (both degrade gracefully when the field/env is absent). (1) State-file path now anchors to $CLAUDE_PROJECT_DIR/.claude/data/logs when Claude Code provides it (CC 2.1.141+), with the relative .claude/data/logs fallback preserved when unset — so the patterns-used writer (UserPromptSubmit/PreToolUse) and reader (Stop/SubagentStop) resolve the SAME absolute path even when a hook's cwd differs, hardening playbook_used delivery for cwd-complex and subagent-heavy sessions. (2) Additive background_tasks telemetry (CC 2.1.145): the Stop and SubagentStop wrappers emit hook_stop_telemetry (background-task count + learn-lock state) to ace-relevance.jsonl. Backgrounded and triple-guarded — never gates a decision, never touches the in-flight learn-lock, never raises. Tests: +4 anchor, +17 telemetry (588 passed). No CC/ace-cli floor change. Requires: Claude Code >= 2.1.139, ace-cli >= 3.17.0 (@ace-sdk/core >= 2.19.0).",
-      "version": "6.6.6",
+      "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v7.0.0: ACE 1.5 / ace-cli 4.0.1 compatibility milestone. F-080 feedback loop closes the LinUCB bandit with retrieval_id + applied_log_ids. Reward-model quality gate replaces helpful/harmful binary. --min-reward replaces --min-helpful (breaking: hard-errors on ace-cli 4.0.1). --task-intent explore on all search call sites. MIN_VERSION bumped to 4.0.1. 14 issues closed (#21-#34). +156 tests (754 total). Requires: Claude Code >= 2.1.139, ace-cli >= 4.0.1 (@ace-sdk/core >= 3.0.1).",
+      "version": "7.0.0",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"

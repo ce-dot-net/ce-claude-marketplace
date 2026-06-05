@@ -128,7 +128,8 @@ echo "$STATUS_OUTPUT" | jq -r '
   "  • APIs to Use: \(.playbook.by_section.apis_to_use // 0)",
   "",
   "📈 Helpful: \(.playbook.helpful_total // 0) | Harmful: \(.playbook.harmful_total // 0)",
-  "📈 Confidence: \((if (.playbook.helpful_total // 0) + (.playbook.harmful_total // 0) > 0 then ((.playbook.helpful_total // 0) * 100 / ((.playbook.helpful_total // 0) + (.playbook.harmful_total // 0))) else 0 end) | floor)%",
+  "📈 Confidence: \((if (.playbook.helpful_total // 0) + (.playbook.harmful_total // 0) > 0 then ((.playbook.helpful_total // 0) * 100 / ((.playbook.helpful_total // 0) + (.playbook.harmful_total // 0))) else ((.avg_confidence // 0) * 100) end) | floor)%",
+  "⚠️  At Risk: \(.at_risk_count // 0) | V15 Rewarded: \(.patterns_with_v15_reward // 0)",
   "",
   "💼 Plan: \(.subscription.plan // "unknown")",
   "📊 Patterns Used: \(.subscription.usage.patterns.used // 0)/\(.subscription.usage.patterns.limit // 0)"

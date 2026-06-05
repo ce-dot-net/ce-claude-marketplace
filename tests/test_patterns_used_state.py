@@ -73,7 +73,7 @@ def test_append_writes_dedupes_and_filters(tmp_path):
 
     sf = _path(tmp_path, SESSION, "main")
     assert sf.exists()
-    assert json.loads(sf.read_text()) == [PID_A, PID_B, PID_C]
+    assert json.loads(sf.read_text())['pattern_ids'] == [PID_A, PID_B, PID_C]
 
 
 def test_append_noops_without_session_or_valid_ids(tmp_path):
@@ -152,7 +152,7 @@ def test_terminal_stop_reads_main_only_and_leaves_siblings(tmp_path):
     assert out == [PID_A, PID_B], "per-agent-pure: terminal Stop returns ONLY main IDs"
     assert not main_file.exists(), "main file reaped"
     assert sub_file.exists() is True, "NO-MERGE: sibling -{uuid} left on disk"
-    assert json.loads(sub_file.read_text()) == [PID_B, PID_C, PID_UUID], \
+    assert json.loads(sub_file.read_text())['pattern_ids'] == [PID_B, PID_C, PID_UUID], \
         "sibling content intact"
 
 
@@ -172,7 +172,7 @@ def test_subagent_stop_does_not_steal_main(tmp_path):
     assert out == [PID_C, PID_UUID], "SubagentStop returns only its own IDs"
     assert sub_file.exists() is False, "subagent's own file reaped"
     assert main_file.exists() is True, "NO STEAL: -main.json untouched"
-    assert json.loads(main_file.read_text()) == [PID_A, PID_B], "main file content intact"
+    assert json.loads(main_file.read_text())['pattern_ids'] == [PID_A, PID_B], "main file content intact"
 
 
 # --------------------------------------------------------------------------
@@ -192,7 +192,7 @@ def test_subagent_stop_reads_own_suffix(tmp_path):
     assert out == [PID_C, PID_UUID], "SubagentStop returns ONLY its own suffix IDs"
     assert not sub_file.exists(), "own -{uuid} reaped"
     assert main_file.exists() is True, "-main left untouched"
-    assert json.loads(main_file.read_text()) == [PID_A, PID_B], "main content intact"
+    assert json.loads(main_file.read_text())['pattern_ids'] == [PID_A, PID_B], "main content intact"
 
 
 # --------------------------------------------------------------------------
@@ -240,5 +240,5 @@ def test_subagent_stop_corrupt_own_self_heals(tmp_path):
     assert out == [], "corrupt own file -> empty result"
     assert not sub_file.exists(), "corrupt own file self-healed (unlinked)"
     assert main_file.exists() is True, "NO STEAL: -main untouched by corrupt SubagentStop"
-    assert json.loads(main_file.read_text()) == [PID_A, PID_B], "main content intact"
+    assert json.loads(main_file.read_text())['pattern_ids'] == [PID_A, PID_B], "main content intact"
     assert errors, "on_error callback invoked for the corrupt own file"

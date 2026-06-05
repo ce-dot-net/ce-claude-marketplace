@@ -198,6 +198,25 @@ else
 fi
 ```
 
+## ace-cli learn Flags (ace-cli ≥ 4.0.1)
+
+The `ace-cli learn` subcommand accepts the following flags for enriched trace correlation:
+
+| Flag | Description |
+|------|-------------|
+| `--retrieval-id <uuid>` | UUID of the ACE search retrieval that preceded this task. Correlates the learn event back to the specific patterns that were retrieved, enabling the reinforcement loop. Supplied automatically by hooks (via #24/#25). |
+| `--applied-log-ids <ids>` | Comma-separated list of retrieval log IDs for patterns that were actually applied during the task. Used by the Curator to reinforce those specific patterns. Supplied automatically by hooks (via #24/#25). |
+| `--pin-session` | Pin this learn event to the current session ID so the ACE server can group all task events within one conversation. Useful when multiple learn calls occur in the same session. |
+| `--stdin` | Read the full learn payload as JSON from stdin (used by hooks for structured payloads). |
+| `--success` / `--failure` | Mark the task outcome. |
+
+> **Note on `task_intent`:** `task_intent` is a **search-only** flag passed to `ace-cli search`.
+> It tells the search command what kind of task is being performed so the ACE server can weight
+> retrieval results accordingly. It is **not** part of the learn payload and is never sent as a
+> trace field — it belongs exclusively to the search/retrieval path.
+
+> **Hooks and enriched trace:** As of #24/#25, hooks automatically send enriched trace data — including `--retrieval-id` and `--applied-log-ids` — when calling `ace-cli learn` after a task completes. The manual `/ace:learn` command accepts the same flags so users can supply them explicitly when needed.
+
 ## Implementation Notes for Claude
 
 **Key Points:**
@@ -209,6 +228,7 @@ fi
 3. **Extract task description** from user's "Other" input or category selection
 4. **Extract lessons learned** from "Other" text input
 5. **Handle both org formats**: Direct (`orgId`) and env wrapper (`env.ACE_ORG_ID`)
+6. **Enriched trace flags** (`--retrieval-id`, `--applied-log-ids`): pass these through when available in the session context (hooks supply them automatically; for manual `/ace:learn`, they are optional)
 
 **Error Handling:**
 - Check ace-cli is installed

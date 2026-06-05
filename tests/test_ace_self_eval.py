@@ -96,9 +96,9 @@ class TestStatuslineReadsReview:
         content = STATUSLINE.read_text()
         assert 'ace-review-result.json' in content
 
-    def test_shows_helpful_pct(self):
+    def test_shows_quality_pct(self):
         content = STATUSLINE.read_text()
-        assert 'helpful_pct' in content
+        assert 'quality_pct' in content
 
 
 class TestStateCleanup:

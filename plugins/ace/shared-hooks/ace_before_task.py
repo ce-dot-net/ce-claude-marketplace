@@ -99,12 +99,16 @@ def build_session_title(pattern_list, pattern_count, agent_type, review_file=Non
     except Exception:
         pass  # non-fatal, ROI suffix stays empty
 
+    # OR-fallback for "ACE ready" tier (issue #27):
+    # v15 patterns qualify via cumulative_v15_reward > 0; legacy via top_helpful >= 20
+    has_reliable = any(p.get('cumulative_v15_reward', 0) > 0 for p in pattern_list) or top_helpful >= 20
+
     # State machine
     if agent_type and agent_type != 'main':
         return f"ACE/sub · {pattern_count}"
     if avg_conf < 0.50:
         return f"ACE low · {pattern_count}"
-    if pattern_count >= 5 and avg_conf >= 0.70 and top_helpful >= 20:
+    if pattern_count >= 5 and avg_conf >= 0.70 and has_reliable:
         base = f"ACE ready · {top_short}" if top_short else f"ACE ready · {pattern_count}"
         return base + roi_suffix
     base = f"ACE · {pattern_count} · {top_short}" if top_short else f"ACE · {pattern_count}"
@@ -183,6 +187,56 @@ def check_eval_request_and_review():
     return eval_context
 
 
+# ---------------------------------------------------------------------------
+# Module-level constants and helpers (issue #27: reward-vocab quality gate)
+# ---------------------------------------------------------------------------
+
+# Fields to keep when stripping server-internal metadata before injection.
+# v15 wire fields (cumulative_v15_reward, n_hot_pos, n_hot_neg, isAtRisk) added
+# so reward data survives the strip step; match_factors excluded by design.
+USEFUL_FIELDS = {
+    'id', 'domain', 'content', 'confidence', 'helpful', 'harmful',
+    'section', 'evidence', 'root_cause', 'error_context',
+    # v15 reward-vocab fields (issue #27)
+    'cumulative_v15_reward', 'n_hot_pos', 'n_hot_neg', 'isAtRisk',
+}
+
+
+def _apply_quality_gate(patterns):
+    """Dual-format quality gate (issue #27, ACE 1.5 native).
+
+    v15 path  (cumulative_v15_reward present):
+        keep if reward > 0 AND NOT isAtRisk
+        (reward model is the authoritative quality signal in ACE 1.5)
+    Legacy path (no cumulative_v15_reward field):
+        keep if confidence >= 0.5 OR helpful >= 2
+        (restore original OR-condition: high-confidence new patterns pass
+        even before accumulating helpful votes)
+    """
+    result = []
+    for p in patterns:
+        reward = p.get('cumulative_v15_reward')
+        if reward is not None:
+            if reward > 0 and not p.get('isAtRisk', False):
+                result.append(p)
+        else:
+            if p.get('confidence', 0) >= 0.5 or p.get('helpful', 0) >= 2:
+                result.append(p)
+    return result
+
+
+def _format_bullet_token(pattern):
+    """Return display token for a pattern bullet (issue #27).
+
+    v15 path  (cumulative_v15_reward present): "⚡{reward:.1f}"
+    Legacy path: "+{helpful}"
+    """
+    reward = pattern.get('cumulative_v15_reward')
+    if reward is not None:
+        return f"⚡{reward:.1f}"
+    return f"+{pattern.get('helpful', 0)}"
+
+
 def main():
     try:
         # Read hook event from stdin
@@ -242,7 +296,8 @@ def main():
             query=search_query,
             org=context['org'],
             project=context['project'],
-            session_id=session_id if use_session_pinning else None
+            session_id=session_id if use_session_pinning else None,
+            task_intent='explore',
         )
 
         # v5.3.5: Sanitize response to remove invalid Unicode surrogates
@@ -284,8 +339,10 @@ def main():
         pattern_list = patterns_response.get('similar_patterns', [])
         original_pattern_list = list(pattern_list)  # Keep original for logging
         if len(pattern_list) > 5:
-            # Filter: confidence >= 0.5 OR helpful >= 2
-            high_quality = [p for p in pattern_list if p.get('confidence', 0) >= 0.5 or p.get('helpful', 0) >= 2]
+            # Filter: dual-format quality gate (issue #27)
+            # v15 path: cumulative_v15_reward > 0 AND not isAtRisk
+            # legacy path: helpful >= 2 (no cumulative_v15_reward field)
+            high_quality = _apply_quality_gate(pattern_list)
             if len(high_quality) >= 3:
                 pattern_list = high_quality
                 patterns_response['similar_patterns'] = pattern_list
@@ -309,6 +366,17 @@ def main():
         except Exception:
             pass  # Non-fatal: continue without logging
 
+        # F-080: Capture retrieval_id + retrieval_log_ids BEFORE useful_fields strip
+        # match_factors is stripped below; must extract here while it's still present.
+        _retrieval_id = patterns_response.get('retrieval_id') or None
+        _retrieval_log_map = {}
+        for _p in patterns_response.get('similar_patterns', []):
+            _pid = _p.get('id')
+            _mf = _p.get('match_factors') or {}
+            _rlid = _mf.get('retrieval_log_id') if isinstance(_mf, dict) else None
+            if _pid and not isinstance(_rlid, bool) and isinstance(_rlid, int):
+                _retrieval_log_map[_pid] = _rlid
+
         # CRITICAL: Save pattern IDs for reinforcement learning (ACE paper feedback loop)
         # When task completes, ace_after_task.py will load these IDs and include in ExecutionTrace
         # Server uses this to update 'helpful' scores for patterns that worked
@@ -320,8 +388,11 @@ def main():
                     # Delegated to patterns_used_state.append_patterns_used (the
                     # single source of truth). Behavior-identical: validates IDs,
                     # appends+dedupes, writes the relative per-agent file.
+                    # F-080: also pass retrieval_id + retrieval_log_map captured above.
                     agent_id = event.get('agent_id') if isinstance(event, dict) else None
-                    append_patterns_used(session_id, agent_id, pattern_ids)
+                    append_patterns_used(session_id, agent_id, pattern_ids,
+                                         retrieval_id=_retrieval_id,
+                                         retrieval_log_ids=_retrieval_log_map)
             except Exception:
                 # Non-fatal: continue without pattern tracking
                 pass
@@ -352,7 +423,7 @@ def main():
         # 'impressions', 'retrieval_count', 'root_cause', 'error_context', 'source',
         # 'source_project_id', 'source_project_name', 'local_helpful', 'local_harmful',
         # 'match_factors', 'observations', 'name'
-        useful_fields = {'id', 'domain', 'content', 'confidence', 'helpful', 'harmful', 'section', 'evidence', 'root_cause', 'error_context'}
+        useful_fields = USEFUL_FIELDS
         if 'similar_patterns' in patterns_response:
             patterns_response['similar_patterns'] = [
                 {k: v for k, v in p.items() if k in useful_fields and (v or k not in ('root_cause', 'error_context'))}
@@ -390,8 +461,8 @@ def main():
                 if len(content) > 80:
                     content = content[:77] + '...'
                 domain = bullet.get('domain', 'general')
-                helpful = bullet.get('helpful', 0)
-                summary_lines.append(f"   • [{domain}] {content} (+{helpful})")
+                token = _format_bullet_token(bullet)
+                summary_lines.append(f"   • [{domain}] {content} ({token})")
 
             if pattern_count > 3:
                 summary_lines.append(f"   ... and {pattern_count - 3} more bullets")

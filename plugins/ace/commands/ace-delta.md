@@ -11,7 +11,7 @@ Manually manipulate patterns in the ACE playbook using delta operations. This is
 
 Allows **direct manipulation** of patterns in the ACE playbook:
 - **ADD**: Manually add new patterns without going through the learning pipeline
-- **UPDATE**: Modify helpful/harmful scores or pattern content
+- **UPDATE**: Modify pattern content or metadata (score adjustments via the reward model — see F-080)
 - **REMOVE**: Delete patterns from the playbook
 
 **Difference from `/ace-learn`**:
@@ -58,15 +58,15 @@ shift
 
 ```bash
 # Example: Add new pattern
+# NOTE: 'helpful' and 'harmful' fields are deprecated in ACE 1.5 (F-080).
+# Score adjustments are handled automatically by the reward model — omit them here.
 JSON_PAYLOAD=$(cat <<'EOF'
 {
   "bullets": [
     {
       "id": "manual-001",
       "content": "Use HTTP-only cookies for JWT refresh tokens to prevent XSS attacks",
-      "section": "strategies_and_hard_rules",
-      "helpful": 0,
-      "harmful": 0
+      "section": "strategies_and_hard_rules"
     }
   ]
 }
@@ -89,8 +89,10 @@ fi
 ### 2. Update Pattern Scores
 
 ```bash
-# Example: Update pattern helpful score
-JSON_PAYLOAD='{"bullets": [{"id": "ctx-1749038476-4cb2", "helpful": 5}]}'
+# Example: Update pattern content
+# NOTE: 'helpful' and 'harmful' fields are deprecated in ACE 1.5 (F-080).
+# Use the reward model for score adjustments instead of passing them directly.
+JSON_PAYLOAD='{"bullets": [{"id": "ctx-1749038476-4cb2", "content": "Updated pattern text"}]}'
 
 echo "$JSON_PAYLOAD" | if [ -n "$ORG_ID" ]; then
   ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" delta update --stdin
@@ -100,9 +102,8 @@ fi
 ```
 
 **What can be updated**:
-- `helpful`: Increment helpful score (pattern was useful)
-- `harmful`: Increment harmful score (pattern was incorrect/outdated)
 - `content`: Update pattern text (rare - usually just add new pattern)
+- Score adjustments: handled automatically by the ACE 1.5 reward model (F-080) — do not pass `helpful`/`harmful` directly
 
 ### 3. Remove Pattern
 
@@ -125,13 +126,15 @@ fi
 ### 4. Batch Operations
 
 ```bash
-# Example: Update multiple patterns
+# Example: Update multiple patterns (content only)
+# NOTE: 'helpful' and 'harmful' are deprecated in ACE 1.5 (F-080) — use the
+# reward model for score adjustments instead.
 JSON_PAYLOAD=$(cat <<'EOF'
 {
   "bullets": [
-    {"id": "ctx-001", "helpful": 1},
-    {"id": "ctx-002", "helpful": 1},
-    {"id": "ctx-003", "helpful": 1}
+    {"id": "ctx-001", "content": "Updated pattern text for ctx-001"},
+    {"id": "ctx-002", "content": "Updated pattern text for ctx-002"},
+    {"id": "ctx-003", "content": "Updated pattern text for ctx-003"}
   ]
 }
 EOF
@@ -159,8 +162,8 @@ fi
 **Scenario**: You reviewed patterns and found some that need score adjustments or removal.
 
 ```bash
-# Mark outdated pattern as harmful
-/ace-delta update ctx-old-001 harmful=3
+# Remove outdated pattern (score corrections handled by reward model — F-080)
+/ace-delta remove ctx-old-001
 
 # Remove duplicate pattern
 /ace-delta remove ctx-duplicate-002
@@ -212,7 +215,7 @@ fi
 2. **Be specific** - Write clear, actionable pattern descriptions
 3. **Use proper sections** - Place patterns in correct playbook section
 4. **Verify after changes** - Run `/ace-patterns` to confirm updates
-5. **Start with helpful=0** - Let usage naturally increase scores
+5. **Omit score fields** - `helpful`/`harmful` are deprecated in ACE 1.5 (F-080); the reward model manages scores automatically
 6. **Don't duplicate** - Check `/ace-search` before adding manually
 
 ## Output Format
