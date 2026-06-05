@@ -158,6 +158,27 @@ if [[ "$ACE_ASYNC_LEARNING" == "1" ]]; then
   LEARN_LOCK="/tmp/ace-learn-inflight-${SESSION_ID:-unknown}.lock"
   touch "$LEARN_LOCK"
 
+  # ── ADDITIVE TELEMETRY (CC v2.1.145 background_tasks field) ──
+  # Records count of CC-managed background tasks at stop time + learn-lock
+  # state into ace-relevance.jsonl. TELEMETRY ONLY — never gates any decision
+  # and never touches the lock mechanism above. Failure-guarded so a malformed
+  # field cannot abort the Stop hook (set -e safe), and run in the background
+  # so it adds no latency.
+  BG_TASK_COUNT=$(echo "$INPUT_JSON" | jq '.background_tasks | length // 0' 2>/dev/null || echo "0")
+  [[ "$BG_TASK_COUNT" =~ ^[0-9]+$ ]] || BG_TASK_COUNT=0
+  REL_LOGGER_DIR="${PLUGIN_ROOT}/shared-hooks/utils"
+  (
+    python3 -c "
+import sys
+sys.path.insert(0, '${REL_LOGGER_DIR}')
+try:
+    from ace_relevance_logger import log_stop_telemetry
+    log_stop_telemetry(session_id='${SESSION_ID:-unknown}', hook_type='Stop', background_tasks_count=${BG_TASK_COUNT}, learn_lock_present=True, learn_lock_age_seconds=0)
+except Exception:
+    pass
+" >/dev/null 2>&1 || true
+  ) > /dev/null 2>&1 &
+
   # Launch in background with proper error logging
   (
     python3 "${HOOK_SCRIPT}" < "$TEMP_INPUT" 2>&1 > "$TEMP_OUTPUT"

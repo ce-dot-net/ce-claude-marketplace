@@ -134,6 +134,25 @@ if [[ "$ACE_ASYNC_LEARNING" == "1" ]]; then
   # In-flight lock so PreCompact can wait for an in-progress subagent learn.
   LEARN_LOCK="/tmp/ace-learn-inflight-${_ASID}.lock"
   touch "$LEARN_LOCK" 2>/dev/null || true
+  # ── ADDITIVE TELEMETRY (CC v2.1.145 background_tasks field) ──
+  # Count of CC-managed background tasks at subagent-stop time + learn-lock
+  # state → ace-relevance.jsonl. TELEMETRY ONLY; never gates a decision, never
+  # touches the lock above. Failure-guarded + backgrounded (no latency, cannot
+  # change exit code).
+  BG_TASK_COUNT=$(echo "$INPUT_JSON" | jq '.background_tasks | length // 0' 2>/dev/null || echo "0")
+  [[ "$BG_TASK_COUNT" =~ ^[0-9]+$ ]] || BG_TASK_COUNT=0
+  REL_LOGGER_DIR="${PLUGIN_ROOT}/shared-hooks/utils"
+  (
+    python3 -c "
+import sys
+sys.path.insert(0, '${REL_LOGGER_DIR}')
+try:
+    from ace_relevance_logger import log_stop_telemetry
+    log_stop_telemetry(session_id='${_ASID}', hook_type='SubagentStop', background_tasks_count=${BG_TASK_COUNT}, learn_lock_present=True, learn_lock_age_seconds=0)
+except Exception:
+    pass
+" >/dev/null 2>&1 || true
+  ) > /dev/null 2>&1 &
   (
     python3 "${HOOK_SCRIPT}" < "$TEMP_INPUT" > /dev/null 2>>"$LOG_FILE"
     rm -f "$TEMP_INPUT" "$LEARN_LOCK"

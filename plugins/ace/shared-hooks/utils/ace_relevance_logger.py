@@ -163,6 +163,49 @@ class ACERelevanceLogger:
 
         self._write_log(entry)
 
+    def log_stop_telemetry(
+        self,
+        session_id: Optional[str],
+        hook_type: str,
+        background_tasks_count: Optional[int],
+        learn_lock_present: bool,
+        learn_lock_age_seconds: Optional[int] = None,
+    ) -> None:
+        """
+        Log Stop/SubagentStop background-task telemetry.
+
+        ADDITIVE / TELEMETRY ONLY (CC v2.1.145 `background_tasks` field).
+
+        Records how many CC-managed background tasks were running at
+        session-stop time, alongside the in-flight learn-lock state. This is
+        purely informational — it never influences the
+        /tmp/ace-learn-inflight-{session}.lock mechanism or PreCompact
+        blocking, which remain owned by the bash wrappers.
+
+        Robustness (risk #3): never raises; malformed inputs degrade to safe
+        defaults so a logging failure cannot break the Stop hook.
+        """
+        try:
+            try:
+                bg_count = int(background_tasks_count) if background_tasks_count is not None else 0
+            except (TypeError, ValueError):
+                bg_count = 0
+
+            entry: Dict[str, Any] = {
+                'timestamp': datetime.now(timezone.utc).isoformat(),
+                'event': 'hook_stop_telemetry',
+                'hook_type': hook_type,
+                'session_id': session_id,
+                'background_tasks_count': bg_count,
+                'learn_lock_present': bool(learn_lock_present),
+                'learn_lock_age_seconds': learn_lock_age_seconds,
+            }
+
+            self._write_log(entry)
+        except Exception:
+            # Graceful degradation — telemetry must never break the hook.
+            pass
+
     def log_execution_metrics(
         self,
         session_id: str,
@@ -270,6 +313,14 @@ def log_compact_event(**kwargs) -> None:
 def log_execution_metrics(**kwargs) -> None:
     """Convenience function to log execution metrics."""
     get_relevance_logger().log_execution_metrics(**kwargs)
+
+
+def log_stop_telemetry(**kwargs) -> None:
+    """Convenience function to log Stop/SubagentStop background-task telemetry."""
+    try:
+        get_relevance_logger().log_stop_telemetry(**kwargs)
+    except Exception:
+        pass
 
 
 def log_hook_error(
