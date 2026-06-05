@@ -61,7 +61,7 @@ patterns_injected=0
 avg_relevance=0
 domains_count=0
 domain_shifts=0
-helpful_pct=0
+quality_pct=0
 time_saved=""
 
 # ── Read per-task metrics from JSONL ──
@@ -118,10 +118,10 @@ else REL_C="$RED"; fi
 REVIEW_FILE=""
 if [ -n "$cwd" ] && [ -f "${cwd}/.claude/data/logs/ace-review-result.json" ]; then
   REVIEW_FILE="${cwd}/.claude/data/logs/ace-review-result.json"
-  review_helpful_pct=$(jq -r '.helpful_pct // 0' "$REVIEW_FILE" 2>/dev/null || echo "0")
+  review_quality_pct=$(jq -r '.quality_pct // .helpful_pct // 0' "$REVIEW_FILE" 2>/dev/null || echo "0")
   review_time_saved=$(jq -r '.time_saved // ""' "$REVIEW_FILE" 2>/dev/null || echo "")
-  if [ "$review_helpful_pct" != "0" ] && [ "$review_helpful_pct" != "" ]; then
-    helpful_pct="$review_helpful_pct"
+  if [ "$review_quality_pct" != "0" ] && [ "$review_quality_pct" != "" ]; then
+    quality_pct="$review_quality_pct"
   fi
   if [ -n "$review_time_saved" ] && [ "$review_time_saved" != "null" ] && [ "$review_time_saved" != "" ]; then
     time_saved="$review_time_saved"
@@ -180,12 +180,12 @@ if [ "$domain_shifts" != "0" ]; then
   LINE2+=" ${YEL}${B}${domain_shifts}${R}${D} shifts${R}"
 fi
 
-# Helpful % + time saved
-if [ "$helpful_pct" != "0" ] && [ "$helpful_pct" != "" ]; then
-  if [ "$helpful_pct" -ge 70 ] 2>/dev/null; then H_C="$GRN"
-  elif [ "$helpful_pct" -ge 40 ] 2>/dev/null; then H_C="$YEL"
+# Quality % + time saved
+if [ "$quality_pct" != "0" ] && [ "$quality_pct" != "" ]; then
+  if [ "$quality_pct" -ge 70 ] 2>/dev/null; then H_C="$GRN"
+  elif [ "$quality_pct" -ge 40 ] 2>/dev/null; then H_C="$YEL"
   else H_C="$RED"; fi
-  LINE2+="  ${D}⋮${R} ${H_C}${B}${helpful_pct}% helpful${R}"
+  LINE2+="  ${D}⋮${R} ${H_C}${B}${quality_pct}% quality${R}"
   if [ -n "$time_saved" ] && [ "$time_saved" != "" ]; then
     LINE2+=" ${D}~${time_saved}${R}"
   fi

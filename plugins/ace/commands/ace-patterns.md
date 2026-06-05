@@ -1,7 +1,7 @@
 ---
 model: claude-haiku-4-5
 description: View ACE playbook organized by section (strategies, snippets, troubleshooting, APIs)
-argument-hint: "[section] [min-helpful]"
+argument-hint: "[section] [min-reward]"
 allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
@@ -43,17 +43,17 @@ fi
 
 # Parse arguments
 SECTION="${1:-}"  # Optional section filter
-MIN_HELPFUL="${2:-0}"  # Optional min helpful score
+MIN_REWARD="${2:-0}"  # Optional min reward score
 
 # Call ace-cli patterns - CLI reads org/project from env vars automatically
 ace-cli patterns \
   ${SECTION:+--section "$SECTION"} \
-  --min-helpful "$MIN_HELPFUL"
+  --min-reward "$MIN_REWARD"
 ```
 
 Arguments:
 - section: Optional section filter (strategies, snippets, troubleshooting, apis)
-- min_helpful: Optional minimum helpful count (default: 0)
+- min_reward: tier-weighted helpful-minus-harmful; default 0, only filters when >0
 
 Examples:
 - All sections: /ace-patterns
@@ -103,7 +103,7 @@ Bullets accumulate helpful/harmful counts over time as they prove useful or misl
 
 - **See full statistics:** Run `/ace:ace-status` for counts and top helpful/harmful
 - **Filter patterns:** Use section parameter (e.g., `/ace:ace-patterns strategies`)
-- **Filter by quality:** Use min-helpful parameter (e.g., `/ace:ace-patterns troubleshooting 5`)
+- **Filter by quality:** Use min-reward parameter (e.g., `/ace:ace-patterns troubleshooting 5`)
 - **Export patterns:** Run `/ace:ace-export-patterns` for backup or sharing
 - **Bootstrap more patterns:** Run `/ace:ace-bootstrap` to analyze git/docs/code
 - **Clear bad patterns:** Run `/ace:ace-clear --confirm` to reset playbook

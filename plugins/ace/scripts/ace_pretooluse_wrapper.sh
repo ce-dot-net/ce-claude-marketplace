@@ -191,7 +191,7 @@ if [ "$MATCHED_DOMAIN" != "$LAST_DOMAIN" ]; then
   # CLI already verified by flag file check above
 
   SEARCH_RESULT=$(echo "$SEARCH_QUERY" | $CLI_CMD search --stdin --json \
-    --allowed-domains "$MATCHED_DOMAIN" 2>/dev/null | \
+    --allowed-domains "$MATCHED_DOMAIN" --task-intent explore 2>/dev/null | \
     iconv -f UTF-8 -t UTF-8 -c 2>/dev/null || echo "")  # Sanitize Unicode
 
   # 3. Check if search succeeded
@@ -238,7 +238,13 @@ ${SEARCH_RESULT}
     # under THIS agent's id (AGENT_ID, extracted once at the top) so
     # ace_after_task.py (SubagentStop/Stop) reports them in playbook_used.
     # Guarded, non-fatal, stdout-suppressed — MUST NOT corrupt the hook's JSON.
-    echo "$SEARCH_RESULT" | python3 "${_ACE_PLUGIN_ROOT}/shared-hooks/utils/patterns_used_state.py" --session "$SESSION_ID" --agent-id "$AGENT_ID" >/dev/null 2>&1 || true
+    # F-080: extract retrieval_id from SEARCH_RESULT (top-level field) and pass via --retrieval-id
+    _RETRIEVAL_ID=$(echo "$SEARCH_RESULT" | jq -r 'if .retrieval_id != null and .retrieval_id != "" then .retrieval_id else empty end' 2>/dev/null || true)
+    if [ -n "$_RETRIEVAL_ID" ] && [ "$_RETRIEVAL_ID" != "null" ]; then
+      echo "$SEARCH_RESULT" | python3 "${_ACE_PLUGIN_ROOT}/shared-hooks/utils/patterns_used_state.py" --session "$SESSION_ID" --agent-id "$AGENT_ID" --retrieval-id "$_RETRIEVAL_ID" >/dev/null 2>&1 || true
+    else
+      echo "$SEARCH_RESULT" | python3 "${_ACE_PLUGIN_ROOT}/shared-hooks/utils/patterns_used_state.py" --session "$SESSION_ID" --agent-id "$AGENT_ID" >/dev/null 2>&1 || true
+    fi
 
     # 5. Output with additionalContext (patterns injected into Claude's context)
     jq -n \

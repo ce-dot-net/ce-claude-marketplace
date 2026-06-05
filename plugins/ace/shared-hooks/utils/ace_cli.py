@@ -12,6 +12,28 @@ from typing import Optional, Dict, Any
 # v6.0.0: Legacy CLI removed, ace-cli is the only supported command
 CLI_CMD = 'ace-cli'
 
+# v6.6.5 / #26: Module-local cache instance created at import time.
+# Each invocation of importlib.util.module_from_spec + exec_module (used in tests)
+# creates a fresh module object and re-executes this block, so each isolated
+# module instance gets its own AceSearchCache object.  In production, a hook
+# process imports ace_cli once, so this is equivalent to a single shared cache.
+#
+# Import strategy: try bare name first (makes unittest.mock patch("ace_search_cache....")
+# observable here), then fall back to the utils-prefixed path.
+try:
+    import ace_search_cache as _ace_search_cache_mod  # type: ignore
+    _module_AceSearchCache = _ace_search_cache_mod.AceSearchCache
+except Exception:  # noqa: BLE001
+    try:
+        from utils.ace_search_cache import AceSearchCache as _module_AceSearchCache  # type: ignore
+    except Exception:  # noqa: BLE001
+        _module_AceSearchCache = None  # type: ignore
+
+try:
+    _module_cache = _module_AceSearchCache()  # fresh per module-exec  # type: ignore
+except Exception:  # noqa: BLE001
+    _module_cache = None  # type: ignore
+
 
 def _log_cli_error(location: str, returncode: int, stdout_sample: str, stderr_sample: str,
                     query: str = None, project_id: str = None, extra: dict = None) -> None:
@@ -42,7 +64,7 @@ def _log_cli_error(location: str, returncode: int, stdout_sample: str, stderr_sa
         pass  # Logging must not fail the caller
 
 
-def run_search(query: str, org: str = None, project: str = None, session_id: str = None) -> Optional[Dict[str, Any]]:
+def run_search(query: str, org: str = None, project: str = None, session_id: str = None, task_intent: str = None) -> Optional[Dict[str, Any]]:
     """
     Call ace-cli search --stdin with optional session pinning
 
@@ -51,6 +73,9 @@ def run_search(query: str, org: str = None, project: str = None, session_id: str
         org: Organization ID (optional, passed via environment)
         project: Project ID (optional, passed via environment)
         session_id: Session ID to pin results to (optional, requires ace-cli v1.0.11+)
+        task_intent: Intent hint for search ranking (optional, e.g. 'explore', 'refactor',
+                     'routine', 'spec_strict'). Passed as --task-intent to ace-cli search.
+                     Included in cache key to prevent cross-intent cache bleed.
 
     Returns:
         Parsed JSON response or None on failure
@@ -76,18 +101,22 @@ def run_search(query: str, org: str = None, project: str = None, session_id: str
         instead of None, enabling better error messages to users.
     """
     # v6.5.0 Item #17: LRU cache for repeat queries within a single Python process
-    # (60s TTL, 100-entry capacity). Cache key includes (query, org, project) so
-    # multi-project hooks segment correctly; session_id intentionally excluded so
-    # pinning doesn't fragment the cache. PR-review I1: variadic key — additional
-    # callers (e.g. Item #6 Bash-error troubleshooting) can pass --section as
+    # (60s TTL, 100-entry capacity). Cache key includes (query, org, project,
+    # task_intent) so multi-project hooks and cross-intent calls segment correctly;
+    # session_id intentionally excluded so pinning doesn't fragment the cache.
+    # PR-review I1: variadic key — additional callers can pass --section as
     # an extra discriminator without colliding with general searches.
+    # v6.6.5 / #26: Use module-local _module_cache / _module_AceSearchCache so each
+    # isolated module instance (tests) gets its own cache and doesn't share state.
+    _cache = None
+    _cache_key = None
     try:
-        from utils.ace_search_cache import get_global_cache, AceSearchCache  # type: ignore
-        _cache = get_global_cache()
-        _cache_key = AceSearchCache.make_key("search", query, org, project)
-        _cached = _cache.get(_cache_key)
-        if _cached is not None:
-            return _cached
+        if _module_cache is not None and _module_AceSearchCache is not None:
+            _cache = _module_cache
+            _cache_key = _module_AceSearchCache.make_key("search", query, org, project, task_intent)
+            _cached = _cache.get(_cache_key)
+            if _cached is not None:
+                return _cached
     except Exception:  # noqa: BLE001 — cache must NEVER break the search path
         _cache = None
         _cache_key = None
@@ -100,10 +129,12 @@ def run_search(query: str, org: str = None, project: str = None, session_id: str
         if project:
             env['ACE_PROJECT_ID'] = project
 
-        # Build command with optional session pinning
+        # Build command with optional session pinning and task intent
         cmd = [CLI_CMD, 'search', '--stdin', '--json']
         if session_id:
             cmd.extend(['--pin-session', session_id])
+        if task_intent:
+            cmd.extend(['--task-intent', task_intent])
 
         result = subprocess.run(
             cmd,

@@ -1,20 +1,20 @@
 ---
 model: claude-haiku-4-5
-description: Get highest-rated ACE patterns by helpful score
+description: Get highest-rated ACE patterns by reward score
 allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Top Patterns
 
-Retrieve proven patterns with the highest helpful scores - battle-tested patterns that have proven successful.
+Retrieve proven patterns with the highest reward scores - battle-tested patterns that have proven successful.
 
 ## What This Does
 
-Returns patterns sorted by helpful score (upvotes from successful usage), giving you quality-first retrieval instead of quantity.
+Returns patterns sorted by reward score (tier-weighted helpful-minus-harmful), giving you quality-first retrieval instead of quantity.
 
 ## Instructions for Claude
 
-When the user runs `/ace-top [section] [limit]`, use ace-cli:
+When the user runs `/ace-top [section] [limit] [min_reward]`, use ace-cli:
 
 ```bash
 #!/usr/bin/env bash
@@ -43,14 +43,14 @@ fi
 # Parse arguments
 SECTION="${1:-}"
 LIMIT="${2:-10}"
-MIN_HELPFUL="${3:-0}"
+MIN_REWARD="${3:-0}"
 
 # Build command
 CMD_ARGS=""
 if [ -n "$SECTION" ]; then
   CMD_ARGS="$CMD_ARGS --section $SECTION"
 fi
-CMD_ARGS="$CMD_ARGS --limit $LIMIT --min-helpful $MIN_HELPFUL"
+CMD_ARGS="$CMD_ARGS --limit $LIMIT --min-reward $MIN_REWARD"
 
 echo "🏆 Fetching top-rated patterns..."
 
@@ -76,9 +76,8 @@ fi
   - Default: All sections
 - **limit** (optional): Maximum patterns to return
   - Default: 10
-- **min_helpful** (optional): Minimum helpful score threshold
+- **min_reward** (optional): Minimum reward score (tier-weighted helpful-minus-harmful; default 0, only filters when >0)
   - Default: 0
-  - Use `5` for only highly-rated patterns
 
 ### Example Usage
 
@@ -93,7 +92,7 @@ fi
 → Returns top 5 troubleshooting patterns
 
 /ace-top apis_to_use 20 3
-→ Returns top 20 API recommendations with helpful >= 3
+→ Returns top 20 API recommendations with reward >= 3
 ```
 
 ### When to Use This
@@ -118,8 +117,10 @@ The tool returns JSON with top-rated patterns:
   "patterns": [
     {
       "content": "Always use refresh token rotation to prevent theft attacks",
-      "helpful": 12,
-      "harmful": 0,
+      "cumulative_v15_reward": 12.5,
+      "n_hot_pos": 8,
+      "n_hot_neg": 0,
+      "isAtRisk": false,
       "confidence": 0.95,
       "section": "strategies_and_hard_rules",
       "observations": 15,
@@ -131,20 +132,20 @@ The tool returns JSON with top-rated patterns:
   ],
   "section": "strategies_and_hard_rules",
   "count": 10,
-  "min_helpful": 5
+  "min_reward": 5
 }
 ```
 
-Patterns are sorted by helpful score (descending).
+Patterns are sorted by reward score (descending).
 
-## Helpful Score Interpretation
+## Reward Score Interpretation
 
-- **0-2**: New pattern, not yet validated
-- **3-5**: Moderately proven, used successfully a few times
-- **6-10**: Well-proven, reliable pattern
-- **11+**: Highly validated, cornerstone pattern
+- **cumulative_v15_reward**: Tier-weighted sum of positive minus negative signals accumulated over all observations
+- **n_hot_pos / n_hot_neg**: Count of recent positive and negative reinforcement events
+- **isAtRisk**: `true` when recent negative signals outpace positives — use these patterns with extra caution
+- **confidence**: Statistical confidence in the reward estimate (higher = more reliable signal)
 
-Patterns with `harmful > 0` indicate they've had negative feedback and should be used cautiously.
+Patterns with `isAtRisk: true` have recent negative feedback and should be used cautiously.
 
 ## Performance Impact
 
@@ -171,7 +172,7 @@ Similar to semantic search - retrieves only top patterns instead of full playboo
 **Library selection**:
 ```
 /ace-top apis_to_use 10 5
-→ "What libraries have we had success with?"
+→ "What libraries have we had success with? (reward >= 5)"
 ```
 
 ## See Also

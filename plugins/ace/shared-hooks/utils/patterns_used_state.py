@@ -47,32 +47,83 @@ def state_file_path(session_id, agent_id, state_dir=None):
     return _state_dir(state_dir) / f'ace-patterns-used-{session_id}-{agent_suffix}.json'
 
 
-def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None):
+def _filter_retrieval_log_ids(retrieval_log_ids):
+    """Filter retrieval_log_ids dict: keep only entries whose value is int but NOT bool."""
+    if not retrieval_log_ids:
+        return {}
+    return {
+        pid: v
+        for pid, v in retrieval_log_ids.items()
+        if not isinstance(v, bool) and isinstance(v, int)
+    }
+
+
+def _read_state_file(sf):
+    """Read state file; return (pattern_ids_list, retrieval_id, retrieval_log_ids).
+
+    Handles both legacy bare-list format and new dict format.
+    Legacy: ["id1", "id2"]  → retrieval_id=None, retrieval_log_ids={}
+    New:    {"pattern_ids": [...], "retrieval_id": ..., "retrieval_log_ids": {...}}
+
+    Raises ValueError/json.JSONDecodeError if the file exists but is not valid JSON,
+    so callers (load_playbook_used) can handle corruption via their own except + on_error.
+    Returns ([], None, {}) ONLY for missing files or wrong-type content (not JSON errors).
+    """
+    if not sf.exists():
+        return [], None, {}
+    raw = json.loads(sf.read_text())  # intentionally raises on bad JSON
+    if isinstance(raw, list):
+        # Legacy bare-list format
+        return raw, None, {}
+    if isinstance(raw, dict):
+        ids = raw.get('pattern_ids') or []
+        rid = raw.get('retrieval_id') or None
+        rlog = raw.get('retrieval_log_ids') or {}
+        return ids, rid, rlog
+    return [], None, {}
+
+
+def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
+                         retrieval_id=None, retrieval_log_ids=None):
     """Append+dedupe valid pattern IDs to the per-agent file; return the full list.
 
-    Behavior-identical to ace_before_task.py:313-340.
+    F-080: new optional params retrieval_id (str|None) and retrieval_log_ids (dict|None).
+    State file is now written as dict schema:
+      {"pattern_ids": [...], "retrieval_id": ..., "retrieval_log_ids": {...}}
+    Backward compat: existing bare-list files are read transparently.
+    bool guard: retrieval_log_ids values that are bool are excluded even though
+    bool is a subclass of int.
     """
     if not session_id:
         return []
     ids = [p for p in (pattern_ids or []) if isinstance(p, str) and is_valid_pattern_id(p)]
-    if not ids:
+    has_retrieval = retrieval_id is not None or bool(retrieval_log_ids)
+    if not ids and not has_retrieval:
         return []
     d = _state_dir(state_dir)
     d.mkdir(parents=True, exist_ok=True)
     sf = state_file_path(session_id, agent_id, state_dir)
-    existing = []
-    if sf.exists():
-        try:
-            existing = json.loads(sf.read_text())
-        except Exception:
-            existing = []
-    seen = set(existing)
+    try:
+        existing_ids, existing_rid, existing_rlog = _read_state_file(sf)
+    except Exception:
+        existing_ids, existing_rid, existing_rlog = [], None, {}
+    seen = set(existing_ids)
     for pid in ids:
         if pid not in seen:
-            existing.append(pid)
+            existing_ids.append(pid)
             seen.add(pid)
-    sf.write_text(json.dumps(existing))
-    return existing
+    # Merge retrieval_log_ids (new entries win over existing for same key)
+    merged_rlog = dict(existing_rlog)
+    merged_rlog.update(_filter_retrieval_log_ids(retrieval_log_ids or {}))
+    # retrieval_id: use new value if provided, else keep existing
+    merged_rid = retrieval_id if retrieval_id is not None else existing_rid
+    state = {
+        'pattern_ids': existing_ids,
+        'retrieval_id': merged_rid,
+        'retrieval_log_ids': merged_rlog,
+    }
+    sf.write_text(json.dumps(state))
+    return existing_ids
 
 
 def load_playbook_used(session_id, agent_id, hook_event_name='Stop', state_dir=None, on_error=None):
@@ -106,8 +157,8 @@ def load_playbook_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
     for f in files:
         try:
             if f.exists():
-                raw = json.loads(f.read_text())
-                for pid in raw:
+                ids, _rid, _rlog = _read_state_file(f)
+                for pid in ids:
                     if isinstance(pid, str) and is_valid_pattern_id(pid) and pid not in seen:
                         seen.add(pid)
                         result.append(pid)
@@ -125,6 +176,64 @@ def load_playbook_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
     return result
 
 
+def reap_patterns_used(session_id, agent_id, hook_event_name='Stop', state_dir=None, on_error=None):
+    """Unlink (reap) the per-agent patterns-used state file WITHOUT reading it.
+
+    v6.6.7: the learning-skip path in ace_after_task (no project context /
+    trivial task / no substantial work) returns BEFORE load_playbook_used(),
+    the consumer that normally unlinks the file. So a skipped (sub)agent used to
+    leave its per-agent file orphaned until the SessionEnd GC. This reaps it
+    eagerly, honoring the SAME PER-AGENT-PURE rule as load_playbook_used:
+      • SubagentStop          -> reap ONLY this subagent's -{agent_id} file
+      • terminal Stop (else)   -> reap ONLY the -main file (force 'main' suffix,
+                                  ignoring any agent_id CC stamps on Stop), and
+                                  LEAVE sibling -{uuid} files for their own
+                                  SubagentStop.
+
+    SAFETY (user invariant): this only ever runs on a path that fires NO learn,
+    so it can never strip pattern IDs from a trace that is sent to the server.
+    Pure unlink (never reads), uses missing_ok, and never raises; on_error(file,
+    exc) is invoked only if the unlink itself fails (e.g. permissions).
+    """
+    if not session_id:
+        return
+    if hook_event_name == 'SubagentStop':
+        f = state_file_path(session_id, agent_id, state_dir)
+    else:
+        f = state_file_path(session_id, None, state_dir)
+    try:
+        f.unlink(missing_ok=True)
+    except Exception as e:
+        if on_error:
+            try:
+                on_error(f, e)
+            except Exception:
+                pass
+
+
+def load_retrieval_ids(session_id, agent_id, hook_event_name='Stop', state_dir=None):
+    """Read the retrieval_log_ids map from the per-agent state file WITHOUT unlinking it.
+
+    F-080: read-only companion to load_playbook_used.  Returns
+    {pattern_id: retrieval_log_id (int)} from the new dict schema.
+    Legacy bare-list files (or missing files) return {} without crash.
+    Honors the same per-agent-pure routing as load_playbook_used:
+      SubagentStop → this subagent's -{agent_id} file
+      other        → -main file
+    """
+    if not session_id:
+        return {}
+    if hook_event_name == 'SubagentStop':
+        sf = state_file_path(session_id, agent_id, state_dir)
+    else:
+        sf = state_file_path(session_id, None, state_dir)
+    try:
+        _ids, _rid, rlog = _read_state_file(sf)
+        return dict(rlog) if rlog else {}
+    except Exception:
+        return {}
+
+
 # CLI entrypoint for the bash PreToolUse wrapper: reads search JSON on stdin,
 # extracts similar_patterns[].id, appends.
 if __name__ == '__main__':
@@ -134,6 +243,7 @@ if __name__ == '__main__':
     ap.add_argument('--session', required=True)
     ap.add_argument('--agent-id', default='')
     ap.add_argument('--state-dir', default=None)
+    ap.add_argument('--retrieval-id', default=None)
     a = ap.parse_args()
     try:
         data = json.load(sys.stdin)
@@ -141,5 +251,18 @@ if __name__ == '__main__':
         sys.exit(0)
     pats = data.get('similar_patterns') or data.get('patterns') or []
     ids = [p.get('id') for p in pats if isinstance(p, dict) and p.get('id')]
-    append_patterns_used(a.session, a.agent_id or None, ids, a.state_dir)
+    # F-080: extract match_factors.retrieval_log_id per pattern (bool guard applied)
+    retrieval_log_map = {}
+    for p in pats:
+        if not isinstance(p, dict):
+            continue
+        pid = p.get('id')
+        mf = p.get('match_factors') or {}
+        rlid = mf.get('retrieval_log_id') if isinstance(mf, dict) else None
+        if pid and not isinstance(rlid, bool) and isinstance(rlid, int):
+            retrieval_log_map[pid] = rlid
+    # retrieval_id: use --retrieval-id flag if provided, else fall back to top-level field
+    retrieval_id = a.retrieval_id or data.get('retrieval_id') or None
+    append_patterns_used(a.session, a.agent_id or None, ids, a.state_dir,
+                         retrieval_id=retrieval_id, retrieval_log_ids=retrieval_log_map)
     sys.exit(0)

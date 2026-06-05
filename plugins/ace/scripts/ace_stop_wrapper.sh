@@ -129,8 +129,8 @@ if echo "$LAST_MSG" | grep -qE 'ACE_REVIEW:'; then
   TIME_SAVED="${TIME_SAVED:-}"
   mkdir -p "$(dirname "$REVIEW_FILE")"
   jq -n --arg pct "$HELPFUL_PCT" --arg time "$TIME_SAVED" \
-    '{helpful_pct: ($pct | tonumber), time_saved: $time}' > "$REVIEW_FILE" 2>/dev/null \
-    || echo "{\"helpful_pct\": ${HELPFUL_PCT}, \"time_saved\": \"${TIME_SAVED}\"}" > "$REVIEW_FILE"
+    '{quality_pct: ($pct | tonumber), time_saved: $time}' > "$REVIEW_FILE" 2>/dev/null \
+    || echo "{\"quality_pct\": ${HELPFUL_PCT}, \"time_saved\": \"${TIME_SAVED}\"}" > "$REVIEW_FILE"
 fi
 
 # Check if async mode is enabled (Issue #3 fix)
@@ -300,9 +300,9 @@ fi
 
 if [ -f "$REVIEW_FILE" ]; then
   # Review was parsed — show result
-  REVIEW_PCT=$(jq -r '.helpful_pct // 0' "$REVIEW_FILE" 2>/dev/null || echo "0")
+  REVIEW_PCT=$(jq -r '.quality_pct // 0' "$REVIEW_FILE" 2>/dev/null || echo "0")
   REVIEW_TIME=$(jq -r '.time_saved // ""' "$REVIEW_FILE" 2>/dev/null || echo "")
-  SYS_MSG="✅ [ACE] ${REVIEW_PCT}% helpful"
+  SYS_MSG="✅ [ACE] ${REVIEW_PCT}% quality"
   if [ -n "$REVIEW_TIME" ] && [ "$REVIEW_TIME" != "null" ] && [ "$REVIEW_TIME" != "" ]; then SYS_MSG="${SYS_MSG} | ~${REVIEW_TIME} saved"; fi
   SYS_MSG="${SYS_MSG} | Learning in background"
   echo "{\"continue\": true, \"systemMessage\": \"${SYS_MSG}\"}"

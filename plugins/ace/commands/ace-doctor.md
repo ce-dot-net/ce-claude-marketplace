@@ -428,6 +428,73 @@ Recommended Actions:
 
 ---
 
+### Check 9: Cache Diagnostics
+
+ACE uses **two distinct caches** that behave differently and are cleared by different mechanisms.
+
+#### Cache 1: In-Memory Client Cache (LRU)
+
+- Held in the running ace-cli process memory
+- Cleared by: `ace-cli cache clear` (any `--type` flag: `sqlite`, `ram`, or `all`)
+- Scope: per-process; lost on process exit automatically
+
+**Important (ace-cli 4.0.1)**: `cache clear` only clears the in-memory cache. It does **not** clear the SQLite graph cache on disk.
+
+#### Cache 2: SQLite Graph Cache
+
+- Location: `~/.ace-cache/<org>__<project>.db`
+- Contains: pattern graph data with a **7-day TTL**
+- **NOT cleared by `cache clear`** — must be manually removed or wait for TTL expiry
+- Inspect with:
+
+```bash
+ls -lh ~/.ace-cache/
+# Example:
+# ~/.ace-cache/ce-dot-net__my-project.db   (graph cache, 7-day TTL)
+# ~/.ace-cache/sessions.db                 (session recall DB)
+```
+
+#### Cache 3: Session Recall DB
+
+- Location: `~/.ace-cache/sessions.db`
+- Contains: per-session recall index used by the before-task hook
+- **NOT cleared by `cache clear`**
+- Managed automatically; safe to delete if corrupted (will be recreated)
+
+**What to Check**:
+```bash
+# Inspect cache directory
+ls -lh ~/.ace-cache/ 2>/dev/null || echo "~/.ace-cache not found (no cache yet)"
+
+# Check graph DB age (warn if > 7 days)
+find ~/.ace-cache -name "*.db" ! -name "sessions.db" -mtime +7 -print 2>/dev/null
+
+# Check sessions DB exists
+test -f ~/.ace-cache/sessions.db && echo "sessions.db: EXISTS" || echo "sessions.db: MISSING"
+```
+
+**Report**:
+- ✅ Cache healthy (graph DB < 7 days old, sessions.db present)
+- ⚠️ Graph DB stale (> 7 days — will be auto-expired on next search)
+- ⚠️ sessions.db missing (will be recreated on next session start)
+- ℹ️ No cache directory yet (cold start — created after first search)
+
+**If Stale Graph Cache**:
+```
+⚠️ Cache: STALE GRAPH DB
+
+File: ~/.ace-cache/<org>__<project>.db
+Age: > 7 days (TTL expired)
+
+Note: ace-cli cache clear does NOT remove this file.
+To force-clear the SQLite graph cache, run:
+  rm ~/.ace-cache/<org>__<project>.db
+
+The cache will be rebuilt automatically on next search.
+```
+
+---
+
 ## 📊 Final Report Format
 
 After running all checks, present results in this format:
@@ -444,6 +511,7 @@ After running all checks, present results in this format:
 [6] Hooks Registered..................... ✅ PASS (5/5)
 [7] CLI Configuration.................... ✅ PASS (multi-org)
 [8] Version Status....................... ✅ PASS
+[9] Cache Diagnostics.................... ✅ PASS
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -493,6 +561,7 @@ Report issues: https://github.com/ce-dot-net/ce-claude-marketplace/issues
 [6] Hooks Registered..................... ⚠️  WARN (3/5)
 [7] CLI Configuration.................... ✅ PASS
 [8] Version Status....................... ⚠️  WARN
+[9] Cache Diagnostics.................... ✅ PASS
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
