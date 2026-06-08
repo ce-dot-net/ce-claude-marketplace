@@ -297,7 +297,6 @@ def main():
             org=context['org'],
             project=context['project'],
             session_id=session_id if use_session_pinning else None,
-            task_intent='explore',
         )
 
         # v5.3.5: Sanitize response to remove invalid Unicode surrogates

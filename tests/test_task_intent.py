@@ -1,17 +1,19 @@
 #!/usr/bin/env python3
 """
-TDD RED tests for issue #26 — Add task_intent param to run_search() + all call sites.
+Tests for task_intent handling in run_search() and call sites.
 
 Scope:
   1. run_search(query, ..., task_intent=None)
        - when task_intent is set, --task-intent <value> is appended to the ace-cli cmd
        - when task_intent is None (default), --task-intent is NOT appended
   2. LRU cache key includes task_intent so different intents never share a cache entry
-  3. UserPromptSubmit call site (ace_before_task.py) passes task_intent='explore'
-  4. Domain-shift PreToolUse call site (ace_pretooluse_wrapper.sh) passes
-     --task-intent explore to ace-cli search (shell-level test)
+  3. UserPromptSubmit call site (ace_before_task.py) does NOT hardcode task_intent;
+     it omits the kwarg (or passes None) so the server classifies intent itself.
+  4. Domain-shift PreToolUse call site (ace_pretooluse_wrapper.sh) does NOT pass
+     --task-intent; the server classifies intent from the search payload.
 
-All tests FAIL (red) until implementation is done.
+The run_search() plumbing still supports task_intent when explicitly passed (used by
+callers that have a real intent); the change is only at the two hardcoded call-sites.
 """
 
 import importlib
@@ -346,16 +348,22 @@ class TestCacheKeyIncludesTaskIntent:
 
 
 # ---------------------------------------------------------------------------
-# 3. Call site — ace_before_task.py UserPromptSubmit passes task_intent='explore'
+# 3. Call site — ace_before_task.py UserPromptSubmit must NOT hardcode task_intent
 # ---------------------------------------------------------------------------
 
 class TestBeforeTaskCallSiteTaskIntent:
-    """ace_before_task.py must pass task_intent='explore' to run_search at UserPromptSubmit."""
+    """
+    ace_before_task.py must NOT pass task_intent='explore' to run_search at
+    UserPromptSubmit. The call-site must omit the kwarg (or pass None) so the
+    server's intent classifier fires without being overridden by a non-null value.
+    """
 
-    def test_run_search_called_with_task_intent_explore(self, tmp_path, monkeypatch):
+    def test_run_search_called_without_hardcoded_task_intent(self, tmp_path, monkeypatch):
         """
         When ace_before_task.main() fires for a UserPromptSubmit event,
-        run_search must be called with task_intent='explore'.
+        run_search must be called with task_intent omitted or None (NOT 'explore').
+        Hardcoding 'explore' masks the server's own intent classifier (flow-A
+        precedence: a non-null value is never overwritten by the server backfill).
         """
         # Minimal valid hook event
         event = {
@@ -404,9 +412,9 @@ class TestBeforeTaskCallSiteTaskIntent:
             "run_search must be called at least once from ace_before_task.main()"
         )
         call0 = captured_kwargs[0]
-        assert call0["task_intent"] == "explore", (
-            f"ace_before_task UserPromptSubmit call site must pass task_intent='explore', "
-            f"got: {call0['task_intent']!r}"
+        assert call0["task_intent"] is None, (
+            f"ace_before_task UserPromptSubmit call site must NOT hardcode task_intent "
+            f"(must be None so server classifies intent), got: {call0['task_intent']!r}"
         )
 
     def test_run_search_import_in_before_task_includes_no_learn_task_intent(self):
@@ -427,47 +435,28 @@ class TestBeforeTaskCallSiteTaskIntent:
 
 
 # ---------------------------------------------------------------------------
-# 4. Shell-level — ace_pretooluse_wrapper.sh domain-shift passes --task-intent explore
+# 4. Shell-level — ace_pretooluse_wrapper.sh domain-shift must NOT pass --task-intent
 # ---------------------------------------------------------------------------
 
 class TestPreToolUseShellCallSiteTaskIntent:
     """
-    ace_pretooluse_wrapper.sh domain-shift ace-cli invocation must include
-    --task-intent explore in the search command.
+    ace_pretooluse_wrapper.sh domain-shift ace-cli invocation must NOT include
+    --task-intent in the search command. Hardcoding 'explore' masks the server's
+    own intent classifier; the fix is to omit the flag entirely.
     """
 
-    def test_pretooluse_wrapper_contains_task_intent_explore(self):
+    def test_pretooluse_wrapper_omits_task_intent(self):
         """
-        The shell script source must include --task-intent explore in the
-        ace-cli search call (domain-shift branch).
+        The shell script source must NOT contain --task-intent in the
+        ace-cli search call (domain-shift branch). The server classifies
+        intent from the search payload; sending a non-null value prevents
+        the server backfill from firing (flow-A precedence).
         """
         wrapper = REPO / "plugins" / "ace" / "scripts" / "ace_pretooluse_wrapper.sh"
         assert wrapper.exists(), f"ace_pretooluse_wrapper.sh not found at {wrapper}"
 
         source = wrapper.read_text()
-        assert "--task-intent" in source, (
-            "ace_pretooluse_wrapper.sh must contain --task-intent flag in the search command"
-        )
-        # Specifically 'explore' (domain-shift is explore intent)
-        assert "--task-intent explore" in source or "--task-intent" in source, (
-            "ace_pretooluse_wrapper.sh must pass --task-intent explore to ace-cli search"
-        )
-
-    def test_pretooluse_wrapper_task_intent_value_is_explore(self):
-        """
-        The task_intent value in the domain-shift search must be 'explore',
-        not refactor/routine/spec_strict.
-        """
-        wrapper = REPO / "plugins" / "ace" / "scripts" / "ace_pretooluse_wrapper.sh"
-        source = wrapper.read_text()
-
-        import re
-        # Look for --task-intent <value> in the search command block
-        m = re.search(r"--task-intent\s+(\S+)", source)
-        assert m is not None, (
-            "Could not find '--task-intent <value>' in ace_pretooluse_wrapper.sh"
-        )
-        intent_value = m.group(1).strip("\"'\\")
-        assert intent_value == "explore", (
-            f"Domain-shift task_intent must be 'explore', got: {intent_value!r}"
+        assert "--task-intent" not in source, (
+            "ace_pretooluse_wrapper.sh must NOT contain --task-intent flag; "
+            "hardcoding it masks the server intent classifier"
         )

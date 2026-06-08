@@ -191,7 +191,7 @@ if [ "$MATCHED_DOMAIN" != "$LAST_DOMAIN" ]; then
   # CLI already verified by flag file check above
 
   SEARCH_RESULT=$(echo "$SEARCH_QUERY" | $CLI_CMD search --stdin --json \
-    --allowed-domains "$MATCHED_DOMAIN" --task-intent explore 2>/dev/null | \
+    --allowed-domains "$MATCHED_DOMAIN" 2>/dev/null | \
     iconv -f UTF-8 -t UTF-8 -c 2>/dev/null || echo "")  # Sanitize Unicode
 
   # 3. Check if search succeeded
