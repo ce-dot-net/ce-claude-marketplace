@@ -24,8 +24,8 @@ Run all checks in parallel for speed, then present organized results.
 
 **What to Check**:
 ```bash
-# Verify plugin directory structure
-ls -la ~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace/
+# Verify plugin directory structure (resolve via $CLAUDE_PLUGIN_ROOT or cache glob)
+ls -la "${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/ce-dot-net-marketplace/ace/*/  2>/dev/null | tail -1)}"
 ```
 
 **Expected Structure**:
@@ -37,10 +37,17 @@ ace/
 ├── scripts/           # Hook wrapper scripts
 │   ├── ace_install_cli.sh
 │   ├── ace_before_task_wrapper.sh
-│   ├── ace_task_complete_wrapper.sh
-│   └── ace_after_task_wrapper.sh
-├── plugin.json
-└── CLAUDE.md
+│   ├── ace_pretooluse_wrapper.sh
+│   ├── ace_posttooluse_wrapper.sh
+│   ├── ace_posttooluse_domain_inject.sh
+│   ├── ace_precompact_wrapper.sh
+│   ├── ace_permission_request_wrapper.sh
+│   ├── ace_permission_denied_wrapper.sh
+│   ├── ace_stop_wrapper.sh
+│   ├── ace_sessionend_wrapper.sh
+│   └── ace_subagent_stop_wrapper.sh
+├── shared-hooks/       # Python hook utilities
+└── plugin.json
 ```
 
 **Report**:
@@ -70,19 +77,23 @@ XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 CONFIG_PATH="$XDG_HOME/ace/config.json"
 test -f "$CONFIG_PATH" && echo "EXISTS" || echo "MISSING"
 
-# If exists, validate JSON and check required fields
-jq -e '.serverUrl, .apiToken, .cacheTtlMinutes, .autoUpdateEnabled' "$CONFIG_PATH"
+# If exists, check for authenticated device-code token (ace-cli 4.x format)
+jq -e '.auth.token' "$CONFIG_PATH" >/dev/null 2>&1 && echo "AUTH: device-code token present" || echo "AUTH: token missing — run /ace:ace-login"
+
+# Detect stale apiToken format (ace-cli v1.x) and warn
+jq -e '.apiToken' "$CONFIG_PATH" >/dev/null 2>&1 && echo "WARN: stale apiToken field detected — run /ace:ace-login to migrate"
 ```
 
-**Expected**:
+**Expected** (ace-cli 4.x device-code format):
 ```json
 {
-  "serverUrl": "https://ace-api.code-engine.app",
-  "apiToken": "ace_xxxxx",
-  "cacheTtlMinutes": 120,
-  "autoUpdateEnabled": true
+  "auth": {
+    "token": "..."
+  }
 }
 ```
+
+**Note**: The old `apiToken`, `serverUrl`, `cacheTtlMinutes`, and `autoUpdateEnabled` fields are from ace-cli v1.x and are no longer valid.  Run `/ace:ace-login` to migrate.
 
 **Report**:
 - ✅ Global config valid
@@ -94,21 +105,20 @@ jq -e '.serverUrl, .apiToken, .cacheTtlMinutes, .autoUpdateEnabled' "$CONFIG_PAT
 ❌ Global Configuration: MISSING
 
 Recommended Actions:
-1. Run: /ace:ace-configure --global
-2. Provide:
-   - Server URL (https://ace-api.code-engine.app)
-   - API Token (starts with ace_)
+1. Run: ace-cli login    (completes device-code auth and writes ~/.ace/config.json)
+2. Then run: /ace:ace-configure --global   (writes org/project IDs to plugin config)
 ```
 
 **If Incomplete**:
 ```
 ⚠️ Global Configuration: INCOMPLETE
 
-Missing fields: apiToken, cacheTtlMinutes
+The config file exists but is missing required v4.x fields (e.g. auth.token).
+This usually means a stale v1.x config is present.
 
 Recommended Actions:
-1. Run: /ace:ace-configure --global
-2. This will preserve existing values and fill missing fields
+1. Run: ace-cli login    (re-authenticates via device-code and refreshes config)
+2. Then run: /ace:ace-configure --global   (re-writes org/project IDs)
 ```
 
 ---
@@ -123,15 +133,17 @@ PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 # Check project settings
 test -f "$PROJECT_ROOT/.claude/settings.json" && echo "EXISTS" || echo "MISSING"
 
-# If exists, validate ACE_PROJECT_ID env var
-jq -e '.projectId' "$PROJECT_ROOT/.claude/settings.json"
+# If exists, validate ACE_PROJECT_ID env var (written by ace-configure)
+jq -e '.env.ACE_PROJECT_ID' "$PROJECT_ROOT/.claude/settings.json"
 ```
 
 **Expected**:
 ```json
 {
   "env": {
-    "ACE_PROJECT_ID": "prj_xxxxx"
+    "ACE_ORG_ID": "org_xxxxx",
+    "ACE_PROJECT_ID": "prj_xxxxx",
+    "ACE_VERBOSITY": "normal"
   }
 }
 ```
@@ -150,20 +162,6 @@ jq -e '.projectId' "$PROJECT_ROOT/.claude/settings.json"
 Recommended Actions:
 1. Run: /ace:ace-configure --project
 2. Provide your project ID (starts with prj_)
-```
-
-**If Using @latest**:
-```
-⚠️ Project Configuration: USING @latest
-
-Current: "@ce-dot-net/ace-client@latest"
-Recommended: "@ce-dot-net/ace-client@3.7.2"
-
-Issue: @latest causes npx caching - updates won't install automatically
-
-Recommended Actions:
-1. Run: /ace:ace-configure --project
-2. This will update to pinned version 3.7.0
 ```
 
 ---
@@ -204,11 +202,11 @@ Recommended Actions:
 
 **What to Check**:
 ```bash
-# Read serverUrl and apiToken from global config
+# Read auth token from global config (ace-cli 4.x device-code format)
 XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
-SERVER_URL=$(jq -r '.serverUrl' "$XDG_HOME/ace/config.json")
-API_TOKEN=$(jq -r '.apiToken' "$XDG_HOME/ace/config.json")
+API_TOKEN=$(jq -r '.auth.token // empty' "$XDG_HOME/ace/config.json")
 PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // .projectId // empty' .claude/settings.json)
+SERVER_URL="https://ace-api.code-engine.app"
 
 # Test connection to ACE server
 curl -s -X GET \
@@ -240,7 +238,7 @@ Recommended Actions:
 1. Test connection: curl https://ace-api.code-engine.app/api/health
 2. Check firewall settings
 3. Try different network (WiFi vs. Ethernet)
-4. Verify serverUrl in ~/.config/ace/config.json
+4. Confirm auth status: ace-cli whoami --json
 ```
 
 **If 401 Unauthorized**:
@@ -277,41 +275,60 @@ Recommended Actions:
 
 **What to Check**:
 ```bash
-# Check if hook scripts exist
-PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-PLUGIN_ROOT="$HOME/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace"
+# Check if hook scripts exist (resolve plugin root dynamically)
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/ce-dot-net-marketplace/ace/*/ 2>/dev/null | tail -1)}"
 
-# Check hook wrappers in scripts/
-test -f "$PLUGIN_ROOT/scripts/ace_before_task_wrapper.sh" && echo "before_task: EXISTS"
-test -f "$PLUGIN_ROOT/scripts/ace_task_complete_wrapper.sh" && echo "task_complete: EXISTS"
-test -f "$PLUGIN_ROOT/scripts/ace_after_task_wrapper.sh" && echo "after_task: EXISTS"
-test -f "$PLUGIN_ROOT/scripts/ace_install_cli.sh" && echo "install_cli: EXISTS"
+# Check all hook wrappers in scripts/
+test -f "$PLUGIN_ROOT/scripts/ace_install_cli.sh" && echo "install_cli: EXISTS" || echo "install_cli: MISSING"
+test -f "$PLUGIN_ROOT/scripts/ace_before_task_wrapper.sh" && echo "before_task: EXISTS" || echo "before_task: MISSING"
+test -f "$PLUGIN_ROOT/scripts/ace_pretooluse_wrapper.sh" && echo "pretooluse: EXISTS" || echo "pretooluse: MISSING"
+test -f "$PLUGIN_ROOT/scripts/ace_posttooluse_wrapper.sh" && echo "posttooluse: EXISTS" || echo "posttooluse: MISSING"
+test -f "$PLUGIN_ROOT/scripts/ace_posttooluse_domain_inject.sh" && echo "posttooluse_domain_inject: EXISTS" || echo "posttooluse_domain_inject: MISSING"
+test -f "$PLUGIN_ROOT/scripts/ace_precompact_wrapper.sh" && echo "precompact: EXISTS" || echo "precompact: MISSING"
+test -f "$PLUGIN_ROOT/scripts/ace_permission_request_wrapper.sh" && echo "permission_request: EXISTS" || echo "permission_request: MISSING"
+test -f "$PLUGIN_ROOT/scripts/ace_permission_denied_wrapper.sh" && echo "permission_denied: EXISTS" || echo "permission_denied: MISSING"
+test -f "$PLUGIN_ROOT/scripts/ace_stop_wrapper.sh" && echo "stop: EXISTS" || echo "stop: MISSING"
+test -f "$PLUGIN_ROOT/scripts/ace_sessionend_wrapper.sh" && echo "sessionend: EXISTS" || echo "sessionend: MISSING"
+test -f "$PLUGIN_ROOT/scripts/ace_subagent_stop_wrapper.sh" && echo "subagent_stop: EXISTS" || echo "subagent_stop: MISSING"
 
 # Check hooks.json
 test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "hooks.json: EXISTS"
 ```
 
-**Expected Hooks** (5 total):
-1. `SessionStart` → `ace_install_cli.sh`
-2. `UserPromptSubmit` → `ace_before_task_wrapper.sh`
-3. `PostToolUse` → `ace_task_complete_wrapper.sh`
-4. `PreCompact` → `ace_after_task_wrapper.sh`
-5. `Stop` → `ace_after_task_wrapper.sh`
+**Expected Hooks** (10 events, 11 hook entries):
+1. `PreToolUse` → `ace_pretooluse_wrapper.sh`
+2. `PreCompact` → `ace_precompact_wrapper.sh`
+3. `SessionStart` → `ace_install_cli.sh`
+4. `UserPromptSubmit` → `ace_before_task_wrapper.sh`
+5. `PostToolUse` → `ace_posttooluse_wrapper.sh --log`
+6. `PostToolUse` (if: `Read(*)`) → `ace_posttooluse_domain_inject.sh`
+7. `PermissionRequest` → `ace_permission_request_wrapper.sh`
+8. `PermissionDenied` → `ace_permission_denied_wrapper.sh`
+9. `Stop` → `ace_stop_wrapper.sh --log --chat`
+10. `SessionEnd` → `ace_sessionend_wrapper.sh`
+11. `SubagentStop` → `ace_subagent_stop_wrapper.sh --log --chat --notify`
 
 **Report**:
-- ✅ All hooks registered (5/5)
-- ⚠️ Some hooks missing (e.g., 3/5)
-- ❌ No hooks registered (0/5)
+- ✅ All hooks registered (10/10)
+- ⚠️ Some hooks missing (e.g., 7/10)
+- ❌ No hooks registered (0/10)
 
 **If Failed**:
 ```
 ❌ Hooks: NOT REGISTERED
 
 Expected Hook Scripts:
-- ace_before_task_wrapper.sh (retrieves patterns before tasks)
-- ace_task_complete_wrapper.sh (captures learning after tasks)
-- ace_after_task_wrapper.sh (backup learning at session end)
 - ace_install_cli.sh (ensures ace-cli is available)
+- ace_before_task_wrapper.sh (retrieves patterns before tasks)
+- ace_pretooluse_wrapper.sh (pre-tool telemetry)
+- ace_posttooluse_wrapper.sh (captures tool use after each tool call)
+- ace_posttooluse_domain_inject.sh (domain injection on Read(*))
+- ace_precompact_wrapper.sh (pre-compact state save)
+- ace_permission_request_wrapper.sh (permission request telemetry)
+- ace_permission_denied_wrapper.sh (permission denied redaction)
+- ace_stop_wrapper.sh (learning capture at Stop)
+- ace_sessionend_wrapper.sh (session end cleanup)
+- ace_subagent_stop_wrapper.sh (subagent learning capture)
 
 Recommended Actions:
 1. Verify plugin installation (Check 1)
@@ -327,46 +344,47 @@ Recommended Actions:
 
 **What to Check**:
 ```bash
-# Check ace-cli config
+# Check ace-cli config (ace-cli 4.x uses device-code auth)
 XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
-test -f "$XDG_HOME/ace/config.json" && echo "CONFIG: EXISTS"
+test -f "$XDG_HOME/ace/config.json" && echo "CONFIG: EXISTS" || echo "CONFIG: MISSING"
 
-# Check if multi-org format (ace-cli v1.x)
-jq -e '.organizations' "$XDG_HOME/ace/config.json" >/dev/null 2>&1 && echo "FORMAT: MULTI-ORG"
+# Verify authenticated via whoami
+ace-cli whoami --json 2>/dev/null | jq -e '.authenticated == true' >/dev/null 2>&1 \
+  && echo "AUTH: authenticated" \
+  || echo "AUTH: not authenticated — run /ace:ace-login"
 
-# Check required fields
-jq -e '.organizations[0].apiKey' "$XDG_HOME/ace/config.json" >/dev/null 2>&1 && echo "API_KEY: SET"
+# Detect stale formats and warn
+jq -e '.organizations' "$XDG_HOME/ace/config.json" >/dev/null 2>&1 \
+  && echo "WARN: stale organizations array detected — run /ace:ace-login to migrate"
+jq -e '.apiToken' "$XDG_HOME/ace/config.json" >/dev/null 2>&1 \
+  && echo "WARN: stale apiToken field detected — run /ace:ace-login to migrate"
 ```
 
-**Expected** (ace-cli v1.x multi-org format):
+**Expected** (ace-cli 4.x device-code format):
 ```json
 {
-  "organizations": [
-    {
-      "name": "ce-dot-net",
-      "apiKey": "ace_xxxxx"
-    }
-  ],
-  "activeOrg": "ce-dot-net"
+  "auth": {
+    "token": "..."
+  }
 }
 ```
 
 **Report**:
-- ✅ CLI config valid (multi-org format)
-- ⚠️ CLI config exists but old format (single-org)
-- ❌ CLI config missing
+- ✅ CLI config valid (device-code authenticated)
+- ⚠️ CLI config exists but stale format (organizations/apiKey from v1.x)
+- ❌ CLI config missing or not authenticated
 
-**If Old Format**:
+**If Stale Format**:
 ```
-⚠️ CLI Configuration: OLD FORMAT
+⚠️ CLI Configuration: STALE FORMAT
 
-Current: Single-org format (ace-cli v0.x)
-Expected: Multi-org format (ace-cli v1.x+)
+Current: organizations/apiKey format (ace-cli v1.x — deprecated)
+Expected: device-code token format (ace-cli 4.x)
 
 Recommended Actions:
 1. Update ace-cli: npm install -g @ace-sdk/cli@latest
-2. Run: ace-cli configure
-3. Or run: /ace:ace-configure
+2. Run: ace-cli login
+3. Or run: /ace:ace-login
 ```
 
 ---
@@ -375,8 +393,9 @@ Recommended Actions:
 
 **What to Check**:
 ```bash
-# Get plugin version
-PLUGIN_JSON="$HOME/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace/plugin.json"
+# Get plugin version (resolve dynamically via $CLAUDE_PLUGIN_ROOT or cache glob)
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/ce-dot-net-marketplace/ace/*/ 2>/dev/null | tail -1)}"
+PLUGIN_JSON="$PLUGIN_ROOT/plugin.json"
 if [ -f "$PLUGIN_JSON" ]; then
     jq -r '.version' "$PLUGIN_JSON"
 else
@@ -391,34 +410,29 @@ else
 fi
 
 # Check for Python hooks (shared-hooks/)
-if [ -d "shared-hooks" ]; then
+if [ -d "${PLUGIN_ROOT}/shared-hooks" ]; then
     echo "Python hooks: present"
 else
-    echo "Python hooks: missing (required for v5.x)"
+    echo "Python hooks: missing (required for v7.x)"
 fi
 ```
 
-**Expected Versions** (as of 2024-11):
-- Plugin: v5.1.2+
-- ace-cli: v1.0.9+
-- CLAUDE.md: v5.0.3+
+**Expected Versions** (as of 2026):
+- Plugin: v7.0.0+
+- ace-cli: v4.0.1+
 
 **Report**:
 - ✅ All components up to date
-- ⚠️ Plugin outdated (< v5.1.2)
-- ⚠️ CLI outdated (< v1.0.9)
+- ⚠️ Plugin outdated (< v7.0.0)
+- ⚠️ CLI outdated (< v4.0.1)
 - ❌ Critical version mismatch
 
 **If Updates Available**:
 ```
 ⚠️ Updates Recommended
 
-Plugin: v5.1.1 → v5.1.2 (latest)
-ace-cli: v1.0.8 → v1.0.9 (latest)
-
-Changes in v5.1.2:
-- Context passing bug fix (subprocess environment variables)
-- Improved error handling in Python hooks
+Plugin: v7.0.0 → latest
+ace-cli: v4.0.1 → latest
 
 Recommended Actions:
 1. Update ace-cli: npm install -g @ace-sdk/cli@latest
@@ -506,10 +520,10 @@ After running all checks, present results in this format:
 [1] Plugin Installation................... ✅ PASS
 [2] Global Configuration................. ✅ PASS
 [3] Project Configuration................ ✅ PASS
-[4] CLI Availability..................... ✅ PASS (v1.0.9)
+[4] CLI Availability..................... ✅ PASS (v4.1.0)
 [5] ACE Server Connectivity.............. ✅ PASS (HTTP 200)
-[6] Hooks Registered..................... ✅ PASS (5/5)
-[7] CLI Configuration.................... ✅ PASS (multi-org)
+[6] Hooks Registered..................... ✅ PASS (10/10)
+[7] CLI Configuration.................... ✅ PASS (device-code)
 [8] Version Status....................... ✅ PASS
 [9] Cache Diagnostics.................... ✅ PASS
 
@@ -525,18 +539,24 @@ ACE is properly configured and ready to use.
 
 System Information:
 
-Plugin Version: v5.1.2
-CLI Version: v1.0.9
-Architecture: Hook-based (v5.x)
+Plugin Version: v7.0.0
+CLI Version: v4.1.0
+Architecture: Hook-based (v7.x)
 Project ID: prj_d3a244129d62c198
 Organization: org_34fYIlitYk4nyFuTvtsAzA6uUJF
 
 Registered Hooks:
+• PreToolUse → ace_pretooluse_wrapper.sh
+• PreCompact → ace_precompact_wrapper.sh
 • SessionStart → ace_install_cli.sh
 • UserPromptSubmit → ace_before_task_wrapper.sh
-• PostToolUse → ace_task_complete_wrapper.sh
-• PreCompact → ace_after_task_wrapper.sh
-• Stop → ace_after_task_wrapper.sh
+• PostToolUse → ace_posttooluse_wrapper.sh --log
+• PostToolUse (if: Read(*)) → ace_posttooluse_domain_inject.sh
+• PermissionRequest → ace_permission_request_wrapper.sh
+• PermissionDenied → ace_permission_denied_wrapper.sh
+• Stop → ace_stop_wrapper.sh --log --chat
+• SessionEnd → ace_sessionend_wrapper.sh
+• SubagentStop → ace_subagent_stop_wrapper.sh --log --chat --notify
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -556,9 +576,9 @@ Report issues: https://github.com/ce-dot-net/ce-claude-marketplace/issues
 [1] Plugin Installation................... ✅ PASS
 [2] Global Configuration................. ✅ PASS
 [3] Project Configuration................ ⚠️  WARN
-[4] CLI Availability..................... ✅ PASS (v1.0.9)
+[4] CLI Availability..................... ✅ PASS (v4.1.0)
 [5] ACE Server Connectivity.............. ✅ PASS (HTTP 200)
-[6] Hooks Registered..................... ⚠️  WARN (3/5)
+[6] Hooks Registered..................... ⚠️  WARN (7/10)
 [7] CLI Configuration.................... ✅ PASS
 [8] Version Status....................... ⚠️  WARN
 [9] Cache Diagnostics.................... ✅ PASS
@@ -570,20 +590,20 @@ Overall Health: 🟡 NEEDS ATTENTION (3 warnings)
 ⚠️  Warnings Found:
 
 [3] Project Configuration
-    Issue: projectId missing in .claude/settings.json
+    Issue: ACE_PROJECT_ID missing in .claude/settings.json (env.ACE_PROJECT_ID)
     Impact: Hooks cannot determine which project to use
     Fix: Run /ace:ace-configure
 
 [6] Hooks Registered
-    Issue: Some hook scripts missing (3/5 found)
-    Missing: ace_task_complete_wrapper.sh, ace_after_task_wrapper.sh
-    Impact: Learning capture won't work after tasks
+    Issue: Some hook scripts missing (7/10 found)
+    Missing: ace_permission_request_wrapper.sh, ace_permission_denied_wrapper.sh, ace_subagent_stop_wrapper.sh
+    Impact: Permission telemetry and subagent learning won't work
     Fix: Reinstall plugin or check scripts/ directory
 
 [8] Version Status
     Issue: Updates available
-    Plugin: v5.1.1 → v5.1.2
-    CLI: v1.0.8 → v1.0.9
+    Plugin: v7.0.0 → latest
+    CLI: v4.0.1 → latest
     Fix: See recommended actions below
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -599,9 +619,9 @@ Run these commands in order:
 
 System Information:
 
-Plugin Version: v5.1.1
-CLI Version: v1.0.8
-Architecture: Hook-based (v5.x)
+Plugin Version: v7.0.0
+CLI Version: v4.1.0
+Architecture: Hook-based (v7.x)
 Project ID: (not configured)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
