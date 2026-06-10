@@ -13,8 +13,8 @@
     {
       "name": "ace",
       "source": "./plugins/ace",
-      "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v7.0.1: Plugin no longer sends hardcoded task_intent='explore' on searches — server is now the authoritative intent source (search-time + /traces classifier); the uniform client hint was masking correct server classification via flow-A precedence. run_search plumbing unchanged. No floor bump. v7.0.0: ACE 1.5 / ace-cli 4.0.1 compatibility milestone. F-080 feedback loop closes the LinUCB bandit with retrieval_id + applied_log_ids. Reward-model quality gate replaces helpful/harmful binary. --min-reward replaces --min-helpful (breaking: hard-errors on ace-cli 4.0.1). MIN_VERSION bumped to 4.0.1. 14 issues closed (#21-#34). +156 tests (754 total). Requires: Claude Code >= 2.1.139, ace-cli >= 4.0.1 (@ace-sdk/core >= 3.0.1).",
-      "version": "7.0.1",
+      "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search. v7.0.2: Fix outdated /ace:ace-doctor — hook map now matches hooks.json (10 events), @ace-sdk/cli package, dynamic $CLAUDE_PLUGIN_ROOT path, ace-cli 4.x device-code auth model, + v1.x-config migration detection. New self-sync test suite. v7.0.1: Plugin no longer sends hardcoded task_intent='explore' on searches — server is now the authoritative intent source (search-time + /traces classifier); the uniform client hint was masking correct server classification via flow-A precedence. run_search plumbing unchanged. No floor bump. v7.0.0: ACE 1.5 / ace-cli 4.0.1 compatibility milestone. F-080 feedback loop closes the LinUCB bandit with retrieval_id + applied_log_ids. Reward-model quality gate replaces helpful/harmful binary. --min-reward replaces --min-helpful (breaking: hard-errors on ace-cli 4.0.1). MIN_VERSION bumped to 4.0.1. 14 issues closed (#21-#34). +156 tests (754 total). Requires: Claude Code >= 2.1.139, ace-cli >= 4.0.1 (@ace-sdk/core >= 3.0.1).",
+      "version": "7.0.2",
       "author": {
         "name": "ACE Team",
         "email": "ace@ce-dot-net.com"
