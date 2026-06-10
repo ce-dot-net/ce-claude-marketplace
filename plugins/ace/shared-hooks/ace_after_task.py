@@ -39,7 +39,8 @@ from ace_context import get_context
 from ace_cli import recall_session
 from utils.git_utils import get_git_context, detect_commits_in_session
 from ace_relevance_logger import log_execution_metrics, log_hook_error
-from patterns_used_state import load_playbook_used, reap_patterns_used, load_retrieval_ids
+from patterns_used_state import (load_playbook_used, reap_patterns_used,
+                                 load_retrieval_ids, load_task_session_id)
 
 # Add plugin utils to path for validation
 sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
@@ -696,15 +697,18 @@ def main():
         # load_retrieval_ids is read-only (does NOT unlink). Must call it first so
         # the state file is still present when load_playbook_used later unlinks it.
         retrieval_log_map = load_retrieval_ids(session_id, agent_id, hook_event_name)
-        # Also read retrieval_id directly from the state file (before unlink).
+        # Also read retrieval_id and task_session_id from the state file (before unlink).
+        # Both load_retrieval_ids and load_task_session_id are read-only.
         _retrieval_id_from_state = None
         try:
             from patterns_used_state import _read_state_file, state_file_path
             _sf = state_file_path(session_id, agent_id if hook_event_name == 'SubagentStop' else None)
             if _sf.exists():
-                _, _retrieval_id_from_state, _ = _read_state_file(_sf)
+                _, _retrieval_id_from_state, _, _ = _read_state_file(_sf)
         except Exception:
             pass  # non-fatal
+        # Read task_session_id before load_playbook_used unlinks the state file.
+        task_session_id = load_task_session_id(session_id, agent_id, hook_event_name)
 
         # Load pattern IDs for reinforcement learning (per-agent scope in v6.4.0).
         # Delegated to patterns_used_state.load_playbook_used (single source of
@@ -769,8 +773,12 @@ def main():
             "timestamp": datetime.now().isoformat(),
             "agent_type": agent_type  # v5.4.11: Attribute learning to agent type
         }
-        # v6.4.0: Always set session_id; conditionally set agent_id + parent_agent_id
-        trace["session_id"] = session_id
+        # per-task session_id: use task_session_id if stored; else OMIT session_id entirely.
+        # Do NOT fall back to CC conversation session_id — that creates false correlation
+        # across tasks (the exact bug this fixes). NULL on the server is better than wrong.
+        if task_session_id:
+            trace["session_id"] = task_session_id
+        # else: omit — server leaves session_id NULL, no false cross-task correlation
         if agent_id:
             trace["agent_id"] = agent_id
         if parent_agent_id:

@@ -45,6 +45,7 @@ ace/
 │   ├── ace_permission_denied_wrapper.sh
 │   ├── ace_stop_wrapper.sh
 │   ├── ace_sessionend_wrapper.sh
+│   ├── ace_subagent_start_wrapper.sh
 │   └── ace_subagent_stop_wrapper.sh
 ├── shared-hooks/       # Python hook utilities
 └── plugin.json
@@ -289,13 +290,14 @@ test -f "$PLUGIN_ROOT/scripts/ace_permission_request_wrapper.sh" && echo "permis
 test -f "$PLUGIN_ROOT/scripts/ace_permission_denied_wrapper.sh" && echo "permission_denied: EXISTS" || echo "permission_denied: MISSING"
 test -f "$PLUGIN_ROOT/scripts/ace_stop_wrapper.sh" && echo "stop: EXISTS" || echo "stop: MISSING"
 test -f "$PLUGIN_ROOT/scripts/ace_sessionend_wrapper.sh" && echo "sessionend: EXISTS" || echo "sessionend: MISSING"
+test -f "$PLUGIN_ROOT/scripts/ace_subagent_start_wrapper.sh" && echo "subagent_start: EXISTS" || echo "subagent_start: MISSING"
 test -f "$PLUGIN_ROOT/scripts/ace_subagent_stop_wrapper.sh" && echo "subagent_stop: EXISTS" || echo "subagent_stop: MISSING"
 
 # Check hooks.json
 test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "hooks.json: EXISTS"
 ```
 
-**Expected Hooks** (10 events, 11 hook entries):
+**Expected Hooks** (11 events, 12 hook entries):
 1. `PreToolUse` → `ace_pretooluse_wrapper.sh`
 2. `PreCompact` → `ace_precompact_wrapper.sh`
 3. `SessionStart` → `ace_install_cli.sh`
@@ -306,10 +308,11 @@ test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "hooks.json: EXISTS"
 8. `PermissionDenied` → `ace_permission_denied_wrapper.sh`
 9. `Stop` → `ace_stop_wrapper.sh --log --chat`
 10. `SessionEnd` → `ace_sessionend_wrapper.sh`
-11. `SubagentStop` → `ace_subagent_stop_wrapper.sh --log --chat --notify`
+11. `SubagentStart` → `ace_subagent_start_wrapper.sh`
+12. `SubagentStop` → `ace_subagent_stop_wrapper.sh --log --chat --notify`
 
 **Report**:
-- ✅ All hooks registered (10/10)
+- ✅ All hooks registered (11/11)
 - ⚠️ Some hooks missing (e.g., 7/10)
 - ❌ No hooks registered (0/10)
 
@@ -328,6 +331,7 @@ Expected Hook Scripts:
 - ace_permission_denied_wrapper.sh (permission denied redaction)
 - ace_stop_wrapper.sh (learning capture at Stop)
 - ace_sessionend_wrapper.sh (session end cleanup)
+- ace_subagent_start_wrapper.sh (per-subagent ACE search at spawn)
 - ace_subagent_stop_wrapper.sh (subagent learning capture)
 
 Recommended Actions:
@@ -556,6 +560,7 @@ Registered Hooks:
 • PermissionDenied → ace_permission_denied_wrapper.sh
 • Stop → ace_stop_wrapper.sh --log --chat
 • SessionEnd → ace_sessionend_wrapper.sh
+• SubagentStart → ace_subagent_start_wrapper.sh
 • SubagentStop → ace_subagent_stop_wrapper.sh --log --chat --notify
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -595,8 +600,8 @@ Overall Health: 🟡 NEEDS ATTENTION (3 warnings)
     Fix: Run /ace:ace-configure
 
 [6] Hooks Registered
-    Issue: Some hook scripts missing (7/10 found)
-    Missing: ace_permission_request_wrapper.sh, ace_permission_denied_wrapper.sh, ace_subagent_stop_wrapper.sh
+    Issue: Some hook scripts missing (8/11 found)
+    Missing: ace_permission_request_wrapper.sh, ace_permission_denied_wrapper.sh, ace_subagent_start_wrapper.sh, ace_subagent_stop_wrapper.sh
     Impact: Permission telemetry and subagent learning won't work
     Fix: Reinstall plugin or check scripts/ directory
 

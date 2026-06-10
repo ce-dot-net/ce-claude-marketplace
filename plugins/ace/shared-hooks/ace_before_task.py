@@ -267,17 +267,28 @@ def main():
         # Use Claude's session_id for state file consistency (Issue #16)
         # ace_after_task.py reads event.get('session_id') — we must use the same key
         session_id = event.get('session_id', str(uuid.uuid4()))
+
+        # Generate a fresh per-task session_id (task_session_id = uuid4).
+        # This is passed to ace-cli search --pin-session and stored in the state file
+        # so ace_after_task can set trace["session_id"] = task_session_id, pinning
+        # each task's retrieval rows + trajectory under one ID on the server.
+        # The CC conversation session_id (above) remains the state-file KEY and is
+        # used for ace-relevance.jsonl / ace-spawn-log.jsonl telemetry.
+        task_session_id = str(uuid.uuid4())
+
         use_session_pinning = check_session_pinning_available()
 
         # v6.0.0: Read agent_type natively from hook event (CC 2.1.69+)
         # agent_type identifies subagent type: "main", "refactorer", "coder", etc.
         agent_type = event.get('agent_type', 'main')
 
-        # Store session ID for PreCompact hook (recall patterns after compaction)
+        # Store task_session_id for PreCompact hook (recall patterns after compaction).
+        # Must write task_session_id (not session_id) because run_search pins under
+        # task_session_id; recall_session in ace_after_task needs the same key.
         if use_session_pinning and context['project']:
             try:
                 session_file = Path(f"/tmp/ace-session-{context['project']}.txt")
-                session_file.write_text(session_id)
+                session_file.write_text(task_session_id)
             except Exception:
                 # Non-fatal: continue without session pinning
                 use_session_pinning = False
@@ -290,13 +301,14 @@ def main():
         # (Server team: DO NOT add generic keywords - hurts embedding quality!)
         search_query = expand_abbreviations(user_prompt)
 
-        # Call ace-cli search --stdin with optional session pinning
-        # Context passed via environment, CLI reads server config for top_k/threshold
+        # Call ace-cli search --stdin with optional session pinning.
+        # Pass task_session_id (not CC conversation session_id) so the server pins
+        # retrieved patterns under this task's ID — each task gets its own pin bucket.
         patterns_response = run_search(
             query=search_query,
             org=context['org'],
             project=context['project'],
-            session_id=session_id if use_session_pinning else None,
+            session_id=task_session_id if use_session_pinning else None,
         )
 
         # v5.3.5: Sanitize response to remove invalid Unicode surrogates
@@ -391,7 +403,8 @@ def main():
                     agent_id = event.get('agent_id') if isinstance(event, dict) else None
                     append_patterns_used(session_id, agent_id, pattern_ids,
                                          retrieval_id=_retrieval_id,
-                                         retrieval_log_ids=_retrieval_log_map)
+                                         retrieval_log_ids=_retrieval_log_map,
+                                         task_session_id=task_session_id)
             except Exception:
                 # Non-fatal: continue without pattern tracking
                 pass

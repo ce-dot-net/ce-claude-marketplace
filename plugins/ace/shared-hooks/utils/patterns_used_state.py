@@ -59,37 +59,43 @@ def _filter_retrieval_log_ids(retrieval_log_ids):
 
 
 def _read_state_file(sf):
-    """Read state file; return (pattern_ids_list, retrieval_id, retrieval_log_ids).
+    """Read state file; return (pattern_ids_list, retrieval_id, retrieval_log_ids, task_session_id).
 
     Handles both legacy bare-list format and new dict format.
-    Legacy: ["id1", "id2"]  → retrieval_id=None, retrieval_log_ids={}
-    New:    {"pattern_ids": [...], "retrieval_id": ..., "retrieval_log_ids": {...}}
+    Legacy: ["id1", "id2"]  → retrieval_id=None, retrieval_log_ids={}, task_session_id=None
+    New:    {"pattern_ids": [...], "retrieval_id": ..., "retrieval_log_ids": {...},
+             "task_session_id": "uuid4-string-or-None"}
 
     Raises ValueError/json.JSONDecodeError if the file exists but is not valid JSON,
     so callers (load_playbook_used) can handle corruption via their own except + on_error.
-    Returns ([], None, {}) ONLY for missing files or wrong-type content (not JSON errors).
+    Returns ([], None, {}, None) ONLY for missing files or wrong-type content (not JSON errors).
     """
     if not sf.exists():
-        return [], None, {}
+        return [], None, {}, None
     raw = json.loads(sf.read_text())  # intentionally raises on bad JSON
     if isinstance(raw, list):
         # Legacy bare-list format
-        return raw, None, {}
+        return raw, None, {}, None
     if isinstance(raw, dict):
         ids = raw.get('pattern_ids') or []
         rid = raw.get('retrieval_id') or None
         rlog = raw.get('retrieval_log_ids') or {}
-        return ids, rid, rlog
-    return [], None, {}
+        tsid = raw.get('task_session_id') or None
+        return ids, rid, rlog, tsid
+    return [], None, {}, None
 
 
 def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
-                         retrieval_id=None, retrieval_log_ids=None):
+                         retrieval_id=None, retrieval_log_ids=None,
+                         task_session_id=None):
     """Append+dedupe valid pattern IDs to the per-agent file; return the full list.
 
-    F-080: new optional params retrieval_id (str|None) and retrieval_log_ids (dict|None).
+    F-080: optional params retrieval_id (str|None) and retrieval_log_ids (dict|None).
+    task_session_id: optional per-task uuid4 (str|None) stored for ace_after_task to read
+    before the state file is reaped — so the server can correlate search↔learn per task.
     State file is now written as dict schema:
-      {"pattern_ids": [...], "retrieval_id": ..., "retrieval_log_ids": {...}}
+      {"pattern_ids": [...], "retrieval_id": ..., "retrieval_log_ids": {...},
+       "task_session_id": "uuid4-or-None"}
     Backward compat: existing bare-list files are read transparently.
     bool guard: retrieval_log_ids values that are bool are excluded even though
     bool is a subclass of int.
@@ -104,9 +110,9 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
     d.mkdir(parents=True, exist_ok=True)
     sf = state_file_path(session_id, agent_id, state_dir)
     try:
-        existing_ids, existing_rid, existing_rlog = _read_state_file(sf)
+        existing_ids, existing_rid, existing_rlog, existing_tsid = _read_state_file(sf)
     except Exception:
-        existing_ids, existing_rid, existing_rlog = [], None, {}
+        existing_ids, existing_rid, existing_rlog, existing_tsid = [], None, {}, None
     seen = set(existing_ids)
     for pid in ids:
         if pid not in seen:
@@ -117,10 +123,13 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
     merged_rlog.update(_filter_retrieval_log_ids(retrieval_log_ids or {}))
     # retrieval_id: use new value if provided, else keep existing
     merged_rid = retrieval_id if retrieval_id is not None else existing_rid
+    # task_session_id: use new value if provided, else keep existing
+    merged_tsid = task_session_id if task_session_id is not None else existing_tsid
     state = {
         'pattern_ids': existing_ids,
         'retrieval_id': merged_rid,
         'retrieval_log_ids': merged_rlog,
+        'task_session_id': merged_tsid,
     }
     sf.write_text(json.dumps(state))
     return existing_ids
@@ -157,7 +166,7 @@ def load_playbook_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
     for f in files:
         try:
             if f.exists():
-                ids, _rid, _rlog = _read_state_file(f)
+                ids, _rid, _rlog, _tsid = _read_state_file(f)
                 for pid in ids:
                     if isinstance(pid, str) and is_valid_pattern_id(pid) and pid not in seen:
                         seen.add(pid)
@@ -228,10 +237,37 @@ def load_retrieval_ids(session_id, agent_id, hook_event_name='Stop', state_dir=N
     else:
         sf = state_file_path(session_id, None, state_dir)
     try:
-        _ids, _rid, rlog = _read_state_file(sf)
+        _ids, _rid, rlog, _tsid = _read_state_file(sf)
         return dict(rlog) if rlog else {}
     except Exception:
         return {}
+
+
+def load_task_session_id(session_id, agent_id, hook_event_name='Stop', state_dir=None):
+    """Read the task_session_id from the per-agent state file WITHOUT unlinking it.
+
+    per-task session_id: read-only companion to load_retrieval_ids.
+    Returns the task_session_id (str uuid4) written by ace_before_task or
+    ace_subagent_start at search time, so ace_after_task can set
+    trace["session_id"] = task_session_id (correlates search↔learn per task
+    rather than per CC conversation).
+
+    Honors the same per-agent-pure routing as load_playbook_used:
+      SubagentStop → this subagent's -{agent_id} file
+      other        → -main file
+    Returns None for missing files, legacy bare-list files, or any error.
+    """
+    if not session_id:
+        return None
+    if hook_event_name == 'SubagentStop':
+        sf = state_file_path(session_id, agent_id, state_dir)
+    else:
+        sf = state_file_path(session_id, None, state_dir)
+    try:
+        _ids, _rid, _rlog, tsid = _read_state_file(sf)
+        return tsid or None
+    except Exception:
+        return None
 
 
 # CLI entrypoint for the bash PreToolUse wrapper: reads search JSON on stdin,
