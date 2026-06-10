@@ -114,6 +114,18 @@
         ]
       }
     ],
+    "SubagentStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_subagent_start_wrapper.sh",
+            "timeout": 40000
+          }
+        ]
+      }
+    ],
     "SubagentStop": [
       {
         "matcher": "",
