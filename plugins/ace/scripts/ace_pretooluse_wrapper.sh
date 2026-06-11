@@ -190,23 +190,56 @@ if [ "$MATCHED_DOMAIN" != "$LAST_DOMAIN" ]; then
 
   # CLI already verified by flag file check above
 
-  SEARCH_RESULT=$(echo "$SEARCH_QUERY" | $CLI_CMD search --stdin --json \
-    --allowed-domains "$MATCHED_DOMAIN" 2>/dev/null | \
-    iconv -f UTF-8 -t UTF-8 -c 2>/dev/null || echo "")  # Sanitize Unicode
+  # Change A (v7.1.2): Session pinning — reuse existing task_session_id from state
+  # file so all domain-shift searches within the SAME task pin to the SAME bucket.
+  # If no task_session_id stored yet, generate a fresh uuid4 (matches before_task pattern).
+  SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // "unknown"')
+  EXISTING_TSID=$(python3 "${_ACE_PLUGIN_ROOT}/shared-hooks/utils/patterns_used_state.py" \
+    --session "$SESSION_ID" --agent-id "$AGENT_ID" \
+    --read-task-session-id 2>/dev/null || echo "")
+  if [ -z "$EXISTING_TSID" ]; then
+    EXISTING_TSID=$(python3 -c 'import uuid; print(uuid.uuid4())' 2>/dev/null || echo "")
+  fi
+
+  # Build search command: pass --pin-session if we have a task_session_id
+  if [ -n "$EXISTING_TSID" ]; then
+    SEARCH_RESULT=$(echo "$SEARCH_QUERY" | $CLI_CMD search --stdin --json \
+      --allowed-domains "$MATCHED_DOMAIN" --pin-session "$EXISTING_TSID" 2>/dev/null | \
+      iconv -f UTF-8 -t UTF-8 -c 2>/dev/null || echo "")  # Sanitize Unicode
+  else
+    SEARCH_RESULT=$(echo "$SEARCH_QUERY" | $CLI_CMD search --stdin --json \
+      --allowed-domains "$MATCHED_DOMAIN" 2>/dev/null | \
+      iconv -f UTF-8 -t UTF-8 -c 2>/dev/null || echo "")  # Sanitize Unicode
+  fi
 
   # 3. Check if search succeeded
   PATTERN_COUNT=$(echo "$SEARCH_RESULT" | jq -r '.count // 0' 2>/dev/null || echo "0")
 
   if [ "$PATTERN_COUNT" != "0" ] && [ "$PATTERN_COUNT" != "null" ] && [ -n "$SEARCH_RESULT" ]; then
-    # 4. Build ace-patterns context (same format as UserPromptSubmit)
+    # 4. Strip server-internal fields AND apply v15 quality gate (Change B: v7.1.2).
+    # Uses --strip-and-gate mode of patterns_used_state.py so ALL inject paths
+    # share the SAME USEFUL_FIELDS set + quality gate as ace_before_task.py.
+    STRIPPED=$(echo "$SEARCH_RESULT" | python3 "${_ACE_PLUGIN_ROOT}/shared-hooks/utils/patterns_used_state.py" \
+      --strip-and-gate 2>/dev/null || echo "$SEARCH_RESULT")
+
+    # After gate: if all patterns were filtered, fallback to reminder
+    GATED_COUNT=$(echo "$STRIPPED" | jq -r '.count // 0' 2>/dev/null || echo "0")
+    if [ "$GATED_COUNT" = "0" ]; then
+      jq -n \
+        --arg old "$LAST_DOMAIN" \
+        --arg new "$MATCHED_DOMAIN" \
+        '{"systemMessage": "💡 [ACE] Domain shift: \($old) → \($new). Consider: /ace:ace-search \($new)"}'
+      exit 0
+    fi
+
+    # Build ace-patterns context (same format as UserPromptSubmit)
     ACE_CONTEXT="<ace-patterns-domain-shift domain=\"${MATCHED_DOMAIN}\">
-${SEARCH_RESULT}
+${STRIPPED}
 </ace-patterns-domain-shift>"
 
     # 4.5: Log domain shift metrics (v5.4.2)
     LOG_DIR=".claude/data/logs"
     mkdir -p "$LOG_DIR" 2>/dev/null || true
-    SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // "unknown"')
     TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     jq -nc --arg ts "$TIMESTAMP" \
           --arg hook "PreToolUse" \
@@ -216,7 +249,7 @@ ${SEARCH_RESULT}
           --arg to "$MATCHED_DOMAIN" \
           --arg path "$FILE_PATH" \
           --arg aid "$AGENT_ID" \
-          --argjson count "$PATTERN_COUNT" \
+          --argjson count "$GATED_COUNT" \
           --argjson success true \
       '{
         timestamp: $ts,
@@ -239,18 +272,29 @@ ${SEARCH_RESULT}
     # ace_after_task.py (SubagentStop/Stop) reports them in playbook_used.
     # Guarded, non-fatal, stdout-suppressed — MUST NOT corrupt the hook's JSON.
     # F-080: extract retrieval_id from SEARCH_RESULT (top-level field) and pass via --retrieval-id
+    # Change A: also pass --task-session-id so the merge keeps it idempotent.
     _RETRIEVAL_ID=$(echo "$SEARCH_RESULT" | jq -r 'if .retrieval_id != null and .retrieval_id != "" then .retrieval_id else empty end' 2>/dev/null || true)
+    _TSID_FLAG=""
+    if [ -n "$EXISTING_TSID" ]; then
+      _TSID_FLAG="--task-session-id $EXISTING_TSID"
+    fi
     if [ -n "$_RETRIEVAL_ID" ] && [ "$_RETRIEVAL_ID" != "null" ]; then
-      echo "$SEARCH_RESULT" | python3 "${_ACE_PLUGIN_ROOT}/shared-hooks/utils/patterns_used_state.py" --session "$SESSION_ID" --agent-id "$AGENT_ID" --retrieval-id "$_RETRIEVAL_ID" >/dev/null 2>&1 || true
+      # shellcheck disable=SC2086
+      echo "$SEARCH_RESULT" | python3 "${_ACE_PLUGIN_ROOT}/shared-hooks/utils/patterns_used_state.py" \
+        --session "$SESSION_ID" --agent-id "$AGENT_ID" --retrieval-id "$_RETRIEVAL_ID" \
+        $_TSID_FLAG >/dev/null 2>&1 || true
     else
-      echo "$SEARCH_RESULT" | python3 "${_ACE_PLUGIN_ROOT}/shared-hooks/utils/patterns_used_state.py" --session "$SESSION_ID" --agent-id "$AGENT_ID" >/dev/null 2>&1 || true
+      # shellcheck disable=SC2086
+      echo "$SEARCH_RESULT" | python3 "${_ACE_PLUGIN_ROOT}/shared-hooks/utils/patterns_used_state.py" \
+        --session "$SESSION_ID" --agent-id "$AGENT_ID" \
+        $_TSID_FLAG >/dev/null 2>&1 || true
     fi
 
     # 5. Output with additionalContext (patterns injected into Claude's context)
     jq -n \
       --arg old "$LAST_DOMAIN" \
       --arg new "$MATCHED_DOMAIN" \
-      --arg count "$PATTERN_COUNT" \
+      --arg count "$GATED_COUNT" \
       --arg ctx "$ACE_CONTEXT" \
       '{
         "systemMessage": "🔄 [ACE] Domain shift: \($old) → \($new). Auto-loaded \($count) patterns.",
@@ -263,7 +307,6 @@ ${SEARCH_RESULT}
     # Fallback: Search failed or no patterns - log failure and show reminder
     LOG_DIR=".claude/data/logs"
     mkdir -p "$LOG_DIR" 2>/dev/null || true
-    SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // "unknown"')
     TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
     jq -nc --arg ts "$TIMESTAMP" \
           --arg hook "PreToolUse" \

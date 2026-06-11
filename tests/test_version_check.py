@@ -139,12 +139,12 @@ class VersionCheckHarness:
         self.disable_flag = tmpdir / "ace-disabled.flag"
         self.cache_file = tmpdir / "update-cache.txt"
         self.harness_script = tmpdir / "test_harness.sh"
-        self.min_version = "4.0.1"
+        self.min_version = "4.1.1"
 
         # Track which stubs have been created
         self._stubs_created = set()
 
-    def add_ace_cli(self, version: str = "4.0.1"):
+    def add_ace_cli(self, version: str = "4.1.1"):
         """Add a fake ace-cli that reports the given version."""
         self._write_stub("ace-cli", textwrap.dedent(f"""\
             #!/usr/bin/env bash
@@ -306,7 +306,7 @@ class TestCLIDetection:
 
     def test_ace_cli_found_sets_cli_cmd(self, harness):
         """When ace-cli is on PATH, CLI_CMD should be 'ace-cli' with no warnings."""
-        harness.add_ace_cli(version="4.0.1")
+        harness.add_ace_cli(version="4.1.1")
         result = harness.run()
 
         assert result["exit_code"] == 0
@@ -349,26 +349,26 @@ class TestVersionComparison:
     """
 
     def test_version_equal_passes(self, harness):
-        """CURRENT_VERSION == MIN_VERSION (4.0.1 == 4.0.1) should pass."""
-        harness.add_ace_cli(version="4.0.1")
+        """CURRENT_VERSION == MIN_VERSION (4.1.1 == 4.1.1) should pass."""
+        harness.add_ace_cli(version="4.1.1")
         result = harness.run()
 
         assert result["exit_code"] == 0
         assert result["disable_flag_exists"] is False
-        assert result["current_version"] == "4.0.1"
+        assert result["current_version"] == "4.1.1"
         version_warnings = [w for w in result["warnings"] if "VERSION_TOO_OLD" in w]
         assert len(version_warnings) == 0
 
     def test_version_greater_minor_passes(self, harness):
-        """CURRENT_VERSION > MIN_VERSION (4.1.0 > 4.0.1) should pass."""
-        harness.add_ace_cli(version="4.1.0")
+        """CURRENT_VERSION > MIN_VERSION (4.2.0 > 4.1.1) should pass."""
+        harness.add_ace_cli(version="4.2.0")
         result = harness.run()
 
         assert result["disable_flag_exists"] is False
-        assert result["current_version"] == "4.1.0"
+        assert result["current_version"] == "4.2.0"
 
     def test_version_less_disables(self, harness):
-        """CURRENT_VERSION < MIN_VERSION (3.9.0 < 4.0.1) should disable."""
+        """CURRENT_VERSION < MIN_VERSION (3.9.0 < 4.1.1) should disable."""
         harness.add_ace_cli(version="3.9.0")
         result = harness.run()
 
@@ -387,7 +387,7 @@ class TestVersionComparison:
         assert "ERROR_VERSION_TOO_OLD:0.0.0" in result["warnings"]
 
     def test_major_version_ahead_passes(self, harness):
-        """CURRENT_VERSION = 5.0.0 (major ahead of 4.0.1) should pass."""
+        """CURRENT_VERSION = 5.0.0 (major ahead of 4.1.1) should pass."""
         harness.add_ace_cli(version="5.0.0")
         result = harness.run()
 
@@ -395,20 +395,20 @@ class TestVersionComparison:
         assert result["current_version"] == "5.0.0"
 
     def test_one_patch_behind_disables(self, harness):
-        """CURRENT_VERSION = 4.0.0 (one patch behind 4.0.1) should disable."""
-        harness.add_ace_cli(version="4.0.0")
+        """CURRENT_VERSION = 4.1.0 (one patch behind 4.1.1) should disable."""
+        harness.add_ace_cli(version="4.1.0")
         result = harness.run()
 
         assert result["disable_flag_exists"] is True
-        assert "4.0.0" in result["disable_flag_reason"]
+        assert "4.1.0" in result["disable_flag_reason"]
 
     def test_higher_patch_passes(self, harness):
-        """CURRENT_VERSION = 4.0.10 (higher patch than 4.0.1) should pass."""
-        harness.add_ace_cli(version="4.0.10")
+        """CURRENT_VERSION = 4.1.10 (higher patch than 4.1.1) should pass."""
+        harness.add_ace_cli(version="4.1.10")
         result = harness.run()
 
         assert result["disable_flag_exists"] is False
-        assert result["current_version"] == "4.0.10"
+        assert result["current_version"] == "4.1.10"
 
     def test_much_older_version_disables(self, harness):
         """CURRENT_VERSION = 1.0.0 (very old) should disable."""
@@ -425,7 +425,7 @@ class TestVersionComparison:
 
         assert result["disable_flag_exists"] is True
         assert "2.5.0" in result["disable_flag_reason"]
-        assert "4.0.1" in result["disable_flag_reason"]
+        assert "4.1.1" in result["disable_flag_reason"]
 
 
 # ===========================================================================
@@ -441,29 +441,29 @@ class TestDailyUpdateCheck:
 
     def test_no_cache_file_creates_one(self, harness):
         """When no cache file exists, it should be created with latest version."""
-        harness.add_ace_cli(version="4.0.1")
-        harness.add_npm_with_show_version(show_version="4.1.0")
+        harness.add_ace_cli(version="4.1.1")
+        harness.add_npm_with_show_version(show_version="4.2.0")
         result = harness.run()
 
         assert result["cache_file_exists"] is True
-        assert result["cache_file_content"] == "4.1.0"
+        assert result["cache_file_content"] == "4.2.0"
 
     def test_cache_file_different_version_warns(self, harness):
         """When cache has a different version than current, show update warning."""
-        harness.add_ace_cli(version="4.0.1")
-        harness.add_npm_with_show_version(show_version="4.0.1")
-        harness.set_cache_file("4.1.0")
+        harness.add_ace_cli(version="4.1.1")
+        harness.add_npm_with_show_version(show_version="4.1.1")
+        harness.set_cache_file("4.2.0")
         result = harness.run()
 
         update_warnings = [w for w in result["warnings"] if "UPDATE_AVAILABLE" in w]
         assert len(update_warnings) == 1
-        assert "4.1.0" in update_warnings[0]
+        assert "4.2.0" in update_warnings[0]
 
     def test_cache_file_same_version_no_warning(self, harness):
         """When cache version matches current version, no update warning."""
-        harness.add_ace_cli(version="4.0.1")
-        harness.add_npm_with_show_version(show_version="4.0.1")
-        harness.set_cache_file("4.0.1")
+        harness.add_ace_cli(version="4.1.1")
+        harness.add_npm_with_show_version(show_version="4.1.1")
+        harness.set_cache_file("4.1.1")
         result = harness.run()
 
         update_warnings = [w for w in result["warnings"] if "UPDATE_AVAILABLE" in w]
@@ -471,8 +471,8 @@ class TestDailyUpdateCheck:
 
     def test_cache_file_empty_no_warning(self, harness):
         """When cache file exists but is empty, no update warning (empty string check)."""
-        harness.add_ace_cli(version="4.0.1")
-        harness.add_npm_with_show_version(show_version="4.0.1")
+        harness.add_ace_cli(version="4.1.1")
+        harness.add_npm_with_show_version(show_version="4.1.1")
         harness.set_cache_file("")
         result = harness.run()
 
@@ -481,7 +481,7 @@ class TestDailyUpdateCheck:
 
     def test_npm_show_fails_creates_empty_cache(self, harness):
         """When npm show fails, cache file is created with empty string, no warning."""
-        harness.add_ace_cli(version="4.0.1")
+        harness.add_ace_cli(version="4.1.1")
         harness.add_npm_failing()
         result = harness.run()
 
@@ -493,7 +493,7 @@ class TestDailyUpdateCheck:
 
     def test_existing_cache_not_overwritten(self, harness):
         """When cache file already exists, npm show is NOT called (cache preserved)."""
-        harness.add_ace_cli(version="4.0.1")
+        harness.add_ace_cli(version="4.1.1")
         harness.add_npm_with_show_version(show_version="9.9.9")
         # Pre-populate cache with a specific value
         harness.set_cache_file("4.2.0")
@@ -504,7 +504,7 @@ class TestDailyUpdateCheck:
 
     def test_new_cache_triggers_warning_if_different(self, harness):
         """When cache is freshly created with a newer version, warning is shown."""
-        harness.add_ace_cli(version="4.0.1")
+        harness.add_ace_cli(version="4.1.1")
         harness.add_npm_with_show_version(show_version="5.0.0")
         result = harness.run()
 
@@ -529,15 +529,15 @@ class TestIntegrationScenarios:
         Full happy path: ace-cli present, correct version, up-to-date.
         Should produce clean exit with no warnings and no disable flag.
         """
-        harness.add_ace_cli(version="4.0.1")
-        harness.add_npm_with_show_version(show_version="4.0.1")
-        harness.set_cache_file("4.0.1")
+        harness.add_ace_cli(version="4.1.1")
+        harness.add_npm_with_show_version(show_version="4.1.1")
+        harness.set_cache_file("4.1.1")
         result = harness.run()
 
         assert result["exit_code"] == 0
         assert result["disable_flag_exists"] is False
         assert result["cli_cmd"] == "ace-cli"
-        assert result["current_version"] == "4.0.1"
+        assert result["current_version"] == "4.1.1"
         assert len(result["warnings"]) == 0
 
     def test_full_sad_path_no_cli(self, harness):
@@ -560,7 +560,7 @@ class TestIntegrationScenarios:
         ace-cli present, correct version, but update available.
         Should show update warning but NOT disable hooks.
         """
-        harness.add_ace_cli(version="4.0.1")
+        harness.add_ace_cli(version="4.1.1")
         harness.add_npm_with_show_version(show_version="5.0.0")
         result = harness.run()
 
@@ -589,13 +589,13 @@ class TestIntegrationScenarios:
         ace-cli present with good version but npm fails.
         Should pass version check, create empty cache, no update warning.
         """
-        harness.add_ace_cli(version="4.0.1")
+        harness.add_ace_cli(version="4.1.1")
         harness.add_npm_failing()
         result = harness.run()
 
         assert result["exit_code"] == 0
         assert result["disable_flag_exists"] is False
-        assert result["current_version"] == "4.0.1"
+        assert result["current_version"] == "4.1.1"
         update_warnings = [w for w in result["warnings"] if "UPDATE_AVAILABLE" in w]
         assert len(update_warnings) == 0
 
@@ -620,10 +620,10 @@ class TestSourceCodeAnalysis:
         """The script file must exist at the expected path."""
         assert SCRIPT_PATH.exists(), f"Script not found at {SCRIPT_PATH}"
 
-    def test_min_version_is_4_0_1(self):
-        """MIN_VERSION in the source must be '4.0.1'."""
-        assert 'MIN_VERSION="4.0.1"' in self.source, (
-            "Expected MIN_VERSION to be 4.0.1 in source"
+    def test_min_version_is_4_1_1(self):
+        """MIN_VERSION in the source must be '4.1.1'."""
+        assert 'MIN_VERSION="4.1.1"' in self.source, (
+            "Expected MIN_VERSION to be 4.1.1 in source"
         )
 
     def test_uses_sort_v_c_for_version_comparison(self):
@@ -722,37 +722,37 @@ class TestEdgeCases:
 
     def test_version_with_prefix_text_extracted(self, harness):
         """
-        ace-cli --version might output 'ace-cli v4.0.1' or similar.
+        ace-cli --version might output 'ace-cli v4.1.1' or similar.
         The grep -oE should extract just the numeric version.
         """
-        harness.add_ace_cli(version="4.0.1")
+        harness.add_ace_cli(version="4.1.1")
         result = harness.run()
 
-        assert result["current_version"] == "4.0.1"
+        assert result["current_version"] == "4.1.1"
 
     def test_sort_v_c_semantics_10_vs_9(self, harness):
         """
         Verify sort -V handles numeric sorting correctly:
-        4.0.1 > 3.9.0 (not string-based where "10" < "9").
+        4.1.1 > 3.9.0 (not string-based where "10" < "9").
         """
-        harness.add_ace_cli(version="4.0.1")
+        harness.add_ace_cli(version="4.1.1")
         harness.set_min_version("3.9.0")
         result = harness.run()
 
         assert result["disable_flag_exists"] is False, (
-            "4.0.1 should be >= 3.9.0 with version sort (not string sort)"
+            "4.1.1 should be >= 3.9.0 with version sort (not string sort)"
         )
 
     def test_exact_patch_boundary(self, harness):
-        """Test the exact boundary: 4.0.1 should pass, 4.0.0 should fail."""
+        """Test the exact boundary: 4.1.1 should pass, 4.1.0 should fail."""
         # Test pass
-        harness.add_ace_cli(version="4.0.1")
+        harness.add_ace_cli(version="4.1.1")
         result = harness.run()
         assert result["disable_flag_exists"] is False
 
     def test_exact_patch_boundary_fail(self, harness):
-        """Test the exact boundary failure: 4.0.0 should fail."""
-        harness.add_ace_cli(version="4.0.0")
+        """Test the exact boundary failure: 4.1.0 should fail."""
+        harness.add_ace_cli(version="4.1.0")
         result = harness.run()
         assert result["disable_flag_exists"] is True
 
@@ -784,7 +784,7 @@ class TestEdgeCases:
         # Pre-create a flag file
         harness.disable_flag.write_text("old reason")
 
-        harness.add_ace_cli(version="4.0.1")
+        harness.add_ace_cli(version="4.1.1")
         result = harness.run()
 
         # Flag should be cleared (good version, no issues)
