@@ -23,9 +23,50 @@ HOOKS_JSON = PLUGIN_ROOT / 'hooks' / 'hooks.json'
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _run_script(input_json: dict, env_extra: dict | None = None) -> tuple[str, str, int]:
-    """Run the domain inject script with given JSON on stdin."""
+def _make_mock_ace_cli(tmp_path: Path) -> Path:
+    """Write a mock ace-cli executable to tmp_path.
+
+    The stub:
+    - Accepts any flags (--stdin, --json, --allowed-domains, --pin-session, etc.)
+      without making any network call.
+    - Emits a minimal, deterministic search JSON whose patterns pass the
+      v15 quality gate (cumulative_v15_reward > 0, isAtRisk false).
+    - Exits 0 immediately.
+
+    Mirrors the _make_mock_ace_cli pattern used in
+    test_domain_shift_session_pinning.py for consistency.
+    """
+    mock = tmp_path / "ace-cli"
+    mock.write_text(
+        "#!/bin/bash\n"
+        "cat <<'ENDJSON'\n"
+        '{"similar_patterns":[{"id":"mock-pat-001","domain":"test-domain",'
+        '"content":"mock pattern content","confidence":0.9,"helpful":5.0,'
+        '"harmful":0,"section":"strategies","evidence":[],'
+        '"cumulative_v15_reward":1.5,"isAtRisk":false,'
+        '"n_hot_pos":1,"n_hot_neg":0,'
+        '"match_factors":{"retrieval_log_id":42}}],'
+        '"count":1,"retrieval_id":"mock-ret-001"}\n'
+        "ENDJSON\n"
+    )
+    mock.chmod(0o755)
+    return mock
+
+
+def _run_script(
+    input_json: dict,
+    env_extra: dict | None = None,
+    mock_ace_cli_dir: Path | None = None,
+) -> tuple[str, str, int]:
+    """Run the domain inject script with given JSON on stdin.
+
+    When *mock_ace_cli_dir* is provided its path is prepended to PATH so
+    the subprocess finds the mock ace-cli stub instead of the real binary,
+    preventing any network calls.
+    """
     env = os.environ.copy()
+    if mock_ace_cli_dir is not None:
+        env['PATH'] = f"{mock_ace_cli_dir}:{env.get('PATH', '/usr/bin:/bin')}"
     if env_extra:
         env.update(env_extra)
     proc = subprocess.run(
@@ -188,39 +229,53 @@ class TestB4DomainMatching:
         (claude_dir / 'settings.json').write_text(json.dumps(settings))
         self.cwd = str(tmp_path)
 
+        # Create a mock ace-cli stub so tests NEVER make real network calls,
+        # regardless of whether ace-cli is installed on the machine.
+        # CLAUDE_PROJECT_DIR is set to tmp_path so patterns_used_state.py
+        # writes its state files into the temp area rather than the real repo logs.
+        mock_bin = tmp_path / 'mock_bin'
+        mock_bin.mkdir()
+        _make_mock_ace_cli(mock_bin)
+        self.mock_ace_cli_dir = mock_bin
+        self.env_extra = {'CLAUDE_PROJECT_DIR': str(tmp_path)}
+
         yield
 
         self.domains_file.unlink(missing_ok=True)
         self.last_domain_file.unlink(missing_ok=True)
 
     def test_matches_auth_domain_from_path(self):
-        """File path containing 'authentication' word should match."""
-        stdout, stderr, rc = _run_script({
-            'tool_input': {'file_path': '/src/authentication/login.py'},
-            'cwd': self.cwd,
-        })
+        """File path containing 'authentication' word should match (deterministic, no network)."""
+        stdout, stderr, rc = _run_script(
+            {'tool_input': {'file_path': '/src/authentication/login.py'}, 'cwd': self.cwd},
+            env_extra=self.env_extra,
+            mock_ace_cli_dir=self.mock_ace_cli_dir,
+        )
         assert rc == 0
-        # If ace-cli not installed, won't produce output but shouldn't error
-        # The domain file should be updated though
-        if self.last_domain_file.exists():
-            assert self.last_domain_file.read_text().strip() == 'authentication'
+        # Domain file must be updated to 'authentication' after a domain match
+        assert self.last_domain_file.exists(), (
+            "last-domain file not written — script did not detect domain match"
+        )
+        assert self.last_domain_file.read_text().strip() == 'authentication'
 
     def test_no_match_exits_cleanly(self):
         """File path with no matching domain words exits cleanly."""
-        stdout, stderr, rc = _run_script({
-            'tool_input': {'file_path': '/src/utils/helpers.py'},
-            'cwd': self.cwd,
-        })
+        stdout, stderr, rc = _run_script(
+            {'tool_input': {'file_path': '/src/utils/helpers.py'}, 'cwd': self.cwd},
+            env_extra=self.env_extra,
+            mock_ace_cli_dir=self.mock_ace_cli_dir,
+        )
         assert rc == 0
         assert stdout == ''
 
     def test_same_domain_skipped(self):
         """If last domain matches current domain, skip injection."""
         self.last_domain_file.write_text('authentication')
-        stdout, stderr, rc = _run_script({
-            'tool_input': {'file_path': '/src/authentication/middleware.py'},
-            'cwd': self.cwd,
-        })
+        stdout, stderr, rc = _run_script(
+            {'tool_input': {'file_path': '/src/authentication/middleware.py'}, 'cwd': self.cwd},
+            env_extra=self.env_extra,
+            mock_ace_cli_dir=self.mock_ace_cli_dir,
+        )
         assert rc == 0
         assert stdout == '', "Same domain should produce no output"
 
@@ -253,12 +308,14 @@ class TestB4OutputFormat:
 
 class TestB4MetadataStripping:
     def test_strip_logic_present(self):
-        """Script must include metadata stripping (same as spec-05 A2)."""
+        """Script must include metadata stripping (delegated to --strip-and-gate helper)."""
         script_text = SCRIPT.read_text()
-        assert "useful=" in script_text or "useful =" in script_text
-        # Check the essential fields are kept
-        for field in ['id', 'domain', 'content', 'confidence']:
-            assert field in script_text, f"Field '{field}' should be in useful set"
+        # v7.1.2 Change B: stripping is now delegated to the shared --strip-and-gate
+        # mode of patterns_used_state.py (which owns USEFUL_FIELDS + quality gate).
+        # The inline 'useful=' set was removed in favour of the shared helper.
+        assert "strip-and-gate" in script_text or "useful=" in script_text or "useful =" in script_text, (
+            "Script must either inline useful= fields OR delegate to --strip-and-gate helper"
+        )
 
 
 # ---------------------------------------------------------------------------

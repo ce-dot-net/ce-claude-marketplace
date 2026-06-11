@@ -270,17 +270,118 @@ def load_task_session_id(session_id, agent_id, hook_event_name='Stop', state_dir
         return None
 
 
-# CLI entrypoint for the bash PreToolUse wrapper: reads search JSON on stdin,
-# extracts similar_patterns[].id, appends.
+# ---------------------------------------------------------------------------
+# Quality-gate + strip helper (shared by bash domain-shift inject paths).
+# Mirrors ace_before_task.USEFUL_FIELDS and _apply_quality_gate exactly so
+# ALL injection paths (main UserPromptSubmit + both domain-shift hooks) apply
+# the SAME v15 gate and field strip.
+# ---------------------------------------------------------------------------
+
+_USEFUL_FIELDS = {
+    'id', 'domain', 'content', 'confidence', 'helpful', 'harmful',
+    'section', 'evidence', 'root_cause', 'error_context',
+    # v15 reward-vocab fields (issue #27 / v7.1.2 Change B)
+    'cumulative_v15_reward', 'n_hot_pos', 'n_hot_neg', 'isAtRisk',
+}
+
+
+def _quality_gate(patterns):
+    """Dual-format quality gate — mirrors ace_before_task._apply_quality_gate.
+
+    v15 path  (cumulative_v15_reward present):
+        keep if reward > 0 AND NOT isAtRisk
+    Legacy path (no cumulative_v15_reward):
+        keep if confidence >= 0.5 OR helpful >= 2
+    """
+    result = []
+    for p in patterns:
+        reward = p.get('cumulative_v15_reward')
+        if reward is not None:
+            if reward > 0 and not p.get('isAtRisk', False):
+                result.append(p)
+        else:
+            if p.get('confidence', 0) >= 0.5 or p.get('helpful', 0) >= 2:
+                result.append(p)
+    return result
+
+
+def strip_and_gate(data):
+    """Apply USEFUL_FIELDS strip + quality gate to a search-result dict.
+
+    Returns a new dict with similar_patterns filtered and stripped, and
+    'count' updated to reflect the post-filter count.  Top-level fields
+    (retrieval_id, count, etc.) are preserved.
+    """
+    pats = data.get('similar_patterns') or []
+    # Strip server-internal fields
+    stripped = [{k: v for k, v in p.items() if k in _USEFUL_FIELDS} for p in pats]
+    # Apply quality gate
+    gated = _quality_gate(stripped)
+    result = dict(data)
+    result['similar_patterns'] = gated
+    result['count'] = len(gated)
+    return result
+
+
+# CLI entrypoint for the bash PreToolUse/PostToolUse wrappers.
+#
+# Modes:
+#   default (no special flag): reads search JSON on stdin, extracts
+#     similar_patterns[].id, appends to per-agent state file.
+#
+#   --read-task-session-id: read state file for (session, agent-id),
+#     print task_session_id to stdout (empty string if absent), exit 0
+#     WITHOUT writing.
+#
+#   --strip-and-gate: read search JSON from stdin, apply USEFUL_FIELDS
+#     strip + v15 quality gate, print filtered JSON to stdout, exit 0.
+#     Does NOT require --session (stateless transform).
 if __name__ == '__main__':
     import argparse
 
     ap = argparse.ArgumentParser()
-    ap.add_argument('--session', required=True)
+    ap.add_argument('--session', default=None)
     ap.add_argument('--agent-id', default='')
     ap.add_argument('--state-dir', default=None)
     ap.add_argument('--retrieval-id', default=None)
+    # Change A: pass task_session_id through append call
+    ap.add_argument('--task-session-id', default=None)
+    # Change A: read-only mode — print stored task_session_id and exit
+    ap.add_argument('--read-task-session-id', action='store_true', default=False)
+    # Change B: strip+gate mode — stateless quality-gate transform
+    ap.add_argument('--strip-and-gate', action='store_true', default=False)
     a = ap.parse_args()
+
+    # ── --strip-and-gate mode (stateless, no --session required) ─────────────
+    if a.strip_and_gate:
+        try:
+            data = json.load(sys.stdin)
+        except Exception:
+            sys.exit(0)
+        print(json.dumps(strip_and_gate(data)))
+        sys.exit(0)
+
+    # ── --read-task-session-id mode (read-only, no write) ────────────────────
+    if a.read_task_session_id:
+        if not a.session:
+            print('')
+            sys.exit(0)
+        agent_id = a.agent_id or None
+        # Route to the correct file: when agent_id is present, treat as
+        # SubagentStop so load_task_session_id reads the agent-specific file.
+        hook_event = 'SubagentStop' if agent_id else 'Stop'
+        tsid = load_task_session_id(
+            a.session,
+            agent_id,
+            hook_event,
+            state_dir=a.state_dir,
+        )
+        print(tsid if tsid else '')
+        sys.exit(0)
+
+    # ── default append mode ───────────────────────────────────────────────────
+    if not a.session:
+        sys.exit(0)
     try:
         data = json.load(sys.stdin)
     except Exception:
@@ -300,5 +401,6 @@ if __name__ == '__main__':
     # retrieval_id: use --retrieval-id flag if provided, else fall back to top-level field
     retrieval_id = a.retrieval_id or data.get('retrieval_id') or None
     append_patterns_used(a.session, a.agent_id or None, ids, a.state_dir,
-                         retrieval_id=retrieval_id, retrieval_log_ids=retrieval_log_map)
+                         retrieval_id=retrieval_id, retrieval_log_ids=retrieval_log_map,
+                         task_session_id=a.task_session_id or None)
     sys.exit(0)

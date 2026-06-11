@@ -44,19 +44,63 @@ FILE_BASENAME=$(basename "$FILE_PATH" 2>/dev/null | sed 's/\.[^.]*$//' || echo "
 SEARCH_QUERY="${MATCHED_DOMAIN} ${FILE_BASENAME}"
 
 if command -v ace-cli >/dev/null 2>&1; then
-  RESULT=$(echo "$SEARCH_QUERY" | ace-cli search --stdin --json --allowed-domains "$MATCHED_DOMAIN" 2>/dev/null || echo "")
+  # Change A (v7.1.2): Session pinning — reuse existing task_session_id from state
+  # file so all domain-shift searches within the SAME task pin to the SAME bucket.
+  # Mirrors ace_pretooluse_wrapper.sh: read EXISTING_TSID, pass --pin-session, and
+  # pass --task-session-id on the append call (idempotent storage).
+  _ACE_PLUGIN_ROOT_PDI="${ACE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+  _PDI_SESSION_ID=$(echo "$INPUT_JSON" | jq -r '.session_id // "unknown"' 2>/dev/null || echo "unknown")
+  _PDI_AGENT_ID=$(echo "$INPUT_JSON" | jq -r '.agent_id // ""' 2>/dev/null || echo "")
+  EXISTING_TSID=$(python3 "${_ACE_PLUGIN_ROOT_PDI}/shared-hooks/utils/patterns_used_state.py" \
+    --session "$_PDI_SESSION_ID" --agent-id "$_PDI_AGENT_ID" \
+    --read-task-session-id 2>/dev/null || echo "")
+  if [ -z "$EXISTING_TSID" ]; then
+    EXISTING_TSID=$(python3 -c 'import uuid; print(uuid.uuid4())' 2>/dev/null || echo "")
+  fi
+
+  # Build ace-cli search command with --pin-session if we have a task_session_id
+  if [ -n "$EXISTING_TSID" ]; then
+    RESULT=$(echo "$SEARCH_QUERY" | ace-cli search --stdin --json --allowed-domains "$MATCHED_DOMAIN" \
+      --pin-session "$EXISTING_TSID" 2>/dev/null || echo "")
+  else
+    RESULT=$(echo "$SEARCH_QUERY" | ace-cli search --stdin --json --allowed-domains "$MATCHED_DOMAIN" 2>/dev/null || echo "")
+  fi
   if [ -n "$RESULT" ] && echo "$RESULT" | jq -e '.similar_patterns | length > 0' >/dev/null 2>&1; then
-    # Strip metadata (same as ace_before_task.py spec-05)
-    STRIPPED=$(echo "$RESULT" | python3 -c "
-import json,sys
-d=json.load(sys.stdin)
-useful={'id','domain','content','confidence','helpful','harmful','section','evidence'}
-if 'similar_patterns' in d:
-    d['similar_patterns']=[{k:v for k,v in p.items() if k in useful} for p in d['similar_patterns']]
-print(json.dumps(d))
-" 2>/dev/null || echo "$RESULT")
+    # Strip server-internal fields AND apply v15 quality gate (Change B: v7.1.2).
+    # Uses --strip-and-gate mode of patterns_used_state.py so ALL inject paths
+    # share the SAME USEFUL_FIELDS set + _quality_gate logic as ace_before_task.py.
+    STRIPPED=$(echo "$RESULT" | python3 "${_ACE_PLUGIN_ROOT_PDI}/shared-hooks/utils/patterns_used_state.py" --strip-and-gate 2>/dev/null || echo "$RESULT")
+
+    # After gate: if all patterns were filtered, skip injection
+    GATED_COUNT=$(echo "$STRIPPED" | jq -r '.count // 0' 2>/dev/null || echo "0")
+    if [ "$GATED_COUNT" = "0" ]; then
+      exit 0
+    fi
 
     CONTEXT="<ace-patterns-domain-shift domain=\"${MATCHED_DOMAIN}\">${STRIPPED}</ace-patterns-domain-shift>"
+
+    # Change A (v7.1.2): Track injected patterns for RL + store task_session_id.
+    # Pass --task-session-id so the state file stores the same EXISTING_TSID
+    # (idempotent — if before_task already wrote it, this is a no-op for that field).
+    # F-080: extract retrieval_id from RESULT top-level field.
+    _PDI_RETRIEVAL_ID=$(echo "$RESULT" | jq -r 'if .retrieval_id != null and .retrieval_id != "" then .retrieval_id else empty end' 2>/dev/null || true)
+    _PDI_TSID_FLAG=""
+    if [ -n "$EXISTING_TSID" ]; then
+      _PDI_TSID_FLAG="--task-session-id $EXISTING_TSID"
+    fi
+    if [ -n "$_PDI_RETRIEVAL_ID" ] && [ "$_PDI_RETRIEVAL_ID" != "null" ]; then
+      # shellcheck disable=SC2086
+      echo "$RESULT" | python3 "${_ACE_PLUGIN_ROOT_PDI}/shared-hooks/utils/patterns_used_state.py" \
+        --session "$_PDI_SESSION_ID" --agent-id "$_PDI_AGENT_ID" \
+        --retrieval-id "$_PDI_RETRIEVAL_ID" \
+        $_PDI_TSID_FLAG >/dev/null 2>&1 || true
+    else
+      # shellcheck disable=SC2086
+      echo "$RESULT" | python3 "${_ACE_PLUGIN_ROOT_PDI}/shared-hooks/utils/patterns_used_state.py" \
+        --session "$_PDI_SESSION_ID" --agent-id "$_PDI_AGENT_ID" \
+        $_PDI_TSID_FLAG >/dev/null 2>&1 || true
+    fi
+
     echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"$(echo "$CONTEXT" | sed 's/"/\\"/g')\"}}"
     exit 0
   fi
