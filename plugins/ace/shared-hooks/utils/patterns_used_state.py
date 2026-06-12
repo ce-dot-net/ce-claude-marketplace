@@ -284,12 +284,23 @@ _USEFUL_FIELDS = {
     'cumulative_v15_reward', 'n_hot_pos', 'n_hot_neg', 'isAtRisk',
 }
 
+# NOTE: The domain-shift count bound moved server-side (v7.1.1+).
+# Both domain-shift scripts now pass --top-k 8 to ace-cli search so the SERVER
+# selects the top-8 patterns.  strip_and_gate is gate+strip only — no client-
+# side cap, no DOMAIN_SHIFT_TOP_K constant, no ucb_score sort.
+# The main UserPromptSubmit search (ace_before_task.py) and the subagent-start
+# search (ace_subagent_start.py) remain fully uncapped (server search_top_k).
+
 
 def _quality_gate(patterns):
     """Dual-format quality gate — mirrors ace_before_task._apply_quality_gate.
 
     v15 path  (cumulative_v15_reward present):
-        keep if reward > 0 AND NOT isAtRisk
+        keep if NOT isAtRisk AND reward >= 0
+        (@ace-sdk/core 3.2.2: isAtRisk means reward<0; reward==0 = neutral/uncredited,
+        kept. Only reward<0 / at-risk patterns are dropped. Fix A: also guard reward >= 0
+        so stale/mixed server data with reward<0 + isAtRisk=False is still dropped.
+        Mirrors ace_before_task _apply_quality_gate — keep both in sync.)
     Legacy path (no cumulative_v15_reward):
         keep if confidence >= 0.5 OR helpful >= 2
     """
@@ -297,7 +308,7 @@ def _quality_gate(patterns):
     for p in patterns:
         reward = p.get('cumulative_v15_reward')
         if reward is not None:
-            if reward > 0 and not p.get('isAtRisk', False):
+            if not p.get('isAtRisk', False) and reward >= 0:
                 result.append(p)
         else:
             if p.get('confidence', 0) >= 0.5 or p.get('helpful', 0) >= 2:
@@ -308,18 +319,24 @@ def _quality_gate(patterns):
 def strip_and_gate(data):
     """Apply USEFUL_FIELDS strip + quality gate to a search-result dict.
 
-    Returns a new dict with similar_patterns filtered and stripped, and
-    'count' updated to reflect the post-filter count.  Top-level fields
-    (retrieval_id, count, etc.) are preserved.
+    Returns a new dict with similar_patterns filtered (quality gate) and
+    stripped of server-internal fields.  'count' is updated to reflect the
+    post-gate count.  Top-level fields (retrieval_id, etc.) are preserved.
+
+    Count bound: the caller (domain-shift scripts) passes --top-k 8 to
+    ace-cli search, so the SERVER selects which patterns to return.  This
+    function does NOT impose a client-side cap or sort — it is gate+strip only.
+    Both domain-shift paths (ace_pretooluse_wrapper.sh and
+    ace_posttooluse_domain_inject.sh) pipe through --strip-and-gate.
     """
     pats = data.get('similar_patterns') or []
-    # Strip server-internal fields
-    stripped = [{k: v for k, v in p.items() if k in _USEFUL_FIELDS} for p in pats]
     # Apply quality gate
-    gated = _quality_gate(stripped)
+    gated = _quality_gate(pats)
+    # Strip server-internal fields (match_factors and all non-useful fields)
+    stripped = [{k: v for k, v in p.items() if k in _USEFUL_FIELDS} for p in gated]
     result = dict(data)
-    result['similar_patterns'] = gated
-    result['count'] = len(gated)
+    result['similar_patterns'] = stripped
+    result['count'] = len(stripped)
     return result
 
 

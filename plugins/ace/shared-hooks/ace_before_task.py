@@ -100,8 +100,16 @@ def build_session_title(pattern_list, pattern_count, agent_type, review_file=Non
         pass  # non-fatal, ROI suffix stays empty
 
     # OR-fallback for "ACE ready" tier (issue #27):
-    # v15 patterns qualify via cumulative_v15_reward > 0; legacy via top_helpful >= 20
-    has_reliable = any(p.get('cumulative_v15_reward', 0) > 0 for p in pattern_list) or top_helpful >= 20
+    # v15 patterns qualify if not isAtRisk AND reward >= 0 (neutral==0 is fine); legacy via top_helpful >= 20
+    # Fix 3c: @ace-sdk/core 3.2.2 changed isAtRisk to mean reward<0; reward==0 = neutral/kept
+    # Fix A: guard reward >= 0 in addition to not isAtRisk — stale/mixed server data can produce
+    #         reward<0 with isAtRisk=False; negative reward is unsafe regardless of that flag.
+    has_reliable = any(
+        p.get('cumulative_v15_reward') is not None
+        and not p.get('isAtRisk', False)
+        and p.get('cumulative_v15_reward') >= 0
+        for p in pattern_list
+    ) or top_helpful >= 20
 
     # State machine
     if agent_type and agent_type != 'main':
@@ -206,8 +214,11 @@ def _apply_quality_gate(patterns):
     """Dual-format quality gate (issue #27, ACE 1.5 native).
 
     v15 path  (cumulative_v15_reward present):
-        keep if reward > 0 AND NOT isAtRisk
-        (reward model is the authoritative quality signal in ACE 1.5)
+        keep if NOT isAtRisk AND reward >= 0
+        (@ace-sdk/core 3.2.2: isAtRisk means reward<0; reward==0 = neutral/uncredited,
+        kept. Only reward<0 / at-risk patterns are dropped. Fix A: also guard reward >= 0
+        so stale/mixed server data with reward<0 + isAtRisk=False is still dropped.
+        Mirrors patterns_used_state _quality_gate — keep both in sync.)
     Legacy path (no cumulative_v15_reward field):
         keep if confidence >= 0.5 OR helpful >= 2
         (restore original OR-condition: high-confidence new patterns pass
@@ -217,7 +228,7 @@ def _apply_quality_gate(patterns):
     for p in patterns:
         reward = p.get('cumulative_v15_reward')
         if reward is not None:
-            if reward > 0 and not p.get('isAtRisk', False):
+            if not p.get('isAtRisk', False) and reward >= 0:
                 result.append(p)
         else:
             if p.get('confidence', 0) >= 0.5 or p.get('helpful', 0) >= 2:
@@ -226,14 +237,32 @@ def _apply_quality_gate(patterns):
 
 
 def _format_bullet_token(pattern):
-    """Return display token for a pattern bullet (issue #27).
+    """Return display token for a pattern bullet (issue #27 / Fix 2).
 
-    v15 path  (cumulative_v15_reward present): "⚡{reward:.1f}"
-    Legacy path: "+{helpful}"
+    Priority order:
+      1. reward != 0 and present  → "⚡{reward:.1f}"  (credited reward)
+      2. reward == 0, ucb_score present → "↑{ucb:.2f}"  (org-fallback ranking)
+      3. reward absent/0, confidence present and > 0 → "{conf:.0%}"
+      4. fallback → "+{helpful}"
+    "⚡0.0" is never emitted (reward==0 is neutral/uncredited, not worthless).
     """
     reward = pattern.get('cumulative_v15_reward')
-    if reward is not None:
+    if reward is not None and reward != 0:
         return f"⚡{reward:.1f}"
+    # reward is 0 or absent — try ucb_score from match_factors
+    ucb = (pattern.get('match_factors') or {}).get('ucb_score')
+    if ucb is not None:
+        try:
+            return f"↑{float(ucb):.2f}"
+        except (TypeError, ValueError):
+            pass
+    # fall through to confidence
+    conf = pattern.get('confidence')
+    if conf is not None and conf:
+        try:
+            return f"{float(conf):.0%}"
+        except (TypeError, ValueError):
+            pass
     return f"+{pattern.get('helpful', 0)}"
 
 
@@ -350,9 +379,9 @@ def main():
         pattern_list = patterns_response.get('similar_patterns', [])
         original_pattern_list = list(pattern_list)  # Keep original for logging
         if len(pattern_list) > 5:
-            # Filter: dual-format quality gate (issue #27)
-            # v15 path: cumulative_v15_reward > 0 AND not isAtRisk
-            # legacy path: helpful >= 2 (no cumulative_v15_reward field)
+            # Filter: dual-format quality gate (issue #27 / isAtRisk-aligned)
+            # v15 path: keep iff NOT isAtRisk (reward<0 = at-risk; reward==0 neutral kept)
+            # legacy path: confidence>=0.5 OR helpful>=2 (no cumulative_v15_reward field)
             high_quality = _apply_quality_gate(pattern_list)
             if len(high_quality) >= 3:
                 pattern_list = high_quality
@@ -430,6 +459,14 @@ def main():
                 # Non-fatal: continue without domain tracking
                 pass
 
+        # Capture top-3 patterns WITH match_factors BEFORE the strip so that
+        # _format_bullet_token can use ucb_score for display.  The injected JSON
+        # (ace_context below) still uses the stripped list — only the display path
+        # uses _display_top3.  Each element is an isolated shallow dict copy so
+        # the strip loop below cannot mutate these objects even if refactored to
+        # operate in-place rather than via a list comprehension.
+        _display_top3 = [dict(p) for p in patterns_response.get('similar_patterns', [])[:3]]
+
         # Strip internal metadata fields from patterns before injection (reduce token usage)
         # These server-internal fields are stripped: 'created_at', 'updated_at', 'last_used',
         # 'impressions', 'retrieval_count', 'root_cause', 'error_context', 'source',
@@ -467,8 +504,9 @@ def main():
                     domains_str += f' (+{len(abstract_domains) - 3} more)'
                 summary_lines.append(f"   Domains: {domains_str}")
 
-            # Show top 3 bullets with domain tags
-            for bullet in pattern_list[:3]:
+            # Show top 3 bullets with domain tags (uses _display_top3 which retains
+            # match_factors so _format_bullet_token can fall back to ucb_score)
+            for bullet in _display_top3:
                 content = bullet.get('content', '')
                 if len(content) > 80:
                     content = content[:77] + '...'

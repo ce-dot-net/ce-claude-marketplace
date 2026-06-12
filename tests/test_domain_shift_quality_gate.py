@@ -242,8 +242,12 @@ class TestStripAndGateCLI:
                 f"not found in: {list(p_out.keys())}"
             )
 
-    def test_strip_and_gate_filters_zero_reward_not_atrisk(self):
-        """cumulative_v15_reward=0, isAtRisk=False → filtered (reward not > 0)."""
+    def test_strip_and_gate_neutral_reward_not_atrisk_kept(self):
+        """cumulative_v15_reward=0, isAtRisk=False → KEPT (neutral, not at-risk).
+
+        Fix 3: @ace-sdk/core 3.2.2 changed isAtRisk to mean reward<0.
+        reward==0 is neutral/uncredited and must NOT be dropped.
+        """
         pattern = _make_v15_pattern("ctx-4338628010-5127", reward=0, is_at_risk=False)
         search_result = _make_search_result([pattern])
 
@@ -252,8 +256,9 @@ class TestStripAndGateCLI:
 
         output = json.loads(result.stdout)
         ids = [p["id"] for p in output.get("similar_patterns", [])]
-        assert "ctx-4338628010-5127" not in ids, (
-            "cumulative_v15_reward=0 (not > 0) must be filtered even if isAtRisk=False"
+        assert "ctx-4338628010-5127" in ids, (
+            "Fix 3: cumulative_v15_reward=0, isAtRisk=False must be KEPT "
+            "(neutral reward is not at-risk per @ace-sdk/core 3.2.2)"
         )
 
     def test_strip_and_gate_passes_positive_reward_not_atrisk(self):
@@ -549,4 +554,451 @@ class TestBothPathsUseSharedHelper:
         assert uses_shared_helper, (
             "After Change B, pretooluse wrapper must use --strip-and-gate flag "
             "(or equivalent) on the domain-shift inject path. Currently missing."
+        )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# FIX 3 — Gate semantics: trust isAtRisk, drop reward>0 condition (v15 path)
+# RED until _quality_gate / strip_and_gate updated in patterns_used_state.py
+# ════════════════════════════════════════════════════════════════════════════
+
+class TestFix3GateSemantics:
+    """
+    @ace-sdk/core 3.2.2: isAtRisk now means cumulative_v15_reward < 0.
+    reward==0 = neutral/uncredited, NOT at-risk → must be KEPT.
+    New v15 rule: keep iff NOT isAtRisk  (drops only reward<0 / at-risk).
+    """
+
+    def _run_strip_gate(self, search_result):
+        result = subprocess.run(
+            [sys.executable, str(PUS_SCRIPT), "--strip-and-gate"],
+            input=json.dumps(search_result),
+            capture_output=True, text=True,
+        )
+        return result
+
+    def test_neutral_reward_not_atrisk_kept_by_gate(self):
+        """FIX 3: cumulative_v15_reward=0, isAtRisk=False → KEPT (neutral, uncredited).
+
+        Was DROPPED under old reward>0 rule. RED until fix.
+        """
+        pattern = _make_v15_pattern("ctx-neutral-0001", reward=0, is_at_risk=False)
+        result = self._run_strip_gate(_make_search_result([pattern]))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        output = json.loads(result.stdout)
+        ids = [p["id"] for p in output.get("similar_patterns", [])]
+        assert "ctx-neutral-0001" in ids, (
+            "FIX 3: cumulative_v15_reward=0, isAtRisk=False must be KEPT "
+            "(neutral reward is not at-risk). Was dropped under old reward>0 rule."
+        )
+
+    def test_negative_reward_atrisk_dropped_by_gate(self):
+        """FIX 3: cumulative_v15_reward=-1.5, isAtRisk=True → dropped."""
+        pattern = _make_v15_pattern("ctx-atrisk-0002", reward=-1.5, is_at_risk=True)
+        result = self._run_strip_gate(_make_search_result([pattern]))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        output = json.loads(result.stdout)
+        ids = [p["id"] for p in output.get("similar_patterns", [])]
+        assert "ctx-atrisk-0002" not in ids, (
+            "FIX 3: cumulative_v15_reward=-1.5, isAtRisk=True must be dropped."
+        )
+
+    def test_positive_reward_not_atrisk_kept_by_gate(self):
+        """FIX 3: cumulative_v15_reward=32.9, isAtRisk=False → kept (positive)."""
+        pattern = _make_v15_pattern("ctx-positive-0003", reward=32.9, is_at_risk=False)
+        result = self._run_strip_gate(_make_search_result([pattern]))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        output = json.loads(result.stdout)
+        ids = [p["id"] for p in output.get("similar_patterns", [])]
+        assert "ctx-positive-0003" in ids, (
+            "FIX 3: cumulative_v15_reward=32.9, isAtRisk=False must be kept."
+        )
+
+    def test_legacy_high_confidence_kept_unchanged(self):
+        """FIX 3 (legacy path unchanged): confidence=0.8, no reward field → kept."""
+        legacy = {
+            "id": "ctx-legacy-0004",
+            "domain": "test-domain",
+            "content": "legacy pattern",
+            "confidence": 0.8,
+            "helpful": 1,
+            "harmful": 0,
+            "section": "strategies",
+            "evidence": [],
+        }
+        result = self._run_strip_gate(_make_search_result([legacy]))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        output = json.loads(result.stdout)
+        ids = [p["id"] for p in output.get("similar_patterns", [])]
+        assert "ctx-legacy-0004" in ids, (
+            "Legacy path unchanged: confidence=0.8 must pass gate."
+        )
+
+    def test_legacy_low_helpful_low_confidence_dropped(self):
+        """FIX 3 (legacy path unchanged): helpful=1, confidence=0.2 → dropped."""
+        legacy = {
+            "id": "ctx-legacy-0005",
+            "domain": "test-domain",
+            "content": "low quality legacy",
+            "confidence": 0.2,
+            "helpful": 1,
+            "harmful": 0,
+            "section": "strategies",
+            "evidence": [],
+        }
+        result = self._run_strip_gate(_make_search_result([legacy]))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        output = json.loads(result.stdout)
+        ids = [p["id"] for p in output.get("similar_patterns", [])]
+        assert "ctx-legacy-0005" not in ids, (
+            "Legacy path: helpful=1, confidence=0.2 must be dropped."
+        )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# FIX A — gate robustness: negative reward + isAtRisk=False (stale/mixed data)
+# Both _quality_gate (patterns_used_state.py) and the --strip-and-gate CLI
+# must drop patterns with cumulative_v15_reward < 0 even when isAtRisk=False.
+# RED against current code (keeps them); GREEN after FIX A.
+# ════════════════════════════════════════════════════════════════════════════
+
+class TestFixAGateRobustness:
+    """FIX A: reward<0 with isAtRisk=False must be dropped (stale server data hole)."""
+
+    def _run_strip_gate(self, search_result):
+        result = subprocess.run(
+            [sys.executable, str(PUS_SCRIPT), "--strip-and-gate"],
+            input=json.dumps(search_result),
+            capture_output=True, text=True,
+        )
+        return result
+
+    def test_negative_reward_not_atrisk_dropped_by_strip_gate(self):
+        """FIX A: reward=-1.5, isAtRisk=False → DROPPED by --strip-and-gate.
+
+        The old gate 'not isAtRisk' passes this; new gate 'not isAtRisk AND
+        reward >= 0' correctly drops it.  RED until FIX A applied.
+        """
+        pattern = _make_v15_pattern("ctx-fixA-neg-0001", reward=-1.5, is_at_risk=False)
+        result = self._run_strip_gate(_make_search_result([pattern]))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        output = json.loads(result.stdout)
+        ids = [p["id"] for p in output.get("similar_patterns", [])]
+        assert "ctx-fixA-neg-0001" not in ids, (
+            "FIX A: reward=-1.5 with isAtRisk=False must be DROPPED — "
+            "negative reward is unsafe regardless of the (possibly stale) isAtRisk flag."
+        )
+
+    def test_zero_reward_not_atrisk_kept_by_strip_gate(self):
+        """FIX A: reward=0, isAtRisk=False → KEPT (neutral; >= 0 passes gate)."""
+        pattern = _make_v15_pattern("ctx-fixA-zero-0002", reward=0, is_at_risk=False)
+        result = self._run_strip_gate(_make_search_result([pattern]))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        output = json.loads(result.stdout)
+        ids = [p["id"] for p in output.get("similar_patterns", [])]
+        assert "ctx-fixA-zero-0002" in ids, (
+            "FIX A: reward=0 with isAtRisk=False must be KEPT (neutral, boundary >= 0)."
+        )
+
+    def test_positive_reward_not_atrisk_kept_by_strip_gate(self):
+        """FIX A: reward=5, isAtRisk=False → KEPT."""
+        pattern = _make_v15_pattern("ctx-fixA-pos-0003", reward=5.0, is_at_risk=False)
+        result = self._run_strip_gate(_make_search_result([pattern]))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        output = json.loads(result.stdout)
+        ids = [p["id"] for p in output.get("similar_patterns", [])]
+        assert "ctx-fixA-pos-0003" in ids, (
+            "FIX A: reward=5 with isAtRisk=False must be KEPT."
+        )
+
+    def test_negative_reward_atrisk_true_dropped_by_strip_gate(self):
+        """FIX A: reward=-2, isAtRisk=True → DROPPED (double-flagged)."""
+        pattern = _make_v15_pattern("ctx-fixA-both-0004", reward=-2.0, is_at_risk=True)
+        result = self._run_strip_gate(_make_search_result([pattern]))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        output = json.loads(result.stdout)
+        ids = [p["id"] for p in output.get("similar_patterns", [])]
+        assert "ctx-fixA-both-0004" not in ids, (
+            "FIX A: reward=-2 with isAtRisk=True must be DROPPED."
+        )
+
+    def test_pus_quality_gate_direct_negative_reward_not_atrisk_dropped(self):
+        """FIX A: patterns_used_state._quality_gate direct call — reward=-1.5,
+        isAtRisk=False → pattern NOT in result.
+        """
+        pattern = _make_v15_pattern("ctx-fixA-direct-0005", reward=-1.5, is_at_risk=False)
+        result = pus._quality_gate([pattern])
+        ids = [p["id"] for p in result]
+        assert "ctx-fixA-direct-0005" not in ids, (
+            "FIX A: pus._quality_gate must drop reward=-1.5, isAtRisk=False pattern."
+        )
+
+    def test_pus_quality_gate_direct_zero_reward_not_atrisk_kept(self):
+        """FIX A: pus._quality_gate direct call — reward=0, isAtRisk=False → KEPT."""
+        pattern = _make_v15_pattern("ctx-fixA-direct-0006", reward=0, is_at_risk=False)
+        result = pus._quality_gate([pattern])
+        ids = [p["id"] for p in result]
+        assert "ctx-fixA-direct-0006" in ids, (
+            "FIX A: pus._quality_gate must keep reward=0, isAtRisk=False (neutral >= 0)."
+        )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# FIX 4 — Domain-shift top-K cap: K=8, ranked by ucb_score desc
+# RED until DOMAIN_SHIFT_TOP_K constant + sorting added to strip_and_gate
+# ════════════════════════════════════════════════════════════════════════════
+
+def _make_v15_pattern_with_ucb(pid, ucb_score, reward=5.0, is_at_risk=False, confidence=0.8):
+    """v15 pattern with match_factors.ucb_score for cap tests."""
+    p = _make_v15_pattern(pid, reward=reward, is_at_risk=is_at_risk)
+    p["match_factors"] = {
+        "ucb_score": ucb_score,
+        "semantic_score": 0.8,
+        "domain_boost": False,
+        "retrieval_log_id": 1,
+        "retrieval_id": "ret-cap-test",
+    }
+    p["confidence"] = confidence
+    return p
+
+
+class TestFix4DomainShiftTopKCap:
+    """
+    strip_and_gate must NOT cap client-side — the cap moved server-side via
+    --top-k 8 on the ace-cli search invocation.  strip_and_gate is now gate+strip
+    only: all gated patterns pass through regardless of count.
+
+    Old tests that asserted cap-to-8 behaviour are updated to assert the new
+    uncapped behaviour.  The DOMAIN_SHIFT_TOP_K constant and ucb_score sort are
+    removed from patterns_used_state.py.
+    """
+
+    def _run_strip_gate(self, search_result):
+        result = subprocess.run(
+            [sys.executable, str(PUS_SCRIPT), "--strip-and-gate"],
+            input=json.dumps(search_result),
+            capture_output=True, text=True,
+        )
+        return result
+
+    def test_no_domain_shift_top_k_constant(self):
+        """DOMAIN_SHIFT_TOP_K must NOT exist in patterns_used_state.py (cap moved server-side)."""
+        assert not hasattr(pus, 'DOMAIN_SHIFT_TOP_K'), (
+            "DOMAIN_SHIFT_TOP_K must be removed from patterns_used_state.py; "
+            "cap is now server-side via --top-k 8"
+        )
+
+    def test_strip_and_gate_passes_all_15_gated_patterns(self):
+        """15 not-at-risk patterns → all 15 returned (no client-side cap)."""
+        patterns = [
+            _make_v15_pattern_with_ucb(f"ctx-cap-{i:04d}", ucb_score=float(i), reward=5.0)
+            for i in range(15)
+        ]
+        result = self._run_strip_gate(_make_search_result(patterns))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        output = json.loads(result.stdout)
+        kept = output.get("similar_patterns", [])
+        assert len(kept) == 15, (
+            f"strip_and_gate must NOT cap: 15 gated patterns in → 15 out, got {len(kept)}"
+        )
+        assert output["count"] == 15, (
+            f"count must reflect all 15 gated patterns, got {output['count']}"
+        )
+
+    def test_strip_and_gate_passes_all_low_ucb_patterns(self):
+        """All patterns pass through — no ranking-based drop (server selects via --top-k 8)."""
+        patterns = [
+            _make_v15_pattern_with_ucb(f"ctx-cap-{i:04d}", ucb_score=float(i), reward=5.0)
+            for i in range(15)
+        ]
+        result = self._run_strip_gate(_make_search_result(patterns))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        output = json.loads(result.stdout)
+        kept_ids = {p["id"] for p in output.get("similar_patterns", [])}
+        # All 15 patterns must be kept (no client-side ranking drop)
+        for i in range(15):
+            assert f"ctx-cap-{i:04d}" in kept_ids, (
+                f"strip_and_gate must keep all gated patterns; "
+                f"ctx-cap-{i:04d} missing from kept_ids={kept_ids}"
+            )
+
+    def test_cap_no_effect_when_fewer_than_8(self):
+        """3 gated patterns → all 3 kept, count=3."""
+        patterns = [
+            _make_v15_pattern_with_ucb(f"ctx-few-{i:04d}", ucb_score=float(i), reward=5.0)
+            for i in range(3)
+        ]
+        result = self._run_strip_gate(_make_search_result(patterns))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        output = json.loads(result.stdout)
+        kept = output.get("similar_patterns", [])
+        assert len(kept) == 3, (
+            f"3 gated patterns must all be kept, got {len(kept)}"
+        )
+        assert output["count"] == 3
+
+    def test_cap_empty_input_stays_empty(self):
+        """0 gated patterns → empty output."""
+        result = self._run_strip_gate(_make_search_result([]))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        output = json.loads(result.stdout)
+        assert output.get("similar_patterns", []) == []
+        assert output["count"] == 0
+
+    def test_match_factors_stripped_from_output(self):
+        """match_factors must be stripped from all output patterns (server-internal field)."""
+        patterns = [
+            _make_v15_pattern_with_ucb(f"ctx-strip-{i:04d}", ucb_score=float(i), reward=5.0)
+            for i in range(10)
+        ]
+        result = self._run_strip_gate(_make_search_result(patterns))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        output = json.loads(result.stdout)
+        for p in output.get("similar_patterns", []):
+            assert "match_factors" not in p, (
+                f"match_factors must be stripped from output pattern {p['id']}"
+            )
+
+    def test_no_ucb_sort_in_strip_and_gate(self):
+        """strip_and_gate must NOT sort by ucb_score (no client-side ranking; server ranks)."""
+        # 10 patterns with descending ucb scores in input order; output order may differ
+        # but the key invariant is ALL 10 patterns are present (not just top-8)
+        patterns = [
+            _make_v15_pattern_with_ucb(
+                f"ctx-ord-{i:04d}", ucb_score=float(10 - i), reward=5.0
+            )
+            for i in range(10)
+        ]
+        result = self._run_strip_gate(_make_search_result(patterns))
+        assert result.returncode == 0, f"stderr: {result.stderr}"
+        output = json.loads(result.stdout)
+        kept_ids = {p["id"] for p in output.get("similar_patterns", [])}
+        assert len(kept_ids) == 10, (
+            f"All 10 gated patterns must be returned by strip_and_gate (no ucb sort+cap), "
+            f"got {len(kept_ids)}"
+        )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Server-side --top-k 8: domain-shift scripts must pass --top-k 8 to ace-cli
+# Main + subagent-start searches must remain uncapped (no --top-k).
+# RED until scripts are updated.
+# ════════════════════════════════════════════════════════════════════════════
+
+class TestServerSideTopK:
+    """
+    The domain-shift count-bound must be enforced server-side via --top-k 8
+    on the ace-cli search invocation, NOT client-side in strip_and_gate.
+
+    Both domain-shift scripts (pretooluse + posttooluse) must pass --top-k 8
+    to every ace-cli search --allowed-domains call (both pin/fallback branches).
+
+    The main search (ace_before_task.py / ace_cli.py) and subagent-start search
+    (ace_subagent_start.py) must NOT pass --top-k (server search_top_k config).
+    """
+
+    PRETOOLUSE = REPO / "plugins/ace/scripts/ace_pretooluse_wrapper.sh"
+    POSTTOOLUSE = REPO / "plugins/ace/scripts/ace_posttooluse_domain_inject.sh"
+    BEFORE_TASK = REPO / "plugins/ace/shared-hooks/ace_before_task.py"
+    SUBAGENT_START = REPO / "plugins/ace/shared-hooks/ace_subagent_start.py"
+    ACE_CLI_PY = REPO / "plugins/ace/shared-hooks/utils/ace_cli.py"
+
+    @staticmethod
+    def _join_continuations(text):
+        """Join bash line-continuation backslashes so multi-line commands become one line."""
+        import re
+        return re.sub(r'\\\n\s*', ' ', text)
+
+    def test_pretooluse_pin_branch_has_top_k_8(self):
+        """pretooluse --pin-session branch must pass --top-k 8 to ace-cli search."""
+        text = self._join_continuations(self.PRETOOLUSE.read_text())
+        import re
+        # Match actual ace-cli / $CLI_CMD search invocation lines (not comments)
+        pin_line = re.search(
+            r'(?:ace-cli|\$CLI_CMD)\s+search[^\n]*--pin-session[^\n]*',
+            text
+        )
+        assert pin_line is not None, (
+            "pretooluse must have a --pin-session search branch with ace-cli/CLI_CMD"
+        )
+        assert '--top-k 8' in pin_line.group(), (
+            f"pretooluse --pin-session branch must include --top-k 8.\n"
+            f"Got: {pin_line.group()!r}"
+        )
+
+    def test_pretooluse_fallback_branch_has_top_k_8(self):
+        """pretooluse fallback (no pin-session) branch must pass --top-k 8 to ace-cli search."""
+        text = self._join_continuations(self.PRETOOLUSE.read_text())
+        import re
+        # Match actual ace-cli / $CLI_CMD search invocation lines (not comments)
+        domain_search_lines = re.findall(
+            r'(?:ace-cli|\$CLI_CMD)\s+search[^\n]*--allowed-domains[^\n]*',
+            text
+        )
+        assert len(domain_search_lines) >= 2, (
+            f"pretooluse must have at least 2 ace-cli domain-shift search branches, "
+            f"got: {domain_search_lines}"
+        )
+        for line in domain_search_lines:
+            assert '--top-k 8' in line, (
+                f"All pretooluse domain-shift search lines must include --top-k 8.\n"
+                f"Missing in: {line!r}"
+            )
+
+    def test_posttooluse_pin_branch_has_top_k_8(self):
+        """posttooluse --pin-session branch must pass --top-k 8 to ace-cli search."""
+        text = self._join_continuations(self.POSTTOOLUSE.read_text())
+        import re
+        # Require --stdin to match actual invocation (not comment lines)
+        pin_line = re.search(
+            r'(?:ace-cli|\$CLI_CMD)\s+search[^\n]*--stdin[^\n]*--pin-session[^\n]*',
+            text
+        )
+        assert pin_line is not None, (
+            "posttooluse must have a --pin-session search invocation with ace-cli/CLI_CMD --stdin"
+        )
+        assert '--top-k 8' in pin_line.group(), (
+            f"posttooluse --pin-session branch must include --top-k 8.\n"
+            f"Got: {pin_line.group()!r}"
+        )
+
+    def test_posttooluse_fallback_branch_has_top_k_8(self):
+        """posttooluse fallback (no pin-session) branch must pass --top-k 8 to ace-cli search."""
+        text = self._join_continuations(self.POSTTOOLUSE.read_text())
+        import re
+        domain_search_lines = re.findall(
+            r'(?:ace-cli|\$CLI_CMD)\s+search[^\n]*--allowed-domains[^\n]*',
+            text
+        )
+        assert len(domain_search_lines) >= 2, (
+            f"posttooluse must have at least 2 ace-cli domain-shift search branches, "
+            f"got: {domain_search_lines}"
+        )
+        for line in domain_search_lines:
+            assert '--top-k 8' in line, (
+                f"All posttooluse domain-shift search lines must include --top-k 8.\n"
+                f"Missing in: {line!r}"
+            )
+
+    def test_before_task_has_no_top_k(self):
+        """ace_before_task.py (main search) must NOT contain --top-k (server search_top_k)."""
+        text = self.BEFORE_TASK.read_text()
+        assert '--top-k' not in text, (
+            "ace_before_task.py must NOT pass --top-k; main search is uncapped "
+            "(server search_top_k config controls count)."
+        )
+
+    def test_subagent_start_has_no_top_k(self):
+        """ace_subagent_start.py (subagent-start search) must NOT contain --top-k."""
+        text = self.SUBAGENT_START.read_text()
+        assert '--top-k' not in text, (
+            "ace_subagent_start.py must NOT pass --top-k; subagent-start search "
+            "is uncapped (server search_top_k config controls count)."
+        )
+
+    def test_ace_cli_py_has_no_top_k(self):
+        """ace_cli.py run_search (used by before_task) must NOT build a --top-k flag."""
+        text = self.ACE_CLI_PY.read_text()
+        assert '--top-k' not in text, (
+            "ace_cli.py must NOT pass --top-k; main-path search is uncapped."
         )
