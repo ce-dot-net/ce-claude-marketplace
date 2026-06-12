@@ -22,6 +22,11 @@ used_pct=$(echo "$INPUT_JSON" | jq -r '.context_window.used_percentage // 0' 2>/
 session_id=$(echo "$INPUT_JSON" | jq -r '.session_id // ""' 2>/dev/null || echo "")
 model_name=$(echo "$INPUT_JSON" | jq -r '.model.display_name // ""' 2>/dev/null || echo "")
 
+# ── Round floats to integers (CC used_percentage can be a float e.g. 28.999…) ──
+# FIX B: assignment-with-cmdsubst doesn't trigger errexit; ${x:-0} fallback
+#         covers empty/non-numeric input without "00" artefact from || echo 0.
+used_pct=$(printf '%.0f' "${used_pct:-0}" 2>/dev/null); used_pct=${used_pct:-0}
+
 # v6.5.0 Item #3 — newer CC stdin fields (CC 2.1.97/2.1.119/2.1.80 …).
 # All empty/zero when running on older CC → conditional rendering keeps backward-compat.
 effort_level=$(echo "$INPUT_JSON" | jq -r '.effort.level // ""' 2>/dev/null || echo "")
@@ -31,6 +36,23 @@ rl_5h_pct=$(echo "$INPUT_JSON" | jq -r '.rate_limits.five_hour.used_percentage /
 rl_5h_resets=$(echo "$INPUT_JSON" | jq -r '.rate_limits.five_hour.resets_at // ""' 2>/dev/null || echo "")
 rl_7d_pct=$(echo "$INPUT_JSON" | jq -r '.rate_limits.seven_day.used_percentage // 0' 2>/dev/null || echo "0")
 rl_7d_resets=$(echo "$INPUT_JSON" | jq -r '.rate_limits.seven_day.resets_at // ""' 2>/dev/null || echo "")
+# Round rate-limit percentages to integers (same float-safety as used_pct above)
+# FIX B: same pattern — avoids "00" artefact from non-numeric input.
+rl_5h_pct=$(printf '%.0f' "${rl_5h_pct:-0}" 2>/dev/null); rl_5h_pct=${rl_5h_pct:-0}
+rl_7d_pct=$(printf '%.0f' "${rl_7d_pct:-0}" 2>/dev/null); rl_7d_pct=${rl_7d_pct:-0}
+
+# ── Format Unix epoch resets_at to human-readable local time ──
+# Cross-platform: date -r (BSD/macOS) with GNU/Linux fallback; pure-integer guard.
+fmt_reset() {
+  local ts="$1"
+  [ -z "$ts" ] || [ "$ts" = "null" ] && { echo ""; return; }
+  case "$ts" in
+    *[!0-9]*) echo "$ts"; return;;   # not a pure integer (e.g. already ISO) → show as-is
+  esac
+  date -r "$ts" '+%a %H:%M' 2>/dev/null || date -d "@$ts" '+%a %H:%M' 2>/dev/null || echo "$ts"
+}
+rl_5h_resets=$(fmt_reset "$rl_5h_resets")
+rl_7d_resets=$(fmt_reset "$rl_7d_resets")
 
 # ── Context % color ──
 if [ "$used_pct" -ge 80 ] 2>/dev/null; then CTX_C="$RED"

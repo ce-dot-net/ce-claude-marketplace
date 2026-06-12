@@ -423,12 +423,12 @@ fi
 
 **Expected Versions** (as of 2026):
 - Plugin: v7.0.0+
-- ace-cli: v4.1.1+
+- ace-cli: v4.1.2+
 
 **Report**:
 - ✅ All components up to date
 - ⚠️ Plugin outdated (< v7.0.0)
-- ⚠️ CLI outdated (< v4.1.1)
+- ⚠️ CLI outdated (< v4.1.2)
 - ❌ Critical version mismatch
 
 **If Updates Available**:
@@ -436,7 +436,7 @@ fi
 ⚠️ Updates Recommended
 
 Plugin: v7.0.0 → latest
-ace-cli: v4.1.1 → latest
+ace-cli: v4.1.2 → latest
 
 Recommended Actions:
 1. Update ace-cli: npm install -g @ace-sdk/cli@latest
@@ -608,7 +608,7 @@ Overall Health: 🟡 NEEDS ATTENTION (3 warnings)
 [8] Version Status
     Issue: Updates available
     Plugin: v7.0.0 → latest
-    CLI: v4.1.1 → latest
+    CLI: v4.1.2 → latest
     Fix: See recommended actions below
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

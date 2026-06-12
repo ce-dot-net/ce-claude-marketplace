@@ -58,12 +58,15 @@ if command -v ace-cli >/dev/null 2>&1; then
     EXISTING_TSID=$(python3 -c 'import uuid; print(uuid.uuid4())' 2>/dev/null || echo "")
   fi
 
-  # Build ace-cli search command with --pin-session if we have a task_session_id
+  # Build ace-cli search command with --pin-session if we have a task_session_id.
+  # --top-k 8: server-side count bound for domain-shift (hot path, per-tool-call).
+  # The server SELECTS the top-8 patterns; the client does NOT cap client-side.
   if [ -n "$EXISTING_TSID" ]; then
     RESULT=$(echo "$SEARCH_QUERY" | ace-cli search --stdin --json --allowed-domains "$MATCHED_DOMAIN" \
-      --pin-session "$EXISTING_TSID" 2>/dev/null || echo "")
+      --top-k 8 --pin-session "$EXISTING_TSID" 2>/dev/null || echo "")
   else
-    RESULT=$(echo "$SEARCH_QUERY" | ace-cli search --stdin --json --allowed-domains "$MATCHED_DOMAIN" 2>/dev/null || echo "")
+    RESULT=$(echo "$SEARCH_QUERY" | ace-cli search --stdin --json --allowed-domains "$MATCHED_DOMAIN" \
+      --top-k 8 2>/dev/null || echo "")
   fi
   if [ -n "$RESULT" ] && echo "$RESULT" | jq -e '.similar_patterns | length > 0' >/dev/null 2>&1; then
     # Strip server-internal fields AND apply v15 quality gate (Change B: v7.1.2).

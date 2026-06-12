@@ -45,7 +45,7 @@ SOURCE=$(echo "$INPUT_JSON" | jq -r '.source // "startup"' 2>/dev/null || echo "
 # Flag file to disable other ACE hooks (per-session, temp directory)
 ACE_DISABLED_FLAG="/tmp/ace-disabled-${SESSION_ID}.flag"
 CACHE_FILE="/tmp/ace-update-check-$(date +%Y%m%d).txt"
-MIN_VERSION="4.1.1"
+MIN_VERSION="4.1.2"
 
 # Helper: Disable ACE hooks by creating flag file
 disable_ace_hooks() {

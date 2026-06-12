@@ -101,12 +101,16 @@ def test_reward_gate_v15_atrisk():
 
 
 def test_reward_gate_v15_zero_reward_not_atrisk():
-    """cumulative_v15_reward=0, isAtRisk=False → filtered (reward not > 0)."""
+    """cumulative_v15_reward=0, isAtRisk=False → KEPT (neutral, not at-risk).
+
+    Fix 3: @ace-sdk/core 3.2.2 changed isAtRisk to mean reward<0.
+    reward==0 is neutral/uncredited and must NOT be dropped.
+    """
     p = _pat_v15(reward=0, is_at_risk=False)
     result = _apply_quality_gate([p])
-    assert p not in result, (
-        "Pattern with cumulative_v15_reward=0 (not > 0) should be filtered "
-        "even if isAtRisk=False."
+    assert p in result, (
+        "Pattern with cumulative_v15_reward=0, isAtRisk=False must be KEPT "
+        "(neutral reward is not at-risk per @ace-sdk/core 3.2.2)."
     )
 
 
@@ -279,25 +283,47 @@ def test_top3_display_v15_reward_token():
 
 
 def test_top3_display_legacy_helpful_token():
-    """Legacy pattern (no cumulative_v15_reward) shows +{helpful} token."""
+    """Legacy pattern (no cumulative_v15_reward) with confidence shows confidence %.
+
+    Fix 2: confidence (priority 3) now wins over helpful (priority 4) when present.
+    For a pure helpful-only fallback, confidence must be absent or 0.
+    """
+    # Pattern with confidence=0.8 → shows "80%" (confidence priority over helpful)
     p = _pat_legacy(helpful=7)
     fmt_fn = ace_before_task._format_bullet_token
     token = fmt_fn(p)
+    assert token == "80%", (
+        f"Expected '80%' for legacy pattern with confidence=0.8, got: {token!r}"
+    )
+
+
+def test_top3_display_legacy_helpful_only_token():
+    """Legacy pattern (no cumulative_v15_reward, no confidence) shows +{helpful}."""
+    p = _pat_legacy(helpful=7, confidence=0)
+    fmt_fn = ace_before_task._format_bullet_token
+    token = fmt_fn(p)
     assert token.startswith("+"), (
-        f"Expected token starting with '+' for legacy pattern, got: {token!r}"
+        f"Expected token starting with '+' for legacy pattern with no confidence, got: {token!r}"
     )
     assert "7" in token, (
         f"Expected helpful value '7' in token, got: {token!r}"
     )
 
 
-def test_top3_display_v15_zero_reward_shows_zero():
-    """cumulative_v15_reward=0.0 → ⚡0.0 (v15 path taken even at zero)."""
+def test_top3_display_v15_zero_reward_shows_confidence():
+    """cumulative_v15_reward=0.0 → NOT ⚡0.0; falls through to confidence (Fix 2).
+
+    reward==0 is neutral/uncredited, so ⚡0.0 must never be emitted.
+    The pattern has confidence=0.8, so the token should be '80%'.
+    """
     p = _pat_v15(reward=0.0)
     fmt_fn = ace_before_task._format_bullet_token
     token = fmt_fn(p)
-    assert token.startswith("⚡"), (
-        f"Expected ⚡ token for v15 field present (even at 0), got: {token!r}"
+    assert token != "⚡0.0", (
+        f"⚡0.0 must never be emitted for reward==0; got: {token!r}"
+    )
+    assert token == "80%", (
+        f"Expected '80%' (confidence fallback) for v15 zero-reward pattern, got: {token!r}"
     )
 
 
@@ -330,4 +356,165 @@ def test_useful_fields_strips_match_factors():
     assert "match_factors" not in uf, (
         "'match_factors' must not be in USEFUL_FIELDS — it is server-internal "
         "and was explicitly excluded before these changes."
+    )
+
+
+# ---------------------------------------------------------------------------
+# FIX 3 — New gate semantics: v15 path trusts isAtRisk, drops reward>0 check
+# (RED until _apply_quality_gate is updated)
+# ---------------------------------------------------------------------------
+
+def test_gate_fix3_neutral_reward_not_atrisk_kept():
+    """FIX 3: cumulative_v15_reward=0, isAtRisk=False → KEPT (neutral, not at-risk).
+
+    @ace-sdk/core 3.2.2 changed isAtRisk to mean reward<0.  reward==0 is
+    neutral/uncredited and must NOT be dropped.
+    RED under old rule (reward > 0 required), GREEN after Fix 3.
+    """
+    p = _pat_v15(reward=0, is_at_risk=False)
+    result = _apply_quality_gate([p])
+    assert p in result, (
+        "FIX 3: Pattern with cumulative_v15_reward=0, isAtRisk=False must be KEPT "
+        "(neutral reward is not at-risk). Was dropped under old reward>0 rule."
+    )
+
+
+def test_gate_fix3_negative_reward_atrisk_dropped():
+    """FIX 3: cumulative_v15_reward=-1.5, isAtRisk=True → dropped."""
+    p = _pat_v15(reward=-1.5, is_at_risk=True)
+    result = _apply_quality_gate([p])
+    assert p not in result, (
+        "FIX 3: Pattern with cumulative_v15_reward=-1.5, isAtRisk=True must be dropped."
+    )
+
+
+def test_gate_fix3_positive_reward_not_atrisk_kept():
+    """FIX 3: cumulative_v15_reward=32.9, isAtRisk=False → kept (positive reward)."""
+    p = _pat_v15(reward=32.9, is_at_risk=False)
+    result = _apply_quality_gate([p])
+    assert p in result, (
+        "FIX 3: Pattern with cumulative_v15_reward=32.9, isAtRisk=False must be kept."
+    )
+
+
+def test_gate_fix3_legacy_high_confidence_kept():
+    """FIX 3 (legacy path unchanged): confidence=0.8, no reward field → kept."""
+    p = _pat_legacy(helpful=0, confidence=0.8)
+    result = _apply_quality_gate([p])
+    assert p in result, (
+        "Legacy path: confidence=0.8 (no reward field) must pass gate unchanged."
+    )
+
+
+def test_gate_fix3_legacy_low_helpful_confidence_dropped():
+    """FIX 3 (legacy path unchanged): helpful=1, confidence=0.2 → dropped."""
+    p = _pat_legacy(helpful=1, confidence=0.2)
+    result = _apply_quality_gate([p])
+    assert p not in result, (
+        "Legacy path: helpful=1, confidence=0.2 must be dropped (neither arm passes)."
+    )
+
+
+# ---------------------------------------------------------------------------
+# FIX 3c — has_reliable: neutral v15 patterns → has_reliable=True
+# (RED under old reward>0 check, GREEN after Fix 3c)
+# ---------------------------------------------------------------------------
+
+def test_has_reliable_fix3c_neutral_v15_patterns(tmp_path):
+    """FIX 3c: neutral v15 patterns (reward=0, isAtRisk=False) → has_reliable=True.
+
+    build_session_title must return 'ACE ready' for a list of 5 neutral-but-not-
+    at-risk patterns with avg_conf>=0.70.
+    RED under old `reward > 0` check; GREEN after Fix 3c.
+    """
+    patterns = [
+        _pat_v15(reward=0, is_at_risk=False, confidence=0.8)
+        for _ in range(5)
+    ]
+    title = ace_before_task.build_session_title(
+        pattern_list=patterns,
+        pattern_count=5,
+        agent_type="main",
+        review_file=tmp_path / "no-such.json",
+    )
+    assert title is not None and "ready" in title, (
+        "FIX 3c: neutral v15 patterns (reward=0, isAtRisk=False) must yield "
+        f"'ACE ready' via has_reliable, got: {title!r}"
+    )
+
+
+# ---------------------------------------------------------------------------
+# FIX A — gate robustness: negative reward + isAtRisk=False (stale/mixed data)
+# The old gate `not isAtRisk` lets reward=-1.5, isAtRisk=False PASS — that is
+# the hole. The new gate requires: NOT isAtRisk AND reward >= 0.
+# ---------------------------------------------------------------------------
+
+def test_gate_fixA_negative_reward_not_atrisk_dropped():
+    """FIX A: cumulative_v15_reward=-1.5, isAtRisk=False → DROPPED.
+
+    Stale/mixed server data can produce negative reward with isAtRisk=False.
+    The old 'not isAtRisk' gate keeps it; the new 'not isAtRisk AND reward>=0'
+    gate correctly drops it.  RED against current code, GREEN after FIX A.
+    """
+    p = _pat_v15(reward=-1.5, is_at_risk=False)
+    result = _apply_quality_gate([p])
+    assert p not in result, (
+        "FIX A: reward=-1.5 with isAtRisk=False must be DROPPED — "
+        "negative reward is unsafe regardless of the (possibly stale) isAtRisk flag."
+    )
+
+
+def test_gate_fixA_zero_reward_not_atrisk_still_kept():
+    """FIX A: reward=0, isAtRisk=False → KEPT (neutral; boundary: >=0 passes)."""
+    p = _pat_v15(reward=0, is_at_risk=False)
+    result = _apply_quality_gate([p])
+    assert p in result, (
+        "FIX A: reward=0 with isAtRisk=False must still be KEPT (neutral >= 0)."
+    )
+
+
+def test_gate_fixA_positive_reward_not_atrisk_still_kept():
+    """FIX A: reward=5, isAtRisk=False → KEPT."""
+    p = _pat_v15(reward=5, is_at_risk=False)
+    result = _apply_quality_gate([p])
+    assert p in result, (
+        "FIX A: reward=5 with isAtRisk=False must be KEPT."
+    )
+
+
+def test_gate_fixA_negative_reward_atrisk_true_dropped():
+    """FIX A: reward=-2, isAtRisk=True → DROPPED (double-flagged)."""
+    p = _pat_v15(reward=-2, is_at_risk=True)
+    result = _apply_quality_gate([p])
+    assert p not in result, (
+        "FIX A: reward=-2 with isAtRisk=True must be DROPPED."
+    )
+
+
+# ---------------------------------------------------------------------------
+# FIX A — has_reliable regression: only negative-reward patterns → False
+# ---------------------------------------------------------------------------
+
+def test_has_reliable_fixA_only_negative_reward_not_atrisk(tmp_path):
+    """FIX A: a list of patterns with only reward=-1, isAtRisk=False
+    → has_reliable must be False (not reliable).
+
+    Under the old gate, reward=-1+isAtRisk=False passed → has_reliable=True.
+    After FIX A these are dropped → has_reliable=False (no reliable pattern).
+    RED against current code, GREEN after FIX A.
+    """
+    patterns = [
+        _pat_v15(reward=-1, is_at_risk=False, confidence=0.8)
+        for _ in range(5)
+    ]
+    title = ace_before_task.build_session_title(
+        pattern_list=patterns,
+        pattern_count=5,
+        agent_type="main",
+        review_file=tmp_path / "no-such.json",
+    )
+    # has_reliable=False → title must NOT contain "ready"
+    assert title is None or "ready" not in title, (
+        "FIX A: patterns with reward=-1, isAtRisk=False must yield has_reliable=False "
+        f"(not 'ACE ready'). Got: {title!r}"
     )

@@ -201,14 +201,16 @@ if [ "$MATCHED_DOMAIN" != "$LAST_DOMAIN" ]; then
     EXISTING_TSID=$(python3 -c 'import uuid; print(uuid.uuid4())' 2>/dev/null || echo "")
   fi
 
-  # Build search command: pass --pin-session if we have a task_session_id
+  # Build search command: pass --pin-session if we have a task_session_id.
+  # --top-k 8: server-side count bound for domain-shift (hot path, per-tool-call).
+  # The server SELECTS the top-8 patterns; the client does NOT cap client-side.
   if [ -n "$EXISTING_TSID" ]; then
     SEARCH_RESULT=$(echo "$SEARCH_QUERY" | $CLI_CMD search --stdin --json \
-      --allowed-domains "$MATCHED_DOMAIN" --pin-session "$EXISTING_TSID" 2>/dev/null | \
+      --allowed-domains "$MATCHED_DOMAIN" --top-k 8 --pin-session "$EXISTING_TSID" 2>/dev/null | \
       iconv -f UTF-8 -t UTF-8 -c 2>/dev/null || echo "")  # Sanitize Unicode
   else
     SEARCH_RESULT=$(echo "$SEARCH_QUERY" | $CLI_CMD search --stdin --json \
-      --allowed-domains "$MATCHED_DOMAIN" 2>/dev/null | \
+      --allowed-domains "$MATCHED_DOMAIN" --top-k 8 2>/dev/null | \
       iconv -f UTF-8 -t UTF-8 -c 2>/dev/null || echo "")  # Sanitize Unicode
   fi
 

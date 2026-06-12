@@ -222,11 +222,11 @@ class TestVersionStrings:
             "now 4.0.1."
         )
 
-    def test_ace_cli_floor_is_4_1_1(self):
+    def test_ace_cli_floor_is_4_1_2(self):
         doc = _doc()
-        # Must mention 4.1.1 as the minimum CLI version somewhere
-        assert "4.1.1" in doc, (
-            "ace-doctor.md does not mention ace-cli floor version 4.1.1."
+        # Must mention 4.1.2 as the minimum CLI version somewhere
+        assert "4.1.2" in doc, (
+            "ace-doctor.md does not mention ace-cli floor version 4.1.2."
         )
 
 
