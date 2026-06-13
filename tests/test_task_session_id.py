@@ -706,3 +706,167 @@ class TestRoundTrip:
 
         rlog = pus.load_retrieval_ids(cc_session, None, "Stop", state_dir=str(tmp_path))
         assert rlog.get(PID_A) == 77, f"load_retrieval_ids broken after 4-tuple change; got {rlog}"
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# 6. Unconditional seed write: task_session_id anchored even for 0-pattern tasks
+# ════════════════════════════════════════════════════════════════════════════
+
+class TestUnconditionalSeedWrite:
+    """RED tests: task_session_id must be persisted even when 0 patterns are returned.
+
+    ROOT CAUSE: both ace_subagent_start and ace_before_task call
+    append_patterns_used only inside `if pattern_ids:` — so a 0-pattern search
+    writes nothing, leaving load_task_session_id to return None at Stop/SubagentStop.
+    The server then receives a trace with no session_id (unanchored).
+
+    FIX: unconditional seed write BEFORE run_search / early-exits using a new
+    code path in append_patterns_used that allows writing even with empty ids
+    when task_session_id is supplied.
+    """
+
+    # ── patterns_used_state: seed write with empty ids ───────────────────────
+
+    def test_append_with_empty_ids_and_task_session_id_writes_file(self, tmp_path):
+        """append_patterns_used([], task_session_id=X) must write state file.
+
+        Currently the early-exit guard `if not ids and not has_retrieval: return []`
+        silently returns without writing, so the seed has no effect.
+        """
+        cc_session = "cc-sess-seed-empty"
+        tsid = str(uuid.uuid4())
+
+        result = pus.append_patterns_used(cc_session, None, [], state_dir=str(tmp_path),
+                                          task_session_id=tsid)
+
+        sf = pus.state_file_path(cc_session, None, state_dir=str(tmp_path))
+        assert sf.exists(), (
+            "append_patterns_used with empty pattern_ids but task_session_id must "
+            "write the state file so the anchor is persisted"
+        )
+        data = json.loads(sf.read_text())
+        assert data.get("task_session_id") == tsid, (
+            f"Seed write must store task_session_id={tsid!r}; got {data!r}"
+        )
+
+    def test_seed_write_then_full_append_merges_correctly(self, tmp_path):
+        """Seed write (empty ids) then full write (ids + retrieval) merges correctly.
+
+        After seed: task_session_id stored, pattern_ids=[].
+        After full: task_session_id unchanged (new==old so either is fine),
+        pattern_ids contains the real ids, retrieval_id present.
+        """
+        cc_session = "cc-sess-seed-then-full"
+        tsid = str(uuid.uuid4())
+
+        # Step 1: seed write (empty ids)
+        pus.append_patterns_used(cc_session, None, [], state_dir=str(tmp_path),
+                                 task_session_id=tsid)
+        sf = pus.state_file_path(cc_session, None, state_dir=str(tmp_path))
+        assert sf.exists(), "Seed write must create state file"
+
+        # Step 2: full write (same task_session_id, real ids)
+        pus.append_patterns_used(cc_session, None, [PID_A, PID_B],
+                                 state_dir=str(tmp_path),
+                                 retrieval_id="ret-merge-001",
+                                 task_session_id=tsid)
+
+        data = json.loads(sf.read_text())
+        assert data.get("task_session_id") == tsid
+        assert PID_A in data.get("pattern_ids", [])
+        assert PID_B in data.get("pattern_ids", [])
+        assert data.get("retrieval_id") == "ret-merge-001"
+
+    def test_seed_write_preserves_existing_task_session_id(self, tmp_path):
+        """If a state file with task_session_id already exists, seed write keeps it."""
+        cc_session = "cc-sess-existing-tsid"
+        existing_tsid = str(uuid.uuid4())
+
+        # Pre-existing state file with task_session_id
+        pus.append_patterns_used(cc_session, None, [PID_A], state_dir=str(tmp_path),
+                                 task_session_id=existing_tsid)
+
+        # Seed write with empty ids (as would happen on a second call)
+        new_tsid = str(uuid.uuid4())
+        pus.append_patterns_used(cc_session, None, [], state_dir=str(tmp_path),
+                                 task_session_id=new_tsid)
+
+        data = json.loads(pus.state_file_path(cc_session, None,
+                                               state_dir=str(tmp_path)).read_text())
+        # new_tsid wins (merge rule: new value overwrites if provided)
+        assert data.get("task_session_id") == new_tsid, (
+            f"Second append's task_session_id should win; got {data.get('task_session_id')!r}"
+        )
+        # Original pattern_ids preserved
+        assert PID_A in data.get("pattern_ids", [])
+
+    # ── ace_before_task: 0-pattern main task still anchors ───────────────────
+
+    def test_before_task_zero_patterns_anchors_task_session_id(self, tmp_path, monkeypatch):
+        """RED test: ace_before_task with 0-pattern search must still write anchor.
+
+        Currently: append_patterns_used only called inside `if pattern_ids:` at line ~426,
+        so 0-pattern tasks leave load_task_session_id returning None at Stop.
+        """
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+        cc_session = "cc-conv-sess-zero-pat-main"
+        event = {"session_id": cc_session, "prompt": "build auth middleware"}
+
+        mod = _load_before_task()
+
+        zero_pattern_response = {"similar_patterns": [], "count": 0, "retrieval_id": None}
+
+        def fake_run_search(query, org=None, project=None, session_id=None, **kwargs):
+            return zero_pattern_response
+
+        monkeypatch.setattr(mod, "run_search", fake_run_search)
+        monkeypatch.setattr(mod, "check_session_pinning_available", lambda: True)
+        monkeypatch.setattr(mod, "check_auth_status", lambda warn_threshold_hours=2.0: None)
+        monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
+        monkeypatch.setattr(mod, "append_patterns_used", pus.append_patterns_used)
+        monkeypatch.setattr(mod, "log_search_metrics", MagicMock())
+
+        import io
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
+        try:
+            mod.main()
+        except SystemExit:
+            pass
+
+        tsid = pus.load_task_session_id(cc_session, None, "Stop", state_dir=None)
+        assert tsid is not None, (
+            "ace_before_task with 0-pattern search must still anchor task_session_id; "
+            "got None — Stop trace will have no session_id (unanchored main task)"
+        )
+        try:
+            uuid.UUID(tsid)
+        except ValueError:
+            raise AssertionError(f"task_session_id from before_task is not a uuid4: {tsid!r}")
+
+    def test_before_task_with_patterns_still_anchors_task_session_id(self, tmp_path, monkeypatch):
+        """GREEN non-regression: ace_before_task with patterns → anchor + pattern_ids stored."""
+        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+        cc_session = "cc-conv-sess-with-pat-main"
+        event = {"session_id": cc_session, "prompt": "implement database schema"}
+
+        mod = _load_before_task()
+        monkeypatch.setattr(mod, "run_search", lambda *a, **kw: SAMPLE_PATTERNS_RESPONSE)
+        monkeypatch.setattr(mod, "check_session_pinning_available", lambda: True)
+        monkeypatch.setattr(mod, "check_auth_status", lambda warn_threshold_hours=2.0: None)
+        monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
+        monkeypatch.setattr(mod, "append_patterns_used", pus.append_patterns_used)
+        monkeypatch.setattr(mod, "log_search_metrics", MagicMock())
+
+        import io
+        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
+        try:
+            mod.main()
+        except SystemExit:
+            pass
+
+        tsid = pus.load_task_session_id(cc_session, None, "Stop", state_dir=None)
+        assert tsid is not None, "task_session_id must be anchored when patterns found"
+
+        sf = pus.state_file_path(cc_session, None)
+        data = json.loads(sf.read_text())
+        assert PID_A in data.get("pattern_ids", []), "Pattern ids must be stored"

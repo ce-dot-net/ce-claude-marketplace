@@ -104,7 +104,8 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
         return []
     ids = [p for p in (pattern_ids or []) if isinstance(p, str) and is_valid_pattern_id(p)]
     has_retrieval = retrieval_id is not None or bool(retrieval_log_ids)
-    if not ids and not has_retrieval:
+    has_task_session = task_session_id is not None
+    if not ids and not has_retrieval and not has_task_session:
         return []
     d = _state_dir(state_dir)
     d.mkdir(parents=True, exist_ok=True)

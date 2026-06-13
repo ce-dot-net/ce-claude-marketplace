@@ -341,6 +341,29 @@ def parse_agent_transcript(path: str) -> list:
     return results
 
 
+def _agent_id_from_transcript_path(path):
+    """v7.1.3 R1: derive the subagent's work agent_id from its transcript filename.
+
+    Returns Optional[str] (uuid or None).  Annotation omitted (no PEP 604 union)
+    to stay import-safe on Python 3.9, matching the rest of this module.
+
+    CC names per-subagent transcripts as `agent-{uuid}.jsonl`.  The {uuid} is
+    the authoritative work agent_id used when writing the patterns-used state
+    file at SubagentStart / PreToolUse domain-shift.  Reuses the stem extraction
+    approach from parse_agent_transcript (lines ~326-330).
+
+    Returns the {uuid} string on match, None otherwise.  Never raises.
+    """
+    try:
+        stem = Path(str(path)).stem
+        if stem.startswith('agent-'):
+            uid = stem[len('agent-'):]
+            return uid if uid else None
+    except Exception:
+        pass
+    return None
+
+
 def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = None, agent_transcript_path: str = None) -> tuple:
     """
     Build REAL trajectory from PostToolUse accumulated data or per-agent transcript.
@@ -672,6 +695,28 @@ def main():
         # v6.4.0: Per-agent scope — None for main agent, UUID for subagents
         agent_id = event.get('agent_id') or None
 
+        # v7.1.3 R1 — SubagentStop read_key==transcript_uuid invariant monitor
+        # (recovery removed: proven inert, read_key always == transcript_uuid).
+        # Compute both keys and emit one telemetry record so we detect immediately
+        # if CC ever breaks the invariant.  Fully guarded — never break the learn pipeline.
+        _keymap_telemetry = None  # populated below for SubagentStop only
+        if hook_event_name == 'SubagentStop':
+            try:
+                _read_key = event.get('agent_id') or None
+                _transcript_uuid = _agent_id_from_transcript_path(
+                    event.get('agent_transcript_path')
+                )
+                _keymap_telemetry = {
+                    "event": "subagent_stop_keymap",
+                    "hook": "SubagentStop",
+                    "session_id": session_id,
+                    "read_key": _read_key,
+                    "transcript_uuid": _transcript_uuid,
+                    "invariant_ok": (_read_key == _transcript_uuid),
+                }
+            except Exception:
+                pass  # non-fatal — never break the learn pipeline
+
         # v6.4.0: Resolve parent_agent_id from spawn log (best-effort).
         # SubagentStop wrapper writes {event: "subagent_done", child_agent_id, parent_agent_id}
         # BEFORE invoking ace_after_task.py, so the entry is present at read time.
@@ -740,6 +785,20 @@ def main():
         ]
         # Use retrieval_id read from state file (before load_playbook_used unlinked it).
         retrieval_id = _retrieval_id_from_state
+
+        # v7.1.3 R1: emit invariant monitor record (SubagentStop only).
+        # Guarded + non-fatal — never break the learn pipeline.
+        if _keymap_telemetry is not None:
+            try:
+                _rel_km = Path('.claude/data/logs')
+                _rel_km.mkdir(parents=True, exist_ok=True)
+                with open(_rel_km / 'ace-relevance.jsonl', 'a') as _rf_km:
+                    _rf_km.write(json.dumps({
+                        "timestamp": datetime.now().isoformat(),
+                        **_keymap_telemetry,
+                    }) + "\n")
+            except Exception:
+                pass  # non-fatal
 
         # agent_id-contract proof: record which agent_id the READ side used and how
         # many IDs it recovered. Diffing this against the wrapper's write-side

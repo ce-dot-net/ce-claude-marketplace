@@ -1063,3 +1063,157 @@ def test_agent_tool_use_name_also_matched(tmp_path, monkeypatch):
     assert "Agent-named block prompt" in captured["query"], (
         f"Expected prompt from Agent block; got: {captured['query']!r}"
     )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 19. ANCHOR PERSISTED FOR 0-PATTERN SEARCHES (the session_id gap fix)
+# ═══════════════════════════════════════════════════════════════════════════
+
+def test_task_session_id_persisted_when_search_returns_zero_patterns(tmp_path, monkeypatch):
+    """RED test: search returns 0 patterns → task_session_id MUST still be anchored.
+
+    ROOT CAUSE: append_patterns_used(... pattern_ids=[]) is inside `if pattern_ids:`
+    so it never runs when the search returns an empty similar_patterns list.
+    At SubagentStop, load_task_session_id returns None → trace has no session_id.
+
+    FIX: unconditional seed write BEFORE run_search / early-exits persists the
+    task_session_id so SubagentStop can always anchor the trace.
+    """
+    import patterns_used_state as pus
+
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    transcript_path = _make_transcript(tmp_path, [
+        {"subagent_type": "coder", "prompt": "Implement the auth hook"},
+    ])
+    event = _make_event(tmp_path, transcript_path=transcript_path, agent_type="coder",
+                        agent_id="subagent-zero-patterns-agent")
+
+    mod = _load_subagent_start()
+    # Search returns 0 patterns (empty similar_patterns list)
+    zero_pattern_response = {"similar_patterns": [], "count": 0}
+    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: zero_pattern_response)
+    monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
+    # Use REAL append_patterns_used so state file is actually written
+    monkeypatch.setattr(mod, "append_patterns_used", pus.append_patterns_used)
+
+    try:
+        mod.main(event=event)
+    except SystemExit:
+        pass
+
+    # The anchor must have been seeded BEFORE the pattern_list early-exit
+    tsid = pus.load_task_session_id("sess-abc123", "subagent-zero-patterns-agent",
+                                    "SubagentStop", state_dir=None)
+    assert tsid is not None, (
+        "task_session_id must be anchored even when search returns 0 patterns; "
+        "got None — SubagentStop trace will have no session_id (unanchored)"
+    )
+    import uuid as _uuid
+    try:
+        _uuid.UUID(tsid)
+    except ValueError:
+        raise AssertionError(f"Anchored task_session_id is not a valid uuid4: {tsid!r}")
+
+
+def test_task_session_id_persisted_when_search_returns_error_dict(tmp_path, monkeypatch):
+    """RED test: search returns error dict → task_session_id MUST still be anchored.
+
+    The early-exit `if isinstance(patterns_response, dict) and patterns_response.get('error')`
+    fires before any append call. Seed write must happen BEFORE run_search is even called.
+    """
+    import patterns_used_state as pus
+
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    transcript_path = _make_transcript(tmp_path, [
+        {"subagent_type": "coder", "prompt": "Implement the auth hook"},
+    ])
+    event = _make_event(tmp_path, transcript_path=transcript_path, agent_type="coder",
+                        agent_id="subagent-error-response-agent")
+
+    mod = _load_subagent_start()
+    error_response = {"error": "timeout", "message": "CLI timed out"}
+    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: error_response)
+    monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
+    monkeypatch.setattr(mod, "append_patterns_used", pus.append_patterns_used)
+
+    try:
+        mod.main(event=event)
+    except SystemExit:
+        pass
+
+    tsid = pus.load_task_session_id("sess-abc123", "subagent-error-response-agent",
+                                    "SubagentStop", state_dir=None)
+    assert tsid is not None, (
+        "task_session_id must be anchored even when run_search returns an error dict; "
+        "got None — SubagentStop trace will have no session_id"
+    )
+
+
+def test_task_session_id_persisted_when_search_returns_none(tmp_path, monkeypatch):
+    """RED test: search returns None → task_session_id MUST still be anchored.
+
+    The `if not patterns_response: sys.exit(0)` fires before any append call.
+    Seed write must happen BEFORE run_search / its early-exits.
+    """
+    import patterns_used_state as pus
+
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    transcript_path = _make_transcript(tmp_path, [
+        {"subagent_type": "coder", "prompt": "Implement the auth hook"},
+    ])
+    event = _make_event(tmp_path, transcript_path=transcript_path, agent_type="coder",
+                        agent_id="subagent-none-response-agent")
+
+    mod = _load_subagent_start()
+    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: None)
+    monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
+    monkeypatch.setattr(mod, "append_patterns_used", pus.append_patterns_used)
+
+    try:
+        mod.main(event=event)
+    except SystemExit:
+        pass
+
+    tsid = pus.load_task_session_id("sess-abc123", "subagent-none-response-agent",
+                                    "SubagentStop", state_dir=None)
+    assert tsid is not None, (
+        "task_session_id must be anchored even when run_search returns None; "
+        "got None — SubagentStop trace will have no session_id"
+    )
+
+
+def test_pattern_ids_still_stored_when_patterns_present(tmp_path, monkeypatch):
+    """GREEN non-regression: when patterns ARE returned, both anchor AND pattern_ids stored."""
+    import patterns_used_state as pus
+
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    transcript_path = _make_transcript(tmp_path, [
+        {"subagent_type": "coder", "prompt": "Implement the auth hook"},
+    ])
+    event = _make_event(tmp_path, transcript_path=transcript_path, agent_type="coder",
+                        agent_id="subagent-with-patterns-agent")
+
+    mod = _load_subagent_start()
+    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: SAMPLE_PATTERNS_RESPONSE)
+    monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
+    monkeypatch.setattr(mod, "append_patterns_used", pus.append_patterns_used)
+
+    try:
+        mod.main(event=event)
+    except SystemExit:
+        pass
+
+    # anchor present
+    tsid = pus.load_task_session_id("sess-abc123", "subagent-with-patterns-agent",
+                                    "SubagentStop", state_dir=None)
+    assert tsid is not None, "task_session_id anchor must be present when patterns found"
+
+    # pattern_ids present
+    sf = pus.state_file_path("sess-abc123", "subagent-with-patterns-agent")
+    assert sf.exists(), "State file must exist"
+    data = json.loads(sf.read_text())
+    expected_ids = [p["id"] for p in SAMPLE_PATTERNS_RESPONSE["similar_patterns"]]
+    for eid in expected_ids:
+        assert eid in data.get("pattern_ids", []), (
+            f"Pattern id {eid!r} missing from state file after patterns-present path"
+        )

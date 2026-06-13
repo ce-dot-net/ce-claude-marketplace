@@ -5,6 +5,56 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [7.1.3] - 2026-06-13
+
+### Headline
+Subagent session-anchoring correctness + SubagentStop observability. No floor bump. Requires: Claude Code >= 2.1.163, ace-cli >= 4.1.2 (@ace-sdk/core >= 3.2.2).
+
+### Fixed
+- **R2 — Unconditional `task_session_id` seed (correctness fix):** `ace_before_task.py` and
+  `ace_subagent_start.py` now persist the per-task `task_session_id` (uuid4) to the
+  patterns-used state file **immediately — before** the ACE search call and before any
+  early-exit paths — via an empty-ids seed write
+  (`append_patterns_used(..., task_session_id=..., pattern_ids=[])`). The guard in
+  `append_patterns_used` was updated to allow a seed write when only `task_session_id`
+  is provided (empty ids + no retrieval metadata no longer short-circuits).
+
+  **Effect:** a subagent that searched successfully (server stamped `retrieval_log_v15`
+  with that `task_session_id`) but then hit an early-exit (0 patterns after quality gate,
+  search error, etc.) now still carries `session_id` on its `ExecutionTrace` → the server
+  anchors it to the stamped search rows → recovers eval-gold that was previously lost.
+
+  **Correctness guarantee:** the seeded uuid4 IS byte-identical to the value passed
+  as `--pin-session` to the search call (single variable, no regeneration between seed
+  and search). (`ace_before_task.py`, `ace_subagent_start.py`, `patterns_used_state.py`)
+
+### Added
+- **R1 — SubagentStop invariant monitor (observability):** `ace_after_task.py` now emits
+  a `subagent_stop_keymap` record to `ace-relevance.jsonl` for every `SubagentStop` event,
+  capturing `read_key` (= `event.agent_id`), `transcript_uuid` (derived from
+  `agent_transcript_path` stem via `_agent_id_from_transcript_path`), and
+  `invariant_ok = (read_key == transcript_uuid)`. A prior "read-recovery" branch that
+  re-derived `agent_id` from the transcript filename was **removed** after live probes
+  proved it structurally inert (invariant held 5/5; recovery key always == primary key).
+  Only the always-on monitor remains — zero dead code, full observability.
+  (`ace_after_task.py`)
+
+### Explicitly Not Included
+- No orphan-sweep or transcript-recovery. Server-confirmed: outcome-less aborted-agent
+  retrievals (whose `SubagentStop` never fires) must correctly abstain (no trace, no
+  signal); they are not lost gold.
+
+### Tests
+- `tests/test_subagent_stop_recovery.py` (NEW — 21 assertions): `_agent_id_from_transcript_path`
+  helper unit tests, happy-path agent_id-not-reassigned, invariant monitor match/mismatch,
+  graceful-degradation edge cases, main-Stop-emits-no-keymap.
+- `tests/test_subagent_start_search.py` — updated for unconditional seed write.
+- `tests/test_task_session_id.py` — updated for unconditional seed write.
+- Full pytest suite: **975 passed, 4 skipped**.
+
+### Notes
+- No floor bump. Requires: Claude Code >= 2.1.163, ace-cli >= 4.1.2 (@ace-sdk/core >= 3.2.2).
+
 ## [6.6.6] - 2026-06-05
 
 ### Headline

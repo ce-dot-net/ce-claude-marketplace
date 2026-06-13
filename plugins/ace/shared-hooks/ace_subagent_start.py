@@ -245,6 +245,16 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         # value (correlates search↔learn per-subagent-task, not per conversation).
         task_session_id = str(uuid.uuid4())
 
+        # Persist the per-task anchor IMMEDIATELY (before search / early-exits) so
+        # SubagentStop's load_task_session_id finds it even if the search returns 0
+        # patterns, fails, or errors.  The later append_patterns_used call (inside
+        # `if pattern_ids:`) will merge pattern_ids + retrieval_id into this same
+        # file via the normal merge logic.
+        try:
+            append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id)
+        except Exception:
+            pass  # non-fatal
+
         # Derive query from the main session transcript (tail-scan algorithm)
         query = _extract_query_from_transcript(transcript_path, agent_type)
         if not query:
