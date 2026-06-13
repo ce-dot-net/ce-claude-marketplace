@@ -311,6 +311,18 @@ def main():
         # agent_type identifies subagent type: "main", "refactorer", "coder", etc.
         agent_type = event.get('agent_type', 'main')
 
+        # Resolve agent_id early (also used below at append_patterns_used).
+        agent_id = event.get('agent_id') if isinstance(event, dict) else None
+
+        # Persist the per-task anchor IMMEDIATELY (before run_search / early-exits) so
+        # Stop's load_task_session_id finds it even if the search returns 0 patterns,
+        # fails, or errors.  The later append_patterns_used call (inside `if pattern_ids:`)
+        # will merge pattern_ids + retrieval_id into this same file via merge logic.
+        try:
+            append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id)
+        except Exception:
+            pass  # non-fatal
+
         # Store task_session_id for PreCompact hook (recall patterns after compaction).
         # Must write task_session_id (not session_id) because run_search pins under
         # task_session_id; recall_session in ace_after_task needs the same key.
@@ -429,7 +441,7 @@ def main():
                     # single source of truth). Behavior-identical: validates IDs,
                     # appends+dedupes, writes the relative per-agent file.
                     # F-080: also pass retrieval_id + retrieval_log_map captured above.
-                    agent_id = event.get('agent_id') if isinstance(event, dict) else None
+                    # agent_id already resolved above (before run_search seed write).
                     append_patterns_used(session_id, agent_id, pattern_ids,
                                          retrieval_id=_retrieval_id,
                                          retrieval_log_ids=_retrieval_log_map,
