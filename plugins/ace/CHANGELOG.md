@@ -5,6 +5,53 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [7.1.4] - 2026-06-14
+
+### Headline
+Concurrent-subagent degenerate-trace fix. No floor bump. Requires: Claude Code >= 2.1.163, ace-cli >= 4.1.2 (@ace-sdk/core >= 3.2.2).
+
+### Fixed
+- **Stage 1 — `agent_id` recovery from transcript path (SubagentStop only):** When many
+  subagents are spawned concurrently (high fan-out via plain `Task` tool or Workflow tool),
+  Claude Code sometimes delivers the `SubagentStop` event with an empty `agent_id` and
+  `agent_type`. The plugin then fell back to the `-main` state file (no `task_session_id`)
+  and produced an anchorless trace the server cannot credit.
+
+  Fix: if `event.agent_id` is empty on `SubagentStop`, the work `agent_id` is now recovered
+  from the `agent_transcript_path` filename (`agent-{uuid}.jsonl`) via the existing
+  `_agent_id_from_transcript_path` helper, **before** all state-file reads. This ensures
+  `load_task_session_id`, `load_retrieval_ids`, and `load_playbook_used` all key off the
+  correct per-agent file. Recovery outcome is recorded as `agent_id_recovered` in the
+  existing `subagent_stop_keymap` telemetry record. (`ace_after_task.py`)
+
+- **Stage 2 — hygiene skip for fully anchorless `SubagentStop` traces:** When Stage 1
+  recovery also fails (no parseable transcript path) and no state file was ever written
+  (the subagent never reached its search), the resulting trace has no `task_session_id`,
+  no `retrieval_id`, no `applied_log_ids`, and `user_prompt = "No user prompt found"` — it
+  is pure server noise that cannot be credited.
+
+  Fix: such traces are now **skipped** instead of submitted. The state file is reaped,
+  a `subagent_degenerate_skip` record is emitted to `ace-relevance.jsonl`, and the hook
+  exits 0 cleanly. Precision guarantee: the skip fires **only** when all four conditions
+  hold simultaneously — a trace with any anchor (`task_session_id` OR `retrieval_id` OR
+  `applied_log_ids`) OR a real user prompt is never skipped. Main `Stop` is unaffected
+  (guard is `SubagentStop`-only). (`ace_after_task.py`)
+
+### Tests
+- `tests/test_subagent_degenerate_skip.py` (NEW — 16 assertions across 5 test classes):
+  Stage 1 recovery reads correct state file; `agent_id_recovered=True` in telemetry;
+  no recovery when `agent_id` already set; existing keymap fields preserved; Stage 2 fully
+  degenerate skip — no learn call, `subagent_degenerate_skip` record emitted with required
+  fields, exits 0, reaps state; happy path normal SubagentStop unchanged; partial-anchor NOT
+  skipped (`tsid` present + sentinel prompt, real prompt + no anchors, `retrieval_id` only);
+  main `Stop` never skipped by Stage 2 logic.
+- Full pytest suite: **991 passed, 4 skipped**.
+
+### Notes
+- No floor bump. Requires: Claude Code >= 2.1.163, ace-cli >= 4.1.2 (@ace-sdk/core >= 3.2.2).
+- Healthy/anchorable subagent traces are unaffected (verified: 162/162 credited normally,
+  0 false skips in live testing of concurrent orchestration).
+
 ## [7.1.3] - 2026-06-13
 
 ### Headline
