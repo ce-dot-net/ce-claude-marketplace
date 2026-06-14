@@ -695,10 +695,32 @@ def main():
         # v6.4.0: Per-agent scope — None for main agent, UUID for subagents
         agent_id = event.get('agent_id') or None
 
+        # v7.1.4 Stage 1 — SubagentStop agent_id recovery from transcript filename.
+        # High fan-out (concurrent subagents via Task tool or Workflow tool) causes CC
+        # to sometimes deliver SubagentStop with an empty agent_id/agent_type.  When
+        # that happens the state-file reads below key off None → hit the '-main' file
+        # (no task_session_id) instead of the per-agent file → anchorless trace.
+        # Fix: if agent_id is falsy on SubagentStop, derive it from the transcript
+        # filename ("agent-{uuid}.jsonl").  Set BEFORE all state-file reads so every
+        # downstream read (load_retrieval_ids, state_file_path, load_task_session_id,
+        # load_playbook_used) uses the recovered key.  Fully guarded — non-fatal.
+        _agent_id_recovered = False
+        if hook_event_name == 'SubagentStop' and not agent_id:
+            try:
+                _recovered = _agent_id_from_transcript_path(
+                    event.get('agent_transcript_path')
+                )
+                if _recovered:
+                    agent_id = _recovered
+                    _agent_id_recovered = True
+            except Exception:
+                pass  # non-fatal — fall back to original (empty) agent_id
+
         # v7.1.3 R1 — SubagentStop read_key==transcript_uuid invariant monitor
         # (recovery removed: proven inert, read_key always == transcript_uuid).
         # Compute both keys and emit one telemetry record so we detect immediately
         # if CC ever breaks the invariant.  Fully guarded — never break the learn pipeline.
+        # v7.1.4: also records agent_id_recovered (Stage 1 outcome).
         _keymap_telemetry = None  # populated below for SubagentStop only
         if hook_event_name == 'SubagentStop':
             try:
@@ -713,6 +735,7 @@ def main():
                     "read_key": _read_key,
                     "transcript_uuid": _transcript_uuid,
                     "invariant_ok": (_read_key == _transcript_uuid),
+                    "agent_id_recovered": _agent_id_recovered,
                 }
             except Exception:
                 pass  # non-fatal — never break the learn pipeline
@@ -787,7 +810,8 @@ def main():
         retrieval_id = _retrieval_id_from_state
 
         # v7.1.3 R1: emit invariant monitor record (SubagentStop only).
-        # Guarded + non-fatal — never break the learn pipeline.
+        # Emitted BEFORE Stage 2 so the keymap record is always written even when
+        # Stage 2 exits early (degenerate skip).  Guarded + non-fatal.
         if _keymap_telemetry is not None:
             try:
                 _rel_km = Path('.claude/data/logs')
@@ -799,6 +823,48 @@ def main():
                     }) + "\n")
             except Exception:
                 pass  # non-fatal
+
+        # v7.1.4 Stage 2 — hygiene: skip anchorless degenerate SubagentStop traces.
+        # Concurrent fan-out can deliver SubagentStop events where Stage 1 recovery
+        # also failed (no parseable transcript path) AND no state file was ever written
+        # (the subagent never got to search → no task_session_id / retrieval_id) AND the
+        # transcript is missing/empty → user_prompt stays the default sentinel.
+        # Sending such a trace is pure server noise: it cannot be credited (no session_id,
+        # no retrieval_id, task = "No user prompt found").
+        # Precision: skip ONLY when ALL four conditions hold simultaneously so we never
+        # drop a trace that has ANY anchor or a real prompt.
+        if hook_event_name == 'SubagentStop':
+            _is_degenerate = (
+                not task_session_id
+                and not retrieval_id
+                and not applied_log_ids
+                and (not user_prompt or user_prompt == "No user prompt found")
+            )
+            if _is_degenerate:
+                try:
+                    reap_patterns_used(session_id, agent_id, hook_event_name)
+                except Exception:
+                    pass  # reaping is best-effort
+                try:
+                    _rel_dg = Path('.claude/data/logs')
+                    _rel_dg.mkdir(parents=True, exist_ok=True)
+                    with open(_rel_dg / 'ace-relevance.jsonl', 'a') as _rf_dg:
+                        _rf_dg.write(json.dumps({
+                            "timestamp": datetime.now().isoformat(),
+                            "event": "subagent_degenerate_skip",
+                            "session_id": session_id,
+                            "agent_id": event.get('agent_id') or None,
+                            "agent_id_recovered": _agent_id_recovered,
+                            "reason": "fully anchorless: no session_id/retrieval_id/prompt",
+                        }) + "\n")
+                except Exception:
+                    pass  # non-fatal telemetry
+                output = {
+                    "continue": True,
+                    "systemMessage": "[ACE] SubagentStop skipped: anchorless degenerate trace",
+                }
+                print(json.dumps(output))
+                sys.exit(0)
 
         # agent_id-contract proof: record which agent_id the READ side used and how
         # many IDs it recovered. Diffing this against the wrapper's write-side
