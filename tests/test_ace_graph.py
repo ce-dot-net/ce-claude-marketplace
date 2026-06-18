@@ -713,6 +713,23 @@ class TestBuildGraphHtmlProjectName:
             "ace-graph.md must include project name in the summary output"
         )
 
+    def test_command_name_lookup_uses_real_ace_cli_keys(self):
+        """
+        Regression guard (v7.1.6): `ace-cli projects --json` records use keys
+        project_id / project_name (4.x schema), NOT id / name. The name lookup
+        MUST match on project_id and read project_name (id/name only as fallback),
+        else project_name stays None and the title shows the raw prj_… ID.
+        """
+        doc = ACE_GRAPH_MD.read_text(encoding="utf-8")
+        assert "p.get('project_id')" in doc or 'p.get("project_id")' in doc, (
+            "ace-graph.md name-lookup must match on p.get('project_id') "
+            "(ace-cli 4.x schema), not only p.get('id')"
+        )
+        assert "p.get('project_name')" in doc or 'p.get("project_name")' in doc, (
+            "ace-graph.md name-lookup must read p.get('project_name') "
+            "(ace-cli 4.x schema), not only p.get('name')"
+        )
+
 
 # ===========================================================================
 # 4. Command sync: ace-graph.md

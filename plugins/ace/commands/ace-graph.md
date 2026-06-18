@@ -102,11 +102,11 @@ try:
     )
     if result.returncode == 0 and result.stdout.strip():
         projects_data = json.loads(result.stdout)
-        # projects_data may be a list of {id, name} or a dict with a projects key
+        # ace-cli 4.x records use project_id/project_name; accept id/name as fallback
         project_list = projects_data if isinstance(projects_data, list) else projects_data.get('projects', [])
         for p in project_list:
-            if isinstance(p, dict) and p.get('id') == project_id:
-                project_name = p.get('name') or None
+            if isinstance(p, dict) and (p.get('project_id') or p.get('id')) == project_id:
+                project_name = p.get('project_name') or p.get('name') or None
                 break
 except Exception:
     project_name = None
