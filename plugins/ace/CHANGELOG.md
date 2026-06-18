@@ -5,6 +5,29 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [7.1.6] - 2026-06-18
+
+### Headline
+Bugfix: /ace:ace-graph project-name resolution. No floor bump. Requires: Claude Code >= 2.1.163, ace-cli >= 4.1.2 (@ace-sdk/core >= 3.2.2).
+
+### Fixed
+- **`/ace:ace-graph` project-name lookup used wrong JSON keys:** `ace-cli projects --json`
+  in ace-cli 4.x returns records with `project_id`/`project_name` keys, NOT `id`/`name`.
+  The v7.1.5 lookup matched on `p.get('id')` and read `p.get('name')`, so it never found
+  a match — the graph `<h1>` title always showed the raw `prj_…` ID instead of the human
+  project name (e.g. "ce-claude-marketplace"). Fixed: lookup now matches on `project_id`
+  and reads `project_name`, with `id`/`name` retained as fallback for forward compatibility.
+  Verified live: title now renders "ACE Knowledge Graph — ce-claude-marketplace".
+
+### Tests
+- `tests/test_ace_graph.py` — added `test_command_name_lookup_uses_real_ace_cli_keys`
+  (regression guard: asserts `ace-graph.md` uses `p.get('project_id')` and
+  `p.get('project_name')` — prevents silent key drift).
+- Full pytest suite: **1068 passed, 4 skipped**.
+
+### Notes
+- No floor bump. Requires: Claude Code >= 2.1.163, ace-cli >= 4.1.2 (@ace-sdk/core >= 3.2.2).
+
 ## [7.1.5] - 2026-06-18
 
 ### Headline
