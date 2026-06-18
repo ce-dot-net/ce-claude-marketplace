@@ -21,15 +21,9 @@ if ! command -v ace-cli >/dev/null 2>&1; then
   exit 1
 fi
 
-# Read context
-ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-
-# Try env wrapper format
-if [ -z "$ORG_ID" ] || [ -z "$PROJECT_ID" ]; then
-  ORG_ID=$(jq -r '.env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-  PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-fi
+# Read context (env-first: .env.ACE_PROJECT_ID is authoritative in ACE 1.5)
+ORG_ID=$(jq -r '.env.ACE_ORG_ID // .orgId // empty' .claude/settings.json 2>/dev/null || echo "")
+PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // .projectId // empty' .claude/settings.json 2>/dev/null || echo "")
 
 if [ -z "$PROJECT_ID" ]; then
   echo "❌ Run /ace:configure first"

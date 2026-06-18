@@ -91,7 +91,13 @@ class ACERelevanceLogger:
                 'harmful': p.get('harmful', 0),
                 'domain': p.get('domain', 'unknown'),
                 'section': p.get('section', 'unknown'),
-                'content': p.get('content', '')[:100] + ('...' if len(p.get('content', '')) > 100 else '')
+                'content': p.get('content', '')[:100] + ('...' if len(p.get('content', '')) > 100 else ''),
+                # v15 reward-model fields — present on ACE-1.5 search responses;
+                # default to None so old log entries without them do not crash.
+                'cumulative_v15_reward': p.get('cumulative_v15_reward', None),
+                'isAtRisk': p.get('isAtRisk', None),
+                'n_hot_pos': p.get('n_hot_pos', None),
+                'n_hot_neg': p.get('n_hot_neg', None),
             }
             for p in patterns_injected[:5]  # Top 5 patterns
         ]
