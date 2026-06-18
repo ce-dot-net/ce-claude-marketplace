@@ -65,14 +65,8 @@ echo ""
 # Test 2: Server Connectivity
 echo "[2/4] Testing ACE server connectivity..."
 
-export ACE_ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-export ACE_PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-
-# Try env wrapper format if not found
-if [ -z "$ACE_ORG_ID" ] || [ -z "$ACE_PROJECT_ID" ]; then
-  export ACE_ORG_ID=$(jq -r '.env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-  export ACE_PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-fi
+export ACE_ORG_ID=$(jq -r '.env.ACE_ORG_ID // .orgId // empty' .claude/settings.json 2>/dev/null || echo "")
+export ACE_PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // .projectId // empty' .claude/settings.json 2>/dev/null || echo "")
 
 if [ -z "$ACE_PROJECT_ID" ]; then
   echo "❌ No project configured"
@@ -110,29 +104,34 @@ echo ""
 # Test 3: Hooks Configuration
 echo "[3/4] Checking hooks configuration..."
 
-PLUGIN_DIR="$HOME/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace"
+# Resolve plugin root dynamically (mirrors ace-doctor)
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/ce-dot-net-marketplace/ace/*/ 2>/dev/null | tail -1)}"
 
-# Check hook wrappers
-HOOKS_FOUND=0
-if [ -f "$PLUGIN_DIR/scripts/ace_before_task_wrapper.sh" ]; then
-  HOOKS_FOUND=$((HOOKS_FOUND + 1))
-fi
-if [ -f "$PLUGIN_DIR/scripts/ace_after_task_wrapper.sh" ]; then
-  HOOKS_FOUND=$((HOOKS_FOUND + 1))
-fi
-
-if [ "$HOOKS_FOUND" -eq 2 ]; then
-  echo "✅ Hook wrappers: 2/2 found"
+if [ -z "$PLUGIN_ROOT" ]; then
+  echo "❌ Plugin root not found — is the ACE plugin installed?"
+  echo "   Expected: ~/.claude/plugins/cache/ce-dot-net-marketplace/ace/<version>/"
 else
-  echo "⚠️  Hook wrappers: $HOOKS_FOUND/2 found"
-fi
+  # Check key hook wrappers exist
+  HOOKS_FOUND=0
+  for WRAPPER in ace_before_task_wrapper.sh ace_stop_wrapper.sh ace_posttooluse_wrapper.sh; do
+    if [ -f "$PLUGIN_ROOT/scripts/$WRAPPER" ]; then
+      HOOKS_FOUND=$((HOOKS_FOUND + 1))
+    fi
+  done
 
-# Check hooks.json
-if [ -f "$PLUGIN_DIR/hooks/hooks.json" ]; then
-  HOOK_COUNT=$(jq -r '.hooks | length' "$PLUGIN_DIR/hooks/hooks.json")
-  echo "✅ hooks.json: $HOOK_COUNT hooks registered"
-else
-  echo "❌ hooks.json not found"
+  if [ "$HOOKS_FOUND" -eq 3 ]; then
+    echo "✅ Hook wrappers: 3/3 key wrappers found"
+  else
+    echo "⚠️  Hook wrappers: $HOOKS_FOUND/3 found (see /ace:ace-doctor for details)"
+  fi
+
+  # Check hooks.json
+  if [ -f "$PLUGIN_ROOT/hooks/hooks.json" ]; then
+    HOOK_COUNT=$(jq -r '.hooks | length' "$PLUGIN_ROOT/hooks/hooks.json")
+    echo "✅ hooks.json: $HOOK_COUNT hook events registered"
+  else
+    echo "❌ hooks.json not found at $PLUGIN_ROOT/hooks/hooks.json"
+  fi
 fi
 echo ""
 ```
@@ -187,23 +186,23 @@ echo "  - Capture learning: /ace:ace-learn"
    Error: Request timeout
    → Network issues or server overloaded
    → Action: Retry with exponential backoff
-   → Fallback: Check ~/.config/ace/config.json for correct serverUrl
+   → Fallback: Confirm auth status with: ace-cli whoami --json
    ```
 
 3. **Authentication Failed**
    ```
    Error: 401 Unauthorized
-   → Invalid or missing API token
-   → Action: Run /ace:ace-configure to set up credentials
-   → Fallback: Check ~/.config/ace/config.json for valid apiToken
+   → Device-code token missing or expired
+   → Action: Run /ace:ace-login (re-authenticates via device-code)
+   → Config path: ~/.config/ace/config.json (field: auth.token)
    ```
 
 4. **Invalid Project**
    ```
    Error: 404 Project not found
-   → Project ID doesn't exist
-   → Action: Verify projectId in .claude/settings.json
-   → Fallback: Create new project or use existing one
+   → Project ID doesn't exist or ACE_PROJECT_ID not configured
+   → Action: Verify ACE_PROJECT_ID in .claude/settings.json (.env.ACE_PROJECT_ID)
+   → Fallback: Run /ace:ace-configure to reconfigure
    ```
 
 5. **Server Error**
@@ -225,9 +224,9 @@ echo "  - Capture learning: /ace:ace-learn"
 7. **Missing Configuration**
    ```
    Error: Config file not found
-   → ~/.config/ace/config.json or .claude/settings.json missing
-   → Action: Run /ace:ace-configure to create config files
-   → Fallback: Provide default configuration template
+   → ~/.config/ace/config.json (global, device-code token) or .claude/settings.json missing
+   → Action: Run /ace:ace-login (creates ~/.config/ace/config.json with auth.token)
+   →         Run /ace:ace-configure (writes ACE_PROJECT_ID to .claude/settings.json)
    ```
 
 ## Available ACE Commands
@@ -275,11 +274,11 @@ All ACE operations use ace-cli:
 
 ### Step 4: Show Configuration Summary
 
-Display the current ACE configuration:
-- Server URL (from `~/.config/ace/config.json` or environment)
-- Project ID (from `.claude/settings.json`)
-- API token status (present/missing, don't show actual token)
-- Plugin version
+Display the current ACE configuration (ACE 1.5 / ace-cli 4.x model):
+- Auth status: verify with `ace-cli whoami --json` (device-code token at `~/.config/ace/config.json` under `auth.token`)
+- Project ID: `ACE_PROJECT_ID` from `.claude/settings.json` (`.env.ACE_PROJECT_ID`)
+- Server URL override (if set): `ACE_SERVER_URL` environment variable (baked into binary by default)
+- Plugin version (resolved via `$CLAUDE_PLUGIN_ROOT` or `~/.claude/plugins/cache/ce-dot-net-marketplace/ace/<version>/plugin.json`)
 - Learning mode (automatic/manual)
 
 **Error Handling**:
@@ -289,7 +288,7 @@ Display the current ACE configuration:
    Error: Cannot read ~/.config/ace/config.json or .claude/settings.json
    → Permission denied or file corrupted
    → Action: Check file permissions (global config should be 600)
-   → Fallback: Recreate config with /ace:ace-configure
+   → Fallback: Recreate config with /ace:ace-login and /ace:ace-configure
    ```
 
 2. **Invalid JSON in Config**
@@ -297,23 +296,22 @@ Display the current ACE configuration:
    Error: Malformed configuration file
    → JSON parse error
    → Action: Show line/column of error
-   → Fallback: Backup corrupted file, create new config
+   → Fallback: Backup corrupted file, run /ace:ace-login to recreate
    ```
 
 3. **Missing Required Fields**
    ```
    Warning: Configuration incomplete
-   → serverUrl, apiToken, or projectId missing
+   → auth.token (device-code) or ACE_PROJECT_ID missing
    → Action: List missing fields
-   → Fallback: Run /ace:ace-configure to complete setup
+   → Fallback: Run /ace:ace-login (auth) or /ace:ace-configure (project)
    ```
 
-4. **Invalid URL Format**
+4. **Server URL Override**
    ```
-   Error: Invalid serverUrl format
-   → URL doesn't match expected pattern
-   → Action: Suggest correct format (e.g., https://ace-api.code-engine.app)
-   → Fallback: Provide default URL options
+   Note: Server URL is baked into the ace-cli binary (ace-cli 4.x)
+   → It is NOT a user-editable field in ~/.config/ace/config.json
+   → To override: set ACE_SERVER_URL environment variable
    ```
 
 ## Example Success Output
@@ -348,10 +346,10 @@ Available ACE Tools:
 
 Configuration:
 Learning Mode: Automatic (hook-based)
-Plugin Version: 5.0.0
+Plugin Version: 7.x
 Config Files:
-  - Global: ~/.config/ace/config.json (serverUrl, apiToken, cacheTtl)
-  - Project: .claude/settings.json (projectId, orgId)
+  - Global: ~/.config/ace/config.json (auth.token — device-code, ace-cli 4.x)
+  - Project: .claude/settings.json (env.ACE_PROJECT_ID, env.ACE_ORG_ID)
 
 🎯 Everything looks good! ACE automatic learning is ready.
 ```
@@ -364,16 +362,17 @@ Config Files:
 Agent Skill: ace:ace-learning
 Status: ❌ NOT FOUND
 
-The ACE Agent Skill is not loaded. Possible causes:
-1. Plugin not installed in ~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace/
-2. Skill file missing or misconfigured
-3. Claude Code plugin system not initialized
+The ACE plugin is not responding as expected. Possible causes:
+1. Plugin not installed — check: ls ~/.claude/plugins/cache/ce-dot-net-marketplace/ace/
+2. ace-cli 4.x not installed — install: npm install -g @ace-sdk/cli
+3. Not authenticated — run: ace-cli login (device-code auth)
+4. ACE_PROJECT_ID not configured — run: /ace:ace-configure
 
 Troubleshooting Steps:
-1. Check plugin installation: ls ~/.claude/plugins/marketplaces/ce-dot-net-marketplace/plugins/ace/
-2. Verify skill configuration in plugin.json
-3. Restart Claude Code CLI
-4. Check Claude Code logs for plugin loading errors
+1. Check plugin installation: ls ~/.claude/plugins/cache/ce-dot-net-marketplace/ace/
+2. Verify CLI: ace-cli --version  (must be 4.x+)
+3. Verify auth: ace-cli whoami --json
+4. Run full diagnostics: /ace:ace-doctor
 ```
 
 ## Common Issues
@@ -381,11 +380,11 @@ Troubleshooting Steps:
 ### Issue: ACE Server Connection Failed
 **Symptom**: ace-cli commands return connection error or authentication failed
 **Solution**:
-1. Run `/ace:ace-configure` to set up connection
-2. Verify server URL in `~/.config/ace/config.json` is correct
-3. Check API token is valid (not expired)
-4. Verify server is running and accessible
-5. Check network connectivity
+1. Verify auth: `ace-cli whoami --json` (device-code token in `~/.config/ace/config.json` under `auth.token`)
+2. Re-authenticate if needed: `ace-cli login`
+3. Verify project is configured: `ACE_PROJECT_ID` in `.claude/settings.json` (`.env.ACE_PROJECT_ID`)
+4. Check network connectivity
+5. Run full diagnostics: `/ace:ace-doctor`
 
 ### Issue: No Bullets in Playbook
 **Symptom**: ace_status shows 0 total bullets

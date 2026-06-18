@@ -409,7 +409,7 @@ def extract_task_data_for_evaluation(
                     continue
                 conf = pat.get("confidence", 0)
                 if pid not in seen_patterns or conf > seen_patterns[pid].get("confidence", 0):
-                    seen_patterns[pid] = {
+                    entry: Dict[str, Any] = {
                         "id": pid,
                         "name": pattern_names.get(pid, pid),
                         "confidence": conf,
@@ -418,6 +418,13 @@ def extract_task_data_for_evaluation(
                         "helpful_votes": pat.get("helpful", 0),
                         "harmful_votes": pat.get("harmful", 0),
                     }
+                    # v15 reward-model fields — present when logged by ace_relevance_logger
+                    # v7.1.5+; absent on older log entries (graceful: omit rather than crash).
+                    if "cumulative_v15_reward" in pat:
+                        entry["cumulative_v15_reward"] = pat["cumulative_v15_reward"]
+                    if "isAtRisk" in pat:
+                        entry["isAtRisk"] = pat["isAtRisk"]
+                    seen_patterns[pid] = entry
 
         task["pattern_details"] = list(seen_patterns.values())
 

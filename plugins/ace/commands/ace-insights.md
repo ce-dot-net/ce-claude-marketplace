@@ -90,15 +90,19 @@ Evaluate the task data directly from the output above.
 Read the JSON output from Step 1. **You are the LLM — evaluate each task's ACE helpfulness.**
 
 For each task in the `tasks` array, assess:
-- **Was ACE helpful?** Look at the `user_prompt` and the `pattern_details` (domain, section, confidence). Were the injected patterns relevant to what the user was trying to do?
-- **Helpfulness percentage (0-100)**: How much did ACE likely help this task? Consider:
+- **Was ACE helpful?** Look at the `user_prompt` and the `pattern_details` (domain, section, confidence, and v15 reward fields when present). Were the injected patterns relevant to what the user was trying to do?
+- **Helpfulness percentage (0-100)**: How much did ACE likely help this task? Consider (in priority order):
+  - **v15 reward signal** (when present in `pattern_details`):
+    - `cumulative_v15_reward > 0` = server-confirmed the pattern was genuinely applied and helpful — strong positive signal; weight this heavily
+    - `isAtRisk == true` = server flagged the pattern as risky/low-quality — negative signal; reduce helpfulness score
+    - When `cumulative_v15_reward` and `isAtRisk` are absent (older log entries), fall back to the signals below
   - Domain match: Do the pattern domains relate to the user's request?
   - Confidence: Higher server confidence = better semantic match
   - Pattern count: More relevant patterns = more guidance available
   - 0% = patterns were completely irrelevant to the task
   - 50% = some patterns were marginally relevant
   - 80%+ = patterns directly matched the task domain and provided clear value
-- **Reasoning**: One sentence explaining your judgment
+- **Reasoning**: One sentence explaining your judgment (mention v15 signal if it influenced the score)
 
 For tasks with `searches: 0` (no ACE involvement), score 0% with reasoning "No ACE patterns were searched or injected for this task."
 

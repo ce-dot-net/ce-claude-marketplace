@@ -5,6 +5,49 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [7.1.5] - 2026-06-18
+
+### Headline
+Command de-stale + ACE-1.5 insights + new knowledge-graph command. No floor bump. Requires: Claude Code >= 2.1.163, ace-cli >= 4.1.2 (@ace-sdk/core >= 3.2.2).
+
+### Changed
+- **ace-test de-stale:** `ace-test.md` now describes the ACE-1.5 model — device-code auth
+  (`ace-cli login`/`whoami`/`auth.token`), dynamic `$CLAUDE_PLUGIN_ROOT`/cache plugin root,
+  `ACE_PROJECT_ID` env, `@ace-sdk/cli` — replacing the dead v1.x model
+  (`serverUrl`/`apiToken`/`cacheTtl`, hardcoded `marketplaces/` path). Guarded by new
+  `tests/test_ace_test_sync.py` so it can't silently drift.
+
+- **`.env.ACE_PROJECT_ID` env-first:** `ace-clear.md`, `ace-delta.md`,
+  `ace-export-patterns.md`, `ace-import-patterns.md`, and `ace-learn.md` now read
+  `.env.ACE_PROJECT_ID // .projectId` (was legacy `.projectId`-first), matching
+  `ace-doctor.md`.
+
+- **ace-insights → v15 reward:** `ace_relevance_logger.py` now logs
+  `cumulative_v15_reward`/`isAtRisk`/`n_hot_pos`/`n_hot_neg` into `top_patterns`
+  (guarded, `None` when absent); `ace_insights_analyzer.py` surfaces them in
+  `pattern_details` (graceful on old log entries); `ace-insights.md` weights the v15
+  reward signal in the helpfulness evaluation.
+
+### Added
+- **NEW command `/ace:ace-graph`:** renders the local ACE knowledge-graph
+  (`ace-cli` 7-day cache `~/.ace-cache/<org>__<project>.db`) as a self-contained
+  interactive HTML report (Cytoscape, force-directed layout; node color=domain,
+  node size=reward/degree, edge width=co-application weight, click→neighbours,
+  domain/min-weight filters). Opens like `ace-insights` — saves to
+  `~/.claude/usage-data/ace-graph.html` then `open` on Darwin. Project title
+  resolved via `ace-cli projects --json` (graceful ID fallback). Backed by new
+  `ace_graph_builder.py` utility.
+
+### Tests
+- `tests/test_ace_test_sync.py` (NEW): asserts `ace-test.md` references ACE-1.5
+  identifiers and no dead v1.x strings.
+- `tests/test_ace_graph.py` (NEW): covers `ace_graph_builder.py` — graph construction,
+  HTML output, node/edge assertions, project-name resolution, graceful fallbacks.
+- Full pytest suite: **1067 passed, 4 skipped**.
+
+### Notes
+- No floor bump. Requires: Claude Code >= 2.1.163, ace-cli >= 4.1.2 (@ace-sdk/core >= 3.2.2).
+
 ## [7.1.4] - 2026-06-14
 
 ### Headline
