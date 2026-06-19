@@ -373,6 +373,7 @@ def build_graph_html(graph_dict, project_name=None):
   .ctrl-group {{ display: flex; align-items: center; gap: 6px; font-size: 12px; }}
   label {{ color: #8892b0; }}
   input[type=range] {{ width: 100px; accent-color: #7c93f5; }}
+  input[type=checkbox] {{ accent-color: #7c93f5; cursor: pointer; }}
   select {{ background: #252836; color: #e2e8f0; border: 1px solid #3d4266;
             border-radius: 4px; padding: 3px 6px; font-size: 12px; }}
   #truncated-note {{ font-size: 11px; color: #e2a458; padding: 2px 8px;
@@ -399,7 +400,8 @@ def build_graph_html(graph_dict, project_name=None):
 <div id="header">
   <h1>{title}</h1>
   <div id="meta-bar">
-    {n_nodes} patterns &nbsp;&bull;&nbsp; {n_edges} edges rendered
+    {n_nodes} patterns &nbsp;&bull;&nbsp; <span id="connected-count">?</span> connected &nbsp;&bull;&nbsp; <span id="isolated-count">?</span> isolated
+    &nbsp;&bull;&nbsp; {n_edges} edges rendered
     {truncated_html}
   </div>
   <div id="controls">
@@ -413,6 +415,10 @@ def build_graph_html(graph_dict, project_name=None):
       <select id="dom-filter">
         <option value="">All</option>
       </select>
+    </div>
+    <div class="ctrl-group">
+      <input type="checkbox" id="show-isolated">
+      <label for="show-isolated">Show isolated nodes</label>
     </div>
   </div>
 </div>
@@ -502,6 +508,10 @@ var cy = cytoscape({{
       style: {{ "opacity": 0.15 }}
     }},
     {{
+      selector: "node.isolated",
+      style: {{ "display": "none" }}
+    }},
+    {{
       selector: "edge",
       style: {{
         "line-color": "#3d4266",
@@ -587,46 +597,91 @@ cy.on("tap", function(evt) {{
   }}
 }});
 
-// ── min-weight slider ──────────────────────────────────────────────────────
+// ── unified applyFilters — called by slider, domain dropdown, and checkbox ─
 var wtSlider = document.getElementById("wt-slider");
 var wtVal    = document.getElementById("wt-val");
-wtSlider.addEventListener("input", function() {{
-  var minW = parseInt(this.value, 10);
-  wtVal.textContent = minW;
-  cy.edges().forEach(function(e) {{
-    if ((e.data("weight") || 0) < minW) {{
-      e.style("display", "none");
-    }} else {{
-      e.style("display", "element");
-    }}
-  }});
-}});
+var showIsolatedCb = document.getElementById("show-isolated");
+var connectedCountEl = document.getElementById("connected-count");
+var isolatedCountEl  = document.getElementById("isolated-count");
 
-// ── domain filter ──────────────────────────────────────────────────────────
-sel.addEventListener("change", function() {{
-  var chosen = this.value;
-  if (!chosen) {{
-    cy.nodes().style("display", "element");
-    cy.edges().style("display", "element");
-    return;
-  }}
+function applyFilters() {{
+  var minW   = parseInt(wtSlider.value, 10);
+  var chosen = sel.value;
+  var showIsolated = showIsolatedCb.checked;
+
+  // 1. Apply domain filter to nodes (show/hide)
   cy.nodes().forEach(function(n) {{
-    if (n.data("domain") === chosen) {{
+    if (!chosen || n.data("domain") === chosen) {{
       n.style("display", "element");
     }} else {{
       n.style("display", "none");
     }}
   }});
+
+  // 2. Apply weight + domain filter to edges
   cy.edges().forEach(function(e) {{
     var src = cy.getElementById(e.data("source"));
     var tgt = cy.getElementById(e.data("target"));
-    if (src.style("display") === "element" && tgt.style("display") === "element") {{
+    var weightOk  = (e.data("weight") || 0) >= minW;
+    var domainOk  = (src.style("display") === "element" &&
+                     tgt.style("display") === "element");
+    if (weightOk && domainOk) {{
       e.style("display", "element");
     }} else {{
       e.style("display", "none");
     }}
   }});
+
+  // 3. Recompute isolated set: nodes with 0 currently-visible edges
+  var connectedCount = 0;
+  var isolatedCount  = 0;
+  cy.nodes().forEach(function(n) {{
+    if (n.style("display") === "none") {{
+      // Already hidden by domain filter — don't classify
+      n.removeClass("isolated");
+      return;
+    }}
+    var visibleEdges = n.connectedEdges().filter(function(e) {{
+      return e.style("display") === "element";
+    }});
+    var degree = visibleEdges.length;
+    if (degree === 0) {{
+      // isolated node
+      n.addClass("isolated");
+      isolatedCount++;
+      if (showIsolated) {{
+        n.style("display", "element");
+      }} else {{
+        n.style("display", "none");
+      }}
+    }} else {{
+      n.removeClass("isolated");
+      n.style("display", "element");
+      connectedCount++;
+    }}
+  }});
+
+  // 4. Update connected/isolated counts in header
+  if (connectedCountEl) {{ connectedCountEl.textContent = connectedCount; }}
+  if (isolatedCountEl)  {{ isolatedCountEl.textContent  = isolatedCount;  }}
+}}
+
+// ── wire up controls ───────────────────────────────────────────────────────
+wtSlider.addEventListener("input", function() {{
+  wtVal.textContent = this.value;
+  applyFilters();
 }});
+
+sel.addEventListener("change", function() {{
+  applyFilters();
+}});
+
+showIsolatedCb.addEventListener("change", function() {{
+  applyFilters();
+}});
+
+// ── run on initial load to hide isolated nodes by default ─────────────────
+applyFilters();
 </script>
 </body>
 </html>""".format(
