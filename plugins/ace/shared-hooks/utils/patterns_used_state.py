@@ -323,7 +323,8 @@ def strip_and_gate(data):
 
     Used by both domain-shift bash scripts via --strip-and-gate CLI mode.
     Domain-shift sets are small (≤8 via --top-k 8 server-side), so all
-    patterns are rendered verbatim (tier_k=100 covers them all).
+    patterns are rendered verbatim (tier_k parameter is a no-op in render_patterns_dict
+    — budget is not applied here; all patterns are returned).
     The bash scripts wrap this JSON output in their own <ace-patterns-domain-shift> tag.
 
     Delegates directly to render_patterns_dict (structured return) to avoid

@@ -449,7 +449,7 @@ def main():
         )
 
         # CRITICAL: Save pattern IDs for reinforcement learning (ACE paper feedback loop)
-        # render_patterns returns ALL injected ids (both tiers, no gate drop).
+        # render_patterns returns only budget-limited injected ids (no gate drop).
         if _pattern_ids and context['project']:
             try:
                 append_patterns_used(session_id, agent_id, _pattern_ids,
@@ -459,9 +459,13 @@ def main():
             except Exception:
                 pass
 
-        # Append fire-and-forget eval injection if present (from previous task's Stop hook)
+        # Append fire-and-forget eval injection if present (from previous task's Stop hook).
+        # CC hard-caps additionalContext at 10,000 chars; trim eval_injection (cosmetic) to fit.
         if eval_injection:
-            ace_context = ace_context + "\n" + eval_injection
+            _CC_HARD_CAP = 10_000
+            _available_for_eval = _CC_HARD_CAP - len(ace_context) - 1  # -1 for the "\n"
+            if _available_for_eval > 0:
+                ace_context = ace_context + "\n" + eval_injection[:_available_for_eval]
 
         # Build user-visible message
         pattern_list = patterns_response.get('similar_patterns', [])

@@ -393,43 +393,57 @@ class TestRenderPatternsDryDelegation:
             "render_patterns must call render_patterns_dict to be DRY"
         )
 
-    def test_render_patterns_and_dict_agree_on_processed_set(self):
-        """render_patterns and render_patterns_dict must agree on which patterns are processed."""
+    def test_render_patterns_injected_is_subset_of_dict_processed(self):
+        """render_patterns injected set is a subset of render_patterns_dict processed set.
+
+        After the budget-verbatim-no-tail change:
+          - render_patterns_dict returns ALL processed patterns (no budget applied)
+          - render_patterns returns only the budget-limited top-N injected patterns
+        With small patterns all 20 fit in budget → both agree; verified here with small inputs.
+        """
         from ace_pattern_render import render_patterns, render_patterns_dict
+        # Small patterns — all 20 fit in default budget
         patterns = [
             _make_pattern(f"ctx-agree-{i:04d}", bandit_rank=i + 1, retrieval_log_id=200 + i)
             for i in range(20)
         ]
         resp = _make_response(patterns)
 
-        ctx, str_ids, _, str_rl_map = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"', tier_k=5)
-        dict_out, dict_ids, dict_rl_map = render_patterns_dict(resp, tier_k=5)
+        ctx, str_ids, _, str_rl_map = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        dict_out, dict_ids, dict_rl_map = render_patterns_dict(resp)
 
-        # Both must agree on injected_pattern_ids
-        assert set(str_ids) == set(dict_ids), (
-            f"render_patterns and render_patterns_dict must agree on injected ids; "
+        # render_patterns injected must be a subset of dict processed
+        assert set(str_ids) <= set(dict_ids), (
+            f"render_patterns injected ids must be a subset of render_patterns_dict processed ids; "
             f"string={set(str_ids)}, dict={set(dict_ids)}"
         )
-        # Both must agree on retrieval_log_map
-        assert str_rl_map == dict_rl_map, (
-            "render_patterns and render_patterns_dict must agree on retrieval_log_map"
+        # With small patterns all fit — both sets must be equal
+        assert set(str_ids) == set(dict_ids), (
+            f"Small patterns: both sets must be equal (all fit in budget); "
+            f"string ids={len(str_ids)}, dict ids={len(dict_ids)}"
         )
+        # render_patterns retrieval_log_map must be a subset of dict retrieval_log_map
+        for pid, rlid in str_rl_map.items():
+            assert pid in dict_rl_map, f"Pattern {pid} in str rl_map but missing from dict rl_map"
+            assert dict_rl_map[pid] == rlid, (
+                f"Pattern {pid}: str rl_map has {rlid}, dict rl_map has {dict_rl_map[pid]}"
+            )
 
-    def test_render_patterns_string_still_tiered(self):
-        """render_patterns (string) must still produce verbatim head + compact tail tiering."""
+    def test_render_patterns_string_uses_budget_no_tail(self):
+        """render_patterns (string) now uses budget-verbatim-no-tail: no ranked_index."""
         from ace_pattern_render import render_patterns
-        patterns = [_make_pattern(f"ctx-tier-{i:04d}", bandit_rank=i + 1) for i in range(20)]
+        import re
+        patterns = [_make_pattern(f"ctx-tier-{i:04d}", bandit_rank=i + 1, content="A" * 200) for i in range(20)]
         resp = _make_response(patterns)
-        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"', tier_k=5)
-        lines = ctx.split("\n")
-        data = json.loads(lines[1])
-        verbatim = data.get("similar_patterns", [])
-        # verbatim section must still have only tier_k=5 patterns
-        assert len(verbatim) == 5, (
-            f"render_patterns string output: verbatim must still be tier_k=5; got {len(verbatim)}"
+        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        # budget-verbatim-no-tail: no ranked_index, total ≤ 9500
+        assert "<ranked_index>" not in ctx, (
+            "render_patterns string output must NOT have ranked_index (tail is DROPPED)"
         )
-        # compact index must be present for the tail 15
-        assert "<ranked_index>" in ctx, "render_patterns string output must still have ranked_index for tail"
+        assert not re.search(r'#\d+ \[', ctx), (
+            "No compact index format '#N [domain]' must appear"
+        )
+        assert len(ctx) <= 9500, f"Total must be ≤9500; got {len(ctx)}"
 
     def test_render_patterns_dict_all_in_similar_patterns(self):
         """render_patterns_dict: all processed patterns appear in similar_patterns (no tiering)."""
@@ -571,21 +585,26 @@ class TestBanditRankOmittedWhenNone:
                 f"Unranked (absent bandit_rank) must come after ranked; order: {ids_in_order}"
             )
 
-    def test_compact_index_shows_hash_question_for_missing_rank(self):
-        """Compact index for a None-rank pattern must render '#?' (not '#None')."""
+    def test_unranked_pattern_in_output_no_compact(self):
+        """Unranked (None bandit_rank) pattern must appear verbatim (if fits budget), not as compact '#?'."""
         from ace_pattern_render import render_patterns
         patterns = [
             _make_pattern("ctx-ranked-0001", bandit_rank=1),
             _make_pattern("ctx-norank-tail-0001", bandit_rank=None),
         ]
         resp = _make_response(patterns)
-        # tier_k=1 → ranked pattern is verbatim, unranked pattern goes to tail compact index
-        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"', tier_k=1)
-        assert "#?" in ctx, (
-            f"Compact index for None bandit_rank must render '#?'; ctx excerpt: {ctx[-200:]!r}"
+        # budget-verbatim-no-tail: both patterns are small, both fit → no compact index at all
+        ctx, ids, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        # No compact index format must appear
+        assert "#?" not in ctx, (
+            "Budget-verbatim-no-tail: no compact '#?' index must appear (tail is DROPPED)"
         )
         assert "#None" not in ctx, (
-            "Compact index must not render '#None' for absent bandit_rank"
+            "Budget-verbatim-no-tail: no compact '#None' index must appear"
+        )
+        # Both patterns must be in output (they are small enough to fit)
+        assert "ctx-norank-tail-0001" in ids, (
+            "Unranked pattern must be included verbatim if it fits in the budget"
         )
 
     def test_semantic_score_still_omitted_when_absent(self):
@@ -640,20 +659,26 @@ class TestRegressionExistingBehavior:
         _, _, reserved, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
         assert reserved == "", f"Third element must be empty string; got {reserved!r}"
 
-    def test_tiering_unchanged_verbatim_head_compact_tail(self):
-        """render_patterns tiering must still work: top tier_k verbatim, rest compact."""
+    def test_no_tiering_budget_verbatim_no_tail(self):
+        """render_patterns (string) must now use budget-verbatim-no-tail: no ranked_index."""
         from ace_pattern_render import render_patterns
         patterns = [_make_pattern(f"ctx-t-{i:04d}", bandit_rank=i + 1) for i in range(10)]
         resp = _make_response(patterns)
-        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"', tier_k=3)
-        verbatim = self._get_verbatim_from_ctx(ctx)
-        assert len(verbatim) == 3, f"verbatim head must be tier_k=3; got {len(verbatim)}"
-        assert "<ranked_index>" in ctx, "compact ranked_index must be present for tail"
+        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        # No compact tail — budget-verbatim-no-tail mode
+        assert "<ranked_index>" not in ctx, (
+            "budget-verbatim-no-tail: no ranked_index must be present"
+        )
+        assert len(ctx) <= 9500, f"Total must be ≤9500; got {len(ctx)}"
 
-    def test_all_ids_in_injected_ids_unchanged(self):
-        """injected_pattern_ids must still cover all valid ids from both tiers."""
+    def test_injected_ids_cover_only_shown_patterns(self):
+        """injected_pattern_ids covers the budget-limited shown set (small patterns: all fit)."""
         from ace_pattern_render import render_patterns
+        # Small patterns — all 20 should fit within the 9500-char default budget
         patterns = [_make_pattern(f"ctx-all-{i:04d}", bandit_rank=i + 1) for i in range(20)]
         resp = _make_response(patterns)
-        _, ids, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"', tier_k=5)
-        assert len(ids) == 20, f"All 20 ids must be in injected_pattern_ids; got {len(ids)}"
+        _, ids, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        # All 20 small patterns fit in budget — all must be in injected_pattern_ids
+        assert len(ids) == 20, (
+            f"All 20 small patterns fit in default budget; injected_pattern_ids should have 20; got {len(ids)}"
+        )
