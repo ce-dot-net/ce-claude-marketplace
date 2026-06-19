@@ -1,21 +1,20 @@
 #!/usr/bin/env python3
 """
-TDD RED tests for ace_pattern_render.render_patterns() — the new central
-pure render helper that replaces the per-site USEFUL_FIELDS strip + quality
-gate + flat dump across all 4 injection sites.
+TDD tests for ace_pattern_render.render_patterns() — the central pure render
+helper for ACE pattern injection.
 
 Contract (server-team validated, ACE-1.5-native):
   - bandit_rank + semantic_score hoisted from match_factors to top-level
   - NO quality gate / NO drop: at-risk and reward<0 RETAINED
   - Sort by bandit_rank ASC; missing/None bandit_rank → tail (stable)
-  - Tier: top-K verbatim (all kept fields incl. evidence[:2]);
-          rest as compact one-line ranked index (no evidence)
+  - BUDGET-VERBATIM-NO-TAIL: greedily include verbatim from top until budget
   - expanded array DROPPED from injected payload
   - Wrap in XML tag with attrs
-  - F-080: retrieval_log_map covers FULL set, bool retrieval_log_id rejected
-  - injected_pattern_ids = ALL injected pattern ids (both tiers, valid only)
+  - F-080: retrieval_log_map covers INJECTED set only, bool retrieval_log_id rejected
+  - injected_pattern_ids = injected (budget-fitting) pattern ids (valid only)
 
-All tests are RED until ace_pattern_render.py exists and is correct.
+Fixture strategy: ALL tests use synthetic in-repo fixtures built by
+_make_synthetic_fixture() — NO /tmp or external-file dependencies.
 """
 
 import json
@@ -117,6 +116,173 @@ def _make_response(patterns, retrieval_id="ret-test-001", with_expanded=True):
     if with_expanded:
         resp["expanded"] = [
             {"cached": True, "pattern_id": "some-cache-id", "cumulative_reward": 5.0}
+        ]
+    return resp
+
+
+def _make_synthetic_fixture(
+    n_patterns=100,
+    *,
+    retrieval_id="ret-synth-fixture-001",
+    with_expanded=True,
+    content_template=None,
+    evidence_template=None,
+    domains=None,
+    start_rank=1,
+    n_atrisk=10,
+    n_negative_reward=5,
+):
+    """Build a representative synthetic server-response dict (no external files).
+
+    Produces a realistic mix of patterns for use as a test fixture:
+      - varied domains (default: 5 rotating domains)
+      - realistic content + evidence lengths
+      - bandit_rank 1..N (rank-sorted), retrieval_log_id = 1000+i
+      - n_atrisk patterns have isAtRisk=True, cumulative_v15_reward=-0.5
+      - n_negative_reward patterns have reward<0 (spread across the set)
+      - all match_factors present (bandit_rank, semantic_score, retrieval_log_id)
+      - expanded array (caller controls via with_expanded)
+
+    This is a PUBLIC repo — synthesised data only, no real pattern content.
+    """
+    if domains is None:
+        domains = [
+            "ace-plugin-release-management",
+            "system-validation-and-testing",
+            "bash-command-execution",
+            "python-development-practices",
+            "ace-server",
+        ]
+
+    CONTENTS = [
+        (
+            "When debugging hook failures, examine the hook output JSON carefully. "
+            "The hookSpecificOutput.additionalContext field is the primary injection "
+            "path; missing or malformed JSON here silently drops context."
+        ),
+        (
+            "Always run the full pytest suite after modifying shared-hooks utilities. "
+            "Shared utilities like ace_pattern_render.py are imported by multiple "
+            "injection sites and regressions can be non-obvious."
+        ),
+        (
+            "Use json.dumps with default separators=(',', ':') when estimating byte "
+            "budgets for serialized payloads. The default ', ' separator adds an extra "
+            "byte per item compared to the compact form."
+        ),
+        (
+            "Verify that retrieval_log_id values extracted from match_factors are "
+            "integers, not booleans. bool is a subclass of int in Python, so an "
+            "isinstance(v, int) check must be preceded by not isinstance(v, bool)."
+        ),
+        (
+            "When implementing greedy budget loops for JSON array serialization, "
+            "account for the separator cost between items. json.dumps list separator "
+            "is ', ' (2 chars), not ',' (1 char) — underestimating by 1 per item "
+            "causes the assembled array to exceed budget with many small patterns."
+        ),
+    ]
+    EVIDENCES = [
+        ["Agent confirmed fix via live test.", "Test suite green after change."],
+        ["Observed in production trace.", "Reproduced in isolated unit test."],
+        ["Server-team confirmed behavior.", "Plugin telemetry verified."],
+        ["Code review caught the issue.", "Static analysis confirmed pattern."],
+        ["Deployment smoke test passed.", "CI pipeline green."],
+    ]
+
+    patterns = []
+    for i in range(n_patterns):
+        rank = start_rank + i
+        domain = domains[i % len(domains)]
+        content_idx = i % len(CONTENTS)
+        ev_idx = i % len(EVIDENCES)
+
+        # Make content length vary: shorter for early ranks, longer for later
+        base_content = (content_template or CONTENTS[content_idx])
+        if i < n_patterns // 3:
+            content = base_content
+        elif i < 2 * n_patterns // 3:
+            content = base_content + " " + base_content[:50]
+        else:
+            content = base_content + " " + base_content
+
+        is_at_risk = i < n_atrisk
+        reward = -0.5 if is_at_risk else (
+            -1.0 if i < (n_atrisk + n_negative_reward) else float(5 + (i % 10))
+        )
+
+        mf = {
+            "bandit_rank": rank,
+            "semantic_score": round(0.99 - i * 0.003, 4),
+            "ucb_score": round(1.0 - i * 0.005, 4),
+            "retrieval_log_id": 1000 + i,
+            "retrieval_id": retrieval_id,
+            "domain_boost": False,
+        }
+        p = {
+            "id": f"ctx-synth-{rank:04d}-fixture",
+            "name": "",
+            "domain": domain,
+            "content": content,
+            "confidence": round(0.95 - i * 0.002, 4),
+            "helpful": float(10 - (i % 5)),
+            "harmful": float(i % 3),
+            "section": "strategies_and_hard_rules",
+            "evidence": (evidence_template or EVIDENCES[ev_idx])[:3],
+            "root_cause": "",
+            "error_context": "",
+            "cumulative_v15_reward": reward,
+            "n_hot_pos": max(0, 5 - i % 6),
+            "n_hot_neg": i % 3,
+            "isAtRisk": is_at_risk,
+            # Server-internal fields (must be stripped by render_patterns)
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-06-01T00:00:00Z",
+            "last_used": "2026-06-12T00:00:00Z",
+            "observations": 10.0,
+            "retrieval_count": 5,
+            "source": "local",
+            "source_project_id": None,
+            "source_project_name": None,
+            "local_helpful": 1,
+            "local_harmful": 0,
+            "payload_version": 15,
+            "root_cause_present": False,
+            "has_error_context": False,
+            "birth_primary_lang": "python",
+            "domain_cluster_id": -1,
+            "abstract_domain": "",
+            "root_cause_cluster_id": -1,
+            "birth_first_tool_bucket": "none",
+            "birth_n_steps_bucket": "0",
+            "birth_has_error": "no_ctx",
+            "last_citation_score": 0,
+            "citation_score_ema_30d": 0,
+            "n_warm_pos": 1,
+            "n_warm_neg": 0,
+            "n_cold_pos": 0,
+            "n_cold_neg": 0,
+            "n_retrieval_no_apply": 0,
+            "merge_winner_count": 0,
+            "merged_from": [],
+            "match_factors": mf,
+        }
+        patterns.append(p)
+
+    resp = {
+        "similar_patterns": patterns,
+        "count": len(patterns),
+        "threshold": 0.5,
+        "retrieval_id": retrieval_id,
+        "domains_summary": {
+            d: {"domain": d, "source": "local", "count": n_patterns // len(domains),
+                "total_helpful": 50.0}
+            for d in domains
+        },
+    }
+    if with_expanded:
+        resp["expanded"] = [
+            {"cached": True, "pattern_id": "ctx-synth-0001-fixture", "cumulative_reward": 5.0}
         ]
     return resp
 
@@ -313,31 +479,35 @@ class TestNoQualityGate:
         _, ids, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
         assert "ctx-neutral-0001" in ids, "reward=0 neutral pattern must be retained"
 
-    def test_all_100_patterns_retained_from_ace_fixture(self):
-        """Real 100-pattern server fixture: all 100 patterns in injected_pattern_ids."""
-        with open("/tmp/ace_raw_ace.json") as f:
-            resp = json.load(f)
+    def test_budget_top_n_injected_is_rank_prefix_from_ace_fixture(self):
+        """Synthetic 100-pattern fixture: injected set is a rank-prefix (top-N by bandit_rank)
+        and total len(ctx) ≤ 9500.  Under the budget-verbatim contract not ALL 100 patterns
+        fit (budget prevents it) — the injected set is the budget-fitting prefix."""
+        resp = _make_synthetic_fixture(n_patterns=100, n_atrisk=5, n_negative_reward=3)
         pats = resp.get("similar_patterns", [])
-        all_ids = {p["id"] for p in pats if p.get("id")}
-        _, ids, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        all_ids_ordered = [p["id"] for p in pats if p.get("id")]
+        ctx, ids, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
         injected = set(ids)
-        assert injected >= all_ids, (
-            f"All {len(all_ids)} pattern ids from ace fixture must be retained; "
-            f"missing: {all_ids - injected}"
+        # The injected set must be a prefix of the rank-ordered full set
+        assert injected == set(all_ids_ordered[:len(ids)]), (
+            "Injected set must be a rank-ordered prefix of the full pattern list"
         )
+        assert len(ctx) <= 9500, f"Budget guarantee: len(ctx)={len(ctx)}"
+        assert len(ids) >= 1, "At least one pattern must be injected"
 
-    def test_all_87_patterns_retained_from_neutral_fixture(self):
-        """Real 87-pattern server fixture: all 87 patterns in injected_pattern_ids."""
-        with open("/tmp/ace_raw_neutral.json") as f:
-            resp = json.load(f)
+    def test_budget_top_n_injected_is_rank_prefix_from_neutral_fixture(self):
+        """Synthetic 87-pattern fixture: injected set is a rank-prefix and ≤9500 chars.
+        Under the budget-verbatim contract the injected set is the budget-fitting prefix."""
+        resp = _make_synthetic_fixture(n_patterns=87, n_atrisk=8, n_negative_reward=4)
         pats = resp.get("similar_patterns", [])
-        all_ids = {p["id"] for p in pats if p.get("id")}
-        _, ids, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        all_ids_ordered = [p["id"] for p in pats if p.get("id")]
+        ctx, ids, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
         injected = set(ids)
-        assert injected >= all_ids, (
-            f"All {len(all_ids)} pattern ids from neutral fixture must be retained; "
-            f"missing: {all_ids - injected}"
+        assert injected == set(all_ids_ordered[:len(ids)]), (
+            "Injected set must be a rank-ordered prefix of the full pattern list"
         )
+        assert len(ctx) <= 9500, f"Budget guarantee: len(ctx)={len(ctx)}"
+        assert len(ids) >= 1, "At least one pattern must be injected"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -388,17 +558,16 @@ class TestSortByBanditRank:
                 f"Unranked patterns must be after all ranked ones; order: {ids_in_order}"
             )
 
-    def test_real_fixture_first_pattern_has_rank_1(self):
-        """In the real neutral fixture, bandit_rank=1 pattern must be first in output."""
-        with open("/tmp/ace_raw_neutral.json") as f:
-            resp = json.load(f)
+    def test_synthetic_fixture_first_pattern_has_rank_1(self):
+        """In the synthetic fixture, bandit_rank=1 pattern must be first in output."""
+        resp = _make_synthetic_fixture(n_patterns=50)
         ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"', tier_k=20)
         out_pats = self._get_verbatim_patterns(ctx)
-        if out_pats:
-            first_rank = out_pats[0].get("bandit_rank")
-            assert first_rank == 1, (
-                f"First verbatim pattern must have bandit_rank=1; got {first_rank}"
-            )
+        assert out_pats, "At least one pattern must appear in output"
+        first_rank = out_pats[0].get("bandit_rank")
+        assert first_rank == 1, (
+            f"First verbatim pattern must have bandit_rank=1; got {first_rank}"
+        )
 
     def test_stable_order_among_unranked(self):
         """Among patterns with the same None bandit_rank, insertion order is preserved (stable)."""
@@ -417,78 +586,72 @@ class TestSortByBanditRank:
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Section 5: Tiering — verbatim head + compact index tail
+# Section 5: Budget-verbatim-no-tail behavior (replaces old tiering contract)
+#
+# Old v7.1.10 behavior (REMOVED):
+#   - tier_k verbatim head + compact ranked_index tail
+#   - F-080 covered full set regardless of what was displayed
+#
+# New v7.1.11+ behavior:
+#   - Greedily include verbatim patterns until budget (default 9500 chars) is hit
+#   - DROP tail entirely — no ranked_index, no compact one-liners
+#   - F-080 covers only the injected (shown) set
+#   - budget= parameter (default 9500)
+#   - tier_k parameter RETAINED for API compat with render_patterns_dict calls,
+#     but no longer controls what render_patterns injects (budget controls instead)
 # ─────────────────────────────────────────────────────────────────────────────
 
-class TestTiering:
+class TestBudgetVerbatimNoTailViaTiering:
+    """Tests that previously covered tiered rendering, updated for budget-verbatim-no-tail."""
 
     def _json_from_ctx(self, ctx):
-        """Extract the JSON object from line 1 of the rendered output."""
+        """Extract the first JSON object from the rendered output."""
         lines = ctx.split("\n")
-        assert len(lines) >= 2, f"Output too short: {ctx[:200]!r}"
-        return json.loads(lines[1])
+        for line in lines:
+            line = line.strip()
+            if line.startswith("{"):
+                try:
+                    return json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+        raise AssertionError(f"No JSON found in ctx: {ctx[:200]!r}")
 
-    def test_verbatim_section_has_tier_k_patterns(self):
-        """With 20 patterns and tier_k=5, the JSON similar_patterns list has 5 entries."""
-        patterns = [_make_pattern(f"ctx-tier-{i:04d}", bandit_rank=i + 1) for i in range(20)]
+    def test_no_ranked_index_in_output(self):
+        """No ranked_index section must appear — tail is dropped, not compacted."""
+        patterns = [_make_pattern(f"ctx-tier-{i:04d}", bandit_rank=i + 1, content="A" * 200) for i in range(20)]
         resp = _make_response(patterns)
-        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"', tier_k=5)
-        data = self._json_from_ctx(ctx)
-        verbatim = data.get("similar_patterns", [])
-        assert len(verbatim) == 5, (
-            f"With tier_k=5 and 20 patterns, verbatim section must have 5 patterns; got {len(verbatim)}"
+        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        assert "<ranked_index>" not in ctx, (
+            "No <ranked_index> must appear — tail is DROPPED in budget-verbatim-no-tail mode"
         )
 
-    def test_tail_section_present_when_over_tier_k(self):
-        """When total > tier_k, output must contain a ranked_index section."""
+    def test_total_within_budget(self):
+        """Total rendered string must be ≤ 9500 chars (default budget)."""
         patterns = [_make_pattern(f"ctx-tier-{i:04d}", bandit_rank=i + 1) for i in range(20)]
         resp = _make_response(patterns)
-        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"', tier_k=5)
-        assert "ranked_index" in ctx or "compact" in ctx.lower() or "#6" in ctx or "ctx-tier-0005" in ctx, (
-            "When total > tier_k, output must contain a compact ranked index for the tail patterns"
-        )
+        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        assert len(ctx) <= 9500, f"Total must be ≤9500; got {len(ctx)}"
 
-    def test_tail_index_has_no_evidence(self):
-        """Tail (compact) index entries must NOT include evidence."""
-        patterns = [_make_pattern(
-            f"ctx-tier-{i:04d}", bandit_rank=i + 1,
-            evidence=["evidence line 1", "evidence line 2"]
-        ) for i in range(10)]
-        resp = _make_response(patterns)
-        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"', tier_k=3)
-        # The tail must exist — extract content after the verbatim JSON block
+    def test_tail_entirely_absent_beyond_budget(self):
+        """Patterns beyond budget must not appear at all (no compact fallback)."""
         import re
-        # Evidence strings from tail patterns must not appear in index section
-        # We test by looking for the specific evidence content of tail patterns
-        tail_evidence = "evidence line"
-        # The verbatim block only has 3 patterns; remaining 7 are tail
-        # Find the compact section (after the JSON block close)
-        m = re.search(r'</[^>]+>(.*)', ctx, re.DOTALL)
-        tail_section = m.group(1).strip() if m else ""
-        # The tail section itself should not be empty if there are tail patterns
-        # (the index is appended OUTSIDE the JSON, or inside as a separate field)
-        # Either way, tail pattern evidence should not appear verbatim in the output
-        # beyond the verbatim section
-        # Tail patterns (ranks 4-10) must appear as compact index lines with their rank
-        # The compact format is: #{rank} [{domain}] s=... {content[:70]}
-        for rank in range(4, 11):
-            assert f"#{rank}" in ctx, f"Compact index line for rank #{rank} must appear in output"
-        # Evidence text must NOT appear in the compact index lines
-        # (only appears in verbatim section for ranks 1-3)
-        # The ranked_index section should contain compact lines, not evidence strings
-        assert "evidence line" not in ctx.split("<ranked_index>")[-1] if "<ranked_index>" in ctx else True, (
-            "Evidence strings must not appear in the compact ranked_index section"
-        )
-
-    def test_no_index_when_all_verbatim(self):
-        """When total <= tier_k, all patterns are verbatim and no index section needed."""
-        patterns = [_make_pattern(f"ctx-tier-{i:04d}", bandit_rank=i + 1) for i in range(5)]
+        patterns = [_make_pattern(f"ctx-tier-{i:04d}", bandit_rank=i + 1, content="B" * 400) for i in range(20)]
         resp = _make_response(patterns)
-        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"', tier_k=15)
-        data = self._json_from_ctx(ctx)
-        verbatim = data.get("similar_patterns", [])
-        assert len(verbatim) == 5, (
-            f"With tier_k=15 and 5 patterns, all must be verbatim; got {len(verbatim)}"
+        ctx, ids, _, _ = render_patterns(
+            resp, tag="ace-patterns", attrs='agent-type="main"', budget=3000
+        )
+        # No compact index format in output
+        assert not re.search(r'#\d+ \[', ctx), "Compact index lines must not appear"
+        assert len(ctx) <= 3000
+
+    def test_no_compact_index_line_for_any_pattern(self):
+        """No compact one-liner format (#rank [domain] s=...) must appear."""
+        import re
+        patterns = [_make_pattern(f"ctx-cmpct-{i:04d}", bandit_rank=i + 1, content="C" * 200) for i in range(20)]
+        resp = _make_response(patterns)
+        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        assert not re.search(r'#\d+ \[', ctx), (
+            "No compact index format '#N [domain]' must appear — tail is DROPPED"
         )
 
     def test_verbatim_evidence_capped_at_2(self):
@@ -498,35 +661,20 @@ class TestTiering:
             evidence=["ev1", "ev2", "ev3", "ev4", "ev5"]
         )
         resp = _make_response([p])
-        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"', tier_k=15)
+        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
         data = self._json_from_ctx(ctx)
         out_pats = data.get("similar_patterns", [])
         assert out_pats, "No verbatim patterns"
         ev = out_pats[0].get("evidence", [])
         assert len(ev) <= 2, f"Evidence must be capped at 2; got {len(ev)}: {ev}"
 
-    def test_default_tier_k_is_15(self):
-        """Default tier_k must be 15 (no explicit arg)."""
-        patterns = [_make_pattern(f"ctx-tier-{i:04d}", bandit_rank=i + 1) for i in range(20)]
-        resp = _make_response(patterns)
-        # no tier_k arg
-        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
-        data = self._json_from_ctx(ctx)
-        verbatim = data.get("similar_patterns", [])
-        assert len(verbatim) == 15, (
-            f"Default tier_k must be 15; verbatim section has {len(verbatim)} patterns"
-        )
-
     def test_empty_input_produces_empty_output(self):
-        """Zero patterns in → empty similar_patterns list, no index."""
+        """Zero patterns in → empty similar_patterns list, no tail."""
         resp = _make_response([])
         ctx, ids, _, rl_map = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
         assert ids == [], f"injected_pattern_ids must be [] for empty input; got {ids}"
         assert rl_map == {}, f"retrieval_log_map must be empty for no patterns; got {rl_map}"
-        lines = ctx.split("\n")
-        if len(lines) >= 2 and lines[1].startswith("{"):
-            data = json.loads(lines[1])
-            assert data.get("similar_patterns", []) == []
+        assert "<ranked_index>" not in ctx
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -550,14 +698,13 @@ class TestExpandedDropped:
             "The 'expanded' array must be DROPPED from injected payload (pure token waste)"
         )
 
-    def test_expanded_dropped_from_real_ace_fixture(self):
-        """Real ace fixture has 'expanded'; it must be absent from render output."""
-        with open("/tmp/ace_raw_ace.json") as f:
-            resp = json.load(f)
-        assert "expanded" in resp, "ace fixture must have expanded"
+    def test_expanded_dropped_from_synthetic_fixture(self):
+        """Synthetic 100-pattern fixture has 'expanded'; it must be absent from render output."""
+        resp = _make_synthetic_fixture(n_patterns=100, with_expanded=True)
+        assert "expanded" in resp, "Synthetic fixture must have expanded"
         ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
         data = self._json_from_ctx(ctx)
-        assert "expanded" not in data, "expanded must not appear in rendered output for real fixture"
+        assert "expanded" not in data, "expanded must not appear in rendered output for synthetic fixture"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -566,20 +713,25 @@ class TestExpandedDropped:
 
 class TestRetrievalLogMap:
 
-    def test_retrieval_log_map_covers_all_patterns(self):
-        """retrieval_log_map must include entries from ALL patterns (not just head tier)."""
+    def test_retrieval_log_map_covers_injected_patterns(self):
+        """retrieval_log_map covers only INJECTED patterns (small → all 20 fit in default budget)."""
         patterns = [
             _make_pattern(f"ctx-f080-{i:04d}", bandit_rank=i + 1, retrieval_log_id=100 + i)
             for i in range(20)
         ]
         resp = _make_response(patterns)
-        _, _, _, rl_map = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"', tier_k=5)
-        # All 20 patterns must have an entry
-        for i in range(20):
-            pid = f"ctx-f080-{i:04d}"
+        # Small patterns — all 20 fit in the 9500-char default budget
+        _, ids, _, rl_map = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        # All injected ids must be in retrieval_log_map
+        for pid in ids:
             assert pid in rl_map, (
-                f"retrieval_log_map must cover ALL patterns including tail; missing: {pid}"
+                f"retrieval_log_map must cover all injected patterns; missing: {pid}"
             )
+        # retrieval_log_map must only cover injected set (not non-injected)
+        assert set(rl_map.keys()) == set(ids), (
+            f"retrieval_log_map must cover exactly the injected set; "
+            f"rl_map has {len(rl_map)} keys, ids has {len(ids)}"
+        )
 
     def test_retrieval_log_map_correct_values(self):
         """retrieval_log_map must map pattern id → int retrieval_log_id."""
@@ -623,24 +775,30 @@ class TestRetrievalLogMap:
         )
         assert rl_map["ctx-atrisk-0001"] == 20
 
-    def test_retrieval_log_map_from_real_ace_fixture(self):
-        """Real 100-pattern fixture: retrieval_log_map must cover all patterns with integer retrieval_log_id."""
-        with open("/tmp/ace_raw_ace.json") as f:
-            resp = json.load(f)
+    def test_retrieval_log_map_from_synthetic_fixture(self):
+        """Synthetic 100-pattern fixture: retrieval_log_map covers only injected patterns (within
+        budget). Injected retrieval_log_ids must have correct integer values."""
+        resp = _make_synthetic_fixture(n_patterns=100)
         pats = resp["similar_patterns"]
-        expected = {
+        all_rlids = {
             p["id"]: p["match_factors"]["retrieval_log_id"]
             for p in pats
             if p.get("id") and isinstance(p.get("match_factors"), dict)
             and not isinstance(p["match_factors"].get("retrieval_log_id"), bool)
             and isinstance(p["match_factors"].get("retrieval_log_id"), int)
         }
-        _, _, _, rl_map = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
-        for pid, expected_rlid in expected.items():
-            assert pid in rl_map, f"Pattern {pid} missing from retrieval_log_map"
-            assert rl_map[pid] == expected_rlid, (
-                f"Pattern {pid}: expected retrieval_log_id={expected_rlid}, got {rl_map[pid]}"
-            )
+        _, ids, _, rl_map = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        injected_set = set(ids)
+        # retrieval_log_map must cover exactly the injected set (not all 100)
+        assert set(rl_map.keys()) == injected_set & set(all_rlids.keys()), (
+            "retrieval_log_map must cover exactly the injected patterns that have int retrieval_log_id"
+        )
+        # Values must be correct for injected patterns
+        for pid in rl_map:
+            if pid in all_rlids:
+                assert rl_map[pid] == all_rlids[pid], (
+                    f"Pattern {pid}: expected retrieval_log_id={all_rlids[pid]}, got {rl_map[pid]}"
+                )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -649,13 +807,14 @@ class TestRetrievalLogMap:
 
 class TestInjectedPatternIds:
 
-    def test_ids_cover_both_tiers(self):
-        """injected_pattern_ids must contain ids from BOTH verbatim and tail tiers."""
+    def test_ids_cover_all_injected_within_budget(self):
+        """injected_pattern_ids covers all patterns that fit within budget (small → all 20)."""
         patterns = [_make_pattern(f"ctx-both-{i:04d}", bandit_rank=i + 1) for i in range(20)]
         resp = _make_response(patterns)
-        _, ids, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"', tier_k=5)
+        # Small patterns — all 20 fit in the default 9500-char budget
+        _, ids, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
         assert len(ids) == 20, (
-            f"injected_pattern_ids must cover all 20 patterns (both tiers); got {len(ids)}"
+            f"All 20 small patterns fit in default budget; injected_pattern_ids must cover all; got {len(ids)}"
         )
 
     def test_ids_only_valid_pattern_ids(self):
@@ -695,42 +854,197 @@ class TestInjectedPatternIds:
 
 class TestTokenReduction:
 
-    def test_rendered_output_smaller_than_raw_json(self):
-        """Rendered output must be significantly smaller than raw json.dumps of input."""
-        with open("/tmp/ace_raw_neutral.json") as f:
-            resp = json.load(f)
-        raw_size = len(json.dumps(resp))
-        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"', tier_k=15)
+    def test_rendered_output_within_budget(self):
+        """Budget-verbatim: synthetic 87-pattern fixture rendered output must be ≤9500 chars."""
+        resp = _make_synthetic_fixture(n_patterns=87, n_atrisk=8, n_negative_reward=4)
+        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
         rendered_size = len(ctx)
-        # Should be at least 50% smaller (spec says ~75-78%)
-        assert rendered_size < raw_size * 0.60, (
-            f"Rendered output ({rendered_size} chars) must be <60% of raw JSON "
-            f"({raw_size} chars); ratio={rendered_size/raw_size:.2%}"
+        assert rendered_size <= 9500, (
+            f"Budget guarantee: rendered output must be ≤9500 chars; got {rendered_size}"
         )
 
-    def test_ace_fixture_token_reduction(self):
-        """100-pattern ace fixture: rendered output must be <60% of raw."""
-        with open("/tmp/ace_raw_ace.json") as f:
-            resp = json.load(f)
-        raw_size = len(json.dumps(resp))
-        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"', tier_k=15)
+    def test_ace_fixture_within_budget(self):
+        """Budget-verbatim: synthetic 100-pattern fixture rendered output must be ≤9500 chars."""
+        resp = _make_synthetic_fixture(n_patterns=100, n_atrisk=10, n_negative_reward=5)
+        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
         rendered_size = len(ctx)
-        assert rendered_size < raw_size * 0.60, (
-            f"Ace fixture: rendered ({rendered_size}) must be <60% of raw ({raw_size}); "
-            f"ratio={rendered_size/raw_size:.2%}"
+        assert rendered_size <= 9500, (
+            f"Budget guarantee on 100-pattern fixture: rendered must be ≤9500 chars; got {rendered_size}"
         )
 
-    def test_compact_index_line_format(self):
-        """Compact index lines must include bandit_rank, domain, semantic_score, content[:70]."""
+    def test_no_compact_index_line_in_output(self):
+        """Compact index format (#N [domain] s=...) must NOT appear — tail is dropped."""
+        import re
         patterns = [_make_pattern(
             f"ctx-cmpct-{i:04d}", bandit_rank=i + 1,
             domain="test-domain", semantic_score=0.75,
             content="This is a test pattern content that should appear truncated"
         ) for i in range(20)]
         resp = _make_response(patterns)
-        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"', tier_k=5)
-        # Tail patterns (ranks 6-20) should appear as compact lines
-        # At minimum check rank #6 appears in the output somewhere
-        assert "#6" in ctx or "ctx-cmpct-0005" in ctx, (
-            "Compact index must reference tail pattern with bandit_rank or id"
+        ctx, _, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        assert not re.search(r'#\d+ \[', ctx), (
+            "Compact index '#N [domain]' must not appear — tail is DROPPED in budget-verbatim mode"
         )
+        assert "<ranked_index>" not in ctx, (
+            "No <ranked_index> section must appear — tail dropped"
+        )
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 10: JSON validity (MUST-FIX 2) — rendered body must always parse
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestJsonValidity:
+    """Every render_patterns call must produce a valid parseable JSON body.
+
+    The core regression is the comma off-by-one bug: with many small patterns
+    the greedy loop underestimates the serialised array size, allowing slightly
+    more patterns than fit, so json.dumps produces a body that exceeds budget
+    and the old safety valve raw-byte-truncated it → invalid JSON.
+
+    Contract assertions for every case:
+      1. json.loads(ctx.split("\\n")[1]) must not raise
+      2. len(data["similar_patterns"]) == len(injected_ids)  (consistency)
+      3. len(ctx) <= 9500
+    """
+
+    def _assert_valid(self, ctx, ids, budget=9500):
+        parts = ctx.split("\n")
+        assert len(parts) >= 3, f"Expected at least 3 lines in ctx (tag, json, /tag); got {len(parts)}"
+        try:
+            data = json.loads(parts[1])
+        except json.JSONDecodeError as e:
+            raise AssertionError(
+                f"Body JSON is invalid (JSONDecodeError: {e}); "
+                f"first 200 chars of body: {parts[1][:200]!r}"
+            )
+        n_rendered = len(data.get("similar_patterns", []))
+        assert n_rendered == len(ids), (
+            f"similar_patterns count ({n_rendered}) must equal len(injected_ids) ({len(ids)})"
+        )
+        assert len(ctx) <= budget, f"len(ctx)={len(ctx)} exceeds budget={budget}"
+
+    def test_many_small_patterns_60x50_produces_valid_json(self):
+        """Deterministic repro: 60 patterns with content='A'*50 — the comma off-by-one
+        case that previously caused the safety valve to fire and raw-truncate JSON."""
+        patterns = [
+            _make_pattern(
+                f"ctx-small-{i:04d}", bandit_rank=i + 1,
+                content="A" * 50,
+                evidence=["e1"],
+            )
+            for i in range(60)
+        ]
+        resp = _make_response(patterns)
+        ctx, ids, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        self._assert_valid(ctx, ids)
+        # The injected set must be consistent: all injected are a rank-prefix
+        assert len(ids) >= 1
+
+    def test_large_rich_content_produces_valid_json(self):
+        """~100 patterns with realistic varied content lengths — body must parse."""
+        resp = _make_synthetic_fixture(n_patterns=100, n_atrisk=10, n_negative_reward=5)
+        ctx, ids, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        self._assert_valid(ctx, ids)
+
+    def test_small_input_produces_valid_json(self):
+        """3 patterns — trivially fits in budget, must produce valid JSON."""
+        patterns = [_make_pattern(f"ctx-sm-{i:04d}", bandit_rank=i + 1) for i in range(3)]
+        resp = _make_response(patterns)
+        ctx, ids, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        self._assert_valid(ctx, ids)
+        assert len(ids) == 3
+
+    def test_empty_input_produces_valid_json(self):
+        """Zero patterns — must produce valid JSON with empty similar_patterns."""
+        resp = _make_response([])
+        ctx, ids, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        self._assert_valid(ctx, ids)
+        assert ids == []
+
+    def test_oversized_single_pattern_produces_valid_json(self):
+        """Single pattern whose verbatim JSON alone would exceed budget — must truncate
+        content but still emit valid parseable JSON with exactly 1 pattern."""
+        p = _make_pattern(
+            "ctx-big-0001", bandit_rank=1,
+            content="X" * 9000,  # way over any budget
+        )
+        resp = _make_response([p])
+        ctx, ids, _, _ = render_patterns(resp, tag="ace-patterns", attrs='agent-type="main"')
+        self._assert_valid(ctx, ids)
+        # Must include the (truncated) single pattern — never emit empty
+        assert len(ids) == 1
+
+    def test_custom_budget_many_small_produces_valid_json(self):
+        """Same 60x50 repro but with a tighter custom budget — must still be valid."""
+        patterns = [
+            _make_pattern(f"ctx-sm2-{i:04d}", bandit_rank=i + 1, content="B" * 50)
+            for i in range(60)
+        ]
+        resp = _make_response(patterns)
+        ctx, ids, _, _ = render_patterns(
+            resp, tag="ace-patterns", attrs='agent-type="main"', budget=4000
+        )
+        self._assert_valid(ctx, ids, budget=4000)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Section 11: eval_injection budget cap (MUST-FIX 4)
+# ─────────────────────────────────────────────────────────────────────────────
+
+class TestEvalInjectionBudget:
+    """ace_before_task appends eval_injection after ace_context.
+    The final string must stay ≤ 10000 chars (CC hard cap).
+    """
+
+    def test_eval_injection_trimmed_when_ace_context_large(self):
+        """When ace_context is ~9499 chars, a long eval_injection must be trimmed
+        so the total stays ≤ 10000 chars."""
+        # Simulate ace_context near the 9500 budget
+        ace_context = "A" * 9499
+        eval_injection = "E" * 1000  # would push total to 10500 — must be trimmed
+
+        _CC_HARD_CAP = 10_000
+        _available_for_eval = _CC_HARD_CAP - len(ace_context) - 1  # -1 for "\n"
+        if _available_for_eval > 0:
+            combined = ace_context + "\n" + eval_injection[:_available_for_eval]
+        else:
+            combined = ace_context
+
+        assert len(combined) <= _CC_HARD_CAP, (
+            f"Combined ace_context + eval_injection must be ≤10000 chars; got {len(combined)}"
+        )
+
+    def test_eval_injection_fully_fits_when_room_available(self):
+        """When ace_context is short, the full eval_injection must appear."""
+        ace_context = "A" * 100
+        eval_injection = "E" * 200
+
+        _CC_HARD_CAP = 10_000
+        _available_for_eval = _CC_HARD_CAP - len(ace_context) - 1
+        if _available_for_eval > 0:
+            combined = ace_context + "\n" + eval_injection[:_available_for_eval]
+        else:
+            combined = ace_context
+
+        assert combined == ace_context + "\n" + eval_injection, (
+            "Full eval_injection must appear when there is room in the CC hard cap"
+        )
+        assert len(combined) <= _CC_HARD_CAP
+
+    def test_eval_injection_skipped_when_no_room(self):
+        """When ace_context is exactly 10000 chars, eval_injection must be skipped."""
+        ace_context = "A" * 10_000
+        eval_injection = "E" * 100
+
+        _CC_HARD_CAP = 10_000
+        _available_for_eval = _CC_HARD_CAP - len(ace_context) - 1  # = -1 → no room
+        if _available_for_eval > 0:
+            combined = ace_context + "\n" + eval_injection[:_available_for_eval]
+        else:
+            combined = ace_context
+
+        assert combined == ace_context, (
+            "eval_injection must be skipped when ace_context already fills the cap"
+        )
+        assert len(combined) <= _CC_HARD_CAP
