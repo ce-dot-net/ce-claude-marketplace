@@ -802,3 +802,298 @@ class TestAceGraphCommand:
         """ace-graph.md must mention --max-edges argument."""
         doc = self._doc()
         assert "max_edges" in doc or "max-edges" in doc
+
+
+# ===========================================================================
+# 5. Isolated-node visibility feature (RED phase)
+# ===========================================================================
+
+class TestIsolatedNodeVisibility:
+    """
+    Tests for the 'Show isolated nodes' feature added to build_graph_html.
+
+    An isolated node is one with no currently-visible edge (degree == 0 in the
+    rendered/kept-edge set).  By default they are hidden; a checkbox reveals them.
+    """
+
+    def _graph_with_isolated(self):
+        """
+        3 nodes: p1-p2 connected, p3 isolated (no edge to/from it).
+        degree: p1=1, p2=1, p3=0.
+        """
+        return {
+            "nodes": [
+                {"id": "p1", "domain": "dom-a", "section": "s1",
+                 "label": "connected node 1", "reward": 2.0, "degree": 1},
+                {"id": "p2", "domain": "dom-a", "section": "s1",
+                 "label": "connected node 2", "reward": 1.5, "degree": 1},
+                {"id": "p3", "domain": "dom-b", "section": "s2",
+                 "label": "isolated node",    "reward": 0.5, "degree": 0},
+            ],
+            "edges": [{"src": "p1", "dst": "p2", "weight": 5}],
+            "meta": {
+                "total_patterns": 3,
+                "total_edges": 1,
+                "rendered_edges": 1,
+                "truncated": False,
+                "project": "prj_test",
+                "org": "org_test",
+            },
+        }
+
+    def _graph_all_connected(self):
+        """All 2 nodes have an edge between them — no isolated node."""
+        return {
+            "nodes": [
+                {"id": "a1", "domain": "dom-x", "section": "s",
+                 "label": "node a1", "reward": 1.0, "degree": 1},
+                {"id": "a2", "domain": "dom-x", "section": "s",
+                 "label": "node a2", "reward": 1.0, "degree": 1},
+            ],
+            "edges": [{"src": "a1", "dst": "a2", "weight": 3}],
+            "meta": {
+                "total_patterns": 2,
+                "total_edges": 1,
+                "rendered_edges": 1,
+                "truncated": False,
+                "project": "prj_test",
+                "org": "org_test",
+            },
+        }
+
+    # -----------------------------------------------------------------------
+    # T1 — Checkbox control exists
+    # -----------------------------------------------------------------------
+
+    def test_checkbox_control_exists(self):
+        """
+        build_graph_html output must contain an <input type="checkbox"> (or
+        type='checkbox') element — the 'Show isolated nodes' toggle.
+        """
+        html = build_graph_html(self._graph_with_isolated())
+        # Accept either single or double quotes around the type value
+        assert re.search(r'<input[^>]+type=["\']checkbox["\']', html, re.IGNORECASE), (
+            "Expected <input type='checkbox'> for 'Show isolated nodes' toggle"
+        )
+
+    def test_checkbox_label_text(self):
+        """
+        The HTML must contain label text that includes the phrase
+        'isolated nodes' (case-insensitive) near the checkbox.
+        """
+        html = build_graph_html(self._graph_with_isolated())
+        assert re.search(r'isolated\s+nodes', html, re.IGNORECASE), (
+            "Expected label text 'isolated nodes' near the checkbox control"
+        )
+
+    def test_checkbox_default_unchecked(self):
+        """
+        The 'Show isolated nodes' checkbox must NOT have a 'checked' attribute
+        by default (unchecked = isolated nodes hidden on first load).
+        """
+        html = build_graph_html(self._graph_with_isolated())
+        # Find the checkbox input element
+        checkbox_match = re.search(
+            r'<input[^>]+type=["\']checkbox["\'][^>]*>',
+            html,
+            re.IGNORECASE | re.DOTALL,
+        )
+        assert checkbox_match is not None, "No checkbox found"
+        checkbox_html = checkbox_match.group(0)
+        # The checkbox element itself must not have a 'checked' attribute
+        assert "checked" not in checkbox_html.lower(), (
+            "Checkbox must be unchecked by default (isolated nodes hidden initially)"
+        )
+
+    # -----------------------------------------------------------------------
+    # T2 — Default hidden mechanism for isolated nodes
+    # -----------------------------------------------------------------------
+
+    def test_isolated_class_or_style_applied_by_default(self):
+        """
+        The JS/CSS must define a mechanism to hide isolated (degree-0) nodes by
+        default.  Accept any of:
+          (a) a CSS class rule for an 'isolated' selector with display:none, OR
+          (b) a cytoscape style selector targeting 'node.isolated' with display:none, OR
+          (c) a JS applyFilters function that hides nodes with 0 visible edges.
+        At minimum the word 'isolated' must appear as an identifier/class/selector
+        (not just in comments or label text).
+        """
+        html = build_graph_html(self._graph_with_isolated())
+        # 'isolated' must appear as a JS/CSS token (class name, selector, or variable)
+        # We allow it to appear in JS code context, e.g. 'isolated', "isolated",
+        # .isolated, node.isolated, addClass('isolated'), etc.
+        assert re.search(
+            r"""['"`\.]isolated['"`\s{,)]""",
+            html,
+        ), (
+            "Expected 'isolated' to appear as a JS/CSS class/selector/identifier "
+            "in the generated HTML (not just in prose text)"
+        )
+
+    def test_apply_filters_function_exists(self):
+        """
+        The generated JS must define a single applyFilters (or applyFilters-style)
+        function that the slider, dropdown, and checkbox all call — so that
+        isolated-node recompute is integrated with existing filter paths.
+        Accepts: 'function applyFilters' or 'applyFilters =' or 'var applyFilters'.
+        """
+        html = build_graph_html(self._graph_with_isolated())
+        assert re.search(
+            r'(function\s+applyFilters|applyFilters\s*=\s*(function)?)',
+            html,
+        ), (
+            "Expected a JS 'applyFilters' function definition in the generated HTML"
+        )
+
+    def test_slider_calls_apply_filters(self):
+        """
+        The min-weight slider event handler must call applyFilters() (not
+        implement its own inline filter logic independently).
+        """
+        html = build_graph_html(self._graph_with_isolated())
+        # The wt-slider listener block must reference applyFilters
+        assert re.search(r'wt-slider.*?applyFilters|applyFilters.*?wt-slider', html, re.DOTALL), (
+            "wt-slider handler must delegate to applyFilters()"
+        )
+
+    def test_domain_filter_calls_apply_filters(self):
+        """
+        The domain filter (select) event handler must call applyFilters().
+        """
+        html = build_graph_html(self._graph_with_isolated())
+        # The dom-filter listener must reference applyFilters
+        assert re.search(r'dom-filter.*?applyFilters|applyFilters.*?dom-filter', html, re.DOTALL), (
+            "dom-filter handler must delegate to applyFilters()"
+        )
+
+    def test_checkbox_calls_apply_filters(self):
+        """
+        The 'Show isolated nodes' checkbox event handler must call applyFilters().
+        """
+        html = build_graph_html(self._graph_with_isolated())
+        # show-isolated listener (or equivalent) must reference applyFilters
+        assert re.search(
+            r'(show.isolated|isolated.*checkbox|checkbox.*isolated).*?applyFilters'
+            r'|applyFilters.*?(show.isolated|isolated)',
+            html,
+            re.DOTALL | re.IGNORECASE,
+        ), (
+            "Show-isolated checkbox handler must delegate to applyFilters()"
+        )
+
+    # -----------------------------------------------------------------------
+    # T3 — Isolated node flagged in data / applyFilters hides it
+    # -----------------------------------------------------------------------
+
+    def test_degree_zero_node_handled_as_isolated(self):
+        """
+        A node with degree==0 in graph_dict must be treated as isolated.
+        The HTML must encode the degree value (0) in the cytoscape data,
+        so the JS applyFilters can inspect it to hide/show the node.
+        """
+        html = build_graph_html(self._graph_with_isolated())
+        # p3 has degree 0 — its id must appear in the HTML data
+        assert "p3" in html, "Node p3 (degree=0) must be present in HTML data"
+        # The degree value 0 must be embedded in the element data
+        assert re.search(r'"degree"\s*:\s*0', html), (
+            "Expected degree:0 to be embedded in cytoscape element data "
+            "for the isolated node p3"
+        )
+
+    def test_apply_filters_hides_zero_degree_nodes(self):
+        """
+        The applyFilters JS function must contain logic that evaluates whether
+        a node has zero visible edges, to hide it when the checkbox is unchecked.
+        Accepts: checking degree==0, counting visible edges per-node, etc.
+        """
+        html = build_graph_html(self._graph_with_isolated())
+        # applyFilters must reference degree or count edges to detect isolation
+        assert re.search(
+            r'degree|connectedEdges|visibleEdge|isolat',
+            html,
+        ), (
+            "applyFilters must check node degree or connected edges "
+            "to identify and hide isolated nodes"
+        )
+
+    # -----------------------------------------------------------------------
+    # T4 — Header split count
+    # -----------------------------------------------------------------------
+
+    def test_header_shows_connected_and_isolated_split(self):
+        """
+        The header/meta-bar must show a split like 'N connected' and 'M isolated'
+        OR the JS must compute and display such a split dynamically.
+        Accept either static HTML values or JS that sets innerHTML with those terms.
+        """
+        html = build_graph_html(self._graph_with_isolated())
+        # Accept 'connected' and 'isolated' appearing in JS string literals or HTML
+        has_connected = re.search(r'connected', html, re.IGNORECASE)
+        has_isolated_count = re.search(r'isolated', html, re.IGNORECASE)
+        assert has_connected and has_isolated_count, (
+            "Header must reference both 'connected' and 'isolated' node counts "
+            "(either as static HTML or as JS-computed strings)"
+        )
+
+    # -----------------------------------------------------------------------
+    # T5 — Regression: existing tests still pass (escaping, project title)
+    # -----------------------------------------------------------------------
+
+    def test_xss_escaping_still_works_with_new_controls(self):
+        """
+        Regression: the XSS-escaping behaviour must not be broken by the new
+        checkbox control or any new JS code.  An evil label must remain escaped.
+        """
+        g = self._graph_with_isolated()
+        g["nodes"][0]["label"] = "</script><script>alert('xss')</script>"
+        html = build_graph_html(g)
+        assert "</script><script>" not in html, (
+            "XSS regression: evil script sequence must remain escaped"
+        )
+
+    def test_project_name_title_preserved(self):
+        """
+        Regression: project_name still appears in <h1> after the new controls
+        are added.
+        """
+        g = self._graph_with_isolated()
+        html = build_graph_html(g, project_name="my-project")
+        h1_match = re.search(r'<h1[^>]*>(.*?)</h1>', html, re.DOTALL | re.IGNORECASE)
+        assert h1_match is not None, "No <h1> found"
+        assert "my-project" in h1_match.group(1), (
+            "project_name must still appear in <h1> after isolated-node feature added"
+        )
+
+    def test_no_xss_in_checkbox_control(self):
+        """
+        The new checkbox control HTML must not introduce any XSS vector —
+        it is static HTML so this is primarily a code-review / structure check:
+        no user-supplied data is interpolated into the checkbox markup.
+        The control must be safe static HTML.
+        """
+        g = self._graph_with_isolated()
+        # Even with an evil project name, the checkbox markup must be safe
+        g["meta"]["project"] = '"><script>evil()</script>'
+        html = build_graph_html(g)
+        # The raw evil string must not appear anywhere unescaped
+        assert '"><script>evil()</script>' not in html, (
+            "Evil project name must not leak into checkbox markup unescaped"
+        )
+
+    # -----------------------------------------------------------------------
+    # T6 — Works on all-connected graph (no isolated nodes present)
+    # -----------------------------------------------------------------------
+
+    def test_all_connected_graph_still_works(self):
+        """
+        A graph where all nodes have edges must still render correctly —
+        the 'isolated' feature must not break graphs with zero isolated nodes.
+        """
+        html = build_graph_html(self._graph_all_connected())
+        assert isinstance(html, str)
+        assert len(html) > 0
+        # Checkbox must still be present
+        assert re.search(r'<input[^>]+type=["\']checkbox["\']', html, re.IGNORECASE), (
+            "Checkbox must be present even when there are no isolated nodes"
+        )
