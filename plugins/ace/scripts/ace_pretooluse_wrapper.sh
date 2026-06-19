@@ -176,13 +176,15 @@ if [ "$MATCHED_DOMAIN" != "$LAST_DOMAIN" ]; then
     exit 0
   fi
 
-  # 1. Build query from domain + file basename for more relevant results
-  # "cache" + "redis-config.ts" → "cache redis-config"
+  # 1. Build query from file basename only (no domain token — server-team confirmed
+  # domain_match ANTI-predicts relevance; cross-domain patterns are more useful;
+  # let de-confounded bandit_rank order an unfiltered set).
   FILE_BASENAME=$(basename "$FILE_PATH" 2>/dev/null | sed 's/\.[^.]*$//' || echo "")
-  SEARCH_QUERY="${MATCHED_DOMAIN}"
-  if [ -n "$FILE_BASENAME" ]; then
-    SEARCH_QUERY="${MATCHED_DOMAIN} ${FILE_BASENAME}"
+  # Edge case: if FILE_BASENAME is empty there is no usable query — skip entirely.
+  if [ -z "$FILE_BASENAME" ]; then
+    exit 0
   fi
+  SEARCH_QUERY="${FILE_BASENAME}"
 
   # 2. Call ace-cli search with domain filter (env vars for context)
   export ACE_ORG_ID="$ORG_ID"
@@ -206,11 +208,11 @@ if [ "$MATCHED_DOMAIN" != "$LAST_DOMAIN" ]; then
   # The server SELECTS the top-8 patterns; the client does NOT cap client-side.
   if [ -n "$EXISTING_TSID" ]; then
     SEARCH_RESULT=$(echo "$SEARCH_QUERY" | $CLI_CMD search --stdin --json \
-      --allowed-domains "$MATCHED_DOMAIN" --top-k 8 --pin-session "$EXISTING_TSID" 2>/dev/null | \
+      --top-k 8 --pin-session "$EXISTING_TSID" 2>/dev/null | \
       iconv -f UTF-8 -t UTF-8 -c 2>/dev/null || echo "")  # Sanitize Unicode
   else
     SEARCH_RESULT=$(echo "$SEARCH_QUERY" | $CLI_CMD search --stdin --json \
-      --allowed-domains "$MATCHED_DOMAIN" --top-k 8 2>/dev/null | \
+      --top-k 8 2>/dev/null | \
       iconv -f UTF-8 -t UTF-8 -c 2>/dev/null || echo "")  # Sanitize Unicode
   fi
 

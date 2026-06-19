@@ -949,23 +949,39 @@ class TestServerSideTopK:
         )
 
     def test_pretooluse_fallback_branch_has_top_k_8(self):
-        """pretooluse fallback (no pin-session) branch must pass --top-k 8 to ace-cli search."""
+        """pretooluse fallback (no pin-session) branch must pass --top-k 8 to ace-cli search.
+
+        NEW CONTRACT: --allowed-domains is removed; match by --top-k 8 on search lines.
+        Both pin-session and fallback branches must carry --top-k 8.
+        """
         text = self._join_continuations(self.PRETOOLUSE.read_text())
         import re
-        # Match actual ace-cli / $CLI_CMD search invocation lines (not comments)
+        # Match all ace-cli / $CLI_CMD search invocation lines that carry --top-k 8
         domain_search_lines = re.findall(
-            r'(?:ace-cli|\$CLI_CMD)\s+search[^\n]*--allowed-domains[^\n]*',
+            r'(?:ace-cli|\$CLI_CMD)\s+search[^\n]*--top-k 8[^\n]*',
             text
         )
         assert len(domain_search_lines) >= 2, (
-            f"pretooluse must have at least 2 ace-cli domain-shift search branches, "
-            f"got: {domain_search_lines}"
+            f"pretooluse must have at least 2 ace-cli domain-shift search branches "
+            f"with --top-k 8 (pin and fallback), got: {domain_search_lines}"
         )
         for line in domain_search_lines:
             assert '--top-k 8' in line, (
                 f"All pretooluse domain-shift search lines must include --top-k 8.\n"
                 f"Missing in: {line!r}"
             )
+
+    def test_pretooluse_no_allowed_domains(self):
+        """NEW CONTRACT: pretooluse must NOT pass --allowed-domains to ace-cli.
+
+        Server-team confirmed domain_match ANTI-predicts relevance; cross-domain
+        patterns are the more relevant ones. The whitelist filter is dropped entirely.
+        """
+        text = self.PRETOOLUSE.read_text()
+        assert '--allowed-domains' not in text, (
+            "pretooluse must NOT pass --allowed-domains to ace-cli search. "
+            "Domain filter has been removed per server-team recommendation."
+        )
 
     def test_posttooluse_pin_branch_has_top_k_8(self):
         """posttooluse --pin-session branch must pass --top-k 8 to ace-cli search."""
@@ -985,22 +1001,38 @@ class TestServerSideTopK:
         )
 
     def test_posttooluse_fallback_branch_has_top_k_8(self):
-        """posttooluse fallback (no pin-session) branch must pass --top-k 8 to ace-cli search."""
+        """posttooluse fallback (no pin-session) branch must pass --top-k 8 to ace-cli search.
+
+        NEW CONTRACT: --allowed-domains is removed; match by --top-k 8 on search lines.
+        Both pin-session and fallback branches must carry --top-k 8.
+        """
         text = self._join_continuations(self.POSTTOOLUSE.read_text())
         import re
         domain_search_lines = re.findall(
-            r'(?:ace-cli|\$CLI_CMD)\s+search[^\n]*--allowed-domains[^\n]*',
+            r'(?:ace-cli|\$CLI_CMD)\s+search[^\n]*--top-k 8[^\n]*',
             text
         )
         assert len(domain_search_lines) >= 2, (
-            f"posttooluse must have at least 2 ace-cli domain-shift search branches, "
-            f"got: {domain_search_lines}"
+            f"posttooluse must have at least 2 ace-cli domain-shift search branches "
+            f"with --top-k 8 (pin and fallback), got: {domain_search_lines}"
         )
         for line in domain_search_lines:
             assert '--top-k 8' in line, (
                 f"All posttooluse domain-shift search lines must include --top-k 8.\n"
                 f"Missing in: {line!r}"
             )
+
+    def test_posttooluse_no_allowed_domains(self):
+        """NEW CONTRACT: posttooluse must NOT pass --allowed-domains to ace-cli.
+
+        Server-team confirmed domain_match ANTI-predicts relevance; cross-domain
+        patterns are the more relevant ones. The whitelist filter is dropped entirely.
+        """
+        text = self.POSTTOOLUSE.read_text()
+        assert '--allowed-domains' not in text, (
+            "posttooluse must NOT pass --allowed-domains to ace-cli search. "
+            "Domain filter has been removed per server-team recommendation."
+        )
 
     def test_before_task_has_no_top_k(self):
         """ace_before_task.py (main search) must NOT contain --top-k (server search_top_k)."""
@@ -1023,4 +1055,266 @@ class TestServerSideTopK:
         text = self.ACE_CLI_PY.read_text()
         assert '--top-k' not in text, (
             "ace_cli.py must NOT pass --top-k; main-path search is uncapped."
+        )
+
+
+# ════════════════════════════════════════════════════════════════════════════
+# Query construction: basename-only, no domain token
+# Empty-basename guard: both scripts must skip the search entirely when
+# FILE_BASENAME is empty (no usable query text).
+# ════════════════════════════════════════════════════════════════════════════
+
+class TestQueryConstructionAndEmptyBasenameGuard:
+    """
+    NEW CONTRACT (server-team approved, ACE-1.5-native):
+      - Query = FILE_BASENAME only (no domain token prepended).
+      - If FILE_BASENAME is empty → skip the domain-shift search entirely
+        (exit gracefully, no ace-cli invocation with an empty/whitespace query).
+    """
+
+    PRETOOLUSE = REPO / "plugins/ace/scripts/ace_pretooluse_wrapper.sh"
+    POSTTOOLUSE = REPO / "plugins/ace/scripts/ace_posttooluse_domain_inject.sh"
+
+    # ── static / textual assertions ──────────────────────────────────────
+
+    def test_pretooluse_query_does_not_use_matched_domain_in_query(self):
+        """pretooluse must NOT include MATCHED_DOMAIN in SEARCH_QUERY construction."""
+        import re
+        text = self.PRETOOLUSE.read_text()
+        # The only acceptable assignment is SEARCH_QUERY="${FILE_BASENAME}" (or equivalent)
+        # The old pattern was: SEARCH_QUERY="${MATCHED_DOMAIN} ${FILE_BASENAME}"
+        bad = re.search(r'SEARCH_QUERY=.*MATCHED_DOMAIN.*FILE_BASENAME', text)
+        assert bad is None, (
+            "pretooluse SEARCH_QUERY must NOT prepend MATCHED_DOMAIN. "
+            "Query must be FILE_BASENAME only per server-team contract."
+        )
+
+    def test_pretooluse_query_is_file_basename_only(self):
+        """pretooluse must set SEARCH_QUERY to FILE_BASENAME (basename-only)."""
+        text = self.PRETOOLUSE.read_text()
+        assert 'SEARCH_QUERY="${FILE_BASENAME}"' in text, (
+            'pretooluse must set SEARCH_QUERY="${FILE_BASENAME}" (no domain token).'
+        )
+
+    def test_posttooluse_query_does_not_use_matched_domain_in_query(self):
+        """posttooluse must NOT include MATCHED_DOMAIN in SEARCH_QUERY construction."""
+        import re
+        text = self.POSTTOOLUSE.read_text()
+        bad = re.search(r'SEARCH_QUERY=.*MATCHED_DOMAIN.*FILE_BASENAME', text)
+        assert bad is None, (
+            "posttooluse SEARCH_QUERY must NOT prepend MATCHED_DOMAIN. "
+            "Query must be FILE_BASENAME only per server-team contract."
+        )
+
+    def test_posttooluse_query_is_file_basename_only(self):
+        """posttooluse must set SEARCH_QUERY to FILE_BASENAME (basename-only)."""
+        text = self.POSTTOOLUSE.read_text()
+        assert 'SEARCH_QUERY="${FILE_BASENAME}"' in text, (
+            'posttooluse must set SEARCH_QUERY="${FILE_BASENAME}" (no domain token).'
+        )
+
+    # ── runtime / behavioural assertions ─────────────────────────────────
+
+    def _make_mock_ace_cli_recording(self, tmp_path: Path) -> tuple[Path, Path]:
+        """Write a mock ace-cli that records the query it received and exits 0."""
+        query_log = tmp_path / "ace_cli_query.txt"
+        mock = tmp_path / "ace-cli"
+        mock.write_text(
+            "#!/bin/bash\n"
+            # Slurp stdin (the query piped via --stdin) into the log file
+            f"cat > {query_log}\n"
+            "echo '{\"similar_patterns\":[],\"count\":0}'\n"
+        )
+        mock.chmod(0o755)
+        return mock, query_log
+
+    def _make_domain_env(self, tmp_path: Path, project_id: str, domain: str) -> str:
+        """Set up a minimal domains file + settings.json; return cwd string."""
+        (tmp_path / ".claude").mkdir(exist_ok=True)
+        (tmp_path / ".claude" / "settings.json").write_text(
+            json.dumps({"env": {"ACE_PROJECT_ID": project_id}})
+        )
+        Path(f"/tmp/ace-domains-{project_id}.json").write_text(
+            json.dumps({domain: {"description": "test"}})
+        )
+        return str(tmp_path)
+
+    def test_pretooluse_empty_basename_skips_search(self, tmp_path):
+        """pretooluse: FILE_BASENAME empty (dotfile like /scripts/.hidden) -> no ace-cli invocation.
+
+        bash basename("/scripts/.hidden") | sed strip-extension produces "" because the
+        leading dot is consumed by the extension-strip sed expression. The guard must exit
+        before calling ace-cli with an empty/whitespace query.
+        """
+        import os
+        project_id = f"prj-ptu-empty-bn-{os.getpid()}"
+        domain = "scripts"
+        cwd = self._make_domain_env(tmp_path, project_id, domain)
+        mock_bin = tmp_path / "bin"
+        mock_bin.mkdir()
+        mock, query_log = self._make_mock_ace_cli_recording(mock_bin)
+
+        # /scripts/.hidden: domain match fires (path has "scripts"), but basename
+        # after extension-strip is empty → guard must prevent ace-cli call.
+        hook_input = {
+            "session_id": "sess-empty-bn",
+            "tool_name": "Read",
+            "tool_input": {"file_path": f"/{domain}/.hidden"},
+            "cwd": cwd,
+        }
+
+        result = subprocess.run(
+            ["bash", str(self.PRETOOLUSE)],
+            input=json.dumps(hook_input),
+            capture_output=True, text=True, timeout=10,
+            env={
+                **os.environ,
+                "PATH": f"{mock_bin}:{os.environ.get('PATH', '/usr/bin:/bin')}",
+                "CLAUDE_PROJECT_DIR": str(tmp_path),
+            },
+        )
+
+        Path(f"/tmp/ace-domains-{project_id}.json").unlink(missing_ok=True)
+        Path(f"/tmp/ace-domain-{project_id}-main.txt").unlink(missing_ok=True)
+
+        assert result.returncode == 0, f"Script must exit 0; rc={result.returncode}"
+        assert not query_log.exists(), (
+            "ace-cli must NOT be called when FILE_BASENAME is empty. "
+            f"Query log was written: {query_log.read_text() if query_log.exists() else '(missing)'}"
+        )
+
+    def test_posttooluse_empty_basename_skips_search(self, tmp_path):
+        """posttooluse: FILE_BASENAME empty (dotfile like /scripts/.hidden) -> no ace-cli invocation.
+
+        bash basename("/scripts/.hidden") | sed strip-extension produces "" because the
+        leading dot is consumed by the extension-strip sed expression. The guard must exit
+        before calling ace-cli with an empty/whitespace query.
+        """
+        import os
+        project_id = f"prj-pdu-empty-bn-{os.getpid()}"
+        domain = "scripts"
+        cwd = self._make_domain_env(tmp_path, project_id, domain)
+        mock_bin = tmp_path / "bin"
+        mock_bin.mkdir()
+        mock, query_log = self._make_mock_ace_cli_recording(mock_bin)
+
+        # Write a last-domain file different from matched domain to trigger the shift
+        last_domain_file = Path(f"/tmp/ace-domain-{project_id}.txt")
+        last_domain_file.write_text("other-domain")
+
+        # /scripts/.hidden: domain match fires (path has "scripts"), but basename
+        # after extension-strip is empty → guard must prevent ace-cli call.
+        hook_input = {
+            "session_id": "sess-pdu-empty-bn",
+            "tool_name": "Read",
+            "tool_input": {"file_path": f"/{domain}/.hidden"},
+            "cwd": cwd,
+        }
+
+        result = subprocess.run(
+            ["bash", str(self.POSTTOOLUSE)],
+            input=json.dumps(hook_input),
+            capture_output=True, text=True, timeout=10,
+            env={
+                **os.environ,
+                "PATH": f"{mock_bin}:{os.environ.get('PATH', '/usr/bin:/bin')}",
+                "CLAUDE_PROJECT_DIR": str(tmp_path),
+            },
+        )
+
+        Path(f"/tmp/ace-domains-{project_id}.json").unlink(missing_ok=True)
+        last_domain_file.unlink(missing_ok=True)
+
+        assert result.returncode == 0, f"Script must exit 0; rc={result.returncode}"
+        assert not query_log.exists(), (
+            "ace-cli must NOT be called when FILE_BASENAME is empty. "
+            f"Query log was written: {query_log.read_text() if query_log.exists() else '(missing)'}"
+        )
+
+    def test_pretooluse_nonempty_basename_search_query_has_no_domain(self, tmp_path):
+        """pretooluse: non-empty basename → query sent to ace-cli is basename only (no domain)."""
+        import os
+        project_id = f"prj-ptu-qry-{os.getpid()}"
+        domain = "scripts"
+        cwd = self._make_domain_env(tmp_path, project_id, domain)
+        mock_bin = tmp_path / "bin"
+        mock_bin.mkdir()
+        mock, query_log = self._make_mock_ace_cli_recording(mock_bin)
+
+        hook_input = {
+            "session_id": "sess-ptu-qry",
+            "tool_name": "Read",
+            "tool_input": {"file_path": f"/{domain}/ace_pretooluse_wrapper.sh"},
+            "cwd": cwd,
+        }
+
+        subprocess.run(
+            ["bash", str(self.PRETOOLUSE)],
+            input=json.dumps(hook_input),
+            capture_output=True, text=True, timeout=10,
+            env={
+                **os.environ,
+                "PATH": f"{mock_bin}:{os.environ.get('PATH', '/usr/bin:/bin')}",
+                "CLAUDE_PROJECT_DIR": str(tmp_path),
+            },
+        )
+
+        Path(f"/tmp/ace-domains-{project_id}.json").unlink(missing_ok=True)
+        Path(f"/tmp/ace-domain-{project_id}-main.txt").unlink(missing_ok=True)
+
+        if not query_log.exists():
+            pytest.skip("ace-cli was not called (domain match may not have fired)")
+
+        query_sent = query_log.read_text().strip()
+        assert domain not in query_sent, (
+            f"Query must NOT contain domain token '{domain}'. Got: {query_sent!r}"
+        )
+        assert "ace_pretooluse_wrapper" in query_sent, (
+            f"Query must contain the file basename. Got: {query_sent!r}"
+        )
+
+    def test_posttooluse_nonempty_basename_search_query_has_no_domain(self, tmp_path):
+        """posttooluse: non-empty basename → query sent to ace-cli is basename only (no domain)."""
+        import os
+        project_id = f"prj-pdu-qry-{os.getpid()}"
+        domain = "scripts"
+        cwd = self._make_domain_env(tmp_path, project_id, domain)
+        mock_bin = tmp_path / "bin"
+        mock_bin.mkdir()
+        mock, query_log = self._make_mock_ace_cli_recording(mock_bin)
+
+        # Write a last-domain file different from matched domain to trigger the shift
+        last_domain_file = Path(f"/tmp/ace-domain-{project_id}.txt")
+        last_domain_file.write_text("other-domain")
+
+        hook_input = {
+            "session_id": "sess-pdu-qry",
+            "tool_name": "Read",
+            "tool_input": {"file_path": f"/{domain}/ace_posttooluse_domain_inject.sh"},
+            "cwd": cwd,
+        }
+
+        subprocess.run(
+            ["bash", str(self.POSTTOOLUSE)],
+            input=json.dumps(hook_input),
+            capture_output=True, text=True, timeout=10,
+            env={
+                **os.environ,
+                "PATH": f"{mock_bin}:{os.environ.get('PATH', '/usr/bin:/bin')}",
+                "CLAUDE_PROJECT_DIR": str(tmp_path),
+            },
+        )
+
+        Path(f"/tmp/ace-domains-{project_id}.json").unlink(missing_ok=True)
+        last_domain_file.unlink(missing_ok=True)
+
+        if not query_log.exists():
+            pytest.skip("ace-cli was not called (domain match may not have fired)")
+
+        query_sent = query_log.read_text().strip()
+        assert domain not in query_sent, (
+            f"Query must NOT contain domain token '{domain}'. Got: {query_sent!r}"
+        )
+        assert "ace_posttooluse_domain_inject" in query_sent, (
+            f"Query must contain the file basename. Got: {query_sent!r}"
         )
