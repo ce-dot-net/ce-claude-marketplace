@@ -60,7 +60,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 from ace_cli import run_search, check_session_pinning_available  # noqa: E402
 from ace_context import get_context                              # noqa: E402
 from patterns_used_state import append_patterns_used             # noqa: E402
-from ace_pattern_render import render_patterns                   # noqa: E402
+from ace_pattern_render import render_patterns, render_cohort, render_compact_all  # noqa: E402
 
 # ── constants ────────────────────────────────────────────────────────────────
 # Maximum query length passed to ACE search (leading semantically-dense portion)
@@ -257,35 +257,77 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         if not pattern_list:
             sys.exit(0)
 
-        # ── Build additionalContext + F-080 data via central render helper ──
-        # NO quality gate: all patterns retained, bandit_rank sort, tiered output.
+        # ── A/B cohort assignment (deterministic, per task_session_id) ──────────
+        # Dormant by default: ACE_AB_CONTROL_PCT=0 / ACE_AB_COMPACT_PCT=0 → budget.
+        _cohort = render_cohort(task_session_id)
+
         retrieval_id = patterns_response.get('retrieval_id') or None
         agent_id_attr = f'agent-type="{agent_type}" agent-id="{agent_id}"' if agent_id else f'agent-type="{agent_type}"'
-        ace_context, pattern_ids, _, retrieval_log_map = render_patterns(
-            patterns_response,
-            tag='ace-patterns-subagent',
-            attrs=agent_id_attr,
-        )
         pattern_count = len(pattern_list)
 
-        # ── Persist per-agent patterns_used state ─────────────────────────
-        if pattern_ids:
+        # ── Render dispatch by cohort ─────────────────────────────────────────
+        if _cohort == 'control':
+            # Control arm: search ran (retrieval_id logged), inject ZERO patterns.
+            ace_context = None
+            pattern_ids = []
+            retrieval_log_map = {}
             try:
-                append_patterns_used(
-                    session_id, agent_id, pattern_ids,
-                    retrieval_id=retrieval_id,
-                    retrieval_log_ids=retrieval_log_map,
-                    task_session_id=task_session_id,
-                )
+                append_patterns_used(session_id, agent_id, [],
+                                     retrieval_id=retrieval_id,
+                                     task_session_id=task_session_id)
             except Exception:
-                pass  # non-fatal
+                pass
 
-        output = {
-            "hookSpecificOutput": {
-                "hookEventName": "SubagentStart",
-                "additionalContext": ace_context,
+        elif _cohort == 'compact':
+            # Compact arm: all patterns as compact one-liners, total ≤ 9500 chars.
+            ace_context, pattern_ids, _, retrieval_log_map = render_compact_all(
+                patterns_response,
+                tag='ace-patterns-subagent',
+                attrs=agent_id_attr,
+            )
+            if pattern_ids:
+                try:
+                    append_patterns_used(
+                        session_id, agent_id, pattern_ids,
+                        retrieval_id=retrieval_id,
+                        retrieval_log_ids=retrieval_log_map,
+                        task_session_id=task_session_id,
+                    )
+                except Exception:
+                    pass
+
+        else:
+            # Budget arm (default): existing budget-verbatim render (unchanged).
+            ace_context, pattern_ids, _, retrieval_log_map = render_patterns(
+                patterns_response,
+                tag='ace-patterns-subagent',
+                attrs=agent_id_attr,
+            )
+            if pattern_ids:
+                try:
+                    append_patterns_used(
+                        session_id, agent_id, pattern_ids,
+                        retrieval_id=retrieval_id,
+                        retrieval_log_ids=retrieval_log_map,
+                        task_session_id=task_session_id,
+                    )
+                except Exception:
+                    pass
+
+        if ace_context is not None:
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "SubagentStart",
+                    "additionalContext": ace_context,
+                }
             }
-        }
+        else:
+            # Control arm: no additionalContext
+            output = {
+                "hookSpecificOutput": {
+                    "hookEventName": "SubagentStart",
+                }
+            }
         # Optionally surface a user-visible message (not required by SubagentStart)
         if pattern_count > 0:
             top_domains = list({p.get('domain', '') for p in pattern_list if p.get('domain')})[:3]

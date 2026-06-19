@@ -29,7 +29,9 @@ Wired into all 3 injection sites:
   3. patterns_used_state.py  — strip_and_gate / --strip-and-gate (domain-shift bash paths)
 """
 
+import hashlib
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -411,3 +413,190 @@ def render_patterns(
         }
 
     return additional_context, injected_pattern_ids, "", retrieval_log_map
+
+
+# ---------------------------------------------------------------------------
+# A/B cohort split — DORMANT BY DEFAULT (100% budget-verbatim unless enabled)
+#
+# Env knobs (both default to 0 → 100% budget-verbatim = no experiment):
+#   ACE_AB_CONTROL_PCT   int 0–100  (default 0)
+#   ACE_AB_COMPACT_PCT   int 0–100  (default 0)
+#
+# Budget-verbatim share = 100 - CONTROL_PCT - COMPACT_PCT.
+# Bad values (non-int, negative, sum > 100) → silently default to 0/0 = all budget.
+# ---------------------------------------------------------------------------
+
+def _read_ab_pcts():
+    """Read and validate ACE_AB_CONTROL_PCT / ACE_AB_COMPACT_PCT from env.
+
+    Returns (control_pct, compact_pct) as ints, or (0, 0) on any invalid input.
+    """
+    try:
+        ctrl = int(os.environ.get("ACE_AB_CONTROL_PCT", "0"))
+        compact = int(os.environ.get("ACE_AB_COMPACT_PCT", "0"))
+    except (TypeError, ValueError):
+        return 0, 0
+    # Clamp and validate
+    if ctrl < 0 or compact < 0:
+        return 0, 0
+    ctrl = min(ctrl, 100)
+    compact = min(compact, 100)
+    if ctrl + compact > 100:
+        return 0, 0
+    return ctrl, compact
+
+
+def render_cohort(session_id: Optional[str]) -> str:
+    """Deterministically assign a session to a render cohort.
+
+    Returns one of: 'control' | 'compact' | 'budget'.
+
+    Algorithm:
+      bucket = sha256(session_id)[:8 hex chars] % 100
+      if session_id is falsy → 'budget'  (never experiment without anchor)
+      if bucket < CONTROL_PCT            → 'control'
+      if bucket < CONTROL_PCT+COMPACT_PCT→ 'compact'
+      else                               → 'budget'
+
+    Env knobs are read fresh on every call so the server can enable/disable
+    the experiment without restarting the plugin process.
+
+    Default (no env or both 0) → 100% 'budget' (= current shipped behavior,
+    zero user degradation).
+    """
+    if not session_id:
+        return "budget"
+
+    ctrl_pct, compact_pct = _read_ab_pcts()
+
+    # Both zero → dormant, all budget (fast-path)
+    if ctrl_pct == 0 and compact_pct == 0:
+        return "budget"
+
+    digest = hashlib.sha256(session_id.encode()).hexdigest()
+    bucket = int(digest[:8], 16) % 100
+
+    if bucket < ctrl_pct:
+        return "control"
+    if bucket < ctrl_pct + compact_pct:
+        return "compact"
+    return "budget"
+
+
+def render_compact_all(
+    patterns_response: Dict[str, Any],
+    *,
+    tag: str,
+    attrs: str = "",
+    budget: int = _DEFAULT_BUDGET,
+) -> Tuple[str, List[str], str, Dict[str, int]]:
+    """Render ALL patterns as compact one-liners within the given budget.
+
+    Each pattern becomes a single line:
+        #<rank> [<domain>] r=<reward> <content_snippet>
+
+    The per-line content snippet length is sized dynamically so the total
+    additionalContext string stays ≤ budget chars.  If even minimal snippets
+    would overflow (extremely unlikely with ≤ 100 patterns), trailing lines
+    are dropped as a last resort and the output is rebuilt — never emit
+    invalid or over-budget output.
+
+    Header attributes: shown="N" of="N" mode="compact"
+
+    F-080: retrieval_log_map + injected_ids cover ALL rendered (= all) patterns
+    that have a valid pattern id, in bandit_rank ASC order.
+
+    Returns:
+        4-tuple:
+          (additional_context_string,
+           injected_pattern_ids,        # all valid ids (compact = all patterns)
+           _reserved,                   # "" (API compat with render_patterns)
+           retrieval_log_map)           # {pattern_id: retrieval_log_id} all rendered
+    """
+    # ── Sort + extract retrieval data (reuse shared helpers) ─────────────────
+    output_dict, _all_ids, _full_rl_map = render_patterns_dict(patterns_response)
+    all_processed = output_dict["similar_patterns"]
+    total_count = output_dict["count"]
+
+    # ── Build tag helpers ─────────────────────────────────────────────────────
+    tag_close = f"</{tag}>"
+
+    def _build_tag_open(n_shown: int) -> str:
+        shown_attr = f'shown="{n_shown}" of="{total_count}" mode="compact"'
+        if attrs:
+            return f"<{tag} {shown_attr} {attrs}>"
+        return f"<{tag} {shown_attr}>"
+
+    if not all_processed:
+        tag_open = _build_tag_open(0)
+        ctx = f"{tag_open}\n{tag_close}"
+        return ctx, [], "", {}
+
+    # ── Build compact lines ───────────────────────────────────────────────────
+    # Format: #<rank> [<domain>] r=<reward> <content_snippet>
+    def _compact_line(p: Dict[str, Any], snippet_len: int) -> str:
+        rank = p.get("bandit_rank", "?")
+        domain = p.get("domain", "")
+        reward = p.get("cumulative_v15_reward", 0)
+        content = p.get("content", "")
+        snippet = content[:snippet_len] if snippet_len > 0 else ""
+        return f"#{rank} [{domain}] r={reward:.1f} {snippet}"
+
+    # Fixed overhead: tag_open + "\n" + tag_close
+    _sample_open = _build_tag_open(total_count)
+    _fixed_overhead = len(_sample_open) + 1 + len(tag_close)  # open + \n + close
+    available_for_lines = budget - _fixed_overhead
+
+    n = len(all_processed)
+
+    # Estimate snippet length: distribute available chars across all lines.
+    # Each line: base part (rank/domain/reward prefix) + "\n" (separator).
+    # Compute base cost for each line first, then allocate remaining chars.
+    base_parts: List[str] = []
+    for p in all_processed:
+        rank = p.get("bandit_rank", "?")
+        domain = p.get("domain", "")
+        reward = p.get("cumulative_v15_reward", 0)
+        base_parts.append(f"#{rank} [{domain}] r={reward:.1f} ")
+
+    total_base_cost = sum(len(b) for b in base_parts)
+    # Each line also needs a "\n" separator (all lines joined by \n)
+    total_sep_cost = n  # n newline characters (one per line, incl. final before close)
+    total_fixed_line_cost = total_base_cost + total_sep_cost
+
+    remaining_for_snippets = available_for_lines - total_fixed_line_cost
+    snippet_len = max(0, remaining_for_snippets // n) if n > 0 else 0
+
+    # Build all lines with the computed snippet length
+    def _build_lines(processed: List[Dict[str, Any]], snip_len: int) -> List[str]:
+        return [_compact_line(p, snip_len) for p in processed]
+
+    lines = _build_lines(all_processed, snippet_len)
+    lines_block = "\n".join(lines)
+    tag_open = _build_tag_open(n)
+    ctx = f"{tag_open}\n{lines_block}\n{tag_close}"
+
+    # Safety: if still over budget, drop trailing lines one by one
+    if len(ctx) > budget:
+        rendered_processed = list(all_processed)
+        while rendered_processed and len(ctx) > budget:
+            rendered_processed.pop()
+            lines = _build_lines(rendered_processed, snippet_len)
+            lines_block = "\n".join(lines)
+            tag_open = _build_tag_open(len(rendered_processed))
+            ctx = f"{tag_open}\n{lines_block}\n{tag_close}"
+        all_processed = rendered_processed
+
+    # ── Collect injected ids + retrieval_log_map ─────────────────────────────
+    injected_pattern_ids: List[str] = [
+        p.get("id")
+        for p in all_processed
+        if p.get("id") and is_valid_pattern_id(p.get("id"))
+    ]
+    retrieval_log_map: Dict[str, int] = {
+        pid: _full_rl_map[pid]
+        for pid in injected_pattern_ids
+        if pid in _full_rl_map
+    }
+
+    return ctx, injected_pattern_ids, "", retrieval_log_map

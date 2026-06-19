@@ -70,7 +70,8 @@ class ACERelevanceLogger:
         domains: List[str],
         project_id: Optional[str] = None,
         org_id: Optional[str] = None,
-        agent_type: Optional[str] = None
+        agent_type: Optional[str] = None,
+        render_cohort: Optional[str] = None,
     ) -> None:
         """
         Log pattern search and injection metrics.
@@ -117,7 +118,8 @@ class ACERelevanceLogger:
             'patterns_filtered': len(patterns_returned) - len(patterns_injected),
             'avg_confidence': round(avg_confidence, 3),
             'domains': domains[:10],  # Limit to 10 domains
-            'top_patterns': top_patterns
+            'top_patterns': top_patterns,
+            'render_cohort': render_cohort,
         }
 
         self._write_log(entry)

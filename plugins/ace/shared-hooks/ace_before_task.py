@@ -24,7 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 from validation import is_valid_pattern_id
 from patterns_used_state import append_patterns_used
-from ace_pattern_render import render_patterns
+from ace_pattern_render import render_patterns, render_cohort, render_compact_all
 
 
 def sanitize_unicode(text: str) -> str:
@@ -390,6 +390,11 @@ def main():
         pattern_list = patterns_response.get('similar_patterns', [])
         original_pattern_list = list(pattern_list)  # Keep original for logging
 
+        # ── A/B cohort assignment (deterministic, per task_session_id) ──────────
+        # Dormant by default: ACE_AB_CONTROL_PCT=0 / ACE_AB_COMPACT_PCT=0 → budget.
+        # Domain-shift paths (PreToolUse/PostToolUse) are NOT affected.
+        _cohort = render_cohort(task_session_id)
+
         # v5.4.2: Log relevance metrics for analysis (before render, use full list)
         try:
             domains = list(set(p.get('domain', 'unknown') for p in pattern_list if p.get('domain')))
@@ -403,7 +408,8 @@ def main():
                 domains=domains,
                 project_id=context.get('project'),
                 org_id=context.get('org'),
-                agent_type=agent_type
+                agent_type=agent_type,
+                render_cohort=_cohort,
             )
         except Exception:
             pass  # Non-fatal: continue without logging
@@ -439,29 +445,61 @@ def main():
             except Exception:
                 pass
 
-        # Use the central render helper: NO gate, bandit_rank sort, tiered output,
-        # bandit_rank/semantic_score hoisted, expanded dropped, F-080 retrieval_log_map.
+        # ── Render dispatch by cohort ─────────────────────────────────────────
         _retrieval_id = patterns_response.get('retrieval_id') or None
-        ace_context, _pattern_ids, _, _retrieval_log_map = render_patterns(
-            patterns_response,
-            tag='ace-patterns',
-            attrs=f'agent-type="{agent_type}"',
-        )
+        _tag_attrs = f'agent-type="{agent_type}"'
 
-        # CRITICAL: Save pattern IDs for reinforcement learning (ACE paper feedback loop)
-        # render_patterns returns only budget-limited injected ids (no gate drop).
-        if _pattern_ids and context['project']:
+        if _cohort == 'control':
+            # Control arm: search ran (retrieval_id logged), but inject ZERO patterns.
+            # F-080 anchor: append_patterns_used with empty ids + retrieval_id + tsid.
+            ace_context = None  # no additionalContext block
+            _pattern_ids = []
+            _retrieval_log_map = {}
             try:
-                append_patterns_used(session_id, agent_id, _pattern_ids,
+                append_patterns_used(session_id, agent_id, [],
                                      retrieval_id=_retrieval_id,
-                                     retrieval_log_ids=_retrieval_log_map,
                                      task_session_id=task_session_id)
             except Exception:
                 pass
 
+        elif _cohort == 'compact':
+            # Compact arm: all patterns as compact one-liners, total ≤ 9500 chars.
+            ace_context, _pattern_ids, _, _retrieval_log_map = render_compact_all(
+                patterns_response,
+                tag='ace-patterns',
+                attrs=_tag_attrs,
+            )
+            if _pattern_ids and context['project']:
+                try:
+                    append_patterns_used(session_id, agent_id, _pattern_ids,
+                                         retrieval_id=_retrieval_id,
+                                         retrieval_log_ids=_retrieval_log_map,
+                                         task_session_id=task_session_id)
+                except Exception:
+                    pass
+
+        else:
+            # Budget arm (default): existing budget-verbatim render (unchanged).
+            ace_context, _pattern_ids, _, _retrieval_log_map = render_patterns(
+                patterns_response,
+                tag='ace-patterns',
+                attrs=_tag_attrs,
+            )
+            # CRITICAL: Save pattern IDs for reinforcement learning.
+            # render_patterns returns only budget-limited injected ids (no gate drop).
+            if _pattern_ids and context['project']:
+                try:
+                    append_patterns_used(session_id, agent_id, _pattern_ids,
+                                         retrieval_id=_retrieval_id,
+                                         retrieval_log_ids=_retrieval_log_map,
+                                         task_session_id=task_session_id)
+                except Exception:
+                    pass
+
         # Append fire-and-forget eval injection if present (from previous task's Stop hook).
         # CC hard-caps additionalContext at 10,000 chars; trim eval_injection (cosmetic) to fit.
-        if eval_injection:
+        # Control arm: ace_context is None — skip eval injection (model sees zero patterns).
+        if eval_injection and ace_context is not None:
             _CC_HARD_CAP = 10_000
             _available_for_eval = _CC_HARD_CAP - len(ace_context) - 1  # -1 for the "\n"
             if _available_for_eval > 0:
@@ -517,14 +555,25 @@ def main():
                 agent_type=agent_type,
             )
 
-            output = {
-                "systemMessage": user_message,
-                "hookSpecificOutput": {
-                    "hookEventName": "UserPromptSubmit",
-                    "additionalContext": ace_context,
-                    "sessionTitle": session_title
+            if ace_context is not None:
+                # Budget or compact arm: inject additionalContext
+                output = {
+                    "systemMessage": user_message,
+                    "hookSpecificOutput": {
+                        "hookEventName": "UserPromptSubmit",
+                        "additionalContext": ace_context,
+                        "sessionTitle": session_title
+                    }
                 }
-            }
+            else:
+                # Control arm: no additionalContext — only systemMessage + sessionTitle
+                output = {
+                    "systemMessage": user_message,
+                    "hookSpecificOutput": {
+                        "hookEventName": "UserPromptSubmit",
+                        "sessionTitle": session_title
+                    }
+                }
         print(json.dumps(output))
         sys.exit(0)
 
