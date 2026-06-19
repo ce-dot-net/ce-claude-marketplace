@@ -108,7 +108,7 @@ if command -v ace-cli >/dev/null 2>&1; then
         $_PDI_TSID_FLAG >/dev/null 2>&1 || true
     fi
 
-    echo "{\"hookSpecificOutput\":{\"hookEventName\":\"PostToolUse\",\"additionalContext\":\"$(echo "$CONTEXT" | sed 's/"/\\"/g')\"}}"
+    jq -n --arg ctx "$CONTEXT" '{"hookSpecificOutput":{"hookEventName":"PostToolUse","additionalContext":$ctx}}'
     exit 0
   fi
 fi
