@@ -39,9 +39,13 @@ LAST_DOMAIN=$(cat "$LAST_DOMAIN_FILE" 2>/dev/null || echo "")
 # Update last domain
 echo "$MATCHED_DOMAIN" > "$LAST_DOMAIN_FILE"
 
-# Search for domain-specific patterns
+# Build query from file basename only (no domain token — server-team confirmed
+# domain_match ANTI-predicts relevance; cross-domain patterns are more useful;
+# let de-confounded bandit_rank order an unfiltered set).
 FILE_BASENAME=$(basename "$FILE_PATH" 2>/dev/null | sed 's/\.[^.]*$//' || echo "")
-SEARCH_QUERY="${MATCHED_DOMAIN} ${FILE_BASENAME}"
+# Edge case: if FILE_BASENAME is empty there is no usable query — skip entirely.
+[ -z "$FILE_BASENAME" ] && exit 0
+SEARCH_QUERY="${FILE_BASENAME}"
 
 if command -v ace-cli >/dev/null 2>&1; then
   # Change A (v7.1.2): Session pinning — reuse existing task_session_id from state
@@ -62,10 +66,10 @@ if command -v ace-cli >/dev/null 2>&1; then
   # --top-k 8: server-side count bound for domain-shift (hot path, per-tool-call).
   # The server SELECTS the top-8 patterns; the client does NOT cap client-side.
   if [ -n "$EXISTING_TSID" ]; then
-    RESULT=$(echo "$SEARCH_QUERY" | ace-cli search --stdin --json --allowed-domains "$MATCHED_DOMAIN" \
+    RESULT=$(echo "$SEARCH_QUERY" | ace-cli search --stdin --json \
       --top-k 8 --pin-session "$EXISTING_TSID" 2>/dev/null || echo "")
   else
-    RESULT=$(echo "$SEARCH_QUERY" | ace-cli search --stdin --json --allowed-domains "$MATCHED_DOMAIN" \
+    RESULT=$(echo "$SEARCH_QUERY" | ace-cli search --stdin --json \
       --top-k 8 2>/dev/null || echo "")
   fi
   if [ -n "$RESULT" ] && echo "$RESULT" | jq -e '.similar_patterns | length > 0' >/dev/null 2>&1; then
