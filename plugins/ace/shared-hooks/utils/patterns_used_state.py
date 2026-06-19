@@ -20,6 +20,11 @@ import os
 import sys
 from pathlib import Path
 
+# ace_pattern_render is in the same utils directory
+_UTILS_DIR = Path(__file__).resolve().parent
+if str(_UTILS_DIR) not in sys.path:
+    sys.path.insert(0, str(_UTILS_DIR))
+
 # is_valid_pattern_id is already used by ace_before_task.py and ace_after_task.py.
 # Import it from the SAME module they use: plugins/ace/utils/validation.py.
 # This file lives at plugins/ace/shared-hooks/utils/ -> ../../utils is plugins/ace/utils.
@@ -272,36 +277,24 @@ def load_task_session_id(session_id, agent_id, hook_event_name='Stop', state_dir
 
 
 # ---------------------------------------------------------------------------
-# Quality-gate + strip helper (shared by bash domain-shift inject paths).
-# Mirrors ace_before_task.USEFUL_FIELDS and _apply_quality_gate exactly so
-# ALL injection paths (main UserPromptSubmit + both domain-shift hooks) apply
-# the SAME v15 gate and field strip.
+# Render + strip helper (shared by bash domain-shift inject paths).
+# Uses ace_pattern_render.render_patterns — NO quality gate, bandit_rank sort,
+# bandit_rank/semantic_score hoisted, expanded dropped.
 # ---------------------------------------------------------------------------
 
-_USEFUL_FIELDS = {
-    'id', 'domain', 'content', 'confidence', 'helpful', 'harmful',
-    'section', 'evidence', 'root_cause', 'error_context',
-    # v15 reward-vocab fields (issue #27 / v7.1.2 Change B)
-    'cumulative_v15_reward', 'n_hot_pos', 'n_hot_neg', 'isAtRisk',
-}
-
-# NOTE: The domain-shift count bound moved server-side (v7.1.1+).
-# Both domain-shift scripts now pass --top-k 8 to ace-cli search so the SERVER
-# selects the top-8 patterns.  strip_and_gate is gate+strip only — no client-
-# side cap, no DOMAIN_SHIFT_TOP_K constant, no ucb_score sort.
-# The main UserPromptSubmit search (ace_before_task.py) and the subagent-start
-# search (ace_subagent_start.py) remain fully uncapped (server search_top_k).
+# NOTE: The domain-shift count bound is server-side (v7.1.1+).
+# Both domain-shift scripts pass --top-k 8 to ace-cli search so the SERVER
+# selects the top-8 patterns.  strip_and_gate renders all returned patterns
+# (no client-side cap, no gate, no ucb_score sort).
 
 
 def _quality_gate(patterns):
-    """Dual-format quality gate — mirrors ace_before_task._apply_quality_gate.
+    """Dual-format quality gate — RETAINED for backward compat with existing tests
+    and for any callers outside the injection path.  The INJECTION path now uses
+    render_patterns (no gate).  This function is no longer called from strip_and_gate.
 
     v15 path  (cumulative_v15_reward present):
         keep if NOT isAtRisk AND reward >= 0
-        (@ace-sdk/core 3.2.2: isAtRisk means reward<0; reward==0 = neutral/uncredited,
-        kept. Only reward<0 / at-risk patterns are dropped. Fix A: also guard reward >= 0
-        so stale/mixed server data with reward<0 + isAtRisk=False is still dropped.
-        Mirrors ace_before_task _apply_quality_gate — keep both in sync.)
     Legacy path (no cumulative_v15_reward):
         keep if confidence >= 0.5 OR helpful >= 2
     """
@@ -318,27 +311,27 @@ def _quality_gate(patterns):
 
 
 def strip_and_gate(data):
-    """Apply USEFUL_FIELDS strip + quality gate to a search-result dict.
+    """Render search-result dict via ace_pattern_render (NO quality gate).
 
-    Returns a new dict with similar_patterns filtered (quality gate) and
-    stripped of server-internal fields.  'count' is updated to reflect the
-    post-gate count.  Top-level fields (retrieval_id, etc.) are preserved.
+    Returns a new dict with:
+      - similar_patterns: sorted by bandit_rank ASC (None→tail), all patterns
+        retained (no gate), server-internal fields stripped, bandit_rank and
+        semantic_score hoisted from match_factors, evidence capped to 2.
+      - expanded dropped
+      - count updated to reflect the full rendered pattern count
+      - top-level fields (retrieval_id, etc.) preserved
 
-    Count bound: the caller (domain-shift scripts) passes --top-k 8 to
-    ace-cli search, so the SERVER selects which patterns to return.  This
-    function does NOT impose a client-side cap or sort — it is gate+strip only.
-    Both domain-shift paths (ace_pretooluse_wrapper.sh and
-    ace_posttooluse_domain_inject.sh) pipe through --strip-and-gate.
+    Used by both domain-shift bash scripts via --strip-and-gate CLI mode.
+    Domain-shift sets are small (≤8 via --top-k 8 server-side), so all
+    patterns are rendered verbatim (tier_k=100 covers them all).
+    The bash scripts wrap this JSON output in their own <ace-patterns-domain-shift> tag.
+
+    Delegates directly to render_patterns_dict (structured return) to avoid
+    the fragile string-split / parse-back / silent fallback approach.
     """
-    pats = data.get('similar_patterns') or []
-    # Apply quality gate
-    gated = _quality_gate(pats)
-    # Strip server-internal fields (match_factors and all non-useful fields)
-    stripped = [{k: v for k, v in p.items() if k in _USEFUL_FIELDS} for p in gated]
-    result = dict(data)
-    result['similar_patterns'] = stripped
-    result['count'] = len(stripped)
-    return result
+    from ace_pattern_render import render_patterns_dict
+    output_dict, _ids, _rl_map = render_patterns_dict(data, tier_k=100)
+    return output_dict
 
 
 # CLI entrypoint for the bash PreToolUse/PostToolUse wrappers.
