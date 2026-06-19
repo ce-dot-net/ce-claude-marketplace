@@ -473,7 +473,7 @@ def render_cohort(session_id: Optional[str]) -> str:
     if ctrl_pct == 0 and compact_pct == 0:
         return "budget"
 
-    digest = hashlib.sha256(session_id.encode()).hexdigest()
+    digest = hashlib.sha256(("render:" + session_id).encode()).hexdigest()
     bucket = int(digest[:8], 16) % 100
 
     if bucket < ctrl_pct:

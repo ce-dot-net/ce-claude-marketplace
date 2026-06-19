@@ -50,6 +50,13 @@ from validation import is_valid_pattern_id
 import re as regex_module
 import time
 
+# render_cohort: imported here for render_variant trace stamping (MUST-FIX 2).
+# Guarded so a missing/broken import never prevents the hook from running.
+try:
+    from ace_pattern_render import render_cohort as _render_cohort
+except Exception:
+    _render_cohort = None  # type: ignore
+
 # CLI command detection
 CLI_CMD = 'ace-cli'
 
@@ -903,6 +910,15 @@ def main():
         # across tasks (the exact bug this fixes). NULL on the server is better than wrong.
         if task_session_id:
             trace["session_id"] = task_session_id
+            # MUST-FIX 2: stamp render_variant for attribution join (server ExecutionTraceRequest).
+            # Recomputing from task_session_id is deterministic — same session_id + same env
+            # → matches injection-time cohort exactly.  Wrapped in try/except: a failure
+            # here must never break the learn trace (hot-path-safe).
+            try:
+                if _render_cohort is not None:
+                    trace["render_variant"] = _render_cohort(task_session_id)
+            except Exception:
+                pass  # non-fatal: omit field, do not break trace
         # else: omit — server leaves session_id NULL, no false cross-task correlation
         if agent_id:
             trace["agent_id"] = agent_id

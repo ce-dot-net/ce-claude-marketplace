@@ -179,37 +179,44 @@ class TestRenderCohortDeterminism:
                 )
 
     def test_hash_computation_matches_spec(self, monkeypatch):
-        """The bucket must equal sha256(session_id)[:8] % 100 (spec-exact)."""
+        """The bucket must equal sha256('render:' + session_id)[:8] % 100 (spec-exact).
+
+        The 'render:' salt keeps the render cohort orthogonal to the server's
+        bare sha256(session_id) serve-A/B bucket.
+        """
         monkeypatch.setenv("ACE_AB_CONTROL_PCT", "20")
         monkeypatch.setenv("ACE_AB_COMPACT_PCT", "20")
         for _ in range(30):
             sid = str(uuid.uuid4())
-            bucket = int(hashlib.sha256(sid.encode()).hexdigest()[:8], 16) % 100
+            bucket = int(hashlib.sha256(("render:" + sid).encode()).hexdigest()[:8], 16) % 100
             expected = (
                 "control" if bucket < 20
                 else "compact" if bucket < 40
                 else "budget"
             )
             assert render_cohort(sid) == expected, (
-                f"Bucket {bucket} for {sid!r}: expected {expected!r}, "
+                f"Salted bucket {bucket} for {sid!r}: expected {expected!r}, "
                 f"got {render_cohort(sid)!r}"
             )
 
     def test_control_range(self, monkeypatch):
-        """Buckets 0..19 → 'control' with CONTROL_PCT=20, COMPACT_PCT=20."""
+        """Salted buckets 0..19 → 'control' with CONTROL_PCT=20, COMPACT_PCT=20.
+
+        Uses the 'render:'-salted hash (not the bare hash) to compute expected cohorts.
+        """
         monkeypatch.setenv("ACE_AB_CONTROL_PCT", "20")
         monkeypatch.setenv("ACE_AB_COMPACT_PCT", "20")
-        # Manufacture session_ids that land in specific buckets
+        # Manufacture session_ids and compute expected cohort from salted bucket
         for _ in range(500):
             sid = str(uuid.uuid4())
-            bucket = int(hashlib.sha256(sid.encode()).hexdigest()[:8], 16) % 100
+            bucket = int(hashlib.sha256(("render:" + sid).encode()).hexdigest()[:8], 16) % 100
             result = render_cohort(sid)
             if bucket < 20:
-                assert result == "control", f"bucket={bucket} → expected 'control', got {result!r}"
+                assert result == "control", f"salted bucket={bucket} → expected 'control', got {result!r}"
             elif bucket < 40:
-                assert result == "compact", f"bucket={bucket} → expected 'compact', got {result!r}"
+                assert result == "compact", f"salted bucket={bucket} → expected 'compact', got {result!r}"
             else:
-                assert result == "budget", f"bucket={bucket} → expected 'budget', got {result!r}"
+                assert result == "budget", f"salted bucket={bucket} → expected 'budget', got {result!r}"
 
 
 class TestRenderCohortDistribution:
