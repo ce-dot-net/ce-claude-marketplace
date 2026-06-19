@@ -776,12 +776,27 @@ class TestValidationIsCalledInPipeline:
                     has_validation_at_extraction = True
                 break
 
-        assert found_extraction, "Could not find pattern ID extraction line in before_task"
-        assert has_validation_at_extraction, (
-            "Pattern ID extraction in before_task does NOT include validation. "
-            "IDs are extracted with only `if p.get('id')` check, which does not "
-            "verify the ctx- prefix. Add is_valid_pattern_id() to the filter."
-        )
+        if found_extraction:
+            # Old inline path: validate is_valid_pattern_id used nearby
+            assert has_validation_at_extraction, (
+                "Pattern ID extraction in before_task does NOT include validation. "
+                "IDs are extracted with only `if p.get('id')` check, which does not "
+                "verify the ctx- prefix. Add is_valid_pattern_id() to the filter."
+            )
+        else:
+            # New render_patterns delegation path: validation is done inside
+            # ace_pattern_render.render_patterns (which calls is_valid_pattern_id).
+            # Verify the delegation is present.
+            assert 'render_patterns(' in source, (
+                "Could not find pattern ID extraction line OR render_patterns call in before_task. "
+                "Either inline pattern_ids extraction with is_valid_pattern_id, or delegate to "
+                "render_patterns (which handles validation internally)."
+            )
+            # Also verify is_valid_pattern_id is imported (for other uses)
+            assert 'is_valid_pattern_id' in source, (
+                "is_valid_pattern_id must still be imported in before_task even when "
+                "render_patterns handles pattern id validation."
+            )
 
 
 if __name__ == "__main__":

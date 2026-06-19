@@ -60,47 +60,14 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 from ace_cli import run_search, check_session_pinning_available  # noqa: E402
 from ace_context import get_context                              # noqa: E402
 from patterns_used_state import append_patterns_used             # noqa: E402
-from validation import is_valid_pattern_id                       # noqa: E402
+from ace_pattern_render import render_patterns                   # noqa: E402
 
 # ── constants ────────────────────────────────────────────────────────────────
-# Fields to keep in patterns before injection (mirrors ace_before_task.py USEFUL_FIELDS)
-_USEFUL_FIELDS = {
-    'id', 'domain', 'content', 'confidence', 'helpful', 'harmful',
-    'section', 'evidence', 'root_cause', 'error_context',
-    'cumulative_v15_reward', 'n_hot_pos', 'n_hot_neg', 'isAtRisk',
-}
-
 # Maximum query length passed to ACE search (leading semantically-dense portion)
 _QUERY_MAX_CHARS = 500
 
 # Tool names that spawn subagents
 _SPAWN_TOOL_NAMES = {'Task', 'Agent'}
-
-
-def _strip_patterns(patterns_response: Dict[str, Any]) -> Dict[str, Any]:
-    """Strip server-internal metadata from patterns before injection."""
-    if 'similar_patterns' not in patterns_response:
-        return patterns_response
-    stripped = dict(patterns_response)
-    stripped['similar_patterns'] = [
-        {k: v for k, v in p.items()
-         if k in _USEFUL_FIELDS and (v or k not in ('root_cause', 'error_context'))}
-        for p in patterns_response['similar_patterns']
-    ]
-    return stripped
-
-
-def _extract_retrieval_ids(patterns_response: Dict[str, Any]):
-    """Extract retrieval_id and per-pattern retrieval_log_ids (F-080 compat)."""
-    retrieval_id = patterns_response.get('retrieval_id') or None
-    retrieval_log_map = {}
-    for p in patterns_response.get('similar_patterns', []):
-        pid = p.get('id')
-        mf = p.get('match_factors') or {}
-        rlid = mf.get('retrieval_log_id') if isinstance(mf, dict) else None
-        if pid and not isinstance(rlid, bool) and isinstance(rlid, int):
-            retrieval_log_map[pid] = rlid
-    return retrieval_id, retrieval_log_map
 
 
 def _read_lines_reversed(path: str):
@@ -290,13 +257,18 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         if not pattern_list:
             sys.exit(0)
 
+        # ── Build additionalContext + F-080 data via central render helper ──
+        # NO quality gate: all patterns retained, bandit_rank sort, tiered output.
+        retrieval_id = patterns_response.get('retrieval_id') or None
+        agent_id_attr = f'agent-type="{agent_type}" agent-id="{agent_id}"' if agent_id else f'agent-type="{agent_type}"'
+        ace_context, pattern_ids, _, retrieval_log_map = render_patterns(
+            patterns_response,
+            tag='ace-patterns-subagent',
+            attrs=agent_id_attr,
+        )
+        pattern_count = len(pattern_list)
+
         # ── Persist per-agent patterns_used state ─────────────────────────
-        # This is what SubagentStop's load_playbook_used(agent_id=...) will read.
-        retrieval_id, retrieval_log_map = _extract_retrieval_ids(patterns_response)
-        pattern_ids = [
-            p.get('id') for p in pattern_list
-            if p.get('id') and is_valid_pattern_id(p.get('id'))
-        ]
         if pattern_ids:
             try:
                 append_patterns_used(
@@ -307,16 +279,6 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                 )
             except Exception:
                 pass  # non-fatal
-
-        # ── Build additionalContext for the subagent ─────────────────────
-        stripped = _strip_patterns(patterns_response)
-        pattern_count = len(pattern_list)
-        agent_id_attr = f' agent-id="{agent_id}"' if agent_id else ''
-        ace_context = (
-            f'<ace-patterns-subagent agent-type="{agent_type}"{agent_id_attr}>\n'
-            f'{json.dumps(stripped)}\n'
-            f'</ace-patterns-subagent>'
-        )
 
         output = {
             "hookSpecificOutput": {

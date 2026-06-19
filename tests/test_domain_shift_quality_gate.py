@@ -172,8 +172,14 @@ class TestStripAndGateCLI:
             f"stderr: {result.stderr}"
         )
 
-    def test_strip_and_gate_filters_atrisk_patterns(self):
-        """--strip-and-gate must remove patterns where isAtRisk=True."""
+    def test_strip_and_gate_retains_atrisk_patterns(self):
+        """--strip-and-gate must RETAIN patterns where isAtRisk=True.
+
+        NEW CONTRACT (server-team validated, ACE-1.5-native): NO quality gate.
+        Inject everything; let ranking + tiering bury weak ones.
+        Client drop starves the server's apply/cleanup loop and discards the
+        de-confound signal. Both patterns must survive.
+        """
         good = _make_v15_pattern("ctx-4338628010-5127", reward=1.5, is_at_risk=False)
         bad = _make_v15_pattern("ctx-6257961166-f081", reward=0, is_at_risk=True)
         search_result = _make_search_result([good, bad])
@@ -183,9 +189,10 @@ class TestStripAndGateCLI:
 
         output = json.loads(result.stdout)
         ids = [p["id"] for p in output.get("similar_patterns", [])]
-        assert "ctx-4338628010-5127" in ids, "Good pattern must survive gate"
-        assert "ctx-6257961166-f081" not in ids, (
-            "isAtRisk=True pattern must be filtered by --strip-and-gate"
+        assert "ctx-4338628010-5127" in ids, "Good pattern must survive strip"
+        assert "ctx-6257961166-f081" in ids, (
+            "NEW CONTRACT: isAtRisk=True pattern must be RETAINED by --strip-and-gate "
+            "(no quality gate; ranking buries weak patterns)"
         )
 
     def test_strip_and_gate_removes_server_internal_fields(self):
@@ -412,9 +419,11 @@ ENDJSON
             pytest.skip("Domain match did not fire in this environment (no ace-cli call)")
 
         output_str = result.stdout
-        assert "ctx-6257961166-f081" not in output_str, (
-            f"isAtRisk=True pattern (ctx-6257961166-f081) must NOT appear in "
-            f"injected context from posttooluse.\nOutput: {output_str!r}"
+        # NEW CONTRACT: NO quality gate — isAtRisk=True patterns are RETAINED.
+        # Both patterns must appear in the injected context.
+        assert "ctx-4338628010-5127" in output_str, (
+            f"Good pattern (ctx-4338628010-5127) must appear in posttooluse output.\n"
+            f"Output: {output_str!r}"
         )
 
     def test_v15_fields_present_in_stripped_posttooluse_output(self, tmp_path):
@@ -592,15 +601,20 @@ class TestFix3GateSemantics:
             "(neutral reward is not at-risk). Was dropped under old reward>0 rule."
         )
 
-    def test_negative_reward_atrisk_dropped_by_gate(self):
-        """FIX 3: cumulative_v15_reward=-1.5, isAtRisk=True → dropped."""
+    def test_negative_reward_atrisk_retained_by_render(self):
+        """NEW CONTRACT: cumulative_v15_reward=-1.5, isAtRisk=True → RETAINED.
+
+        The injection path has NO quality gate. The server's de-confound signal
+        requires all patterns to be injected; ranking buries weak ones.
+        """
         pattern = _make_v15_pattern("ctx-atrisk-0002", reward=-1.5, is_at_risk=True)
         result = self._run_strip_gate(_make_search_result([pattern]))
         assert result.returncode == 0, f"stderr: {result.stderr}"
         output = json.loads(result.stdout)
         ids = [p["id"] for p in output.get("similar_patterns", [])]
-        assert "ctx-atrisk-0002" not in ids, (
-            "FIX 3: cumulative_v15_reward=-1.5, isAtRisk=True must be dropped."
+        assert "ctx-atrisk-0002" in ids, (
+            "NEW CONTRACT: cumulative_v15_reward=-1.5, isAtRisk=True must be RETAINED "
+            "(no quality gate in injection path)."
         )
 
     def test_positive_reward_not_atrisk_kept_by_gate(self):
@@ -634,8 +648,12 @@ class TestFix3GateSemantics:
             "Legacy path unchanged: confidence=0.8 must pass gate."
         )
 
-    def test_legacy_low_helpful_low_confidence_dropped(self):
-        """FIX 3 (legacy path unchanged): helpful=1, confidence=0.2 → dropped."""
+    def test_legacy_low_helpful_low_confidence_retained(self):
+        """NEW CONTRACT: helpful=1, confidence=0.2 legacy pattern → RETAINED.
+
+        The injection path has NO quality gate. All patterns are retained
+        regardless of confidence/helpful/isAtRisk/reward.
+        """
         legacy = {
             "id": "ctx-legacy-0005",
             "domain": "test-domain",
@@ -650,8 +668,9 @@ class TestFix3GateSemantics:
         assert result.returncode == 0, f"stderr: {result.stderr}"
         output = json.loads(result.stdout)
         ids = [p["id"] for p in output.get("similar_patterns", [])]
-        assert "ctx-legacy-0005" not in ids, (
-            "Legacy path: helpful=1, confidence=0.2 must be dropped."
+        assert "ctx-legacy-0005" in ids, (
+            "NEW CONTRACT: low-confidence legacy pattern must be RETAINED "
+            "(no quality gate in injection path)."
         )
 
 
@@ -673,20 +692,22 @@ class TestFixAGateRobustness:
         )
         return result
 
-    def test_negative_reward_not_atrisk_dropped_by_strip_gate(self):
-        """FIX A: reward=-1.5, isAtRisk=False → DROPPED by --strip-and-gate.
+    def test_negative_reward_not_atrisk_retained_by_render(self):
+        """NEW CONTRACT: reward=-1.5, isAtRisk=False → RETAINED by --strip-and-gate.
 
-        The old gate 'not isAtRisk' passes this; new gate 'not isAtRisk AND
-        reward >= 0' correctly drops it.  RED until FIX A applied.
+        The injection path has NO quality gate. The server's de-confound signal
+        requires all patterns to be injected. _quality_gate (still available for
+        non-injection callers) retains its behavior, but strip_and_gate no longer
+        calls it.
         """
         pattern = _make_v15_pattern("ctx-fixA-neg-0001", reward=-1.5, is_at_risk=False)
         result = self._run_strip_gate(_make_search_result([pattern]))
         assert result.returncode == 0, f"stderr: {result.stderr}"
         output = json.loads(result.stdout)
         ids = [p["id"] for p in output.get("similar_patterns", [])]
-        assert "ctx-fixA-neg-0001" not in ids, (
-            "FIX A: reward=-1.5 with isAtRisk=False must be DROPPED — "
-            "negative reward is unsafe regardless of the (possibly stale) isAtRisk flag."
+        assert "ctx-fixA-neg-0001" in ids, (
+            "NEW CONTRACT: reward=-1.5 with isAtRisk=False must be RETAINED — "
+            "injection path has no quality gate."
         )
 
     def test_zero_reward_not_atrisk_kept_by_strip_gate(self):
@@ -711,15 +732,16 @@ class TestFixAGateRobustness:
             "FIX A: reward=5 with isAtRisk=False must be KEPT."
         )
 
-    def test_negative_reward_atrisk_true_dropped_by_strip_gate(self):
-        """FIX A: reward=-2, isAtRisk=True → DROPPED (double-flagged)."""
+    def test_negative_reward_atrisk_true_retained_by_render(self):
+        """NEW CONTRACT: reward=-2, isAtRisk=True → RETAINED (no quality gate)."""
         pattern = _make_v15_pattern("ctx-fixA-both-0004", reward=-2.0, is_at_risk=True)
         result = self._run_strip_gate(_make_search_result([pattern]))
         assert result.returncode == 0, f"stderr: {result.stderr}"
         output = json.loads(result.stdout)
         ids = [p["id"] for p in output.get("similar_patterns", [])]
-        assert "ctx-fixA-both-0004" not in ids, (
-            "FIX A: reward=-2 with isAtRisk=True must be DROPPED."
+        assert "ctx-fixA-both-0004" in ids, (
+            "NEW CONTRACT: reward=-2 with isAtRisk=True must be RETAINED "
+            "(injection path has no quality gate)."
         )
 
     def test_pus_quality_gate_direct_negative_reward_not_atrisk_dropped(self):

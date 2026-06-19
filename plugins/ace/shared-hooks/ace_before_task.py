@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 from validation import is_valid_pattern_id
 from patterns_used_state import append_patterns_used
+from ace_pattern_render import render_patterns
 
 
 def sanitize_unicode(text: str) -> str:
@@ -386,21 +387,10 @@ def main():
             print(json.dumps(output))
             sys.exit(0)
 
-        # Client-side filtering: Filter low-quality patterns (server team recommendation)
-        # Only filter if we have enough results (keep at least 3)
         pattern_list = patterns_response.get('similar_patterns', [])
         original_pattern_list = list(pattern_list)  # Keep original for logging
-        if len(pattern_list) > 5:
-            # Filter: dual-format quality gate (issue #27 / isAtRisk-aligned)
-            # v15 path: keep iff NOT isAtRisk (reward<0 = at-risk; reward==0 neutral kept)
-            # legacy path: confidence>=0.5 OR helpful>=2 (no cumulative_v15_reward field)
-            high_quality = _apply_quality_gate(pattern_list)
-            if len(high_quality) >= 3:
-                pattern_list = high_quality
-                patterns_response['similar_patterns'] = pattern_list
-                patterns_response['count'] = len(pattern_list)
 
-        # v5.4.2: Log relevance metrics for analysis
+        # v5.4.2: Log relevance metrics for analysis (before render, use full list)
         try:
             domains = list(set(p.get('domain', 'unknown') for p in pattern_list if p.get('domain')))
             log_search_metrics(
@@ -418,46 +408,25 @@ def main():
         except Exception:
             pass  # Non-fatal: continue without logging
 
-        # F-080: Capture retrieval_id + retrieval_log_ids BEFORE useful_fields strip
-        # match_factors is stripped below; must extract here while it's still present.
-        _retrieval_id = patterns_response.get('retrieval_id') or None
-        _retrieval_log_map = {}
-        for _p in patterns_response.get('similar_patterns', []):
-            _pid = _p.get('id')
-            _mf = _p.get('match_factors') or {}
-            _rlid = _mf.get('retrieval_log_id') if isinstance(_mf, dict) else None
-            if _pid and not isinstance(_rlid, bool) and isinstance(_rlid, int):
-                _retrieval_log_map[_pid] = _rlid
-
-        # CRITICAL: Save pattern IDs for reinforcement learning (ACE paper feedback loop)
-        # When task completes, ace_after_task.py will load these IDs and include in ExecutionTrace
-        # Server uses this to update 'helpful' scores for patterns that worked
-        if pattern_list and context['project']:
-            try:
-                pattern_ids = [p.get('id') for p in pattern_list if p.get('id') and is_valid_pattern_id(p.get('id'))]
-                if pattern_ids:
-                    # v6.4.0: Per-agent state file keyed by agent_id (or 'main').
-                    # Delegated to patterns_used_state.append_patterns_used (the
-                    # single source of truth). Behavior-identical: validates IDs,
-                    # appends+dedupes, writes the relative per-agent file.
-                    # F-080: also pass retrieval_id + retrieval_log_map captured above.
-                    # agent_id already resolved above (before run_search seed write).
-                    append_patterns_used(session_id, agent_id, pattern_ids,
-                                         retrieval_id=_retrieval_id,
-                                         retrieval_log_ids=_retrieval_log_map,
-                                         task_session_id=task_session_id)
-            except Exception:
-                # Non-fatal: continue without pattern tracking
-                pass
+        # Capture top-3 patterns WITH match_factors BEFORE render so that
+        # _format_bullet_token can use ucb_score for display.  render_patterns
+        # sorts by bandit_rank ASC, so pre-sort here to match display order.
+        _sorted_for_display = sorted(
+            pattern_list,
+            key=lambda p: (
+                (0, (p.get('match_factors') or {}).get('bandit_rank'))
+                if (p.get('match_factors') or {}).get('bandit_rank') is not None
+                else (1, 0)
+            )
+        )
+        _display_top3 = [dict(p) for p in _sorted_for_display[:3]]
 
         # v5.3.0: Store domains for PreToolUse hook (domain-aware reminders)
-        # When Claude enters a new domain, hook can suggest targeted search
         # Extract domains from patterns if domains_summary is empty
         domains_summary = patterns_response.get('domains_summary', {})
         if not domains_summary:
-            # Build domains from pattern list
             pattern_domains = {}
-            for p in patterns_response.get('similar_patterns', []):
+            for p in pattern_list:
                 domain = p.get('domain', '')
                 if domain:
                     pattern_domains[domain] = pattern_domains.get(domain, 0) + 1
@@ -468,32 +437,27 @@ def main():
                 domains_file = Path(f"/tmp/ace-domains-{context['project']}.json")
                 domains_file.write_text(json.dumps(domains_summary))
             except Exception:
-                # Non-fatal: continue without domain tracking
                 pass
 
-        # Capture top-3 patterns WITH match_factors BEFORE the strip so that
-        # _format_bullet_token can use ucb_score for display.  The injected JSON
-        # (ace_context below) still uses the stripped list — only the display path
-        # uses _display_top3.  Each element is an isolated shallow dict copy so
-        # the strip loop below cannot mutate these objects even if refactored to
-        # operate in-place rather than via a list comprehension.
-        _display_top3 = [dict(p) for p in patterns_response.get('similar_patterns', [])[:3]]
+        # Use the central render helper: NO gate, bandit_rank sort, tiered output,
+        # bandit_rank/semantic_score hoisted, expanded dropped, F-080 retrieval_log_map.
+        _retrieval_id = patterns_response.get('retrieval_id') or None
+        ace_context, _pattern_ids, _, _retrieval_log_map = render_patterns(
+            patterns_response,
+            tag='ace-patterns',
+            attrs=f'agent-type="{agent_type}"',
+        )
 
-        # Strip internal metadata fields from patterns before injection (reduce token usage)
-        # These server-internal fields are stripped: 'created_at', 'updated_at', 'last_used',
-        # 'impressions', 'retrieval_count', 'root_cause', 'error_context', 'source',
-        # 'source_project_id', 'source_project_name', 'local_helpful', 'local_harmful',
-        # 'match_factors', 'observations', 'name'
-        useful_fields = USEFUL_FIELDS
-        if 'similar_patterns' in patterns_response:
-            patterns_response['similar_patterns'] = [
-                {k: v for k, v in p.items() if k in useful_fields and (v or k not in ('root_cause', 'error_context'))}
-                for p in patterns_response['similar_patterns']
-            ]
-
-        # Build context for Claude (JSON in XML tags - includes domain metadata)
-        # v5.4.11: Include agent_type attribute for server-side pattern weighting
-        ace_context = f'<ace-patterns agent-type="{agent_type}">\n{json.dumps(patterns_response)}\n</ace-patterns>'
+        # CRITICAL: Save pattern IDs for reinforcement learning (ACE paper feedback loop)
+        # render_patterns returns ALL injected ids (both tiers, no gate drop).
+        if _pattern_ids and context['project']:
+            try:
+                append_patterns_used(session_id, agent_id, _pattern_ids,
+                                     retrieval_id=_retrieval_id,
+                                     retrieval_log_ids=_retrieval_log_map,
+                                     task_session_id=task_session_id)
+            except Exception:
+                pass
 
         # Append fire-and-forget eval injection if present (from previous task's Stop hook)
         if eval_injection:
