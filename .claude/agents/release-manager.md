@@ -32,6 +32,16 @@ I specialize in complete, error-free plugin releases that prevent common mistake
   - `.claude-plugin/marketplace.json` (plugin marketplace)
 - [ ] Verify ALL versions match the target version
 
+### 1b. Description Field Discipline (plugin.json / plugin.template.json / marketplace.json)
+
+**The `description` field is rendered VERBATIM in the Claude Code Plugins UI — it is public, user-facing text, not a changelog.**
+
+- [ ] Keep it to ONE short paragraph: what the plugin does + `Requires: Claude Code >= X.Y.Z, ace-cli >= X.Y.Z (@ace-sdk/core >= X.Y.Z)`.
+- [ ] NEVER prepend a new `vX.Y.Z: ...` block to the existing description on release. That has happened before and produced a multi-KB wall of internal engineering notes visible to every installed user — fix it, don't repeat it.
+- [ ] Detailed per-version changes belong ONLY in `plugins/ace/CHANGELOG.md` and the GitHub release notes, never in the manifest `description`.
+- [ ] Only the version number and the CC/ace-cli/@ace-sdk floors in the `Requires:` clause need to change between releases — the rest of the description text should stay stable.
+- [ ] `tests/test_v600_version_bump.py::TestDescriptions` only requires the description to contain the current version string and a `Claude Code >= X.Y.Z` floor — it does NOT require a changelog.
+
 ### 2. File Update Verification
 **CRITICAL**: I MUST verify these files are staged before committing:
 ```bash
