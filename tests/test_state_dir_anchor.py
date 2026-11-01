@@ -37,12 +37,34 @@ def test_explicit_state_dir_overrides_env(monkeypatch, tmp_path):
 
 
 def test_writer_reader_consistent_across_cwd_change(monkeypatch, tmp_path):
+    """Production resolution: no project_id kwarg; anchored to CLAUDE_PROJECT_DIR."""
+    import json
+    root = tmp_path / "root"
+    (root / ".claude").mkdir(parents=True)
+    (root / ".claude" / "settings.json").write_text(json.dumps({"orgId": "o", "projectId": "prj_x"}))
+    sub = root / "sub"
+    sub.mkdir()
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
     monkeypatch.delenv("ACE_PROJECT_ID", raising=False)
-    monkeypatch.chdir(tmp_path)
-    pus.append_patterns_used("s", None, ["ctx-1234567890-abcd"], project_id="prj")
-    other = tmp_path / "elsewhere"
-    other.mkdir()
-    monkeypatch.chdir(other)
-    got = pus.load_playbook_used("s", None, "Stop", project_id="prj")
+    monkeypatch.chdir(root)
+    pus.append_patterns_used("s", None, ["ctx-1234567890-abcd"])
+    assert (tmp_path / "pd" / "projects" / "prj_x" / "sessions" / "s" / "patterns-used-main.json").exists()
+    monkeypatch.chdir(sub)  # no settings here
+    got = pus.load_playbook_used("s", None, "Stop")
     assert got == ["ctx-1234567890-abcd"]
+
+
+def test_concurrent_appends_keep_retrieval_log_ids(monkeypatch, tmp_path):
+    import threading
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    pus.append_patterns_used("s", None, [], retrieval_id="r1", retrieval_log_ids={"ctx-1234567890-aaaa": 1},
+                             task_session_id="t1", project_id="p")
+    ids = ["ctx-%010d-abcd" % i for i in range(20)]
+    ts = [threading.Thread(target=pus.append_patterns_used, args=("s", None, [i]),
+                           kwargs={"project_id": "p"}) for i in ids]
+    [t.start() for t in ts]
+    [t.join() for t in ts]
+    _, rid, rlog, tsid = pus._read_state_file(pus.state_file_path("s", None, project_id="p"))
+    assert rid == "r1" and rlog == {"ctx-1234567890-aaaa": 1} and tsid == "t1"
+    assert len(pus.load_playbook_used("s", None, "Stop", project_id="p")) == 20
