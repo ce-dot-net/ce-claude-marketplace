@@ -38,25 +38,5 @@ def test_every_timeout_is_int_seconds_le_600():
     assert not offenders, f"timeouts must be int seconds in (0, 600]: {offenders}"
 
 
-# DESIGN §6 Foundation per-event values (WP-A later reshapes hooks.json per §3
-# and owns tests/test_hooks_json_v8.py; it may retire this table then).
-EXPECTED = {
-    ("UserPromptSubmit", "ace_before_task_wrapper.sh"): 20,
-    ("SubagentStart", "ace_subagent_start_wrapper.sh"): 20,
-    ("Stop", "ace_stop_wrapper.sh"): 130,
-    ("SubagentStop", "ace_subagent_stop_wrapper.sh"): 130,
-    ("PreToolUse", "ace_pretooluse_wrapper.sh"): 10,
-    ("PostToolUse", "ace_posttooluse_wrapper.sh"): 30,
-    ("PostToolUse", "ace_posttooluse_domain_inject.sh"): 15,
-    ("SessionStart", "ace_install_cli.sh"): 20,
-    ("SessionEnd", "ace_sessionend_wrapper.sh"): 5,
-    ("PreCompact", "ace_precompact_wrapper.sh"): 10,
-    ("PermissionRequest", "ace_permission_request_wrapper.sh"): 10,
-    ("PermissionDenied", "ace_permission_denied_wrapper.sh"): 10,
-}
-
-
-def test_foundation_per_event_timeouts():
-    actual = {(event, _script(hook)): hook.get("timeout") for event, hook in _iter_hooks()}
-    mismatches = {k: (actual.get(k), v) for k, v in EXPECTED.items() if actual.get(k) != v}
-    assert not mismatches, f"(event, script): (actual, expected) -> {mismatches}"
+# The Foundation per-event table was retired by WP-A: tests/test_hooks_json_v8.py pins
+# the full DESIGN §3 rows (incl. timeouts); this file keeps only the permanent guard.
