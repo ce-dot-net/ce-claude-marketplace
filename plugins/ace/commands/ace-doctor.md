@@ -2,7 +2,7 @@
 disable-model-invocation: true
 model: claude-haiku-4-5
 description: Comprehensive ACE installation and health diagnostic
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(curl:*), Bash(ls:*), Bash(test:*), Read
+allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(curl:*), Bash(ls:*), Bash(test:*), Bash(claude:*), Bash(cat:*), Bash(tail:*), Bash(sort:*), Read
 ---
 
 # ACE Doctor - Installation & Health Diagnostic
@@ -29,8 +29,10 @@ Run all checks in parallel for speed, then present organized results.
 claude --version
 # Compare against 2.1.300 (sort -V): older => WARN, hooks use features from <= 2.1.300
 
-# Plugin data layout (v8): $CLAUDE_PLUGIN_DATA, default ~/.claude/plugins/data/ace
-DATA="${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/ace}"
+# Plugin data layout (v8): Claude Code substitutes the exact token below (cc_hooks_reference.md:480).
+# If it comes through unsubstituted, use the real dir: ~/.claude/plugins/data/ace-ce-dot-net-marketplace
+DATA="${CLAUDE_PLUGIN_DATA}"
+[ -z "$DATA" ] || [ "$DATA" = "\${CLAUDE_PLUGIN_DATA}" ] && DATA="$HOME/.claude/plugins/data/ace-ce-dot-net-marketplace"
 ls -la "$DATA"
 test -r "$DATA/python_path" && cat "$DATA/python_path"   # written by SessionStart
 test -r "$DATA/cli_version.json" && cat "$DATA/cli_version.json"
@@ -70,7 +72,7 @@ ace/
 │   ├── ace_subagent_start_wrapper.sh
 │   └── ace_subagent_stop_wrapper.sh
 ├── shared-hooks/       # Python hook utilities
-└── plugin.json
+└── .claude-plugin/plugin.json
 ```
 
 **Report**:
@@ -318,7 +320,7 @@ test -f "$PLUGIN_ROOT/scripts/ace_subagent_stop_wrapper.sh" && echo "subagent_st
 test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "hooks.json: EXISTS"
 ```
 
-**Expected Hooks** (v8: 9 events, 11 hook entries):
+**Expected Hooks** (v8: 9 events, 12 hook entries incl. async --update-check):
 1. `SessionStart` → `ace_install_cli.sh` (startup|clear; plus async `--update-check`)
 2. `SessionStart` (compact) → `ace_sessionstart_compact.sh`
 3. `UserPromptSubmit` → `ace_before_task_wrapper.sh`
@@ -418,7 +420,7 @@ Recommended Actions:
 ```bash
 # Get plugin version (installPath from installed_plugins.json)
 PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(jq -r '.plugins["ace@ce-dot-net-marketplace"][0].installPath // empty' ~/.claude/plugins/installed_plugins.json 2>/dev/null)}"
-PLUGIN_JSON="$PLUGIN_ROOT/plugin.json"
+PLUGIN_JSON="$PLUGIN_ROOT/.claude-plugin/plugin.json"
 if [ -f "$PLUGIN_JSON" ]; then
     jq -r '.version' "$PLUGIN_JSON"
 else
@@ -576,10 +578,10 @@ Registered Hooks:
 • PostToolUseFailure → ace_posttoolusefailure_wrapper.sh
 • SessionStart (compact) → ace_sessionstart_compact.sh
 • PermissionDenied → ace_permission_denied_wrapper.sh
-• Stop → ace_stop_wrapper.sh --log --chat
+• Stop → ace_stop_wrapper.sh
 • SessionEnd → ace_sessionend_wrapper.sh
 • SubagentStart → ace_subagent_start_wrapper.sh
-• SubagentStop → ace_subagent_stop_wrapper.sh --log --chat --notify
+• SubagentStop → ace_subagent_stop_wrapper.sh
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
@@ -619,7 +621,7 @@ Overall Health: 🟡 NEEDS ATTENTION (3 warnings)
 
 [6] Hooks Registered
     Issue: Some hook scripts missing (8/11 found)
-    Impact: Permission telemetry and subagent learning won't work
+    Impact: Learning capture and subagent learning won't work
     Fix: Reinstall plugin or check scripts/ directory
 
 [8] Version Status
