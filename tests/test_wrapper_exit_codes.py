@@ -19,7 +19,6 @@ WRAPPER_SCRIPTS = [
     'ace_stop_wrapper.sh',
     'ace_subagent_stop_wrapper.sh',
     'ace_posttooluse_wrapper.sh',
-    'ace_precompact_wrapper.sh',
     'ace_install_cli.sh',
 ]
 

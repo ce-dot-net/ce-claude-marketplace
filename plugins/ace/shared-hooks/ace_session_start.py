@@ -1,0 +1,47 @@
+#!/usr/bin/env python3
+"""ACE SessionStart hook (v8). Only mode: --compact.
+
+SessionStart source == "compact" (cc_hooks_reference.md:1256-1262): re-inject the
+`rendered_context` UPS saved in the MAIN agent's state (DESIGN §5 C1) as
+hookSpecificOutput.additionalContext (:1295-1312), capped at the 10,000-char hook
+output limit. Local state only: no ace-cli call, no /tmp, never blocks.
+"""
+import json
+import os
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent / 'utils'))
+sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
+
+import plugin_data_dir                         # noqa: E402
+from ace_context import get_context            # noqa: E402
+from patterns_used_state import load_state     # noqa: E402
+
+_CAP = 10000
+
+
+def main() -> None:
+    try:
+        event = json.load(sys.stdin)
+        if '--compact' not in sys.argv or event.get('source') != 'compact':
+            return
+        cwd = event.get('cwd')
+        if cwd and os.path.isdir(cwd):
+            os.chdir(cwd)  # v8 shims never cd (DESIGN §3.1)
+        ctx = get_context()
+        if not ctx:
+            return
+        sid = plugin_data_dir.resolve_session_id(event)
+        if plugin_data_dir.disabled_flag(ctx['project'], sid).exists():
+            return
+        rendered = load_state(sid, None, 'Stop', project_id=ctx['project']).get('rendered_context')
+        if rendered and isinstance(rendered, str):
+            print(json.dumps({"hookSpecificOutput": {
+                "hookEventName": "SessionStart", "additionalContext": rendered[:_CAP]}}))
+    except Exception:
+        pass  # never fail SessionStart
+
+
+if __name__ == '__main__':
+    main()

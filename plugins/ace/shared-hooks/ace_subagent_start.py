@@ -47,8 +47,11 @@ Output JSON shape (CC SubagentStart additionalContext):
   }
 """
 
+import glob
 import json
+import os
 import sys
+import time
 import uuid
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -59,7 +62,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 from ace_cli import run_search  # noqa: E402
 from ace_context import get_context                              # noqa: E402
-from patterns_used_state import append_patterns_used             # noqa: E402
+from patterns_used_state import append_patterns_used, load_task_session_id  # noqa: E402
+import plugin_data_dir                                           # noqa: E402
+from ace_relevance_logger import log_search                      # noqa: E402
 from ace_pattern_render import render_patterns, render_cohort, render_compact_all  # noqa: E402
 
 # ── constants ────────────────────────────────────────────────────────────────
@@ -69,11 +74,18 @@ _QUERY_MAX_CHARS = 500
 # Tool names that spawn subagents
 _SPAWN_TOOL_NAMES = {'Task', 'Agent'}
 
+# Parent-transcript reverse scan reads at most this many trailing bytes (critic T7/T12).
+_SCAN_MAX_BYTES = 2 * 1024 * 1024
+
+# Workflow agents get a fixed harness preamble ending in this marker; with the
+# 500-char cap it would make every Workflow query identical, so drop it.
+_WORKFLOW_MARKER = 'The computed task text follows:'
+
 
 def _read_lines_reversed(path: str):
     """Yield raw lines of a text file in reverse order.
 
-    Reads in chunks from the end so large files are not fully loaded into memory.
+    Reads in chunks from the end, at most the last _SCAN_MAX_BYTES (2 MB).
     Yields stripped non-empty strings.
     """
     chunk_size = 8192
@@ -86,8 +98,9 @@ def _read_lines_reversed(path: str):
 
             remainder = b''
             pos = file_size
-            while pos > 0:
-                read_size = min(chunk_size, pos)
+            lowest = max(0, file_size - _SCAN_MAX_BYTES)
+            while pos > lowest:
+                read_size = min(chunk_size, pos - lowest)
                 pos -= read_size
                 f.seek(pos)
                 chunk = f.read(read_size)
@@ -102,8 +115,9 @@ def _read_lines_reversed(path: str):
                     stripped = line.strip()
                     if stripped:
                         yield stripped.decode('utf-8', errors='replace')
-            # Yield the final remainder (beginning of file)
-            if remainder.strip():
+            # Yield the final remainder only when we reached the file start
+            # (otherwise it is a partial line cut by the 2 MB bound).
+            if lowest == 0 and remainder.strip():
                 yield remainder.strip().decode('utf-8', errors='replace')
     except (OSError, IOError):
         return
@@ -184,6 +198,46 @@ def _extract_query_from_transcript(transcript_path: str, agent_type: str) -> Opt
     return None
 
 
+def _query_from_own_transcript(transcript_path: str, session_id: str, agent_id: str) -> Optional[str]:
+    """First user message of this agent's own transcript, if it exists yet.
+
+    Layout (observed): <dir of main transcript>/<session_id>/subagents/**/agent-<agent_id>.jsonl
+    (Workflow agents live under subagents/workflows/<wf_id>/). Workflow agent
+    prompts are NOT Agent/Task tool_use blocks in the main transcript.
+    """
+    if not (transcript_path and session_id and agent_id):
+        return None
+    pattern = os.path.join(glob.escape(os.path.dirname(transcript_path)), glob.escape(session_id),
+                           'subagents', '**', 'agent-%s.jsonl' % glob.escape(agent_id))
+    for path in glob.glob(pattern, recursive=True):
+        try:
+            with open(path, 'rb') as f:
+                head = f.read(65536).decode('utf-8', errors='replace')
+        except OSError:
+            continue
+        for line in head.splitlines():
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            msg = entry.get('message') if isinstance(entry, dict) else None
+            if not isinstance(msg, dict) or msg.get('role') != 'user':
+                continue
+            content = msg.get('content')
+            if isinstance(content, list):
+                content = ' '.join(b.get('text', '') for b in content
+                                   if isinstance(b, dict) and b.get('type') == 'text')
+            if not isinstance(content, str):
+                continue
+            if _WORKFLOW_MARKER in content:
+                content = content.split(_WORKFLOW_MARKER, 1)[1]
+            content = content.strip()
+            if content:
+                return content[:_QUERY_MAX_CHARS]
+            return None
+    return None
+
+
 def main(event: Optional[Dict[str, Any]] = None) -> None:
     """Process a SubagentStart event.
 
@@ -191,9 +245,14 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         event: Hook event dict (for testing).  When None, reads from stdin.
     """
     try:
+        t_start = time.monotonic()
         # Read event
         if event is None:
             event = json.load(sys.stdin)
+            # v8 shims never cd (DESIGN §3.1): resolve the project from the hook cwd.
+            _cwd = event.get('cwd')
+            if _cwd and os.path.isdir(_cwd):
+                os.chdir(_cwd)
 
         # Guard: agent_id must be present and non-null.
         # state_file_path(session, None) resolves to the 'main' suffix, which
@@ -206,11 +265,28 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         agent_type = event.get('agent_type', 'subagent')
         transcript_path = event.get('transcript_path', '')
 
+        context = get_context()
+
+        # §4: per-session disabled flag under plugin data.
+        if plugin_data_dir.disabled_flag(context['project'] if context else None,
+                                         plugin_data_dir.resolve_session_id(event)).exists():
+            sys.exit(0)
+
+        # Resume / teammate re-wake re-fires SubagentStart (cc_hooks_reference.md:2549):
+        # this agent already has a task_session_id -> keep it, no new search.
+        if load_task_session_id(session_id, agent_id, 'SubagentStop'):
+            sys.exit(0)
+
         # Generate a fresh per-task session_id for this subagent.
         # Passed to run_search as the --pin-session value and stored in the state
         # file so SubagentStop's ace_after_task can set trace["session_id"] to this
         # value (correlates search↔learn per-subagent-task, not per conversation).
         task_session_id = str(uuid.uuid4())
+
+        # SubagentStart input has no prompt field (cc_hooks_reference.md:2553-2566):
+        # own transcript first (Workflow agents), else bounded parent-transcript tail scan.
+        query = (_query_from_own_transcript(transcript_path, session_id, agent_id)
+                 or _extract_query_from_transcript(transcript_path, agent_type))
 
         # Persist the per-task anchor IMMEDIATELY (before search / early-exits) so
         # SubagentStop's load_task_session_id finds it even if the search returns 0
@@ -218,18 +294,15 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         # `if pattern_ids:`) will merge pattern_ids + retrieval_id into this same
         # file via the normal merge logic.
         try:
-            append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id)
+            append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id,
+                                 user_prompt=query, hook_event_name='SubagentStart')
         except Exception:
             pass  # non-fatal
 
-        # Derive query from the main session transcript (tail-scan algorithm)
-        query = _extract_query_from_transcript(transcript_path, agent_type)
         if not query:
             # No usable query — degrade gracefully, do not search with garbage
             sys.exit(0)
 
-        # Resolve org/project via the same path as ace_before_task (Candidate 1 safe)
-        context = get_context()
         if not context:
             sys.exit(0)
 
@@ -313,6 +386,13 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                     )
                 except Exception:
                     pass
+
+        log_search(hook='SubagentStart', session_id=session_id, user_prompt=query,
+                   search_query=query, patterns_returned=pattern_count,
+                   patterns_injected=len(pattern_ids),
+                   hook_ms=int((time.monotonic() - t_start) * 1000),
+                   project_id=context['project'], org_id=context['org'],
+                   agent_type=agent_type, render_cohort=_cohort)
 
         if ace_context is not None:
             output = {
