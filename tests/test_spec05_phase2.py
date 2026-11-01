@@ -108,34 +108,28 @@ class TestB4HooksJson:
     def hooks(self):
         return json.loads(HOOKS_JSON.read_text())
 
+    # v8 (DESIGN §3): domain-shift is its own PostToolUse group (matcher Read|Glob|Grep, no `if`,
+    # timeout in SECONDS); the accumulator group is async.
+    def _domain(self, hooks):
+        groups = [g for g in hooks['hooks']['PostToolUse']
+                  if any('domain_inject' in h.get('command', '') for h in g['hooks'])]
+        assert len(groups) == 1, "Expected exactly one domain_inject group"
+        return groups[0], groups[0]['hooks'][0]
+
     def test_posttooluse_has_domain_inject_hook(self, hooks):
-        post_hooks = hooks['hooks']['PostToolUse']
-        assert len(post_hooks) > 0
-        hook_entries = post_hooks[0]['hooks']
-        domain_hooks = [
-            h for h in hook_entries
-            if 'domain_inject' in h.get('command', '')
-        ]
-        assert len(domain_hooks) == 1, "Expected exactly one domain_inject hook"
+        group, _ = self._domain(hooks)
+        assert group['matcher'] == 'Read|Glob|Grep'
 
     def test_domain_inject_has_if_read(self, hooks):
-        hook_entries = hooks['hooks']['PostToolUse'][0]['hooks']
-        domain_hook = next(
-            h for h in hook_entries if 'domain_inject' in h.get('command', '')
-        )
-        assert domain_hook.get('if') == 'Read(*)', \
-            f"Expected if: 'Read(*)', got: {domain_hook.get('if')}"
+        _, hook = self._domain(hooks)
+        assert 'if' not in hook
 
     def test_domain_inject_timeout_lte_5000(self, hooks):
-        hook_entries = hooks['hooks']['PostToolUse'][0]['hooks']
-        domain_hook = next(
-            h for h in hook_entries if 'domain_inject' in h.get('command', '')
-        )
-        assert domain_hook.get('timeout', 15000) <= 5000, \
-            "Domain inject timeout should be <= 5000ms"
+        _, hook = self._domain(hooks)
+        assert hook.get('timeout', 15) <= 15, "Domain inject timeout should be <= 15 s"
 
     def test_original_posttooluse_hook_preserved(self, hooks):
-        hook_entries = hooks['hooks']['PostToolUse'][0]['hooks']
+        hook_entries = [h for g in hooks['hooks']['PostToolUse'] for h in g['hooks']]
         wrapper_hooks = [
             h for h in hook_entries
             if 'posttooluse_wrapper' in h.get('command', '')

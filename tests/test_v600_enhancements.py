@@ -55,9 +55,9 @@ class TestAsyncPostToolUse:
         """PostToolUse timeout should be <=30s (async, just SQLite writes)."""
         data = json.loads(_read(HOOKS_JSON))
         post_tool = data['hooks']['PostToolUse']
-        timeout = post_tool[0]['hooks'][0]['timeout']
-        assert timeout <= 30000, \
-            f"PostToolUse timeout {timeout}ms too high for async hook"
+        hook = post_tool[0]['hooks'][0]
+        # v8 (DESIGN §3): the accumulator is async, which carries no timeout (hooks doc :414)
+        assert hook.get('async') is True and hook.get('timeout', 0) <= 30
 
     def test_no_empty_systemmessage_output(self):
         """Async hooks should not output empty systemMessage (use async flag instead)."""
@@ -75,38 +75,31 @@ class TestConsolidatedSessionStart:
     """SessionStart should be consolidated (single matcher with source branching)."""
 
     def test_single_sessionstart_matcher(self):
-        """hooks.json should have exactly 1 SessionStart entry."""
+        """v8 (DESIGN §3): source routing moved into matchers: startup|clear, startup (async), compact."""
         data = json.loads(_read(HOOKS_JSON))
-        session_start = data['hooks']['SessionStart']
-        assert len(session_start) == 1, \
-            f"Expected 1 SessionStart matcher (consolidated), got {len(session_start)}"
+        matchers = [g['matcher'] for g in data['hooks']['SessionStart']]
+        assert matchers == ['startup|clear', 'startup', 'compact']
 
     def test_sessionstart_reads_source_field(self):
-        """SessionStart script should read source field from stdin JSON."""
-        content = _read(INSTALL_CLI)
-        # Must extract .source from the input JSON
-        assert '.source' in content, \
-            "Script should read .source field from event JSON"
+        """No source branching left in the CLI check: resume never matches."""
+        assert 'resume' not in [g['matcher'] for g in json.loads(_read(HOOKS_JSON))['hooks']['SessionStart']]
 
     def test_sessionstart_handles_compact_source(self):
-        """SessionStart script should handle source=compact for pattern restoration."""
-        content = _read(INSTALL_CLI)
-        # Must have a branch for compact source
-        assert 'compact' in content.lower(), \
-            "Script should handle compact source for pattern restoration"
+        """compact is its own matcher routed to the re-inject shim."""
+        groups = json.loads(_read(HOOKS_JSON))['hooks']['SessionStart']
+        assert any(g['matcher'] == 'compact' and 'ace_sessionstart_compact.sh' in g['hooks'][0]['command']
+                   for g in groups)
 
     def test_sessionstart_handles_resume_source(self):
-        """SessionStart script should handle source=resume (skip heavy checks)."""
-        content = _read(INSTALL_CLI)
-        assert 'resume' in content.lower(), \
-            "Script should handle resume source"
+        """The CLI check does not run on resume (matcher startup|clear only)."""
+        groups = json.loads(_read(HOOKS_JSON))['hooks']['SessionStart']
+        assert not any('resume' in g['matcher'] for g in groups)
 
     def test_no_separate_compact_in_hooks_json(self):
-        """hooks.json should NOT have a separate compact matcher."""
-        data = json.loads(_read(HOOKS_JSON))
-        hooks_str = json.dumps(data)
-        assert 'ace_sessionstart_compact' not in hooks_str, \
-            "Separate compact script should be consolidated into main SessionStart"
+        """v8: the compact matcher exists and is NOT the CLI-check script."""
+        groups = json.loads(_read(HOOKS_JSON))['hooks']['SessionStart']
+        compact = [g for g in groups if g['matcher'] == 'compact']
+        assert len(compact) == 1 and 'ace_install_cli' not in compact[0]['hooks'][0]['command']
 
 
 # ===========================================================================

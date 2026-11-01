@@ -105,11 +105,11 @@ class TestStateCleanup:
     """State files cleaned properly."""
 
     def test_sessionstart_cleans_stale_files(self):
-        install_cli = SCRIPTS_DIR / 'ace_install_cli.sh'
+        install_cli = SCRIPTS_DIR.parent / 'shared-hooks' / 'ace_install_cli.py'
         content = install_cli.read_text()
         assert 'ace-eval-request' in content or 'ace-review-result' in content
 
     def test_sessionend_cleans_eval_flag(self):
-        sessionend = SCRIPTS_DIR / 'ace_sessionend_wrapper.sh'
-        content = sessionend.read_text()
-        assert 'ace-eval' in content
+        # v8 (DESIGN §4): SessionEnd deletes only the session dir; the /tmp eval flag is gone
+        sessionend = SCRIPTS_DIR.parent / 'shared-hooks' / 'ace_session_end.py'
+        assert 'session_dir' in sessionend.read_text()
