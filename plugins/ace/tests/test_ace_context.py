@@ -45,8 +45,15 @@ def test_get_context_success():
             os.chdir(original_dir)
 
 
-def test_get_context_missing_file():
-    """Test when .claude/settings.json doesn't exist"""
+def test_get_context_missing_file(monkeypatch):
+    """Test when .claude/settings.json doesn't exist (and no env fallback).
+
+    WP-F hermetic fix: get_context() falls back to ACE_ORG_ID/ACE_PROJECT_ID
+    (ace_context.py:27-29), which CC exports from .claude/settings.json `env`
+    into every shell it starts -- so the test failed inside a CC session.
+    """
+    monkeypatch.delenv('ACE_ORG_ID', raising=False)
+    monkeypatch.delenv('ACE_PROJECT_ID', raising=False)
     with tempfile.TemporaryDirectory() as tmpdir:
         import os
         original_dir = os.getcwd()
