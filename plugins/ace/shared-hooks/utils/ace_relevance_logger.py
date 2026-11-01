@@ -96,6 +96,7 @@ class ACERelevanceLogger:
         agent_type: Optional[str] = None,
         render_cohort: Optional[str] = None,
         hook_ms: Optional[int] = None,
+        cache_hit: Optional[bool] = None,
     ) -> None:
         """
         Log pattern search and injection metrics.
@@ -153,6 +154,8 @@ class ACERelevanceLogger:
         }
         if hook_ms is not None:
             entry['hook_ms'] = hook_ms
+        if cache_hit is not None:
+            entry['cache_hit'] = cache_hit
 
         self._write_log(entry)
 
