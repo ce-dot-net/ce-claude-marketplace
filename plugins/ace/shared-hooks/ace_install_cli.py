@@ -45,10 +45,25 @@ def _cli_version(cli):
     ver = m.group(0) if m else "0.0.0"
     if m:  # never cache a failed probe
         try:
-            f.write_text(json.dumps({"path": real, "mtime": mtime, "version": ver}))
+            _atomic_write(f, json.dumps({"path": real, "mtime": mtime, "version": ver}))
         except OSError:
             pass
     return ver
+
+
+def _atomic_write(path, text):
+    """tempfile + os.replace: the sync and async rows may write the same file concurrently."""
+    import tempfile
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=path.name + ".")
+    try:
+        with os.fdopen(fd, "w") as fh:
+            fh.write(text)
+        os.replace(tmp, str(path))
+    except OSError:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
 
 
 def _write_if_changed(path, text):
@@ -83,7 +98,7 @@ def update_check(cli):
             latest = ""
         try:
             cache.parent.mkdir(parents=True, exist_ok=True)
-            cache.write_text(json.dumps({"date": today, "latest": latest}))
+            _atomic_write(cache, json.dumps({"date": today, "latest": latest}))
         except OSError:
             pass
     cur = _cli_version(cli)

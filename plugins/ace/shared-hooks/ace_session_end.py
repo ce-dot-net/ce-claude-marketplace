@@ -18,7 +18,18 @@ def main():
     if not ev.get("session_id"):
         return 0
     sid, pid = resolve_ids(ev)
-    shutil.rmtree(str(session_dir(pid, sid, create=False)), ignore_errors=True)
+    d = session_dir(pid, sid, create=False)
+    # Async Stop/SubagentStop may still be learning: keep the dir while a fresh learn lock exists.
+    # ponytail: only covers a started learn; a Stop that has not yet taken its lock can still lose state.
+    import glob
+    import time
+    for lk in glob.glob(os.path.join(str(d), "learn-inflight-*.lock")):
+        try:
+            if time.time() - os.path.getmtime(lk) < 120:
+                return 0
+        except OSError:
+            pass
+    shutil.rmtree(str(d), ignore_errors=True)
     return 0
 
 

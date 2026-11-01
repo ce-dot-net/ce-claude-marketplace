@@ -162,7 +162,8 @@ def _is_classifier_infra_denial(event) -> bool:
         reason = event.get("reason")
         if isinstance(reason, str) and reason.strip():
             low = reason.lower()
-            return "classifier unavailable" in low or "could not evaluate this action" in low
+            return ("classifier unavailable" in low
+                    or any(m in low for m in _INFRA_MARKERS))
         transcript_path = event.get("transcript_path")
         if not transcript_path:
             return False
@@ -206,7 +207,14 @@ _PROJECT_ID = None  # set by main() from the hook cwd; keeps the 2-arg debounce 
 def _debounce_dir(session_id: str) -> Path:
     """Per-session debounce dir under plugin data (DESIGN §4), never /tmp."""
     from plugin_data_dir import session_dir
-    return session_dir(_PROJECT_ID, session_id or "default")
+    # Own subdir: the sweep in _record_debounce must never touch the shared session
+    # dir (patterns-used-*.json, disabled.flag, locks, tools.db live there).
+    d = session_dir(_PROJECT_ID, session_id or "default") / "permission-denied"
+    try:
+        d.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    return d
 
 
 def _is_debounced(tool_name: str, session_id: str) -> bool:
@@ -315,9 +323,14 @@ def _send_to_cli(trace: dict) -> bool:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        proc.communicate(input=json.dumps(trace).encode("utf-8"), timeout=10)
+        try:
+            proc.communicate(input=json.dumps(trace).encode("utf-8"), timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            return False
         return proc.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+    except (FileNotFoundError, OSError):
         return False
 
 
