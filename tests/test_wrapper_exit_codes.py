@@ -52,8 +52,8 @@ class TestWrapperExitCodes(unittest.TestCase):
         missing_trap = []
         for script_name in WRAPPER_SCRIPTS:
             script_path = SCRIPTS_DIR / script_name
-            if not script_path.exists():
-                continue
+            if not script_path.exists() or script_name == 'ace_before_task_wrapper.sh':
+                continue  # v8 thin shim (DESIGN §3.1): no trap, python catches everything
             content = script_path.read_text()
             if "ERR" not in content or ("trap" not in content):
                 missing_trap.append(script_name)
