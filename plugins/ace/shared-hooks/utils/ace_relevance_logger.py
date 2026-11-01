@@ -159,6 +159,11 @@ class ACERelevanceLogger:
 
         self._write_log(entry)
 
+    def log_search_skipped(self, hook, reason, session_id=None, project_id=None) -> None:
+        """C5: public entry for the `search_skipped` event (machine prompt, too short, ...)."""
+        self._write_log({'timestamp': _utc_now(), 'event': 'search_skipped', 'hook': hook,
+                         'reason': reason, 'session_id': session_id, 'project_id': project_id})
+
     def log_domain_shift(
         self,
         session_id: str,
@@ -336,6 +341,10 @@ def get_relevance_logger() -> ACERelevanceLogger:
     if _logger is None:
         _logger = ACERelevanceLogger()
     return _logger
+
+
+def log_search_skipped(hook, reason, session_id=None, project_id=None) -> None:
+    get_relevance_logger().log_search_skipped(hook, reason, session_id, project_id)
 
 
 def log_search_metrics(**kwargs) -> None:
