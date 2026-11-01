@@ -101,11 +101,9 @@ class TestWrapperVersionConstants:
     """
 
     def test_wrapper_version_constants_updated(self):
-        """Stop wrappers source _ace_env.sh for dynamic version loading."""
-        for wrapper_path in [STOP_WRAPPER, SUBAGENT_STOP_WRAPPER]:
-            content = _read(wrapper_path)
-            assert "_ace_env.sh" in content, \
-                f"{os.path.basename(wrapper_path)} does not source _ace_env.sh"
+        """v8: the Stop logic runs in ace_after_task.py, which sets ACE_CLIENT_ID from plugin.json."""
+        content = _read(os.path.join(PLUGIN_DIR, 'shared-hooks', 'ace_after_task.py'))
+        assert "claude-code-plugin/" in content and "ACE_CLIENT_ID" in content
 
     def test_all_wrapper_versions_match(self):
         """No wrapper should hardcode ACE_PLUGIN_VERSION (except _ace_env.sh, the loader)."""

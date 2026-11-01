@@ -40,12 +40,9 @@ def test_agent_id_conditionally_on_trace():
         "Trace must conditionally include agent_id when present"
 
 
-def test_parent_agent_id_conditionally_on_trace():
-    src = _read()
-    assert 'parent_agent_id' in src, "parent_agent_id must be referenced"
-    assert ('if parent_agent_id:' in src and
-            ('trace["parent_agent_id"]' in src or "trace['parent_agent_id']" in src)), \
-        "Trace must conditionally include parent_agent_id when present"
+def test_parent_agent_id_no_longer_sent():
+    # v8: the spawn-log read (constant parent "main") is gone, so is the trace field.
+    assert 'parent_agent_id' not in _read()
 
 
 def test_agent_id_extracted_from_event():
