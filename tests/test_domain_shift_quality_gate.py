@@ -1133,7 +1133,8 @@ class TestQueryConstructionAndEmptyBasenameGuard:
         """Set up a minimal domains file + settings.json; return cwd string."""
         (tmp_path / ".claude").mkdir(exist_ok=True)
         (tmp_path / ".claude" / "settings.json").write_text(
-            json.dumps({"env": {"ACE_PROJECT_ID": project_id}})
+            # WP-F hermetic: orgId was silently taken from the repo's real settings.
+            json.dumps({"env": {"ACE_PROJECT_ID": project_id, "ACE_ORG_ID": "org-test"}})
         )
         Path(f"/tmp/ace-domains-{project_id}.json").write_text(
             json.dumps({domain: {"description": "test"}})
@@ -1253,6 +1254,9 @@ class TestQueryConstructionAndEmptyBasenameGuard:
             ["bash", str(self.PRETOOLUSE)],
             input=json.dumps(hook_input),
             capture_output=True, text=True, timeout=10,
+            # WP-F hermetic: the wrapper reads .claude/settings.json relative to its
+            # cwd; without cwd= it used the repo's real settings + /tmp domains file.
+            cwd=cwd,
             env={
                 **os.environ,
                 "PATH": f"{mock_bin}:{os.environ.get('PATH', '/usr/bin:/bin')}",
