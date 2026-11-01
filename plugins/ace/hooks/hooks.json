@@ -1,37 +1,38 @@
 {
   "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_pretooluse_wrapper.sh",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "PreCompact": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_precompact_wrapper.sh",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
     "SessionStart": [
       {
-        "matcher": "",
+        "matcher": "startup|clear",
         "hooks": [
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_install_cli.sh",
+            "args": [],
             "timeout": 20
+          }
+        ]
+      },
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_install_cli.sh",
+            "args": [
+              "--update-check"
+            ],
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_sessionstart_compact.sh",
+            "args": [],
+            "timeout": 10
           }
         ]
       }
@@ -43,7 +44,9 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_before_task_wrapper.sh",
-            "timeout": 20
+            "args": [],
+            "timeout": 20,
+            "statusMessage": "ACE: searching patterns…"
           }
         ]
       }
@@ -54,62 +57,36 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_posttooluse_wrapper.sh --log",
-            "timeout": 30
-          },
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_posttooluse_wrapper.sh",
+            "args": [
+              "--log"
+            ],
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Glob|Grep",
+        "hooks": [
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_posttooluse_domain_inject.sh",
+            "args": [],
             "timeout": 15,
-            "if": "Read(*)"
+            "statusMessage": "ACE: domain shift…"
           }
         ]
       }
     ],
-    "PermissionRequest": [
+    "PostToolUseFailure": [
       {
-        "matcher": "",
+        "matcher": "Bash",
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_permission_request_wrapper.sh",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "PermissionDenied": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_permission_denied_wrapper.sh",
-            "timeout": 10
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_stop_wrapper.sh --log --chat",
-            "timeout": 130
-          }
-        ]
-      }
-    ],
-    "SessionEnd": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_sessionend_wrapper.sh",
-            "timeout": 5
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_posttoolusefailure_wrapper.sh",
+            "args": [],
+            "async": true
           }
         ]
       }
@@ -121,7 +98,22 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_subagent_start_wrapper.sh",
-            "timeout": 20
+            "args": [],
+            "timeout": 20,
+            "statusMessage": "ACE: loading patterns for subagent…"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_stop_wrapper.sh",
+            "args": [],
+            "async": true
           }
         ]
       }
@@ -132,8 +124,35 @@
         "hooks": [
           {
             "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_subagent_stop_wrapper.sh --log --chat --notify",
-            "timeout": 130
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_subagent_stop_wrapper.sh",
+            "args": [],
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PermissionDenied": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_permission_denied_wrapper.sh",
+            "args": [],
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_sessionend_wrapper.sh",
+            "args": [],
+            "timeout": 5
           }
         ]
       }

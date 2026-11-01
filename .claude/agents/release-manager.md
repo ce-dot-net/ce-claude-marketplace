@@ -85,15 +85,8 @@ If anything shows as modified → ADD IT!
 # 1. Push commit first
 git push
 
-# 2. Tag AFTER commit is pushed
-# v6.5.0+: prefer `claude plugin tag` — it reads version from plugin.json
-# and refuses to tag on version mismatch (catches forgotten bumps).
-# Falls back to manual git tag if claude plugin tag is unavailable.
-if command -v claude >/dev/null 2>&1; then
-  claude plugin tag         # auto-reads plugin.json, validates, creates annotated tag
-else
-  git tag v{VERSION}
-fi
+# 2. Tag AFTER commit is pushed (manual annotated tag; verify plugin.json version first)
+git tag -a v{VERSION} -m "ACE Plugin v{VERSION}"
 git push --tags
 
 # 3. Create GitHub release
@@ -200,14 +193,14 @@ For this plugin specifically:
 - `plugins/ace/.claude-plugin/plugin.template.json` ⚠️ **MUST match plugin.json version!**
 - `.claude-plugin/marketplace.json`
 - All files in `plugins/ace/commands/` (if documentation updated)
-- `plugins/ace/CHANGELOG.md` (update with release notes)
+- `plugins/ace/CHANGELOG.md` (mandatory: update with release notes)
 
-**Files to IGNORE** (old/unused):
-- `plugins/ace/plugin.local.json` (dev only)
+**The 3 version manifests (all must carry the same version):**
+- `plugins/ace/.claude-plugin/plugin.json`
+- `plugins/ace/.claude-plugin/plugin.template.json`
+- `.claude-plugin/marketplace.json`
 
-**Note:** v6.5.0 removed the legacy production manifest (only `plugin.local.json` remains as
-the dev-only variant). The corresponding test uses an `os.path.exists()` guard so it skips
-cleanly when no longer present.
+`plugins/ace/CHANGELOG.md` is mandatory for every release: no release without a new entry.
 
 **Hardcoded versions to AUDIT before tag** (v6.5.0+: should be ZERO):
 ```bash

@@ -1046,63 +1046,33 @@ class TestHooksJsonConfig:
         self.hooks = self.hooks_data["hooks"]
 
     def test_consolidated_sessionstart_handles_compact(self):
-        """
-        v6.0.0: Consolidated SessionStart handles compact via source field.
-        The main ace_install_cli.sh reads .source from stdin and branches.
-        """
-        session_start_hooks = self.hooks.get("SessionStart", [])
-        assert len(session_start_hooks) == 1, (
-            f"v6.0.0: SessionStart should have 1 consolidated entry, "
-            f"got {len(session_start_hooks)}"
-        )
-        # The single entry should route to ace_install_cli.sh
-        commands = [h.get("command", "") for h in session_start_hooks[0].get("hooks", [])]
-        assert any("ace_install_cli.sh" in cmd for cmd in commands), (
-            f"Consolidated SessionStart must route to ace_install_cli.sh. "
-            f"Found commands: {commands}"
-        )
+        """v8 (DESIGN §3): SessionStart = startup|clear, startup (async update check), compact."""
+        groups = self.hooks.get("SessionStart", [])
+        assert [g["matcher"] for g in groups] == ["startup|clear", "startup", "compact"]
+        compact = [h["command"] for h in groups[2]["hooks"]]
+        assert any("ace_sessionstart_compact.sh" in c for c in compact), compact
 
     def test_install_cli_handles_compact_source(self):
-        """
-        v6.0.0: ace_install_cli.sh must handle source=compact for pattern restoration.
-        """
-        install_cli = HOOKS_JSON_PATH.parent.parent / "scripts" / "ace_install_cli.sh"
-        content = install_cli.read_text()
-        assert '.source' in content, "Script must read .source field from event"
-        assert 'compact' in content, "Script must handle compact source"
+        """v8: compact is routed by matcher, so the CLI-check entry never sees it."""
+        assert "compact" not in self.hooks["SessionStart"][0]["matcher"]
 
     def test_precompact_entry_still_exists(self):
-        """
-        Test scenario 18: The original PreCompact entry must still exist
-        (for the wrapper that saves to temp file).
-        """
-        assert "PreCompact" in self.hooks, (
-            "PreCompact hook entry must still exist in hooks.json"
-        )
-        precompact_hooks = self.hooks["PreCompact"]
-        assert len(precompact_hooks) > 0, (
-            "PreCompact must have at least one hook entry"
-        )
-        commands = []
-        for entry in precompact_hooks:
-            for hook in entry.get("hooks", []):
-                commands.append(hook.get("command", ""))
-        assert any("ace_precompact_wrapper.sh" in cmd for cmd in commands), (
-            f"PreCompact must route to ace_precompact_wrapper.sh. "
-            f"Found commands: {commands}"
-        )
+        """v8 (DESIGN §3): PreCompact is removed (never block compaction); compact re-inject
+        goes through SessionStart(compact)."""
+        assert "PreCompact" not in self.hooks
 
     def test_sessionstart_has_default_matcher(self):
-        """SessionStart must have a default (empty) matcher."""
-        session_start_hooks = self.hooks.get("SessionStart", [])
-        matchers = [h.get("matcher") for h in session_start_hooks]
-        assert "" in matchers, "SessionStart must have a default (empty) matcher"
+        """v8: no catch-all SessionStart matcher; startup|clear runs the CLI check."""
+        assert "startup|clear" in [h.get("matcher") for h in self.hooks.get("SessionStart", [])]
+
 
     def test_sessionstart_hook_has_timeout(self):
         """The SessionStart hook entry must have a timeout configured."""
         session_start_hooks = self.hooks.get("SessionStart", [])
         for entry in session_start_hooks:
             for hook in entry.get("hooks", []):
+                if hook.get("async"):  # hooks doc :414: timeout not enforced on async hooks
+                    continue
                 assert "timeout" in hook, (
                     "SessionStart hook must have a timeout configured"
                 )
