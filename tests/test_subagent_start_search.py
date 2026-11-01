@@ -213,6 +213,9 @@ def test_run_search_called_with_transcript_query_type_matched(tmp_path, monkeypa
     must be used. task_intent must NOT be passed.
     """
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "general-purpose", "prompt": "Do some general research"},
         {"subagent_type": "coder", "prompt": "Implement the SubagentStart hook"},
@@ -226,7 +229,7 @@ def test_run_search_called_with_transcript_query_type_matched(tmp_path, monkeypa
         captured["query"] = query
         captured["kwargs"] = kwargs
         captured["task_intent_present"] = "task_intent" in kwargs
-        return SAMPLE_PATTERNS_RESPONSE
+        return SAMPLE_PATTERNS_RESPONSE, 0
 
     monkeypatch.setattr(mod, "run_search", fake_run_search)
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
@@ -249,6 +252,9 @@ def test_run_search_called_with_transcript_query_type_matched(tmp_path, monkeypa
 def test_tail_scan_picks_most_recent_matching_type(tmp_path, monkeypatch):
     """When multiple blocks match agent_type, the LAST one (tail-scan first) is used."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "OLD coder task"},
         {"subagent_type": "coder", "prompt": "NEW coder task — use this one"},
@@ -260,7 +266,7 @@ def test_tail_scan_picks_most_recent_matching_type(tmp_path, monkeypatch):
 
     def fake_run_search(query, **kwargs):
         captured["query"] = query
-        return SAMPLE_PATTERNS_RESPONSE
+        return SAMPLE_PATTERNS_RESPONSE, 0
 
     monkeypatch.setattr(mod, "run_search", fake_run_search)
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
@@ -280,6 +286,9 @@ def test_tail_scan_picks_most_recent_matching_type(tmp_path, monkeypatch):
 def test_type_match_skips_mismatched_types(tmp_path, monkeypatch):
     """A 'general-purpose' block must not be returned for agent_type='coder'."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "general-purpose", "prompt": "General task"},
         {"subagent_type": "coder", "prompt": "Correct coder task"},
@@ -291,7 +300,7 @@ def test_type_match_skips_mismatched_types(tmp_path, monkeypatch):
 
     def fake_run_search(query, **kwargs):
         captured["query"] = query
-        return SAMPLE_PATTERNS_RESPONSE
+        return SAMPLE_PATTERNS_RESPONSE, 0
 
     monkeypatch.setattr(mod, "run_search", fake_run_search)
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
@@ -318,6 +327,9 @@ def test_type_match_skips_mismatched_types(tmp_path, monkeypatch):
 def test_global_fallback_when_no_type_match(tmp_path, monkeypatch):
     """When no block matches agent_type, the most-recent Task/Agent block is used."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "general-purpose", "prompt": "First general task"},
         {"subagent_type": "general-purpose", "prompt": "Most recent general task"},
@@ -330,7 +342,7 @@ def test_global_fallback_when_no_type_match(tmp_path, monkeypatch):
 
     def fake_run_search(query, **kwargs):
         captured["query"] = query
-        return SAMPLE_PATTERNS_RESPONSE
+        return SAMPLE_PATTERNS_RESPONSE, 0
 
     monkeypatch.setattr(mod, "run_search", fake_run_search)
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
@@ -350,6 +362,9 @@ def test_global_fallback_when_no_type_match(tmp_path, monkeypatch):
 def test_global_fallback_when_subagent_type_absent(tmp_path, monkeypatch):
     """When block.input has no subagent_type, global fallback must still find it."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"prompt": "Task without subagent_type field"},
     ])
@@ -360,7 +375,7 @@ def test_global_fallback_when_subagent_type_absent(tmp_path, monkeypatch):
 
     def fake_run_search(query, **kwargs):
         captured["query"] = query
-        return SAMPLE_PATTERNS_RESPONSE
+        return SAMPLE_PATTERNS_RESPONSE, 0
 
     monkeypatch.setattr(mod, "run_search", fake_run_search)
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
@@ -384,6 +399,9 @@ def test_global_fallback_when_subagent_type_absent(tmp_path, monkeypatch):
 def test_description_used_when_prompt_absent(tmp_path, monkeypatch):
     """When block.input has no 'prompt', 'description' must be used as fallback."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "description": "Task via description field"},
     ])
@@ -394,7 +412,7 @@ def test_description_used_when_prompt_absent(tmp_path, monkeypatch):
 
     def fake_run_search(query, **kwargs):
         captured["query"] = query
-        return SAMPLE_PATTERNS_RESPONSE
+        return SAMPLE_PATTERNS_RESPONSE, 0
 
     monkeypatch.setattr(mod, "run_search", fake_run_search)
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
@@ -418,6 +436,9 @@ def test_description_used_when_prompt_absent(tmp_path, monkeypatch):
 def test_long_prompt_is_truncated(tmp_path, monkeypatch):
     """Prompts longer than ~500 chars must be truncated before passing to run_search."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     long_prompt = "A" * 1200
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": long_prompt},
@@ -429,7 +450,7 @@ def test_long_prompt_is_truncated(tmp_path, monkeypatch):
 
     def fake_run_search(query, **kwargs):
         captured["query"] = query
-        return SAMPLE_PATTERNS_RESPONSE
+        return SAMPLE_PATTERNS_RESPONSE, 0
 
     monkeypatch.setattr(mod, "run_search", fake_run_search)
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
@@ -453,6 +474,9 @@ def test_long_prompt_is_truncated(tmp_path, monkeypatch):
 def test_no_run_search_when_transcript_missing(tmp_path, monkeypatch):
     """When transcript_path doesn't exist, run_search must NOT be called."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     event = _make_event(tmp_path, transcript_path=str(tmp_path / "nonexistent.jsonl"))
 
     mod = _load_subagent_start()
@@ -472,6 +496,9 @@ def test_no_run_search_when_transcript_missing(tmp_path, monkeypatch):
 def test_no_run_search_when_transcript_has_no_task_blocks(tmp_path, monkeypatch):
     """When transcript has no Task/Agent tool_use blocks, run_search must NOT be called."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     # Transcript with only user/system entries, no Task tool_use
     entries = [
         {"type": "userMessage", "message": {"role": "user", "content": "hello"}},
@@ -501,6 +528,9 @@ def test_no_run_search_when_transcript_has_no_task_blocks(tmp_path, monkeypatch)
 def test_no_run_search_when_transcript_empty(tmp_path, monkeypatch):
     """When transcript is empty/blank, run_search must NOT be called."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript = tmp_path / "empty.jsonl"
     transcript.write_text("")
     event = _make_event(tmp_path, transcript_path=str(transcript))
@@ -522,6 +552,9 @@ def test_no_run_search_when_transcript_empty(tmp_path, monkeypatch):
 def test_no_run_search_when_transcript_path_absent(tmp_path, monkeypatch):
     """When transcript_path key is absent from event, run_search must NOT be called."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     event = _make_event(tmp_path)
     del event["transcript_path"]
 
@@ -542,6 +575,9 @@ def test_no_run_search_when_transcript_path_absent(tmp_path, monkeypatch):
 def test_graceful_when_transcript_is_all_malformed_json(tmp_path, monkeypatch):
     """When every line of the transcript is malformed JSON, must not crash."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript = tmp_path / "bad.jsonl"
     transcript.write_text("{{not json\nnot json either\n{broken")
     event = _make_event(tmp_path, transcript_path=str(transcript))
@@ -567,6 +603,9 @@ def test_graceful_when_transcript_is_all_malformed_json(tmp_path, monkeypatch):
 def test_run_search_task_intent_kwarg_not_passed(tmp_path, monkeypatch):
     """task_intent must not appear in the run_search call at all (not even as None)."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some coder task"},
     ])
@@ -577,7 +616,7 @@ def test_run_search_task_intent_kwarg_not_passed(tmp_path, monkeypatch):
 
     def fake_run_search(*args, **kwargs):
         calls.append(kwargs)
-        return SAMPLE_PATTERNS_RESPONSE
+        return SAMPLE_PATTERNS_RESPONSE, 0
 
     monkeypatch.setattr(mod, "run_search", fake_run_search)
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
@@ -602,13 +641,16 @@ def test_run_search_task_intent_kwarg_not_passed(tmp_path, monkeypatch):
 def test_append_patterns_used_called_with_subagent_agent_id(tmp_path, monkeypatch):
     """Pattern IDs must be persisted keyed to the subagent's agent_id."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Implement the SubagentStart hook"},
     ])
     event = _make_event(tmp_path, transcript_path=transcript_path, agent_type="coder")
 
     mod = _load_subagent_start()
-    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: SAMPLE_PATTERNS_RESPONSE)
+    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: (SAMPLE_PATTERNS_RESPONSE, 0))
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
     pu_calls = []
     monkeypatch.setattr(mod, "append_patterns_used",
@@ -634,13 +676,16 @@ def test_per_agent_state_file_written_for_subagent(tmp_path, monkeypatch):
     import patterns_used_state as pus
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Implement the SubagentStart hook"},
     ])
     event = _make_event(tmp_path, transcript_path=transcript_path, agent_type="coder")
 
     mod = _load_subagent_start()
-    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: SAMPLE_PATTERNS_RESPONSE)
+    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: (SAMPLE_PATTERNS_RESPONSE, 0))
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
     # Use REAL append_patterns_used so the file is actually written
     monkeypatch.setattr(mod, "append_patterns_used", pus.append_patterns_used)
@@ -671,13 +716,16 @@ def test_per_agent_state_file_written_for_subagent(tmp_path, monkeypatch):
 def test_graceful_when_run_search_returns_none(tmp_path, monkeypatch):
     """Hook must not raise even when run_search returns None."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some task"},
     ])
     event = _make_event(tmp_path, transcript_path=transcript_path, agent_type="coder")
 
     mod = _load_subagent_start()
-    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: None)
+    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: (None, 0))
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
     monkeypatch.setattr(mod, "append_patterns_used", MagicMock())
 
@@ -690,6 +738,9 @@ def test_graceful_when_run_search_returns_none(tmp_path, monkeypatch):
 def test_graceful_when_no_context(tmp_path, monkeypatch):
     """Hook must not raise when get_context returns None."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some task"},
     ])
@@ -709,6 +760,9 @@ def test_graceful_when_no_context(tmp_path, monkeypatch):
 def test_graceful_when_run_search_raises(tmp_path, monkeypatch):
     """Hook must not propagate exceptions from run_search."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some task"},
     ])
@@ -737,13 +791,16 @@ def test_graceful_when_run_search_raises(tmp_path, monkeypatch):
 def test_output_contains_additional_context_when_patterns_found(tmp_path, monkeypatch, capsys):
     """When patterns are found, stdout JSON must include hookSpecificOutput.additionalContext."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Implement the SubagentStart hook"},
     ])
     event = _make_event(tmp_path, transcript_path=transcript_path, agent_type="coder")
 
     mod = _load_subagent_start()
-    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: SAMPLE_PATTERNS_RESPONSE)
+    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: (SAMPLE_PATTERNS_RESPONSE, 0))
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
     monkeypatch.setattr(mod, "append_patterns_used", MagicMock())
 
@@ -776,6 +833,9 @@ def test_output_contains_additional_context_when_patterns_found(tmp_path, monkey
 def test_org_and_project_passed_to_run_search_from_context(tmp_path, monkeypatch):
     """org and project must come from get_context(), not hardcoded or from env directly."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some coder task"},
     ])
@@ -790,7 +850,7 @@ def test_org_and_project_passed_to_run_search_from_context(tmp_path, monkeypatch
     def fake_run_search(query, org=None, project=None, **kwargs):
         context_used["org"] = org
         context_used["project"] = project
-        return SAMPLE_PATTERNS_RESPONSE
+        return SAMPLE_PATTERNS_RESPONSE, 0
 
     monkeypatch.setattr(mod, "get_context", fake_get_context)
     monkeypatch.setattr(mod, "run_search", fake_run_search)
@@ -822,6 +882,9 @@ def test_session_id_from_event_passed_to_run_search(tmp_path, monkeypatch):
     """
     import uuid as _uuid
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some coder task"},
     ])
@@ -833,7 +896,7 @@ def test_session_id_from_event_passed_to_run_search(tmp_path, monkeypatch):
 
     def fake_run_search(query, org=None, project=None, session_id=None, **kwargs):
         captured["session_id"] = session_id
-        return SAMPLE_PATTERNS_RESPONSE
+        return SAMPLE_PATTERNS_RESPONSE, 0
 
     monkeypatch.setattr(mod, "run_search", fake_run_search)
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
@@ -881,13 +944,16 @@ def test_main_accepts_event_kwarg():
 def test_no_append_when_agent_id_is_none(tmp_path, monkeypatch):
     """When agent_id is None, append_patterns_used must NOT be called."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some task"},
     ])
     event = _make_event(tmp_path, transcript_path=transcript_path, agent_id=None)
 
     mod = _load_subagent_start()
-    rs_mock = MagicMock(return_value=SAMPLE_PATTERNS_RESPONSE)
+    rs_mock = MagicMock(return_value=(SAMPLE_PATTERNS_RESPONSE, 0))
     pu_mock = MagicMock()
     monkeypatch.setattr(mod, "run_search", rs_mock)
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
@@ -906,13 +972,16 @@ def test_no_append_when_agent_id_is_none(tmp_path, monkeypatch):
 def test_no_run_search_when_agent_id_is_none(tmp_path, monkeypatch):
     """When agent_id is None, run_search must NOT be called (early exit)."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some task"},
     ])
     event = _make_event(tmp_path, transcript_path=transcript_path, agent_id=None)
 
     mod = _load_subagent_start()
-    rs_mock = MagicMock(return_value=SAMPLE_PATTERNS_RESPONSE)
+    rs_mock = MagicMock(return_value=(SAMPLE_PATTERNS_RESPONSE, 0))
     pu_mock = MagicMock()
     monkeypatch.setattr(mod, "run_search", rs_mock)
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
@@ -931,6 +1000,9 @@ def test_no_run_search_when_agent_id_is_none(tmp_path, monkeypatch):
 def test_no_append_when_agent_id_absent(tmp_path, monkeypatch):
     """When the agent_id key is entirely absent from the event, must be a no-op."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some task"},
     ])
@@ -938,7 +1010,7 @@ def test_no_append_when_agent_id_absent(tmp_path, monkeypatch):
     del event["agent_id"]
 
     mod = _load_subagent_start()
-    rs_mock = MagicMock(return_value=SAMPLE_PATTERNS_RESPONSE)
+    rs_mock = MagicMock(return_value=(SAMPLE_PATTERNS_RESPONSE, 0))
     pu_mock = MagicMock()
     monkeypatch.setattr(mod, "run_search", rs_mock)
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
@@ -962,13 +1034,16 @@ def test_agent_id_none_does_not_write_main_state_file(tmp_path, monkeypatch):
     import patterns_used_state as pus
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some task"},
     ])
     event = _make_event(tmp_path, transcript_path=transcript_path, agent_id=None)
 
     mod = _load_subagent_start()
-    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: SAMPLE_PATTERNS_RESPONSE)
+    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: (SAMPLE_PATTERNS_RESPONSE, 0))
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
     monkeypatch.setattr(mod, "append_patterns_used", pus.append_patterns_used)
 
@@ -989,7 +1064,7 @@ def test_agent_id_none_does_not_write_main_state_file(tmp_path, monkeypatch):
 # ═══════════════════════════════════════════════════════════════════════════
 
 def test_hooks_json_subagent_start_timeout_covers_run_search_budget():
-    """SubagentStart hook timeout must be >= 40000ms."""
+    """SubagentStart hook timeout is in SECONDS (CC hooks ref line 414): 15..60."""
     hooks_path = REPO / "plugins" / "ace" / "hooks" / "hooks.json"
     data = json.loads(hooks_path.read_text())
     entries = data.get("hooks", {}).get("SubagentStart", [])
@@ -1004,10 +1079,10 @@ def test_hooks_json_subagent_start_timeout_covers_run_search_budget():
 
     assert timeouts, "No timeout values found in SubagentStart hooks"
     for t in timeouts:
-        assert t >= 40000, (
-            f"SubagentStart hook timeout {t}ms is too low — run_search alone "
-            f"needs up to 30s; set timeout >= 40000ms to avoid SIGKILL before "
-            f"append_patterns_used writes the state file"
+        assert 15 <= t <= 60, (
+            f"SubagentStart hook timeout {t}s must be in [15, 60] seconds: "
+            f"run_search is capped at 15s (v8 C2) and CC reads `timeout` as "
+            f"seconds, so a millisecond value (e.g. 40000) means ~11h"
         )
 
 
@@ -1018,6 +1093,9 @@ def test_hooks_json_subagent_start_timeout_covers_run_search_budget():
 def test_agent_tool_use_name_also_matched(tmp_path, monkeypatch):
     """Tool_use blocks with name='Agent' (not just 'Task') must also be scanned."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
 
     # Build a transcript with an 'Agent' block instead of 'Task'
     entry = {
@@ -1048,7 +1126,7 @@ def test_agent_tool_use_name_also_matched(tmp_path, monkeypatch):
 
     def fake_run_search(query, **kwargs):
         captured["query"] = query
-        return SAMPLE_PATTERNS_RESPONSE
+        return SAMPLE_PATTERNS_RESPONSE, 0
 
     monkeypatch.setattr(mod, "run_search", fake_run_search)
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
@@ -1082,6 +1160,9 @@ def test_task_session_id_persisted_when_search_returns_zero_patterns(tmp_path, m
     import patterns_used_state as pus
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Implement the auth hook"},
     ])
@@ -1091,7 +1172,7 @@ def test_task_session_id_persisted_when_search_returns_zero_patterns(tmp_path, m
     mod = _load_subagent_start()
     # Search returns 0 patterns (empty similar_patterns list)
     zero_pattern_response = {"similar_patterns": [], "count": 0}
-    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: zero_pattern_response)
+    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: (zero_pattern_response, 0))
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
     # Use REAL append_patterns_used so state file is actually written
     monkeypatch.setattr(mod, "append_patterns_used", pus.append_patterns_used)
@@ -1124,6 +1205,9 @@ def test_task_session_id_persisted_when_search_returns_error_dict(tmp_path, monk
     import patterns_used_state as pus
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Implement the auth hook"},
     ])
@@ -1132,7 +1216,7 @@ def test_task_session_id_persisted_when_search_returns_error_dict(tmp_path, monk
 
     mod = _load_subagent_start()
     error_response = {"error": "timeout", "message": "CLI timed out"}
-    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: error_response)
+    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: (error_response, 0))
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
     monkeypatch.setattr(mod, "append_patterns_used", pus.append_patterns_used)
 
@@ -1158,6 +1242,9 @@ def test_task_session_id_persisted_when_search_returns_none(tmp_path, monkeypatc
     import patterns_used_state as pus
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Implement the auth hook"},
     ])
@@ -1165,7 +1252,7 @@ def test_task_session_id_persisted_when_search_returns_none(tmp_path, monkeypatc
                         agent_id="subagent-none-response-agent")
 
     mod = _load_subagent_start()
-    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: None)
+    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: (None, 0))
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
     monkeypatch.setattr(mod, "append_patterns_used", pus.append_patterns_used)
 
@@ -1187,6 +1274,9 @@ def test_pattern_ids_still_stored_when_patterns_present(tmp_path, monkeypatch):
     import patterns_used_state as pus
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Implement the auth hook"},
     ])
@@ -1194,7 +1284,7 @@ def test_pattern_ids_still_stored_when_patterns_present(tmp_path, monkeypatch):
                         agent_id="subagent-with-patterns-agent")
 
     mod = _load_subagent_start()
-    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: SAMPLE_PATTERNS_RESPONSE)
+    monkeypatch.setattr(mod, "run_search", lambda *a, **kw: (SAMPLE_PATTERNS_RESPONSE, 0))
     monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
     monkeypatch.setattr(mod, "append_patterns_used", pus.append_patterns_used)
 

@@ -57,7 +57,7 @@ class TestLegacyListStillReadable:
 
     def test_legacy_list_load_playbook_used(self, tmp_path):
         """write a bare-list JSON, call load_playbook_used → returns IDs, no crash."""
-        sf = tmp_path / f"ace-patterns-used-{SESSION}-main.json"
+        sf = tmp_path / "patterns-used-main.json"
         sf.write_text(json.dumps([PID_A, PID_B]))
 
         result = pus.load_playbook_used(SESSION, None, hook_event_name='Stop', state_dir=str(tmp_path))
@@ -215,7 +215,7 @@ class TestLegacyLoadRetrievalIdsReturnsEmpty:
 
     def test_legacy_load_retrieval_ids_returns_empty(self, tmp_path):
         """Legacy file with bare list → load_retrieval_ids returns {}."""
-        sf = tmp_path / f"ace-patterns-used-{SESSION}-main.json"
+        sf = tmp_path / "patterns-used-main.json"
         sf.write_text(json.dumps([PID_A, PID_B]))
 
         result = pus.load_retrieval_ids(SESSION, None, hook_event_name='Stop', state_dir=str(tmp_path))
@@ -228,7 +228,7 @@ class TestLegacyLoadRetrievalIdsReturnsEmpty:
 
     def test_subagent_legacy_load_retrieval_ids_returns_empty(self, tmp_path):
         """Legacy subagent file → load_retrieval_ids returns {} for SubagentStop."""
-        sf = tmp_path / f"ace-patterns-used-{SESSION}-{AGENT_SUB}.json"
+        sf = tmp_path / f"patterns-used-{AGENT_SUB}.json"
         sf.write_text(json.dumps([PID_A]))
 
         result = pus.load_retrieval_ids(SESSION, AGENT_SUB, hook_event_name='SubagentStop', state_dir=str(tmp_path))

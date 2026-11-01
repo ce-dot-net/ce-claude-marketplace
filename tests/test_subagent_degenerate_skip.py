@@ -86,7 +86,7 @@ def _write_state(state_dir, agent_id, pattern_ids=None, task_session_id=None,
         SESSION,
         agent_id,
         pattern_ids or [PID_A],
-        state_dir=str(state_dir),
+        project_id="prj-1",
         task_session_id=task_session_id,
         retrieval_id=retrieval_id,
         retrieval_log_ids=retrieval_log_ids or {},
@@ -122,6 +122,8 @@ def _run_main(tmp_path, monkeypatch, event,
     state_dir = tmp_path / ".claude" / "data" / "logs"
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
     monkeypatch.chdir(tmp_path)
 
     if write_state_under is not None:
@@ -396,13 +398,14 @@ class TestStage2DegenerateSkip:
         """
         event = _empty_agent_subagent_event(tmp_path, transcript_uuid=None)
         # Write a state file under 'None' agent (the '-main' suffix) to verify it gets reaped
-        state_dir = tmp_path / ".claude" / "data" / "logs"
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
         pus.append_patterns_used(
             SESSION, None, [PID_A],
-            state_dir=str(state_dir),
+            project_id="prj-1",
             task_session_id=None,
         )
-        main_sf = pus.state_file_path(SESSION, None, state_dir=str(state_dir))
+        main_sf = pus.state_file_path(SESSION, None, project_id="prj-1")
         assert main_sf.exists(), "Precondition: state file must exist before test"
 
         records, captured = _run_main(
@@ -528,11 +531,11 @@ class TestPartialAnchorNotSkipped:
     def test_retrieval_id_only_not_skipped(self, tmp_path, monkeypatch):
         """retrieval_id present (no tsid, no applied_log_ids, sentinel prompt) → NOT skipped."""
         # Build state with retrieval_id but no task_session_id
-        state_dir = tmp_path / ".claude" / "data" / "logs"
-        state_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
         pus.append_patterns_used(
             SESSION, WORK_UUID, [PID_A],
-            state_dir=str(state_dir),
+            project_id="prj-1",
             task_session_id=None,       # no tsid
             retrieval_id=RETRIEVAL_ID,  # but retrieval_id present
         )
@@ -567,6 +570,8 @@ class TestMainStopNotAffected:
         learn is called (or skipped for other reasons, but not the degenerate guard).
         """
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
         monkeypatch.chdir(tmp_path)
 
         transcript = tmp_path / "transcript.jsonl"

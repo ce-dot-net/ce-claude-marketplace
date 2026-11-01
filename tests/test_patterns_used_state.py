@@ -57,7 +57,9 @@ SUBAGENT_UUID = "11111111-2222-3333-4444-555555555555"
 
 
 def _path(state_dir, session, suffix):
-    return Path(state_dir) / f"ace-patterns-used-{session}-{suffix}.json"
+    # v8 (DESIGN §4): an explicit state_dir IS the per-session dir, so the
+    # session id is no longer part of the file name.
+    return Path(state_dir) / f"patterns-used-{suffix}.json"
 
 
 # --------------------------------------------------------------------------
@@ -83,17 +85,18 @@ def test_append_noops_without_session_or_valid_ids(tmp_path):
     assert not _path(tmp_path, SESSION, "main").exists()
 
 
-def test_state_file_path_relative_scheme(tmp_path):
+def test_state_file_path_scheme(tmp_path, monkeypatch):
     # agent_id None -> 'main'
     p_main = pus.state_file_path(SESSION, None, state_dir=str(tmp_path))
-    assert p_main.name == f"ace-patterns-used-{SESSION}-main.json"
+    assert p_main.name == "patterns-used-main.json"
     # agent_id UUID -> uuid suffix
     p_sub = pus.state_file_path(SESSION, SUBAGENT_UUID, state_dir=str(tmp_path))
-    assert p_sub.name == f"ace-patterns-used-{SESSION}-{SUBAGENT_UUID}.json"
-    # default (no state_dir) anchors to the RELATIVE default dir, NOT $CLAUDE_PROJECT_DIR
-    p_default = pus.state_file_path(SESSION, None)
-    assert str(p_default).startswith(pus.STATE_DIR_DEFAULT)
-    assert pus.STATE_DIR_DEFAULT == ".claude/data/logs"
+    assert p_sub.name == f"patterns-used-{SUBAGENT_UUID}.json"
+    # v8: default (no state_dir) lives under $CLAUDE_PLUGIN_DATA/projects/<p>/sessions/<s>/
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    p_default = pus.state_file_path(SESSION, None, project_id="prj_x")
+    assert p_default == (tmp_path / "pd" / "projects" / "prj_x" / "sessions" / SESSION
+                         / "patterns-used-main.json")
 
 
 # --------------------------------------------------------------------------
