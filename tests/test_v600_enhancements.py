@@ -1,5 +1,6 @@
 """
-Tests for v6.0.0 CC 2.1.69+ Enhancements:
+Tests for v6.0.0 CC 2.1.69+ Enhancements (v8: WP-C removed the stdout
+`{"async": true}` echo assertions and the bash agent_id/argv assertions):
 1. Async PostToolUse (non-blocking tool accumulation)
 2. Consolidated SessionStart with source field
 3. agent_id capture in tool accumulator
@@ -29,35 +30,16 @@ def _read(path):
 class TestAsyncPostToolUse:
     """PostToolUse should be async for non-blocking tool accumulation."""
 
-    def test_wrapper_outputs_async_true(self):
-        """Wrapper must output {"async": true} for non-blocking execution."""
-        content = _read(POSTTOOLUSE_WRAPPER)
-        assert '"async"' in content, \
-            "PostToolUse wrapper should output async flag"
-
-    def test_async_output_before_accumulator_run(self):
-        """Async output must be emitted BEFORE the accumulator python3 run."""
-        content = _read(POSTTOOLUSE_WRAPPER)
-        lines = content.splitlines()
-        async_line = None
-        accumulator_run_line = None
-        for i, line in enumerate(lines):
-            if '"async"' in line and 'echo' in line.lower():
-                async_line = i
-            if 'python3' in line and 'ACCUMULATOR' in line:
-                accumulator_run_line = i
-        assert async_line is not None, "No async echo found"
-        assert accumulator_run_line is not None, "No accumulator call found"
-        assert async_line < accumulator_run_line, \
-            f"Async output (line {async_line}) must come before accumulator (line {accumulator_run_line})"
-
-    def test_posttooluse_timeout_reasonable(self):
-        """PostToolUse timeout should be <=30s (async, just SQLite writes)."""
+    def test_posttooluse_accumulator_is_async_or_bounded(self):
+        """v8 (DESIGN §3): the accumulator handler is `async: true` in hooks.json
+        (the stdout `{"async": true}` echo was never an output field, critic V3);
+        until then its timeout must stay <= 30 s."""
         data = json.loads(_read(HOOKS_JSON))
-        post_tool = data['hooks']['PostToolUse']
-        hook = post_tool[0]['hooks'][0]
+        handlers = [h for grp in data['hooks']['PostToolUse'] for h in grp['hooks']
+                    if 'ace_posttooluse_wrapper.sh' in json.dumps(h)]
+        assert handlers, "accumulator handler missing from PostToolUse"
         # v8 (DESIGN §3): the accumulator is async, which carries no timeout (hooks doc :414)
-        assert hook.get('async') is True and hook.get('timeout', 0) <= 30
+        assert handlers[0].get('async') is True and handlers[0].get('timeout', 0) <= 30
 
     def test_no_empty_systemmessage_output(self):
         """Async hooks should not output empty systemMessage (use async flag instead)."""
@@ -120,33 +102,13 @@ class TestAgentIdCapture:
         assert 'agent_id' in create_stmt, \
             "CREATE TABLE should include agent_id column"
 
-    def test_accumulator_append_accepts_agent_id(self):
-        """append_tool function signature should include agent_id parameter."""
+    def test_record_tool_accepts_agent_id(self):
+        """v8 C4: record_tool(session_id, agent_id, ...) is the accumulator API;
+        agent_id comes from the stdin event inside Python (no bash/argv)."""
         content = _read(ACCUMULATOR)
-        # Find append_tool def
-        func_idx = content.index('def append_tool(')
-        func_end = content.index(')', func_idx)
-        func_sig = content[func_idx:func_end]
-        assert 'agent_id' in func_sig, \
-            "append_tool() should accept agent_id parameter"
-
-    def test_accumulator_cli_has_agent_id_flag(self):
-        """Accumulator CLI append command should have --agent-id flag."""
-        content = _read(ACCUMULATOR)
-        assert '--agent-id' in content, \
-            "CLI should have --agent-id flag for append command"
-
-    def test_posttooluse_extracts_agent_id(self):
-        """PostToolUse wrapper should extract agent_id from hook event JSON."""
-        content = _read(POSTTOOLUSE_WRAPPER)
-        assert 'agent_id' in content, \
-            "Wrapper should extract agent_id from event"
-
-    def test_posttooluse_passes_agent_id_to_accumulator(self):
-        """PostToolUse wrapper should pass agent_id to accumulator CLI."""
-        content = _read(POSTTOOLUSE_WRAPPER)
-        assert '--agent-id' in content, \
-            "Wrapper should pass --agent-id to accumulator"
+        func_idx = content.index('def record_tool(')
+        func_sig = content[func_idx:content.index(')', func_idx)]
+        assert 'agent_id' in func_sig
 
     def test_get_session_tools_returns_agent_id(self):
         """get_session_tools SELECT should include agent_id."""

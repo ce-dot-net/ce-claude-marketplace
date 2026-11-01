@@ -144,6 +144,9 @@ class ACEEventLogger:
 
 
 def main():
+    if os.environ.get("ACE_EVENT_LOGGING") != "1":
+        return  # v5.4.5 gate, now enforced here (SubagentStop ran this ungated)
+
     parser = argparse.ArgumentParser(
         description="Log ACE hook events to JSONL files"
     )

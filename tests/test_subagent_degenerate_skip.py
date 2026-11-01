@@ -117,7 +117,7 @@ def _run_main(tmp_path, monkeypatch, event,
     Wire minimal mocks and run main(), returning (all_relevance_records, captured).
 
     captured["learn_calls"] is the list of (trace, kwargs) tuples if learn was called.
-    captured["learn_called"] is True if _learn_via_transcript was called at all.
+    captured["learn_called"] is True if run_learn was called at all.
     """
     state_dir = tmp_path / ".claude" / "data" / "logs"
 
@@ -166,7 +166,7 @@ def _run_main(tmp_path, monkeypatch, event,
         r.returncode = 1  # skip success branch (avoid stdout parsing)
         return r
 
-    monkeypatch.setattr(mod, "_learn_via_transcript", fake_learn)
+    monkeypatch.setattr(mod, "run_learn", lambda *a, _f=fake_learn, **k: (_f(*a, **k), (None, 0))[1])
     monkeypatch.setattr(mod, "get_git_context", lambda wd: None)
     monkeypatch.setattr(mod, "detect_commits_in_session", lambda t: [])
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
@@ -330,9 +330,9 @@ class TestStage2DegenerateSkip:
 
     def test_fully_degenerate_skip_no_learn_call(self, tmp_path, monkeypatch):
         """SubagentStop with empty agent_id, no recoverable transcript, no state,
-        no anchors, user_prompt = sentinel → _learn_via_transcript must NOT be called.
+        no anchors, user_prompt = sentinel → run_learn must NOT be called.
 
-        RED: current code always calls _learn_via_transcript (no degenerate skip guard).
+        RED: current code always calls run_learn (no degenerate skip guard).
         """
         # No transcript_uuid → recovery fails → agent_id stays empty → no state file
         event = _empty_agent_subagent_event(tmp_path, transcript_uuid=None)
@@ -342,7 +342,7 @@ class TestStage2DegenerateSkip:
             user_prompt_return=NO_PROMPT_SENTINEL,
         )
         assert not captured["learn_called"], (
-            "Fully degenerate SubagentStop must NOT call _learn_via_transcript; "
+            "Fully degenerate SubagentStop must NOT call run_learn; "
             "learn was called unexpectedly"
         )
 
@@ -606,7 +606,7 @@ class TestMainStopNotAffected:
             r.returncode = 1
             return r
 
-        monkeypatch.setattr(mod, "_learn_via_transcript", fake_learn)
+        monkeypatch.setattr(mod, "run_learn", lambda *a, _f=fake_learn, **k: (_f(*a, **k), (None, 0))[1])
         monkeypatch.setattr(mod, "get_git_context", lambda wd: None)
         monkeypatch.setattr(mod, "detect_commits_in_session", lambda t: [])
         monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))

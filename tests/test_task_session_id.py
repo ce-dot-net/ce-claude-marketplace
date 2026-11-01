@@ -513,7 +513,7 @@ class TestAfterTaskSessionId:
                 stderr = ""
             return FakeResult()
 
-        monkeypatch.setattr(at, "_learn_via_transcript", fake_learn)
+        monkeypatch.setattr(at, "run_learn", lambda *a, _f=fake_learn, **k: (_f(*a, **k), (None, 0))[1])
         monkeypatch.setattr(at, "load_playbook_used",
                             lambda sess, aid, hook, **kw: [PID_A])
         monkeypatch.setattr(at, "load_retrieval_ids",

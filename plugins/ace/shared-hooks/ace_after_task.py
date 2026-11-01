@@ -30,17 +30,20 @@ import sys
 import subprocess
 import os
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 
 from ace_context import get_context
-from ace_cli import recall_session
 from utils.git_utils import get_git_context, detect_commits_in_session
-from ace_relevance_logger import log_execution_metrics, log_hook_error
+from ace_relevance_logger import log_execution_metrics, log_hook_error, log_stop_telemetry
 from patterns_used_state import (load_playbook_used, reap_patterns_used,
-                                 load_retrieval_ids, load_task_session_id)
+                                 load_retrieval_ids, load_task_session_id, load_state)
+import plugin_data_dir
+from ace_cli import run_learn  # C2: single spawn + DESIGN §8 'database is locked' retry
+sys.path.insert(0, str(Path(__file__).parent))
+from ace_tool_accumulator import log_hook_exception, read_event
 
 # Add plugin utils to path for validation
 sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
@@ -59,6 +62,9 @@ except Exception:
 
 # CLI command detection
 CLI_CMD = 'ace-cli'
+
+
+from utils.machine_prompts import MACHINE_PROMPT_PREFIXES  # shared with WP-B UPS guard
 
 
 def is_trivial_task(task_description: str) -> bool:
@@ -111,6 +117,9 @@ def is_trivial_task(task_description: str) -> bool:
     ]
 
     task_lower = task_description.lower()
+    # DESIGN §8: machine-generated "prompts" (same prefix list as the UPS guard)
+    if task_lower.lstrip().startswith(MACHINE_PROMPT_PREFIXES):
+        return True
     for pattern in trivial_patterns:
         if regex_module.search(pattern, task_lower, regex_module.IGNORECASE):
             return True
@@ -196,14 +205,16 @@ def summarize_tool_response(tool_name: str, tool_response: dict) -> str:
 
     Per ACE Research Paper Page 19: Trajectory should show execution feedback.
     """
-    if isinstance(tool_response, str):
+    if not isinstance(tool_response, dict):
+        # str, or the content ARRAY MCP tools return (crashed the dict-only path)
+        tool_response = tool_response if isinstance(tool_response, str) else str(tool_response)
         if len(tool_response) > 100:
             return tool_response[:100] + '...'
         return tool_response
 
     # Handle error responses
     if tool_response.get('error'):
-        return f"Error: {tool_response.get('error', 'Unknown error')[:100]}"
+        return f"Error: {str(tool_response.get('error'))[:100]}"
 
     if tool_response.get('stderr'):
         return f"Stderr: {tool_response.get('stderr', '')[:100]}"
@@ -248,6 +259,9 @@ def summarize_tool_response(tool_name: str, tool_response: dict) -> str:
         return response_str
 
 
+AGENT_TRANSCRIPT_MAX_BYTES = 8 * 1024 * 1024
+
+
 def parse_agent_transcript(path: str) -> list:
     """
     Parse a per-agent transcript JSONL file (CC's agent_transcript_path).
@@ -270,8 +284,15 @@ def parse_agent_transcript(path: str) -> list:
     order = []  # preserve encounter order by tool_use_id
 
     transcript_file = Path(path).expanduser()
-    with open(transcript_file, 'r') as f:
-        for line in f:
+    with open(transcript_file, 'rb') as fb:
+        size = fb.seek(0, os.SEEK_END)
+        start = max(0, size - AGENT_TRANSCRIPT_MAX_BYTES)  # size guard: keep the tail only
+        fb.seek(start)
+        raw_lines = fb.read().decode('utf-8', 'replace').splitlines()
+    if start:
+        raw_lines = raw_lines[1:]  # first line is cut mid-record
+    if raw_lines:
+        for line in raw_lines:
             if not line.strip():
                 continue
             try:
@@ -371,7 +392,8 @@ def _agent_id_from_transcript_path(path):
     return None
 
 
-def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = None, agent_transcript_path: str = None) -> tuple:
+def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = None, agent_transcript_path: str = None,
+                                            scope_agent_id=None) -> tuple:
     """
     Build REAL trajectory from PostToolUse accumulated data or per-agent transcript.
 
@@ -388,7 +410,7 @@ def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = 
     """
     # Import accumulator functions
     sys.path.insert(0, str(Path(__file__).parent))
-    from ace_tool_accumulator import get_session_tools, clear_session
+    from ace_tool_accumulator import get_session_tools
 
     tools = None
     if agent_transcript_path:
@@ -411,7 +433,7 @@ def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = 
             tools = None
 
     if tools is None:
-        tools = get_session_tools(session_id, working_dir)
+        tools = get_session_tools(session_id, working_dir, agent_id=scope_agent_id)
     trajectory = []
 
     for i, (tool_name, tool_input_json, tool_response_json, tool_use_id, agent_id, start_ms, end_ms, duration_ms) in enumerate(tools, 1):
@@ -444,7 +466,7 @@ def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = 
     return trajectory, tools
 
 
-def skip_learning(reason, event=None):
+def skip_learning(reason, event=None, agent_id=None):
     """
     Skip learning with user feedback.
 
@@ -454,24 +476,29 @@ def skip_learning(reason, event=None):
     so a skipped (sub)agent doesn't leave an orphan until the SessionEnd GC.
     This path fires NO learn, so reaping here can never strip IDs from a trace
     that is sent to the server. Best-effort: a reap failure never breaks the
-    skip. The suffix is derived from `event` because agent_id is not yet in
-    scope at the skip sites (they run before it is computed).
-    """
-    if os.environ.get('ACE_DEBUG_HOOKS') == '1':
-        with open('/tmp/ace_hook_debug.log', 'a') as f:
-            f.write(f"ACE: Skipping learning - {reason}\n")
-            if event:
-                f.write(f"  Event: {json.dumps(event, default=str)[:500]}\n")
+    skip.
 
+    `agent_id` is the RECOVERED id (v7.1.4); a SubagentStop with no id at all
+    never reaps (reap_patterns_used would resolve to the MAIN agent's file).
+    The self-eval request is still written on a skipped Stop that had injected
+    patterns (7.1.14 parity), read BEFORE the reap.
+    """
     if event:
+        hook = event.get('hook_event_name', 'Stop')
+        sid = event.get('session_id', '')
+        aid = agent_id or event.get('agent_id') or None
         try:
-            reap_patterns_used(
-                event.get('session_id', ''),
-                event.get('agent_id') or None,
-                event.get('hook_event_name', 'Stop'),
-            )
+            if hook == 'Stop':
+                n = len(load_state(sid, None, hook).get('pattern_ids') or [])
+                if n:
+                    write_eval_request(n, 0)
         except Exception:
-            pass  # reaping is best-effort; never break the skip path
+            pass
+        if hook != 'SubagentStop' or aid:
+            try:
+                reap_patterns_used(sid, aid, hook)
+            except Exception:
+                pass  # reaping is best-effort; never break the skip path
 
     return {
         "continue": True,
@@ -479,51 +506,45 @@ def skip_learning(reason, event=None):
     }
 
 
+TRANSCRIPT_TAIL_BYTES = 2 * 1024 * 1024
+
+
 def get_user_prompt_from_transcript(transcript_path: str) -> str:
     """
-    Extract the user's prompt from transcript for task description.
-
-    This is the ONLY transcript parsing we do - just to get the user's request.
-    All tool execution data comes from accumulated tools.
+    Fallback task description: the last real user prompt in the LAST 2 MB of the
+    transcript (bounded reverse read, never a full parse). The primary source is
+    the `user_prompt` UPS stores in the session state (contract C1).
     """
     try:
         transcript_file = Path(transcript_path).expanduser()
         if not transcript_file.exists():
             return "No user prompt found"
 
-        all_entries = []
-        with open(transcript_file, 'r') as f:
-            for line in f:
-                if not line.strip():
-                    continue
-                try:
-                    entry = json.loads(line)
-                    all_entries.append(entry)
-                except json.JSONDecodeError:
-                    continue
+        with open(transcript_file, 'rb') as f:
+            size = f.seek(0, os.SEEK_END)
+            start = max(0, size - TRANSCRIPT_TAIL_BYTES)
+            f.seek(start)
+            lines = f.read().decode('utf-8', 'replace').splitlines()
+        if start:
+            lines = lines[1:]  # first line is cut mid-record
 
         # Find LAST user message (task start) - search backwards
         # Skip tool_result messages - they have role=user but are not user prompts
-        for i in range(len(all_entries) - 1, -1, -1):
-            message = all_entries[i].get('message', {})
+        for line in reversed(lines):
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            message = entry.get('message', {}) if isinstance(entry, dict) else {}
             if message.get('role') == 'user':
                 content = message.get('content', '')
 
                 if isinstance(content, list):
-                    # Skip tool_result messages
-                    has_tool_result = any(
-                        isinstance(b, dict) and b.get('type') == 'tool_result'
-                        for b in content
-                    )
-                    if has_tool_result:
+                    if any(isinstance(b, dict) and b.get('type') == 'tool_result' for b in content):
                         continue
-
-                    # Extract text content
-                    text_parts = []
-                    for block in content:
-                        if isinstance(block, dict) and block.get('type') == 'text':
-                            text_parts.append(block.get('text', ''))
-                    user_prompt = '\n'.join(text_parts)
+                    user_prompt = '\n'.join(
+                        b.get('text', '') for b in content
+                        if isinstance(b, dict) and b.get('type') == 'text')
                     if user_prompt.strip():
                         return user_prompt[:2000]
 
@@ -532,11 +553,37 @@ def get_user_prompt_from_transcript(transcript_path: str) -> str:
 
         return "No user prompt found"
 
-    except Exception as e:
-        if os.environ.get('ACE_DEBUG_HOOKS') == '1':
-            with open('/tmp/ace_hook_debug.log', 'a') as f:
-                f.write(f"get_user_prompt_from_transcript error: {e}\n")
+    except Exception:
         return "No user prompt found"
+
+
+def parse_ace_review(message, review_file='.claude/data/logs/ace-review-result.json'):
+    """`ACE_REVIEW: N% | Xm saved | ...` in the last assistant message -> review file
+    (read by the statusline). Pure Python: a message without a time phrase used to
+    abort the old bash parse (set -eo pipefail) before learning ran."""
+    m = regex_module.search(r'ACE_REVIEW:\s*(\d+)', message or '')
+    if not m:
+        return
+    t = regex_module.search(r'\d+m\d*s? saved|\d+s saved|\d+ ?min', message)
+    try:
+        Path(review_file).parent.mkdir(parents=True, exist_ok=True)
+        Path(review_file).write_text(json.dumps({
+            'quality_pct': int(m.group(1)),
+            'time_saved': t.group(0).replace(' saved', '') if t else ''}))
+    except Exception:
+        pass
+
+
+def write_eval_request(patterns_injected, tools_executed, path='.claude/data/logs/ace-eval-request.json'):
+    """Next UserPromptSubmit (ace_before_task.check_eval_request_and_review) turns this into a silent self-eval."""
+    try:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        Path(path).write_text(json.dumps({
+            'patterns_injected': patterns_injected, 'avg_relevance': 0, 'domains': 0,
+            'tools_executed': tools_executed, 'success': True,
+            'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}))
+    except Exception:
+        pass
 
 
 def _resolve_effort_level(event):
@@ -555,81 +602,53 @@ def _resolve_effort_level(event):
     return raw if isinstance(raw, str) and raw else "normal"
 
 
-def _learn_via_transcript(trace, env=None, verbosity='detailed', timeout=300, cli_cmd=CLI_CMD,
-                          retrieval_id=None, applied_log_ids=None):
-    """Submit an ExecutionTrace to `ace-cli learn` via a temp file + --transcript.
-
-    ace-cli `learn --stdin` cannot read payloads larger than the ~64KB OS pipe
-    buffer — it errors {"message":"Failed to read from stdin"} and the producer
-    side gets a BrokenPipe, so ANY trace over ~64KB silently fails to learn
-    (empirically: 64KB ok, 80KB fails; a 3.25MB --transcript file succeeds).
-    A transcript file has no such limit, so traces of any size (up to the 2MB
-    truncate cap) submit reliably. Returns the subprocess.CompletedProcess; the
-    temp file is always removed.
-
-    F-080: retrieval_id and applied_log_ids are passed as --retrieval-id and
-    --applied-log-ids flags to ace-cli learn when present/non-empty.
-    """
-    import tempfile
-    fd, path = tempfile.mkstemp(prefix='ace-trace-', suffix='.json')
-    try:
-        with os.fdopen(fd, 'w') as f:
-            json.dump(trace, f)
-        cmd = [cli_cmd, 'learn', '--transcript', path, '--json',
-               '--timeout', '300000', '--verbosity', verbosity]
-        if retrieval_id:
-            cmd += ['--retrieval-id', retrieval_id]
-        if applied_log_ids:
-            cmd += ['--applied-log-ids', ','.join(str(x) for x in applied_log_ids)]
-        return subprocess.run(
-            cmd,
-            text=True,
-            capture_output=True,
-            timeout=timeout,
-            env=env,
-        )
-    finally:
-        try:
-            os.unlink(path)
-        except Exception:
-            pass
-
-
 def main():
     """
-    ACE After Task Hook - PostToolUse Accumulation Architecture (v5.3.0)
+    ACE After Task Hook (Stop / SubagentStop) — runs learning IN the hook process
+    (the hook is registered `async`; no `&`; the learn trace goes through a temp file that
+    run_learn removes before returning; nothing under ~/.claude/logs).
 
-    Stop hook processes accumulated tool data:
-    1. Query SQLite for session's tools (ground truth from PostToolUse)
-    2. Build trajectory with real tool calls
-    3. Send to ace-cli learn --stdin
-    4. Clear accumulated tools (cleanup)
+    1. Early exits (stop_hook_active, SubagentStop with empty agent_type, disabled flag)
+    2. Task = state `user_prompt` (C1), else bounded transcript tail; trivial/machine prompts skip
+    3. Trajectory from the accumulator (or the subagent transcript), build trace
+    4. `ace-cli learn` under a per-agent in-flight lock, eval request, cleanup
     """
+    hook_name = 'AfterTask'
     try:
         # Track execution start time for metrics
         execution_start_time = time.time()
 
         # Read hook event from stdin
-        event = json.load(sys.stdin)
-
-        # DEBUG: Log raw event
-        if os.environ.get('ACE_DEBUG_HOOKS') == '1':
-            debug_log = Path('/tmp/ace_hook_debug.log')
-            with open(debug_log, 'a') as f:
-                f.write(f"\n\n{'='*80}\n")
-                f.write(f"Hook fired at: {datetime.now().isoformat()}\n")
-                f.write(f"Event data:\n{json.dumps(event, indent=2)}\n")
-                f.write(f"{'='*80}\n")
+        event = read_event()
+        if not isinstance(event, dict):
+            raise ValueError('hook event is not a JSON object')
 
         # Extract event metadata
-        hook_event_name = event.get('hook_event_name', 'Stop')
-        session_id = event.get('session_id', 'unknown')
+        hook_event_name = hook_name = event.get('hook_event_name', 'Stop')
+        session_id = event.get('session_id') or plugin_data_dir.resolve_session_id(event)
         transcript_path = event.get('transcript_path', '')
         last_assistant_message = event.get('last_assistant_message', '')  # v5.5.0: CC 2.1.51+
 
-        # Handle SubagentStop: use agent's transcript
-        if hook_event_name == 'SubagentStop' and 'agent_transcript_path' in event:
-            transcript_path = event['agent_transcript_path']
+        # Project context (.claude/settings.json, relevance log) is resolved relative to the
+        # HOOK cwd — shims do not cd. (The old transcript_path-derived fallback is gone: CC
+        # always sends cwd.)
+        working_dir = event.get('cwd') or event.get('working_directory')
+        if working_dir and os.path.isdir(working_dir):
+            os.chdir(working_dir)
+
+        # Continuation stops / CC-internal agents (prompt suggestions, /btw: agent_type "")
+        # fire the same events: exit before any state, transcript or db work.
+        # doc cc_hooks_reference.md (Stop / SubagentStop input: stop_hook_active, agent_type)
+        if event.get('stop_hook_active'):
+            sys.exit(0)
+        # (agent_type "" WITH an agent_id = CC-internal agent, doc :2593. Both empty = the
+        # v7.1.4 degenerate fan-out event, left to Stage 1 recovery / Stage 2 skip below.)
+        if hook_event_name == 'SubagentStop' and not event.get('agent_type') and event.get('agent_id'):
+            sys.exit(0)
+
+        # Self-eval answer in the last message -> review file for the statusline
+        if hook_event_name == 'Stop':
+            parse_ace_review(last_assistant_message)
 
         # Get project context
         context = get_context()
@@ -637,50 +656,67 @@ def main():
             output = skip_learning("No project context found", event)
             print(json.dumps(output))
             sys.exit(0)
+        if plugin_data_dir.disabled_flag(context['project'], session_id).exists():
+            sys.exit(0)  # set by SessionStart when the CLI is unusable
 
-        # Determine working directory
-        working_dir = event.get('cwd') or event.get('working_directory')
-        if not working_dir and transcript_path:
+        # Handle SubagentStop: use agent's transcript
+        if hook_event_name == 'SubagentStop' and 'agent_transcript_path' in event:
+            transcript_path = event['agent_transcript_path']
+
+        # v6.0.0: Read agent_type natively from hook event (CC 2.1.69+)
+        agent_type = event.get('agent_type', 'main')
+        # v6.4.0: Per-agent scope — None for main agent, UUID for subagents
+        agent_id = event.get('agent_id') or None
+
+        # v7.1.4 Stage 1 — SubagentStop agent_id recovery from transcript filename.
+        # High fan-out can deliver SubagentStop with an empty agent_id; derive it from
+        # "agent-{uuid}.jsonl" BEFORE every per-agent state read. Fully guarded — non-fatal.
+        _agent_id_recovered = False
+        if hook_event_name == 'SubagentStop' and not agent_id:
             try:
-                working_dir = str(Path(transcript_path).parent.parent.parent)
+                _recovered = _agent_id_from_transcript_path(event.get('agent_transcript_path'))
+                if _recovered:
+                    agent_id = _recovered
+                    _agent_id_recovered = True
             except Exception:
-                working_dir = None
+                pass  # non-fatal — fall back to original (empty) agent_id
 
-        # =======================================================================
-        # v5.3.0: POSTTOOLUSE ACCUMULATION ARCHITECTURE
-        # =======================================================================
+        # Telemetry: real learn-lock state at hook start + background task count
+        lock_file = plugin_data_dir.learn_lock(
+            context['project'], session_id, agent_id if hook_event_name == 'SubagentStop' else None)
+        try:
+            lock_age = int(time.time() - lock_file.stat().st_mtime)
+            lock_present = True
+        except OSError:
+            lock_age, lock_present = None, False
+        bg = event.get('background_tasks')
+        log_stop_telemetry(session_id=session_id, hook_type=hook_event_name,
+                           background_tasks_count=len(bg) if isinstance(bg, list) else 0,
+                           learn_lock_present=lock_present, learn_lock_age_seconds=lock_age)
 
-        # v6.4.0: Prefer CC's per-agent transcript (agent_transcript_path) to avoid
-        # cross-agent contamination from the session-wide SQLite accumulator.
-        agent_transcript_path = event.get('agent_transcript_path') or None
+        # STEP 1: task description — state `user_prompt` (C1), else bounded transcript tail
+        user_prompt = (load_state(session_id, agent_id, hook_event_name).get('user_prompt') or '').strip()
+        if not user_prompt:
+            user_prompt = get_user_prompt_from_transcript(transcript_path) if transcript_path \
+                else "No user prompt found"
 
-        # STEP 1: Build trajectory from accumulated tools (GROUND TRUTH)
-        trajectory, tools = build_trajectory_from_accumulated_tools(
-            session_id, working_dir, agent_transcript_path=agent_transcript_path
-        )
-
-        if os.environ.get('ACE_DEBUG_HOOKS') == '1':
-            with open('/tmp/ace_hook_debug.log', 'a') as f:
-                f.write(f"Accumulated tools: {len(tools)} total\n")
-                for t in tools[:5]:
-                    f.write(f"  - {t[0]}\n")
-                if len(tools) > 5:
-                    f.write(f"  ... and {len(tools) - 5} more\n")
-
-        # STEP 2: Get user prompt for task description
-        user_prompt = "No user prompt found"
-        if transcript_path:
-            user_prompt = get_user_prompt_from_transcript(transcript_path)
-
-        # STEP 3: QUALITY GATE - Check for trivial task
+        # STEP 2: QUALITY GATE - trivial / machine-generated prompts (before any db work)
         if is_trivial_task(user_prompt):
-            output = skip_learning("Trivial task (ACE command or simple query)", event)
+            output = skip_learning("Trivial task (ACE command or simple query)", event, agent_id)
             print(json.dumps(output))
             sys.exit(0)
 
+        # STEP 3: trajectory from accumulated tools (GROUND TRUTH).
+        # v6.4.0: prefer CC's per-agent transcript to avoid cross-agent contamination.
+        agent_transcript_path = event.get('agent_transcript_path') or None
+        trajectory, tools = build_trajectory_from_accumulated_tools(
+            session_id, working_dir, agent_transcript_path=agent_transcript_path,
+            scope_agent_id=agent_id if hook_event_name == 'SubagentStop' else None
+        )
+
         # STEP 4: QUALITY GATE - Check for substantial work
         if not has_substantial_work_from_accumulated(tools):
-            output = skip_learning("No substantial work (no Edit/Write/Bash tools)", event)
+            output = skip_learning("No substantial work (no Edit/Write/Bash tools)", event, agent_id)
             print(json.dumps(output))
             sys.exit(0)
 
@@ -696,38 +732,8 @@ def main():
             except Exception:
                 pass
 
-        # v6.0.0: Read agent_type natively from hook event (CC 2.1.69+)
-        # agent_type identifies subagent type: "main", "refactorer", "coder", etc.
-        agent_type = event.get('agent_type', 'main')
-        # v6.4.0: Per-agent scope — None for main agent, UUID for subagents
-        agent_id = event.get('agent_id') or None
-
-        # v7.1.4 Stage 1 — SubagentStop agent_id recovery from transcript filename.
-        # High fan-out (concurrent subagents via Task tool or Workflow tool) causes CC
-        # to sometimes deliver SubagentStop with an empty agent_id/agent_type.  When
-        # that happens the state-file reads below key off None → hit the '-main' file
-        # (no task_session_id) instead of the per-agent file → anchorless trace.
-        # Fix: if agent_id is falsy on SubagentStop, derive it from the transcript
-        # filename ("agent-{uuid}.jsonl").  Set BEFORE all state-file reads so every
-        # downstream read (load_retrieval_ids, state_file_path, load_task_session_id,
-        # load_playbook_used) uses the recovered key.  Fully guarded — non-fatal.
-        _agent_id_recovered = False
-        if hook_event_name == 'SubagentStop' and not agent_id:
-            try:
-                _recovered = _agent_id_from_transcript_path(
-                    event.get('agent_transcript_path')
-                )
-                if _recovered:
-                    agent_id = _recovered
-                    _agent_id_recovered = True
-            except Exception:
-                pass  # non-fatal — fall back to original (empty) agent_id
-
-        # v7.1.3 R1 — SubagentStop read_key==transcript_uuid invariant monitor
-        # (recovery removed: proven inert, read_key always == transcript_uuid).
-        # Compute both keys and emit one telemetry record so we detect immediately
-        # if CC ever breaks the invariant.  Fully guarded — never break the learn pipeline.
-        # v7.1.4: also records agent_id_recovered (Stage 1 outcome).
+        # v7.1.3 R1 — SubagentStop read_key==transcript_uuid invariant monitor.
+        # Guarded — never break the learn pipeline.
         _keymap_telemetry = None  # populated below for SubagentStop only
         if hook_event_name == 'SubagentStop':
             try:
@@ -746,27 +752,6 @@ def main():
                 }
             except Exception:
                 pass  # non-fatal — never break the learn pipeline
-
-        # v6.4.0: Resolve parent_agent_id from spawn log (best-effort).
-        # SubagentStop wrapper writes {event: "subagent_done", child_agent_id, parent_agent_id}
-        # BEFORE invoking ace_after_task.py, so the entry is present at read time.
-        parent_agent_id = None
-        if agent_id:
-            try:
-                spawn_log_path = Path('.claude/data/logs/ace-spawn-log.jsonl')
-                if spawn_log_path.exists():
-                    with open(spawn_log_path) as _sl:
-                        for _line in reversed(list(_sl)):
-                            try:
-                                _sp = json.loads(_line)
-                                if (_sp.get('event') == 'subagent_done'
-                                        and _sp.get('child_agent_id') == agent_id):
-                                    parent_agent_id = _sp.get('parent_agent_id')
-                                    break
-                            except Exception:
-                                continue
-            except Exception:
-                pass  # non-fatal
 
         # F-080: Read retrieval metadata BEFORE load_playbook_used unlinks the file.
         # load_retrieval_ids is read-only (does NOT unlink). Must call it first so
@@ -922,8 +907,6 @@ def main():
         # else: omit — server leaves session_id NULL, no false cross-task correlation
         if agent_id:
             trace["agent_id"] = agent_id
-        if parent_agent_id:
-            trace["parent_agent_id"] = parent_agent_id
         # F-080: Enrich trace with retrieval provenance (omit keys when absent/empty).
         if retrieval_id:
             trace["retrieval_id"] = retrieval_id
@@ -954,28 +937,11 @@ def main():
             session_commits = detect_commits_in_session(tools)
             if session_commits and git_context:
                 git_context['session_commits'] = session_commits
-        except Exception as e:
-            if os.environ.get('ACE_DEBUG_HOOKS') == '1':
-                with open('/tmp/ace_hook_debug.log', 'a') as f:
-                    f.write(f"Git context extraction failed: {e}\n")
+        except Exception:
+            pass  # git context is optional
 
         if git_context:
             trace["git"] = git_context
-
-        # STEP 6: Recall pinned session patterns
-        recalled_patterns = None
-        if context['project']:
-            session_file = Path(f"/tmp/ace-session-{context['project']}.txt")
-            if session_file.exists():
-                try:
-                    session_id_from_file = session_file.read_text().strip()
-                    recalled_patterns = recall_session(
-                        session_id=session_id_from_file,
-                        org=context['org'],
-                        project=context['project']
-                    )
-                except Exception:
-                    pass
 
         # STEP 7: Build user-visible message (output depends on verbosity setting)
         message_lines = []
@@ -995,11 +961,15 @@ def main():
 
         # STEP 8: Send to ace-cli learn via --transcript (temp file)
         try:
-            env = os.environ.copy()
-            if context['org']:
-                env['ACE_ORG_ID'] = context['org']
-            if context['project']:
-                env['ACE_PROJECT_ID'] = context['project']
+            # X-ACE-Client attribution (was exported by the bash wrapper via _ace_env.sh);
+            # run_learn copies os.environ, so set it here.
+            try:
+                _ver = json.loads((Path(__file__).resolve().parent.parent / '.claude-plugin' /
+                                   'plugin.json').read_text()).get('version') or '0.0.0'
+            except Exception:
+                _ver = '0.0.0'
+            os.environ['ACE_PLUGIN_VERSION'] = _ver
+            os.environ['ACE_CLIENT_ID'] = 'claude-code-plugin/' + _ver
 
             # Get verbosity from env, default to 'detailed' for meaningful feedback
             verbosity = os.environ.get('ACE_VERBOSITY', 'detailed')
@@ -1008,15 +978,25 @@ def main():
             # cannot read payloads > ~64KB (OS pipe buffer) -> "Failed to read from
             # stdin" + BrokenPipe -> any trace over ~64KB silently failed to learn.
             # F-080: pass retrieval_id + applied_log_ids flags when present.
-            result = _learn_via_transcript(
-                trace, env=env, verbosity=verbosity,
-                retrieval_id=retrieval_id,
-                applied_log_ids=applied_log_ids,
-            )
-
-            if result.returncode == 0:
+            # Per-agent in-flight lock (plugin data): held while ace-cli learn runs.
+            try:
+                lock_file.touch()
+            except OSError:
+                pass
+            try:
+                # C2: run_learn (timeout 120 s, retry-once on 'database is locked').
+                response, _learn_ms = run_learn(
+                    trace, retrieval_id=retrieval_id, applied_log_ids=applied_log_ids,
+                    org=context['org'], project=context['project'], verbosity=verbosity,
+                    hook_event_name=hook_event_name)
+            finally:
                 try:
-                    response = json.loads(result.stdout)
+                    lock_file.unlink()
+                except OSError:
+                    pass
+
+            if response is not None:
+                try:
                     stats = response.get('learning_statistics', {})
 
                     # Handle nested learning_statistics structure from CLI v3.0.0+
@@ -1098,7 +1078,7 @@ def main():
                 except json.JSONDecodeError:
                     message_lines.append("✅ [ACE] Learning captured!")
             else:
-                message_lines.append(f"⚠️ [ACE] Learning capture failed: {result.stderr}")
+                message_lines.append("⚠️ [ACE] Learning capture failed (see ace-hook-errors.log)")
                 message_lines.append("   You can manually capture with: /ace-learn")
 
         except subprocess.TimeoutExpired:
@@ -1137,42 +1117,24 @@ def main():
         except Exception:
             pass  # Non-fatal: continue without metrics logging
 
+        # Self-eval request for the next UserPromptSubmit (Stop only)
+        if hook_event_name == 'Stop' and playbook_used:
+            write_eval_request(len(playbook_used), len(tools))
+
         # STEP 9: Clear accumulated tools (cleanup)
-        sys.path.insert(0, str(Path(__file__).parent))
+        # Scope to this agent: a subagent stop must not wipe the main agent's rows; a
+        # degenerate SubagentStop (no id at all) clears nothing.
         from ace_tool_accumulator import clear_session
-        clear_session(session_id, working_dir)
+        if hook_event_name != 'SubagentStop' or agent_id:
+            clear_session(session_id, working_dir, agent_id=agent_id if hook_event_name == 'SubagentStop' else None)
 
-        if os.environ.get('ACE_DEBUG_HOOKS') == '1':
-            with open('/tmp/ace_hook_debug.log', 'a') as f:
-                f.write(f"Cleared accumulated tools for session {session_id}\n")
-
-        # Add recalled patterns message
-        if recalled_patterns and recalled_patterns.get('count', 0) > 0:
-            pattern_count = recalled_patterns['count']
-            message_lines.insert(1, f"🔄 [ACE] Recalled {pattern_count} patterns from session")
-
-        # Output JSON with systemMessage + recalled patterns
-        output = {
-            "systemMessage": "\n".join(message_lines)
-        }
-
-        if recalled_patterns and recalled_patterns.get('count', 0) > 0:
-            ace_context = f"<ace-patterns>\n{json.dumps(recalled_patterns, indent=2)}\n</ace-patterns>"
-            output["hookSpecificOutput"] = {
-                "hookEventName": hook_event_name,
-                "additionalContext": ace_context
-            }
-
-        print(json.dumps(output))
+        # Async hook: output is advisory only (logged by CC, not shown)
+        print(json.dumps({"systemMessage": "\n".join(message_lines)}))
         sys.exit(0)
 
     except Exception as e:
         # Log error but don't block
-        if os.environ.get('ACE_DEBUG_HOOKS') == '1':
-            with open('/tmp/ace_hook_debug.log', 'a') as f:
-                f.write(f"FATAL ERROR: {e}\n")
-                import traceback
-                f.write(traceback.format_exc())
+        log_hook_exception(hook_name, e)
         print(f"[ERROR] ACE after-task hook failed: {e}", file=sys.stderr)
         sys.exit(0)
 

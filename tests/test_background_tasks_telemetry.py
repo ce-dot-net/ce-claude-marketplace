@@ -5,14 +5,11 @@ ADDITIVE ONLY: verifies that the new ``log_stop_telemetry`` helper records the
 count of CC-managed background tasks present at session-stop time, plus the
 in-flight learn-lock state, into the canonical ace-relevance.jsonl sink.
 
-CRITICAL invariant under test: this is telemetry only. It must NEVER influence
-the /tmp/ace-learn-inflight-{SESSION_ID}.lock mechanism or PreCompact blocking.
-The lock is verified-working and lives entirely in the bash wrappers; these
-tests only assert the telemetry payload shape and graceful degradation.
+Telemetry only: it never gates learning. These tests assert the payload
+shape and graceful degradation of the logger helper.
 """
 
 import json
-import subprocess
 import sys
 from pathlib import Path
 
@@ -25,17 +22,6 @@ sys.path.insert(
 
 import ace_relevance_logger  # noqa: E402
 from ace_relevance_logger import ACERelevanceLogger  # noqa: E402
-
-STOP_WRAPPER = (
-    REPO_ROOT / "plugins" / "ace" / "scripts" / "ace_stop_wrapper.sh"
-)
-SUBAGENT_WRAPPER = (
-    REPO_ROOT / "plugins" / "ace" / "scripts" / "ace_subagent_stop_wrapper.sh"
-)
-PRECOMPACT_WRAPPER = (
-    REPO_ROOT / "plugins" / "ace" / "scripts" / "ace_precompact_wrapper.sh"
-)
-
 
 @pytest.fixture
 def tmp_logger(tmp_path, monkeypatch):
@@ -133,81 +119,9 @@ def test_never_raises_on_bad_input(tmp_logger):
     )  # must not raise
 
 
-# ── Static guard: lock mechanism MUST remain intact (regression) ─────────────
-
-def test_stop_wrapper_still_creates_learn_lock():
-    src = STOP_WRAPPER.read_text()
-    assert 'LEARN_LOCK="/tmp/ace-learn-inflight-${SESSION_ID:-unknown}.lock"' in src
-    assert 'touch "$LEARN_LOCK"' in src
-    # cleanup still present in bg subshell
-    assert '"$LEARN_LOCK"' in src and 'rm -f "$TEMP_INPUT" "$TEMP_OUTPUT" "$LEARN_LOCK"' in src
-
-
-def test_subagent_wrapper_still_creates_learn_lock():
-    src = SUBAGENT_WRAPPER.read_text()
-    assert 'LEARN_LOCK="/tmp/ace-learn-inflight-${_ASID}.lock"' in src
-    assert 'touch "$LEARN_LOCK"' in src
-    assert 'rm -f "$TEMP_INPUT" "$LEARN_LOCK"' in src
-
-
-def test_precompact_still_blocks_on_lock():
-    src = PRECOMPACT_WRAPPER.read_text()
-    assert 'LEARN_LOCK="/tmp/ace-learn-inflight-${SESSION_ID}.lock"' in src
-    assert 'find "$LEARN_LOCK" -mmin -10' in src
-    assert '"decision": "block"' in src or 'decision: "block"' in src
-    assert "exit 2" in src
-
-
-# ── Static guard: wrappers extract background_tasks count additively ─────────
-
-def test_stop_wrapper_extracts_background_tasks_count():
-    src = STOP_WRAPPER.read_text()
-    assert "background_tasks" in src
-    assert "BG_TASK_COUNT" in src
-    # additive: must not gate any decision on the count
-    assert "log_stop_telemetry" in src
-
-
-def test_subagent_wrapper_extracts_background_tasks_count():
-    src = SUBAGENT_WRAPPER.read_text()
-    assert "background_tasks" in src
-    assert "BG_TASK_COUNT" in src
-    assert "log_stop_telemetry" in src
-
-
-def test_background_tasks_extraction_does_not_set_exit_on_failure():
-    # jq parse of background_tasks must be guarded with `|| echo "0"` so a
-    # malformed/null field cannot abort the Stop hook (risk #3 + set -e).
-    for w in (STOP_WRAPPER, SUBAGENT_WRAPPER):
-        src = w.read_text()
-        # the extraction line must tolerate failure
-        line = [ln for ln in src.splitlines() if "BG_TASK_COUNT=" in ln and "background_tasks" in ln]
-        assert line, f"no BG_TASK_COUNT extraction in {w.name}"
-        assert "|| echo" in line[0], f"BG_TASK_COUNT extraction in {w.name} not failure-guarded"
-
-
-# ── jq behaviour: length on array regardless of element shape ────────────────
-
-@pytest.mark.parametrize(
-    "payload,expected",
-    [
-        ('{"background_tasks": []}', "0"),
-        ('{"background_tasks": [{"id": "a"}]}', "1"),
-        ('{"background_tasks": [{"id": "a"}, {"id": "b"}, {"id": "c"}]}', "3"),
-        ('{"no_field": true}', "0"),
-        ('{"background_tasks": null}', "0"),
-    ],
-)
-def test_jq_length_extraction(payload, expected):
-    # Mirrors the exact bash extraction expression so element schema is irrelevant.
-    cmd = (
-        "echo '%s' | jq '.background_tasks | length // 0' 2>/dev/null || echo \"0\""
-        % payload
-    )
-    out = subprocess.run(
-        ["bash", "-c", cmd], capture_output=True, text=True
-    ).stdout.strip()
-    assert out == expected
+# v8 (DESIGN §6 WP-C): the bash-wrapper lock/BG_TASK_COUNT static guards were
+# removed — wrappers are thin shims; the real-lock telemetry is pinned by
+# tests/test_stop_v8.py::test_stop_telemetry_reports_real_learn_lock.
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ PLUGIN_ROOT = Path(__file__).parent.parent / 'plugins' / 'ace'
 SCRIPTS_DIR = PLUGIN_ROOT / 'scripts'
 SHARED_HOOKS = PLUGIN_ROOT / 'shared-hooks'
 STATUSLINE = SCRIPTS_DIR / 'ace_statusline.sh'
-STOP_WRAPPER = SCRIPTS_DIR / 'ace_stop_wrapper.sh'
+STOP_WRAPPER = SHARED_HOOKS / 'ace_after_task.py'  # v8: Stop logic lives in Python (thin shim wrapper)
 BEFORE_TASK = SHARED_HOOKS / 'ace_before_task.py'
 
 
