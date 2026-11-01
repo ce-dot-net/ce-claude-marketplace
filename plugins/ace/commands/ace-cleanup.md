@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 model: claude-haiku-4-5
 description: Manage ACE log files and event logging toggle
 argument-hint: "[--days N] [--status] [--enable-logging] [--disable-logging]"

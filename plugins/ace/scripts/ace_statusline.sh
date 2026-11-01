@@ -15,31 +15,61 @@ CYN="\033[36m"
 WHT="\033[37m"
 RED="\033[31m"
 
-# ── Read CC JSON from stdin ──
+# ── ONE python3 call parses CC stdin JSON + relevance log + review file ──
+# (v8: replaces 13 jq spawns + a second python3; CC debounces statusline at 300 ms.)
+# Python prints shlex-quoted VAR=value lines; bash evals them. Missing python3 => defaults.
+cwd=""; used_pct=0; model_name=""; effort_level=""; thinking_enabled=false; git_worktree=""
+rl_5h_pct=0; rl_5h_resets=""; rl_7d_pct=0; rl_7d_resets=""
+patterns_injected=0; avg_relevance=0; domains_count=0; domain_shifts=0; quality_pct=0; time_saved=""
 INPUT_JSON=$(cat 2>/dev/null || echo "{}")
-cwd=$(echo "$INPUT_JSON" | jq -r '.cwd // ""' 2>/dev/null || echo "")
-used_pct=$(echo "$INPUT_JSON" | jq -r '.context_window.used_percentage // 0' 2>/dev/null || echo "0")
-session_id=$(echo "$INPUT_JSON" | jq -r '.session_id // ""' 2>/dev/null || echo "")
-model_name=$(echo "$INPUT_JSON" | jq -r '.model.display_name // ""' 2>/dev/null || echo "")
-
-# ── Round floats to integers (CC used_percentage can be a float e.g. 28.999…) ──
-# FIX B: assignment-with-cmdsubst doesn't trigger errexit; ${x:-0} fallback
-#         covers empty/non-numeric input without "00" artefact from || echo 0.
-used_pct=$(printf '%.0f' "${used_pct:-0}" 2>/dev/null); used_pct=${used_pct:-0}
-
-# v6.5.0 Item #3 — newer CC stdin fields (CC 2.1.97/2.1.119/2.1.80 …).
-# All empty/zero when running on older CC → conditional rendering keeps backward-compat.
-effort_level=$(echo "$INPUT_JSON" | jq -r '.effort.level // ""' 2>/dev/null || echo "")
-thinking_enabled=$(echo "$INPUT_JSON" | jq -r '.thinking.enabled // false' 2>/dev/null || echo "false")
-git_worktree=$(echo "$INPUT_JSON" | jq -r '.workspace.git_worktree // ""' 2>/dev/null || echo "")
-rl_5h_pct=$(echo "$INPUT_JSON" | jq -r '.rate_limits.five_hour.used_percentage // 0' 2>/dev/null || echo "0")
-rl_5h_resets=$(echo "$INPUT_JSON" | jq -r '.rate_limits.five_hour.resets_at // ""' 2>/dev/null || echo "")
-rl_7d_pct=$(echo "$INPUT_JSON" | jq -r '.rate_limits.seven_day.used_percentage // 0' 2>/dev/null || echo "0")
-rl_7d_resets=$(echo "$INPUT_JSON" | jq -r '.rate_limits.seven_day.resets_at // ""' 2>/dev/null || echo "")
-# Round rate-limit percentages to integers (same float-safety as used_pct above)
-# FIX B: same pattern — avoids "00" artefact from non-numeric input.
-rl_5h_pct=$(printf '%.0f' "${rl_5h_pct:-0}" 2>/dev/null); rl_5h_pct=${rl_5h_pct:-0}
-rl_7d_pct=$(printf '%.0f' "${rl_7d_pct:-0}" 2>/dev/null); rl_7d_pct=${rl_7d_pct:-0}
+PYOUT=$(python3 -c '
+import json, os, shlex, sys
+def num(v):
+    try: return "%.0f" % float(v)   # CC used_percentage can be a float e.g. 28.999
+    except Exception: return "0"
+def get(d, *ks):
+    for k in ks:
+        d = d.get(k) if isinstance(d, dict) else None
+    return d
+try: j = json.loads(sys.stdin.read() or "{}")
+except Exception: j = {}
+if not isinstance(j, dict): j = {}
+out = {
+ "cwd": get(j, "cwd") or "", "used_pct": num(get(j, "context_window", "used_percentage") or 0),
+ "model_name": get(j, "model", "display_name") or "", "effort_level": get(j, "effort", "level") or "",
+ "thinking_enabled": "true" if get(j, "thinking", "enabled") is True else "false",
+ "git_worktree": get(j, "workspace", "git_worktree") or "",
+ "rl_5h_pct": num(get(j, "rate_limits", "five_hour", "used_percentage") or 0),
+ "rl_5h_resets": get(j, "rate_limits", "five_hour", "resets_at") or "",
+ "rl_7d_pct": num(get(j, "rate_limits", "seven_day", "used_percentage") or 0),
+ "rl_7d_resets": get(j, "rate_limits", "seven_day", "resets_at") or "",
+}
+logs = os.path.join(out["cwd"], ".claude", "data", "logs") if out["cwd"] else ""
+# Task boundary: events since last "execution" event (Stop hook writes these)
+try:
+    events = []
+    with open(os.path.join(logs, "ace-relevance.jsonl")) as f:
+        for line in f:
+            try: events.append(json.loads(line))
+            except Exception: pass
+    last = max([i for i, e in enumerate(events) if isinstance(e, dict) and e.get("event") == "execution"] or [-1])
+    cur = [e for e in events[last + 1:] if isinstance(e, dict)]
+    s = [e for e in cur if e.get("event") == "search"]
+    out["patterns_injected"] = sum(e.get("patterns_injected", 0) for e in s)
+    out["avg_relevance"] = int(sum(e.get("avg_confidence", 0) for e in s) / len(s) * 100) if s else 0
+    out["domains_count"] = len(set(d for e in s for d in e.get("domains", [])))
+    out["domain_shifts"] = len([e for e in cur if e.get("event") == "domain_shift"])
+except Exception: pass
+# Self-eval review result (no fake helpfulness). jq-equivalent: .quality_pct // .helpful_pct // 0
+try:
+    with open(os.path.join(logs, "ace-review-result.json")) as f: r = json.load(f)
+    out["quality_pct"] = r.get("quality_pct") or r.get("helpful_pct") or 0
+    out["time_saved"] = r.get("time_saved") or ""
+except Exception: pass
+for k, v in out.items(): print("%s=%s" % (k, shlex.quote(str(v))))
+' <<<"$INPUT_JSON" 2>/dev/null || true)
+eval "$PYOUT"
+used_pct=${used_pct:-0}; rl_5h_pct=${rl_5h_pct:-0}; rl_7d_pct=${rl_7d_pct:-0}
 
 # ── Format Unix epoch resets_at to human-readable local time ──
 # Cross-platform: date -r (BSD/macOS) with GNU/Linux fallback; pure-integer guard.
@@ -72,83 +102,10 @@ bar_empty=""
 for (( i=0; i<filled; i++ )); do bar_filled+="█"; done
 for (( i=0; i<empty; i++ )); do bar_empty+="░"; done
 
-# ── Locate relevance log ──
-RELEVANCE_FILE=""
-if [ -n "$cwd" ] && [ -f "${cwd}/.claude/data/logs/ace-relevance.jsonl" ]; then
-  RELEVANCE_FILE="${cwd}/.claude/data/logs/ace-relevance.jsonl"
-fi
-
-# ── Defaults ──
-patterns_injected=0
-avg_relevance=0
-domains_count=0
-domain_shifts=0
-quality_pct=0
-time_saved=""
-
-# ── Read per-task metrics from JSONL ──
-# Task boundary: events since last "execution" event (Stop hook writes these)
-# This gives us "current task" metrics that reset after each learn cycle
-if [ -n "$RELEVANCE_FILE" ] && [ -f "$RELEVANCE_FILE" ]; then
-  # Use python for reliable task-boundary detection (fast, <50ms)
-  METRICS=$(python3 -c "
-import json, sys
-events = []
-with open('$RELEVANCE_FILE') as f:
-    for line in f:
-        line = line.strip()
-        if line:
-            try: events.append(json.loads(line))
-            except: pass
-# Find last execution event (= task boundary from Stop hook)
-last_exec = -1
-for i, e in enumerate(events):
-    if e.get('event') == 'execution':
-        last_exec = i
-# Current task = everything after last execution
-current = events[last_exec + 1:] if last_exec >= 0 else events
-searches = [e for e in current if e.get('event') == 'search']
-shifts = [e for e in current if e.get('event') == 'domain_shift']
-inj = sum(s.get('patterns_injected', 0) for s in searches)
-rel = int(sum(s.get('avg_confidence', 0) for s in searches) / len(searches) * 100) if searches else 0
-doms = len(set(d for s in searches for d in s.get('domains', [])))
-shf = len(shifts)
-
-# No fake helpfulness — only real self-eval from ace-review-result.json
-print(f'patterns_injected={inj}')
-print(f'avg_relevance={rel}')
-print(f'domains_count={doms}')
-print(f'domain_shifts={shf}')
-" 2>/dev/null || echo "")
-  patterns_injected=$(echo "$METRICS" | grep '^patterns_injected=' | cut -d= -f2)
-  avg_relevance=$(echo "$METRICS" | grep '^avg_relevance=' | cut -d= -f2)
-  domains_count=$(echo "$METRICS" | grep '^domains_count=' | cut -d= -f2)
-  domain_shifts=$(echo "$METRICS" | grep '^domain_shifts=' | cut -d= -f2)
-  # Ensure defaults if parsing failed
-  patterns_injected="${patterns_injected:-0}"
-  avg_relevance="${avg_relevance:-0}"
-  domains_count="${domains_count:-0}"
-  domain_shifts="${domain_shifts:-0}"
-fi
-
 # ── Relevance % color ──
 if [ "$avg_relevance" -ge 70 ] 2>/dev/null; then REL_C="$GRN"
 elif [ "$avg_relevance" -ge 40 ] 2>/dev/null; then REL_C="$YEL"
 else REL_C="$RED"; fi
-
-# ── Read self-eval review result (ace-review-result.json) ──
-REVIEW_FILE=""
-if [ -n "$cwd" ] && [ -f "${cwd}/.claude/data/logs/ace-review-result.json" ]; then
-  REVIEW_FILE="${cwd}/.claude/data/logs/ace-review-result.json"
-  review_quality_pct=$(jq -r '.quality_pct // .helpful_pct // 0' "$REVIEW_FILE" 2>/dev/null || echo "0")
-  review_time_saved=$(jq -r '.time_saved // ""' "$REVIEW_FILE" 2>/dev/null || echo "")
-  if [ "$review_quality_pct" != "0" ] && [ "$review_quality_pct" != "" ]; then
-    quality_pct="$review_quality_pct"
-  fi
-  if [ -n "$review_time_saved" ] && [ "$review_time_saved" != "null" ] && [ "$review_time_saved" != "" ]; then
-    time_saved="$review_time_saved"
-  fi
-fi
 
 # ═══════════════════════════════════════
 # BUILD OUTPUT — Line 1: Model · context bar · context%

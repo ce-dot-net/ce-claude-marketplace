@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 description: Render the local ACE knowledge-graph as a self-contained interactive HTML report
 argument-hint: "[--min-weight N] [--max-edges N]"
 allowed-tools: Bash(python3:*), Read

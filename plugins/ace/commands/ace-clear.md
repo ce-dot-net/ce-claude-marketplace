@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 description: Clear ACE playbook (reset all learned bullets)
 argument-hint: "[--confirm]"
 allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read

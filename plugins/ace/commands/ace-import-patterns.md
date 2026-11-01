@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 description: Import ACE playbook from JSON file
 argument-hint: <file>
 allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
