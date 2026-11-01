@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 description: Login to ACE using browser-based device code authentication
 allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(mkdir:*), Bash(cat:*), Bash(rm:*), Read
 ---

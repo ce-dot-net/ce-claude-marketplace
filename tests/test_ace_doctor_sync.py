@@ -127,16 +127,17 @@ class TestInstallPath:
 
 
 # ---------------------------------------------------------------------------
-# 5. Hook event completeness — all 10 events must be mentioned
+# 5. Hook event completeness — all v8 events must be mentioned
+#    (v8 DESIGN §3: PreToolUse/PreCompact/PermissionRequest removed,
+#     PostToolUseFailure added; see tests/test_ace_doctor_v8.py for absence checks)
 # ---------------------------------------------------------------------------
 
 EXPECTED_EVENTS = [
-    "PreToolUse",
-    "PreCompact",
     "SessionStart",
     "UserPromptSubmit",
     "PostToolUse",
-    "PermissionRequest",
+    "PostToolUseFailure",
+    "SubagentStart",
     "PermissionDenied",
     "Stop",
     "SessionEnd",

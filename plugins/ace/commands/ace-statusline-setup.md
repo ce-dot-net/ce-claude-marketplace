@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 model: claude-haiku-4-5
 description: Install, update, or uninstall ACE statusline. Use '/ace-statusline-setup' to install, '/ace-statusline-setup update' to update, '/ace-statusline-setup uninstall' to remove.
 argument-hint: "[update|uninstall]"
@@ -17,7 +18,7 @@ allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(cp:*), Bash(chmod:
 
 1. Copy the statusline script from the plugin:
 ```bash
-cp "$CLAUDE_PLUGIN_ROOT/scripts/ace_statusline.sh" ~/.claude/ace_statusline.sh
+cp "${CLAUDE_PLUGIN_ROOT}/scripts/ace_statusline.sh" ~/.claude/ace_statusline.sh
 chmod +x ~/.claude/ace_statusline.sh
 ```
 
@@ -33,7 +34,7 @@ jq '.statusLine = {"type": "command", "command": "~/.claude/ace_statusline.sh", 
 
 Re-copy the latest script from the plugin (preserves settings.json config):
 ```bash
-cp "$CLAUDE_PLUGIN_ROOT/scripts/ace_statusline.sh" ~/.claude/ace_statusline.sh
+cp "${CLAUDE_PLUGIN_ROOT}/scripts/ace_statusline.sh" ~/.claude/ace_statusline.sh
 chmod +x ~/.claude/ace_statusline.sh
 ```
 

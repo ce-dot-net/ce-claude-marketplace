@@ -4,99 +4,47 @@
 
 This document provides a comprehensive analysis of how the ACE (Agentic Context Engineering) plugin implements the ACE framework architecture, including verification of all components.
 
-**Current Version**: 5.1.4 (CLI-Based Architecture, Session Pinning, Rich Context Learning)
+**Current Version**: 8.0.0 (plugin-data state, single-spawn CLI, slim hook topology)
 
 ---
 
-## 🆕 New in v5.1.4: Session Pinning & Rich Context Learning
+## v8.0.0: Plugin-Data State, Single-Spawn CLI, Slim Hook Topology
 
-### Session Pinning Architecture
+**Requires**: Claude Code >= 2.1.300, ace-cli >= 4.1.2, @ace-sdk/core >= 3.2.2.
 
-**Problem Solved**: Retrieved patterns were lost after Claude Code's context compaction, forcing re-fetching from server or losing knowledge mid-task.
+### State layout (`CLAUDE_PLUGIN_DATA`)
 
-**Solution**: Session pinning with 24-hour TTL in local SQLite database, enabling fast pattern recall across context compaction events.
+All plugin state lives under `$CLAUDE_PLUGIN_DATA` (default `~/.claude/plugins/data/ace-ce-dot-net-marketplace`) via
+`shared-hooks/utils/plugin_data_dir.py`; nothing is written to the system temp dir:
 
-**Architecture**:
 ```
-┌─────────────────────────────────────────────────────────┐
-│ UserPromptSubmit Hook: Pattern Retrieval & Pinning    │
-│ 1. Generate UUID session ID                            │
-│ 2. Store session ID in /tmp/ace-session-{project}.txt │
-│ 3. Call: ace-cli search --stdin --pin-session {uuid}   │
-│ 4. Patterns saved to ~/.ace-cache/sessions.db         │
-│ 5. Inject patterns as <ace-patterns> context           │
-└─────────────────────────────────────────────────────────┘
-                    ↓
-┌─────────────────────────────────────────────────────────┐
-│ Work Phase: Patterns Persist in Session Storage       │
-│ - Session TTL: 24 hours (vs 2-hour cache TTL)         │
-│ - Survives context compaction events                   │
-│ - No server calls needed for recall                    │
-└─────────────────────────────────────────────────────────┘
-                    ↓
-┌─────────────────────────────────────────────────────────┐
-│ PreCompact Hook: Pattern Recall Before Compaction     │
-│ 1. Read session ID from /tmp/ace-session-{project}.txt│
-│ 2. Call: ace-cli cache recall --session {uuid}         │
-│ 3. Retrieve patterns in ~10ms (89% faster vs server)  │
-│ 4. Re-inject as additionalContext                      │
-│ 5. Continue learning with full pattern context        │
-└─────────────────────────────────────────────────────────┘
+<root>/python_path                    # interpreter resolved once by SessionStart
+<root>/cli_version.json               # cached ace-cli version (no per-search probe)
+<root>/logs/ace-hook-errors.log       # single rotating error log for all hooks
+<root>/cache/search/<sha256>.json     # disk search cache (15 min TTL)
+<root>/projects/<project_id>/domains.json
+<root>/projects/<project_id>/sessions/<session_id>/   # per-session state, removed by SessionEnd
 ```
 
-**Benefits**:
-- **89% Faster Recall**: ~10ms (session cache) vs ~100ms (server fetch)
-- **Pattern Persistence**: 24-hour TTL ensures patterns survive multiple compaction cycles
-- **Zero Server Load**: Recall operations are fully local (SQLite query)
-- **Graceful Degradation**: Falls back to cache/server if session expired or unavailable
+`.claude/data/logs/ace-relevance.jsonl` stays in the project (read by insights, graph, doctor, statusline).
 
-**Implementation Files**:
-- `shared-hooks/utils/ace_cli.py` - Session pinning functions (`run_search`, `recall_session`, `check_session_pinning_available`)
-- `shared-hooks/ace_before_task.py` - UUID generation, session storage, pattern pinning
-- `shared-hooks/ace_after_task.py` - Session recall, pattern re-injection
+### Hook topology
 
-**Requirements**: ace-cli v1.0.11+ (introduces session pinning support)
+| Event | Mode | Script |
+|---|---|---|
+| SessionStart (startup/clear, async update check, compact) | sync/async | `ace_install_cli.sh`, `ace_sessionstart_compact.sh` |
+| UserPromptSubmit | sync | `ace_before_task_wrapper.sh` (one `ace-cli search`) |
+| PostToolUse | async accumulator + sync domain shift (Read/Glob/Grep) | `ace_posttooluse_wrapper.sh`, `ace_posttooluse_domain_inject.sh` |
+| PostToolUseFailure (Bash) | async | `ace_posttoolusefailure_wrapper.sh` |
+| SubagentStart | sync | `ace_subagent_start_wrapper.sh` |
+| Stop / SubagentStop | async | `ace_stop_wrapper.sh`, `ace_subagent_stop_wrapper.sh` |
+| PermissionDenied | async | `ace_permission_denied_wrapper.sh` |
+| SessionEnd | sync | `ace_sessionend_wrapper.sh` |
 
-### Rich Context Extraction
-
-**Problem Solved**: Hooks were sending generic messages ("Edit: ", "Session work") creating duplicate, low-value patterns in the playbook.
-
-**Solution**: Extract comprehensive context from events - user requests, file paths, changes, outcomes, error resolutions.
-
-**PostToolUse Hook Improvements**:
-```python
-# Before (v5.1.3):
-task = "Edit: "  # Generic, no context
-
-# After (v5.1.4):
-task = "Modified code: hero.tsx with JWT authentication flow"
-# Includes: file path, specific changes, intent
-```
-
-**Context Extraction Strategy**:
-- Extract file paths from tool descriptions
-- Include tool output, summary, details, error messages
-- Capture 10 assistant messages (up from 2-3) for full session arc
-- List ALL files modified (not just first 5)
-- Increased limits: task 300→2000 chars, output 800→10000 chars
-- No trajectory truncation (send full descriptions to server)
-
-**Server-Side Filtering**:
-- Reflector (Sonnet 4) and Curator (Haiku 4.5) handle deduplication
-- Hooks send FULL context, server extracts valuable patterns
-- Result: Unique, specific patterns with actionable details
-
-**PostToolUse Trigger Logic**:
-- **Sequence Completion Detection**: Learning triggers when work is COMPLETE (not mid-task)
-- Tracks consecutive Edit/Write operations via `/tmp/ace_edit_sequence_state.json`
-- Triggers when switching from Edit/Write to different tool (after 2+ edits)
-- Example: `Edit→Edit→Edit→Read` triggers on Read (sequence complete)
-- Prevents mid-task noise while ensuring complete knowledge capture
-
-**Impact**:
-- No more generic "Edit: " or "Session work" patterns
-- Playbook filled with specific, valuable lessons
-- Learning captured at task completion (prevents knowledge loss)
+Every script is a thin shim that execs the Python hook (no jq, no cat). Removed in v8: the PreToolUse,
+PreCompact and PermissionRequest hooks. Patterns survive compaction because UserPromptSubmit saves the
+rendered context in the session state and the SessionStart `compact` hook re-injects it.
+See `ADR-001-language.md` for why the implementation stays Python.
 
 ---
 

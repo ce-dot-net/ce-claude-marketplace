@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 model: claude-haiku-4-5
 description: List available pattern domains for filtering
 argument-hint: "[--min-patterns N]"
