@@ -41,6 +41,7 @@ from ace_relevance_logger import log_execution_metrics, log_hook_error, log_stop
 from patterns_used_state import (load_playbook_used, reap_patterns_used,
                                  load_retrieval_ids, load_task_session_id, load_state)
 import plugin_data_dir
+from ace_cli import run_learn  # C2: single spawn + DESIGN §8 'database is locked' retry
 sys.path.insert(0, str(Path(__file__).parent))
 from ace_tool_accumulator import log_hook_exception, read_event
 
@@ -63,11 +64,7 @@ except Exception:
 CLI_CMD = 'ace-cli'
 
 
-MACHINE_PROMPT_PREFIXES = (
-    '<task-notification', '<agent-message', '<cross-session-message', '[system notification',
-    '<local-command', '<command-name>', '<bash-input>', '<bash-stdout>', '<bash-stderr>',
-    '<system-reminder>',
-)
+from utils.machine_prompts import MACHINE_PROMPT_PREFIXES  # shared with WP-B UPS guard
 
 
 def is_trivial_task(task_description: str) -> bool:
@@ -262,6 +259,9 @@ def summarize_tool_response(tool_name: str, tool_response: dict) -> str:
         return response_str
 
 
+AGENT_TRANSCRIPT_MAX_BYTES = 8 * 1024 * 1024
+
+
 def parse_agent_transcript(path: str) -> list:
     """
     Parse a per-agent transcript JSONL file (CC's agent_transcript_path).
@@ -284,8 +284,15 @@ def parse_agent_transcript(path: str) -> list:
     order = []  # preserve encounter order by tool_use_id
 
     transcript_file = Path(path).expanduser()
-    with open(transcript_file, 'r') as f:
-        for line in f:
+    with open(transcript_file, 'rb') as fb:
+        size = fb.seek(0, os.SEEK_END)
+        start = max(0, size - AGENT_TRANSCRIPT_MAX_BYTES)  # size guard: keep the tail only
+        fb.seek(start)
+        raw_lines = fb.read().decode('utf-8', 'replace').splitlines()
+    if start:
+        raw_lines = raw_lines[1:]  # first line is cut mid-record
+    if raw_lines:
+        for line in raw_lines:
             if not line.strip():
                 continue
             try:
@@ -385,7 +392,8 @@ def _agent_id_from_transcript_path(path):
     return None
 
 
-def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = None, agent_transcript_path: str = None) -> tuple:
+def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = None, agent_transcript_path: str = None,
+                                            scope_agent_id=None) -> tuple:
     """
     Build REAL trajectory from PostToolUse accumulated data or per-agent transcript.
 
@@ -425,7 +433,7 @@ def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = 
             tools = None
 
     if tools is None:
-        tools = get_session_tools(session_id, working_dir)
+        tools = get_session_tools(session_id, working_dir, agent_id=scope_agent_id)
     trajectory = []
 
     for i, (tool_name, tool_input_json, tool_response_json, tool_use_id, agent_id, start_ms, end_ms, duration_ms) in enumerate(tools, 1):
@@ -458,7 +466,7 @@ def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = 
     return trajectory, tools
 
 
-def skip_learning(reason, event=None):
+def skip_learning(reason, event=None, agent_id=None):
     """
     Skip learning with user feedback.
 
@@ -468,18 +476,29 @@ def skip_learning(reason, event=None):
     so a skipped (sub)agent doesn't leave an orphan until the SessionEnd GC.
     This path fires NO learn, so reaping here can never strip IDs from a trace
     that is sent to the server. Best-effort: a reap failure never breaks the
-    skip. The suffix is derived from `event` because agent_id is not yet in
-    scope at the skip sites (they run before it is computed).
+    skip.
+
+    `agent_id` is the RECOVERED id (v7.1.4); a SubagentStop with no id at all
+    never reaps (reap_patterns_used would resolve to the MAIN agent's file).
+    The self-eval request is still written on a skipped Stop that had injected
+    patterns (7.1.14 parity), read BEFORE the reap.
     """
     if event:
+        hook = event.get('hook_event_name', 'Stop')
+        sid = event.get('session_id', '')
+        aid = agent_id or event.get('agent_id') or None
         try:
-            reap_patterns_used(
-                event.get('session_id', ''),
-                event.get('agent_id') or None,
-                event.get('hook_event_name', 'Stop'),
-            )
+            if hook == 'Stop':
+                n = len(load_state(sid, None, hook).get('pattern_ids') or [])
+                if n:
+                    write_eval_request(n, 0)
         except Exception:
-            pass  # reaping is best-effort; never break the skip path
+            pass
+        if hook != 'SubagentStop' or aid:
+            try:
+                reap_patterns_used(sid, aid, hook)
+            except Exception:
+                pass  # reaping is best-effort; never break the skip path
 
     return {
         "continue": True,
@@ -583,50 +602,11 @@ def _resolve_effort_level(event):
     return raw if isinstance(raw, str) and raw else "normal"
 
 
-def _learn_via_transcript(trace, env=None, verbosity='detailed', timeout=300, cli_cmd=CLI_CMD,
-                          retrieval_id=None, applied_log_ids=None):
-    """Submit an ExecutionTrace to `ace-cli learn` via a temp file + --transcript.
-
-    ace-cli `learn --stdin` cannot read payloads larger than the ~64KB OS pipe
-    buffer — it errors {"message":"Failed to read from stdin"} and the producer
-    side gets a BrokenPipe, so ANY trace over ~64KB silently fails to learn
-    (empirically: 64KB ok, 80KB fails; a 3.25MB --transcript file succeeds).
-    A transcript file has no such limit, so traces of any size (up to the 2MB
-    truncate cap) submit reliably. Returns the subprocess.CompletedProcess; the
-    temp file is always removed.
-
-    F-080: retrieval_id and applied_log_ids are passed as --retrieval-id and
-    --applied-log-ids flags to ace-cli learn when present/non-empty.
-    """
-    import tempfile
-    fd, path = tempfile.mkstemp(prefix='ace-trace-', suffix='.json')
-    try:
-        with os.fdopen(fd, 'w') as f:
-            json.dump(trace, f)
-        cmd = [cli_cmd, 'learn', '--transcript', path, '--json',
-               '--timeout', '300000', '--verbosity', verbosity]
-        if retrieval_id:
-            cmd += ['--retrieval-id', retrieval_id]
-        if applied_log_ids:
-            cmd += ['--applied-log-ids', ','.join(str(x) for x in applied_log_ids)]
-        return subprocess.run(
-            cmd,
-            text=True,
-            capture_output=True,
-            timeout=timeout,
-            env=env,
-        )
-    finally:
-        try:
-            os.unlink(path)
-        except Exception:
-            pass
-
-
 def main():
     """
     ACE After Task Hook (Stop / SubagentStop) — runs learning IN the hook process
-    (the hook is registered `async`; no `&`, no temp files, nothing under ~/.claude/logs).
+    (the hook is registered `async`; no `&`; the learn trace goes through a temp file that
+    run_learn removes before returning; nothing under ~/.claude/logs).
 
     1. Early exits (stop_hook_active, SubagentStop with empty agent_type, disabled flag)
     2. Task = state `user_prompt` (C1), else bounded transcript tail; trivial/machine prompts skip
@@ -722,7 +702,7 @@ def main():
 
         # STEP 2: QUALITY GATE - trivial / machine-generated prompts (before any db work)
         if is_trivial_task(user_prompt):
-            output = skip_learning("Trivial task (ACE command or simple query)", event)
+            output = skip_learning("Trivial task (ACE command or simple query)", event, agent_id)
             print(json.dumps(output))
             sys.exit(0)
 
@@ -730,12 +710,13 @@ def main():
         # v6.4.0: prefer CC's per-agent transcript to avoid cross-agent contamination.
         agent_transcript_path = event.get('agent_transcript_path') or None
         trajectory, tools = build_trajectory_from_accumulated_tools(
-            session_id, working_dir, agent_transcript_path=agent_transcript_path
+            session_id, working_dir, agent_transcript_path=agent_transcript_path,
+            scope_agent_id=agent_id if hook_event_name == 'SubagentStop' else None
         )
 
         # STEP 4: QUALITY GATE - Check for substantial work
         if not has_substantial_work_from_accumulated(tools):
-            output = skip_learning("No substantial work (no Edit/Write/Bash tools)", event)
+            output = skip_learning("No substantial work (no Edit/Write/Bash tools)", event, agent_id)
             print(json.dumps(output))
             sys.exit(0)
 
@@ -980,19 +961,15 @@ def main():
 
         # STEP 8: Send to ace-cli learn via --transcript (temp file)
         try:
-            env = os.environ.copy()
-            if context['org']:
-                env['ACE_ORG_ID'] = context['org']
-            if context['project']:
-                env['ACE_PROJECT_ID'] = context['project']
-            # X-ACE-Client attribution (was exported by the bash wrapper via _ace_env.sh)
+            # X-ACE-Client attribution (was exported by the bash wrapper via _ace_env.sh);
+            # run_learn copies os.environ, so set it here.
             try:
                 _ver = json.loads((Path(__file__).resolve().parent.parent / '.claude-plugin' /
                                    'plugin.json').read_text()).get('version') or '0.0.0'
             except Exception:
                 _ver = '0.0.0'
-            env['ACE_PLUGIN_VERSION'] = _ver
-            env['ACE_CLIENT_ID'] = 'claude-code-plugin/' + _ver
+            os.environ['ACE_PLUGIN_VERSION'] = _ver
+            os.environ['ACE_CLIENT_ID'] = 'claude-code-plugin/' + _ver
 
             # Get verbosity from env, default to 'detailed' for meaningful feedback
             verbosity = os.environ.get('ACE_VERBOSITY', 'detailed')
@@ -1007,20 +984,19 @@ def main():
             except OSError:
                 pass
             try:
-                result = _learn_via_transcript(
-                    trace, env=env, verbosity=verbosity,
-                    retrieval_id=retrieval_id,
-                    applied_log_ids=applied_log_ids,
-                )
+                # C2: run_learn (timeout 120 s, retry-once on 'database is locked').
+                response, _learn_ms = run_learn(
+                    trace, retrieval_id=retrieval_id, applied_log_ids=applied_log_ids,
+                    org=context['org'], project=context['project'], verbosity=verbosity,
+                    hook_event_name=hook_event_name)
             finally:
                 try:
                     lock_file.unlink()
                 except OSError:
                     pass
 
-            if result.returncode == 0:
+            if response is not None:
                 try:
-                    response = json.loads(result.stdout)
                     stats = response.get('learning_statistics', {})
 
                     # Handle nested learning_statistics structure from CLI v3.0.0+
@@ -1102,7 +1078,7 @@ def main():
                 except json.JSONDecodeError:
                     message_lines.append("✅ [ACE] Learning captured!")
             else:
-                message_lines.append(f"⚠️ [ACE] Learning capture failed: {result.stderr}")
+                message_lines.append("⚠️ [ACE] Learning capture failed (see ace-hook-errors.log)")
                 message_lines.append("   You can manually capture with: /ace-learn")
 
         except subprocess.TimeoutExpired:
@@ -1146,8 +1122,11 @@ def main():
             write_eval_request(len(playbook_used), len(tools))
 
         # STEP 9: Clear accumulated tools (cleanup)
+        # Scope to this agent: a subagent stop must not wipe the main agent's rows; a
+        # degenerate SubagentStop (no id at all) clears nothing.
         from ace_tool_accumulator import clear_session
-        clear_session(session_id, working_dir)
+        if hook_event_name != 'SubagentStop' or agent_id:
+            clear_session(session_id, working_dir, agent_id=agent_id if hook_event_name == 'SubagentStop' else None)
 
         # Async hook: output is advisory only (logged by CC, not shown)
         print(json.dumps({"systemMessage": "\n".join(message_lines)}))

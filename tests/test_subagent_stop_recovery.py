@@ -179,7 +179,7 @@ def _run_main(tmp_path, monkeypatch, event, write_state_under=None):
         r.returncode = 1  # skip success branch
         return r
 
-    monkeypatch.setattr(mod, "_learn_via_transcript", fake_learn)
+    monkeypatch.setattr(mod, "run_learn", lambda *a, _f=fake_learn, **k: (_f(*a, **k), (None, 0))[1])
     monkeypatch.setattr(mod, "get_git_context", lambda wd: None)
     monkeypatch.setattr(mod, "detect_commits_in_session", lambda t: [])
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
@@ -508,7 +508,7 @@ class TestMainStopNoKeymap:
             r.returncode = 1
             return r
 
-        monkeypatch.setattr(mod, "_learn_via_transcript", fake_learn)
+        monkeypatch.setattr(mod, "run_learn", lambda *a, _f=fake_learn, **k: (_f(*a, **k), (None, 0))[1])
         monkeypatch.setattr(mod, "get_git_context", lambda wd: None)
         monkeypatch.setattr(mod, "detect_commits_in_session", lambda t: [])
         monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))

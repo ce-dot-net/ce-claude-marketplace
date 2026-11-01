@@ -154,7 +154,10 @@ def append_tool(session_id, tool_name, tool_input, tool_response, tool_use_id, a
                        duration_ms=duration_ms, working_dir=working_dir, db_path=db_path)
 
 
-def get_session_tools(session_id: str = None, working_dir: str = None, db_path=None) -> list:
+_ALL = object()  # sentinel: no agent scoping (legacy behaviour)
+
+
+def get_session_tools(session_id: str = None, working_dir: str = None, db_path=None, agent_id=_ALL) -> list:
     """8-tuples (tool_name, tool_input_json, tool_response_json, tool_use_id, agent_id,
     start_ms, end_ms, duration_ms). A failed row (PostToolUseFailure) has its
     error_first_line merged into tool_response as {"error": ...}."""
@@ -166,8 +169,8 @@ def get_session_tools(session_id: str = None, working_dir: str = None, db_path=N
         rows = conn.execute('''
             SELECT tool_name, tool_input, tool_response, tool_use_id, agent_id,
                    start_ms, end_ms, duration_ms, success, error_first_line
-            FROM tool_uses WHERE session_id = ? ORDER BY id
-        ''', (session_id,)).fetchall()
+            FROM tool_uses WHERE session_id = ?''' + ('' if agent_id is _ALL else ' AND agent_id IS ?') + ' ORDER BY id',
+            (session_id,) if agent_id is _ALL else (session_id, agent_id or None)).fetchall()
         conn.close()
     except Exception as e:
         log_hook_exception('accumulator', e)
@@ -186,13 +189,17 @@ def get_session_tools(session_id: str = None, working_dir: str = None, db_path=N
     return tools
 
 
-def clear_session(session_id: str, working_dir: str = None) -> bool:
+def clear_session(session_id: str, working_dir: str = None, agent_id=_ALL) -> bool:
     try:
         db_path = get_db_path(session_id, working_dir)
         if not db_path.exists():
             return True
         conn = init_db(db_path)
-        conn.execute('DELETE FROM tool_uses WHERE session_id = ?', (session_id,))
+        if agent_id is _ALL:
+            conn.execute('DELETE FROM tool_uses WHERE session_id = ?', (session_id,))
+        else:  # agent_id IS ? matches NULL (= the main agent)
+            conn.execute('DELETE FROM tool_uses WHERE session_id = ? AND agent_id IS ?',
+                         (session_id, agent_id or None))
         conn.commit()
         conn.close()
         return True
@@ -212,8 +219,21 @@ def get_session_stats(session_id: str, working_dir: str = None) -> dict:
     }
 
 
+MAX_FIELD_CHARS = 8192
+
+
 def _dump(value):
-    return value if isinstance(value, str) else json.dumps(value if value is not None else {})
+    """JSON-dump a tool payload, capped at MAX_FIELD_CHARS (Read/Write/MCP outputs can be huge).
+    Dicts keep their shape: oversized string values are cut individually first."""
+    if isinstance(value, str):
+        return value[:MAX_FIELD_CHARS]
+    if isinstance(value, dict):
+        value = {k: (v[:2000] + '...[truncated]' if isinstance(v, str) and len(v) > 2000 else v)
+                 for k, v in value.items()}
+    out = json.dumps(value if value is not None else {})
+    if len(out) > MAX_FIELD_CHARS:
+        out = json.dumps({'_truncated': out[:MAX_FIELD_CHARS - 64]})
+    return out
 
 
 def hook_main(failure: bool) -> None:

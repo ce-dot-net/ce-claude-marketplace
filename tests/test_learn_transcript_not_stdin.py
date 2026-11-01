@@ -52,9 +52,9 @@ def test_learn_uses_transcript_file_not_stdin(monkeypatch):
     }
     assert len(json.dumps(trace)) > 64 * 1024  # > the 64KB stdin limit
 
-    result = at._learn_via_transcript(trace, env={}, verbosity="detailed")
+    result = at.run_learn(trace, verbosity="detailed")
 
-    assert result.returncode == 0
+    assert result[0] == {}
     assert "--transcript" in captured["argv"], captured["argv"]
     assert "--stdin" not in captured["argv"], "must not use the 64KB-limited --stdin"
     assert "input" not in captured["kwargs"], "must not pipe the trace via stdin"

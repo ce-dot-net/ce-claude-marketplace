@@ -60,7 +60,7 @@ class TestLastAssistantMessage(unittest.TestCase):
              patch('builtins.print') as mock_print:
 
             # v6.6.3: the trace is sent via `ace-cli learn --transcript <tempfile>`
-            # (not --stdin), and _learn_via_transcript deletes that file right after
+            # (not --stdin), and run_learn deletes that file right after
             # the call returns — so capture its contents DURING the mocked call.
             captured = {}
 
