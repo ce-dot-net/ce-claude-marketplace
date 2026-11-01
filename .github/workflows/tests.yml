@@ -32,10 +32,10 @@ jobs:
         env:
           ACE_E2E: "1"
         run: python -m pytest tests/e2e -q -p no:cacheprovider
-      - name: claude plugin validate (skipped when the claude CLI is unavailable)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: claude plugin validate --strict
         run: |
-          if command -v claude >/dev/null 2>&1; then
-            claude plugin validate plugins/ace --strict
-          else
-            echo "claude CLI not installed on this runner; skipping plugin validate"
-          fi
+          npm i -g @anthropic-ai/claude-code@2.1.300
+          claude plugin validate plugins/ace --strict
