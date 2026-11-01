@@ -82,6 +82,8 @@ class TestConsolidatedSessionStart:
         groups = json.loads(_read(HOOKS_JSON))['hooks']['SessionStart']
         compact = [g for g in groups if g['matcher'] == 'compact']
         assert len(compact) == 1 and 'ace_install_cli' not in compact[0]['hooks'][0]['command']
+        owners = [g['matcher'] for g in groups if 'ace_sessionstart_compact' in json.dumps(g)]
+        assert owners == ['compact'], owners
 
 
 # ===========================================================================
