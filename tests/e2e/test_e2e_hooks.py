@@ -148,3 +148,13 @@ def test_e2e_sessionstart_startup_makes_no_whoami_or_network_cli_calls():
     r = result("SessionStart_startup")
     other = [c["argv"] for c in r["cli_calls"] if c["argv"] != ["--version"]]
     assert other == [], other
+
+
+@pytest.mark.parametrize("name", ["Stop", "SubagentStop"])
+def test_e2e_stop_makes_exactly_one_learn(name):
+    """DESIGN §3 Stop row / WP-C: learning runs in-process with exactly ONE `ace-cli learn`
+    spawn. Guards against the false pass where the hook exits early (missing global config /
+    trivial task) so the no-background / no-/tmp checks never reach learn."""
+    r = result(name)
+    learns = [c for c in r["cli_calls"] if c["argv"][:1] == ["learn"]]
+    assert len(learns) == 1, _cli_summary(r)

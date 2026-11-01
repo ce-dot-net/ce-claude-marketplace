@@ -1,7 +1,7 @@
 # ACE plugin tests
 
 ```bash
-python3 -m pytest tests -q -p no:cacheprovider            # main suite (~20 s)
+python3 -m pytest tests -q -p no:cacheprovider            # main suite (~1-7 min wall; subprocess-heavy)
 python3 -m pytest plugins/ace/tests -q -p no:cacheprovider # plugin-local unit tests
 ACE_E2E=1 python3 -m pytest tests/e2e -q                   # hook e2e, v8 target behavior
 ```
@@ -24,7 +24,8 @@ Applied before collection, for every test:
   per call to `$ACE_FAKE_CLI_LOG` (per test) and prints `{"count":0,"similar_patterns":[]}` for
   `search`, `{}` for `learn` and everything else, `4.2.2` for `--version`. The `fake_cli_calls`
   fixture returns the current test's calls. Tests that genuinely need the real CLI use
-  `@pytest.mark.real_ace_cli`. Nothing in the suite may call the network.
+  `@pytest.mark.real_ace_cli` (this only removes the fake from `PATH`; `HOME`/`XDG_CONFIG_HOME` stay
+  sandboxed, so a real CLI has no auth/config unless the test provides it; no test uses it today). Nothing in the suite may call the network.
 
 ## Hook e2e harness (`tests/e2e/`)
 
@@ -42,3 +43,5 @@ exactly one `search`, SubagentStop with empty `agent_type` → 0, PostToolUse ac
 SessionStart startup → no `whoami`). These tests are skipped unless `ACE_E2E=1`.
 
 Validate a deployed copy instead of the repo: `ACE_PLUGIN_ROOT_UNDER_TEST=<plugin dir> ACE_E2E=1 python3 -m pytest tests/e2e -q`.
+
+Set `ACE_E2E_WALL_BUDGET_S` (default 1.5) to loosen the per-hook wall-time check on slow shared runners.

@@ -45,7 +45,8 @@ HOOK_SPECIFIC_KEYS = {
     "SessionEnd": set(),
 }
 CONTEXT_CAP = 10000  # cc_hooks_reference.md:1050
-WALL_BUDGET_S = 1.5  # per hook with the fake CLI (DESIGN §6 WP-F)
+# per hook with the fake CLI (DESIGN §6 WP-F); override on slow shared CI runners.
+WALL_BUDGET_S = float(os.environ.get("ACE_E2E_WALL_BUDGET_S", "1.5"))
 
 # Which field each event's matcher filters on (cc_hooks_reference.md:291-311).
 MATCHER_FIELD = {
@@ -102,9 +103,17 @@ def script_names(hook):
 
 
 def _tmp_snapshot(token):
-    # Only entries carrying this run's unique token: concurrent real CC sessions on the
-    # same machine write their own /tmp/ace-* files and must not make this flaky.
-    return {os.path.realpath(p) for p in glob.glob("/tmp/ace*") if token in p}
+    # All /tmp/ace* entries (catches hashed/agent-keyed/ace_raw_* names, not just tokened ones);
+    # run_fixture() diffs before/after and keeps only entries that are new AND touched during the
+    # run, so files from concurrent real CC sessions that already existed are not false positives.
+    return {os.path.realpath(p) for p in glob.glob("/tmp/ace*")}
+
+
+def _mtime(p):
+    try:
+        return os.lstat(p).st_mtime
+    except OSError:
+        return 0
 
 
 def _group_alive(pgid):
@@ -163,37 +172,67 @@ def run_fixture(name):
     transcript = sandbox / "transcript.jsonl"
     transcript.write_text(
         json.dumps({"type": "user", "message": {"role": "user", "content": "Refactor the auth login flow"}}) + "\n"
+        + json.dumps({"type": "assistant", "message": {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "toolu_e2e1", "name": "Edit",
+             "input": {"file_path": str(proj / "src" / "auth" / "login.py")}}]}}) + "\n"
+        + json.dumps({"type": "user", "message": {"role": "user", "content": [
+            {"type": "tool_result", "tool_use_id": "toolu_e2e1", "content": "ok"}]}}) + "\n"
         + json.dumps({"type": "assistant", "message": {"role": "assistant",
                       "content": [{"type": "text", "text": "Done."}]}}) + "\n")
     agent_transcript = sandbox / "subagents" / ("agent-%s.jsonl" % agent_id)
     agent_transcript.parent.mkdir()
     agent_transcript.write_text(transcript.read_text())
 
-    raw = (FIXTURES / (name + ".json")).read_text()
-    for k, v in (("__SESSION__", session_id), ("__TRANSCRIPT__", str(transcript)), ("__CWD__", str(proj)),
-                 ("__AGENT_TRANSCRIPT__", str(agent_transcript)), ("__AGENT__", agent_id)):
-        raw = raw.replace(k, v)
+    def load(fixture):
+        text = (FIXTURES / (fixture + ".json")).read_text()
+        for k, v in (("__SESSION__", session_id), ("__TRANSCRIPT__", str(transcript)), ("__CWD__", str(proj)),
+                     ("__AGENT_TRANSCRIPT__", str(agent_transcript)), ("__AGENT__", agent_id)):
+            text = text.replace(k, v)
+        return text
+
+    raw = load(name)
     event = json.loads(raw)
     event_name = event["hook_event_name"]
+
+    # Global ACE config: ace_stop_wrapper.sh:57-62 exits 0 silently when
+    # ${XDG_CONFIG_HOME:-$HOME/.config}/ace/config.json is missing, which would make the Stop /
+    # SubagentStop checks pass without ever reaching learn. XDG dirs are per run, not shared.
+    xdg_config, xdg_data = sandbox / "xdg-config", sandbox / "xdg-data"
+    (xdg_config / "ace").mkdir(parents=True)
+    xdg_data.mkdir()
+    (xdg_config / "ace" / "config.json").write_text(json.dumps({"serverUrl": "http://127.0.0.1:9", "apiToken": "e2e"}))
 
     cli_log = sandbox / "fake-ace-cli.log"
     env = dict(os.environ)
     env.update({
         "HOME": str(home), "CLAUDE_PLUGIN_DATA": str(data), "CLAUDE_PLUGIN_ROOT": str(root),
-        "CLAUDE_PROJECT_DIR": str(proj), "TMPDIR": str(tmpdir), "ACE_FAKE_CLI_LOG": str(cli_log),
+        "CLAUDE_PROJECT_DIR": str(proj), "XDG_CONFIG_HOME": str(xdg_config), "XDG_DATA_HOME": str(xdg_data),
+        "TMPDIR": str(tmpdir), "ACE_FAKE_CLI_LOG": str(cli_log),
         "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     })
     hooks_json = json.loads((root / "hooks" / "hooks.json").read_text())
     before = _tmp_snapshot(token)
+    started = time.time() - 1
     runs = []
-    for hook in routed_hooks(hooks_json, event_name, event):
-        sub = lambda s: s.replace("${CLAUDE_PLUGIN_ROOT}", str(root)).replace(
-            "${CLAUDE_PLUGIN_DATA}", str(data)).replace("${CLAUDE_PROJECT_DIR}", str(proj))
+    sub = lambda s: s.replace("${CLAUDE_PLUGIN_ROOT}", str(root)).replace(
+        "${CLAUDE_PLUGIN_DATA}", str(data)).replace("${CLAUDE_PROJECT_DIR}", str(proj))
+
+    def argv_of(hook):
         if hook.get("args") is not None:
-            argv = [sub(hook["command"])] + [sub(a) for a in hook["args"]]  # exec form
-        else:
-            argv = ["sh", "-c", sub(hook["command"])]  # shell form: sh -c on macOS/Linux (:455)
-        rc, out, err, wall, left_bg = _run_hook(argv, raw, str(proj), env)
+            return [sub(hook["command"])] + [sub(a) for a in hook["args"]]  # exec form
+        return ["sh", "-c", sub(hook["command"])]  # shell form: sh -c on macOS/Linux (:455)
+
+    if event_name in ("Stop", "SubagentStop"):
+        # Stop/SubagentStop learn only after substantial work (Edit/Write/Bash) was accumulated by
+        # PostToolUse; without it the hook exits early and never reaches `learn`. Seed through the
+        # real accumulator hook so this stays independent of where the plugin keeps its db.
+        seed_raw = load("PostToolUse_Write")
+        seed = json.loads(seed_raw)
+        for hook in routed_hooks(hooks_json, "PostToolUse", seed):
+            _run_hook(argv_of(hook), seed_raw, str(proj), env)
+
+    for hook in routed_hooks(hooks_json, event_name, event):
+        rc, out, err, wall, left_bg = _run_hook(argv_of(hook), raw, str(proj), env)
         runs.append({"hook": hook, "scripts": script_names(hook), "rc": rc, "stdout": out, "stderr": err,
                      "wall_s": wall, "left_background_process": left_bg})
 
@@ -201,7 +240,7 @@ def run_fixture(name):
     if cli_log.exists():
         calls = [json.loads(l) for l in cli_log.read_text().splitlines() if l.strip()]
     claude_logs = home / ".claude" / "logs"
-    new_tmp = sorted(_tmp_snapshot(token) - before)
+    new_tmp = sorted(p for p in _tmp_snapshot(token) - before if _mtime(p) >= started)
     for leftover in new_tmp:  # record, then clean up: the pre-v8 hooks still write /tmp
         _remove(leftover)
     return {
