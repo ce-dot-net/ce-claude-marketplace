@@ -7,7 +7,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_pretooluse_wrapper.sh",
-            "timeout": 5000
+            "timeout": 10
           }
         ]
       }
@@ -19,7 +19,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_precompact_wrapper.sh",
-            "timeout": 10000
+            "timeout": 10
           }
         ]
       }
@@ -31,7 +31,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_install_cli.sh",
-            "timeout": 30000
+            "timeout": 20
           }
         ]
       }
@@ -43,7 +43,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_before_task_wrapper.sh",
-            "timeout": 15000
+            "timeout": 20
           }
         ]
       }
@@ -55,12 +55,12 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_posttooluse_wrapper.sh --log",
-            "timeout": 15000
+            "timeout": 30
           },
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_posttooluse_domain_inject.sh",
-            "timeout": 5000,
+            "timeout": 15,
             "if": "Read(*)"
           }
         ]
@@ -73,7 +73,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_permission_request_wrapper.sh",
-            "timeout": 5000
+            "timeout": 10
           }
         ]
       }
@@ -85,7 +85,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_permission_denied_wrapper.sh",
-            "timeout": 5000
+            "timeout": 10
           }
         ]
       }
@@ -97,7 +97,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_stop_wrapper.sh --log --chat",
-            "timeout": 130000
+            "timeout": 130
           }
         ]
       }
@@ -109,7 +109,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_sessionend_wrapper.sh",
-            "timeout": 3000
+            "timeout": 5
           }
         ]
       }
@@ -121,7 +121,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_subagent_start_wrapper.sh",
-            "timeout": 40000
+            "timeout": 20
           }
         ]
       }
@@ -133,7 +133,7 @@
           {
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_subagent_stop_wrapper.sh --log --chat --notify",
-            "timeout": 130000
+            "timeout": 130
           }
         ]
       }

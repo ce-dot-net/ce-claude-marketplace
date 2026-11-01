@@ -57,7 +57,7 @@ from typing import Any, Dict, Optional
 sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
-from ace_cli import run_search, check_session_pinning_available  # noqa: E402
+from ace_cli import run_search  # noqa: E402
 from ace_context import get_context                              # noqa: E402
 from patterns_used_state import append_patterns_used             # noqa: E402
 from ace_pattern_render import render_patterns, render_cohort, render_compact_all  # noqa: E402
@@ -235,13 +235,13 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
 
         # ── ACE search keyed to subagent's query ──────────────────────────────
         # task_intent is INTENTIONALLY OMITTED — server-authoritative (v7.0.1)
-        use_session_pinning = check_session_pinning_available()
-
-        patterns_response = run_search(
+        patterns_response, _search_ms = run_search(
             query=query,
             org=context['org'],
             project=context['project'],
-            session_id=task_session_id if use_session_pinning else None,
+            session_id=task_session_id,
+            timeout=15,
+            hook_event_name='SubagentStart',
             # task_intent deliberately NOT passed
         )
 

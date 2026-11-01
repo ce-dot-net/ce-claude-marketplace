@@ -180,3 +180,88 @@ def archive_on_id_change(old_project_id: str, new_project_id: str, cwd: Optional
         archive_dir = base / archive_name
     old_dir.rename(archive_dir)
     return archive_dir
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# v8 state layout (DESIGN §4, contract C3) — the ONLY way to compute state paths.
+# Root = $CLAUDE_PLUGIN_DATA (exported to hook processes, cc_hooks_reference.md:480)
+# else ~/.claude/plugins/data/ace (cc_plugins_reference.md:559).
+# Helpers never raise: a mkdir failure just leaves the path uncreated and the
+# caller's own write fails (and is swallowed there).
+# ═══════════════════════════════════════════════════════════════════════════
+import re as _re
+
+_SAFE_COMPONENT = _re.compile(r"[^A-Za-z0-9._-]")
+
+
+def _safe(component: Optional[str]) -> str:
+    """Hook-supplied ids are untrusted: never let them leave the data root."""
+    s = _SAFE_COMPONENT.sub("_", str(component or ""))
+    if s in ("", ".", ".."):
+        return "default" if not s else "_"
+    return s
+
+
+def _mk(path: Path) -> Path:
+    try:
+        path.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    return path
+
+
+def data_root() -> Path:
+    explicit = os.environ.get("CLAUDE_PLUGIN_DATA")
+    if explicit:
+        return Path(explicit)
+    return Path.home() / ".claude" / "plugins" / "data" / "ace"
+
+
+def project_dir(project_id: Optional[str], create: bool = True) -> Path:
+    p = data_root() / "projects" / _safe(project_id)
+    return _mk(p) if create else p
+
+
+def session_dir(project_id: Optional[str], session_id: Optional[str], create: bool = True) -> Path:
+    p = project_dir(project_id, create=False) / "sessions" / _safe(session_id)
+    return _mk(p) if create else p
+
+
+def _file(path: Path) -> Path:
+    _mk(path.parent)
+    return path
+
+
+def python_path_file() -> Path:
+    return _file(data_root() / "python_path")
+
+
+def cli_version_file() -> Path:
+    return _file(data_root() / "cli_version.json")
+
+
+def errors_log() -> Path:
+    return _file(data_root() / "logs" / "ace-hook-errors.log")
+
+
+def search_cache_dir() -> Path:
+    return _mk(data_root() / "cache" / "search")
+
+
+def domains_file(project_id: Optional[str]) -> Path:
+    return _file(project_dir(project_id, create=False) / "domains.json")
+
+
+def disabled_flag(project_id: Optional[str], session_id: Optional[str]) -> Path:
+    return _file(session_dir(project_id, session_id, create=False) / "disabled.flag")
+
+
+def learn_lock(project_id: Optional[str], session_id: Optional[str], agent: Optional[str]) -> Path:
+    name = "learn-inflight-%s.lock" % _safe(agent or "main")
+    return _file(session_dir(project_id, session_id, create=False) / name)
+
+
+def resolve_session_id(event: Optional[dict]) -> str:
+    """Hook JSON session_id, then CLAUDE_CODE_SESSION_ID, then 'default'."""
+    sid = event.get("session_id") if isinstance(event, dict) else None
+    return sid or os.environ.get("CLAUDE_CODE_SESSION_ID") or "default"
