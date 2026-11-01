@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 description: View and update ACE project configuration dynamically at runtime
 allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---

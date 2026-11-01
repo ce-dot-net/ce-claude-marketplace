@@ -20,7 +20,9 @@
 npm install -g @ace-sdk/cli
 ```
 
-**Requirements:** ace-cli >= v3.4.1
+**Requirements:** Claude Code >= 2.1.300, ace-cli >= 4.1.2
+
+**Statusline:** `~/.claude/ace_statusline.sh` is a user copy of the plugin script; refresh it after a plugin update with `/ace:ace-statusline-setup update`.
 
 ### 2. Enable Plugin
 
@@ -387,5 +389,5 @@ MIT License - See [LICENSE](../../LICENSE)
 **Version**: v5.4.7 (CLI Migration + Blocking Detection)
 **Status**: Active Development
 **Maintainer**: CE.NET Team
-**Requires**: ace-cli >= v3.4.1 (npm install -g @ace-sdk/cli)
+**Requires**: Claude Code >= 2.1.300, ace-cli >= 4.1.2 (npm install -g @ace-sdk/cli)
 **Architecture**: Hooks + CLI (no MCP)

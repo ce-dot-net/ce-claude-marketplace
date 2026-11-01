@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 model: claude-haiku-4-5
 description: Get highest-rated ACE patterns by reward score
 allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read

@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 model: claude-haiku-4-5
 description: Install and verify ace-cli tool (smart, non-noisy installation wizard)
 argument-hint:

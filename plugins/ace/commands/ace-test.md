@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 model: claude-haiku-4-5
 description: Verify ACE plugin is properly configured and operational
 argument-hint:
@@ -104,8 +105,8 @@ echo ""
 # Test 3: Hooks Configuration
 echo "[3/4] Checking hooks configuration..."
 
-# Resolve plugin root dynamically (mirrors ace-doctor)
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/ce-dot-net-marketplace/ace/*/ 2>/dev/null | tail -1)}"
+# Resolve plugin root dynamically (installPath from installed_plugins.json, mirrors ace-doctor)
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(jq -r '.plugins["ace@ce-dot-net-marketplace"][0].installPath // empty' ~/.claude/plugins/installed_plugins.json 2>/dev/null)}"
 
 if [ -z "$PLUGIN_ROOT" ]; then
   echo "❌ Plugin root not found — is the ACE plugin installed?"

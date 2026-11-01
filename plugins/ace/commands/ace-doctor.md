@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 model: claude-haiku-4-5
 description: Comprehensive ACE installation and health diagnostic
 allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(curl:*), Bash(ls:*), Bash(test:*), Read
@@ -20,12 +21,34 @@ Run all checks in parallel for speed, then present organized results.
 
 ## 🏥 Diagnostic Checks
 
+### Check 0: Claude Code Version and Plugin Data
+
+**What to Check**:
+```bash
+# Claude Code floor is 2.1.300
+claude --version
+# Compare against 2.1.300 (sort -V): older => WARN, hooks use features from <= 2.1.300
+
+# Plugin data layout (v8): $CLAUDE_PLUGIN_DATA, default ~/.claude/plugins/data/ace
+DATA="${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/ace}"
+ls -la "$DATA"
+test -r "$DATA/python_path" && cat "$DATA/python_path"   # written by SessionStart
+test -r "$DATA/cli_version.json" && cat "$DATA/cli_version.json"
+test -f "$DATA/logs/ace-hook-errors.log" && tail -5 "$DATA/logs/ace-hook-errors.log"   # non-empty => hook errors
+```
+
+**Report**:
+- PASS: Claude Code >= 2.1.300, python_path and cli_version.json present, ace-hook-errors.log empty or absent
+- WARN: Claude Code older than 2.1.300, or python_path / cli_version.json missing (start a new session), or errors in ace-hook-errors.log
+
+---
+
 ### Check 1: Plugin Installation
 
 **What to Check**:
 ```bash
-# Verify plugin directory structure (resolve via $CLAUDE_PLUGIN_ROOT or cache glob)
-ls -la "${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/ce-dot-net-marketplace/ace/*/  2>/dev/null | tail -1)}"
+# Verify plugin directory structure (installPath from installed_plugins.json is authoritative)
+ls -la "${CLAUDE_PLUGIN_ROOT:-$(jq -r '.plugins["ace@ce-dot-net-marketplace"][0].installPath // empty' ~/.claude/plugins/installed_plugins.json 2>/dev/null)}"
 ```
 
 **Expected Structure**:
@@ -37,11 +60,10 @@ ace/
 ├── scripts/           # Hook wrapper scripts
 │   ├── ace_install_cli.sh
 │   ├── ace_before_task_wrapper.sh
-│   ├── ace_pretooluse_wrapper.sh
 │   ├── ace_posttooluse_wrapper.sh
 │   ├── ace_posttooluse_domain_inject.sh
-│   ├── ace_precompact_wrapper.sh
-│   ├── ace_permission_request_wrapper.sh
+│   ├── ace_posttoolusefailure_wrapper.sh
+│   ├── ace_sessionstart_compact.sh
 │   ├── ace_permission_denied_wrapper.sh
 │   ├── ace_stop_wrapper.sh
 │   ├── ace_sessionend_wrapper.sh
@@ -214,7 +236,7 @@ curl -s -X GET \
   -H "Authorization: Bearer $API_TOKEN" \
   "$SERVER_URL/api/projects/$PROJECT_ID/playbook" \
   -w "\nHTTP: %{http_code}\n" \
-  -o /tmp/ace-doctor-response.json
+  -o /dev/null
 ```
 
 **Report**:
@@ -276,17 +298,16 @@ Recommended Actions:
 
 **What to Check**:
 ```bash
-# Check if hook scripts exist (resolve plugin root dynamically)
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/ce-dot-net-marketplace/ace/*/ 2>/dev/null | tail -1)}"
+# Check if hook scripts exist (installPath from installed_plugins.json)
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(jq -r '.plugins["ace@ce-dot-net-marketplace"][0].installPath // empty' ~/.claude/plugins/installed_plugins.json 2>/dev/null)}"
 
 # Check all hook wrappers in scripts/
 test -f "$PLUGIN_ROOT/scripts/ace_install_cli.sh" && echo "install_cli: EXISTS" || echo "install_cli: MISSING"
 test -f "$PLUGIN_ROOT/scripts/ace_before_task_wrapper.sh" && echo "before_task: EXISTS" || echo "before_task: MISSING"
-test -f "$PLUGIN_ROOT/scripts/ace_pretooluse_wrapper.sh" && echo "pretooluse: EXISTS" || echo "pretooluse: MISSING"
 test -f "$PLUGIN_ROOT/scripts/ace_posttooluse_wrapper.sh" && echo "posttooluse: EXISTS" || echo "posttooluse: MISSING"
 test -f "$PLUGIN_ROOT/scripts/ace_posttooluse_domain_inject.sh" && echo "posttooluse_domain_inject: EXISTS" || echo "posttooluse_domain_inject: MISSING"
-test -f "$PLUGIN_ROOT/scripts/ace_precompact_wrapper.sh" && echo "precompact: EXISTS" || echo "precompact: MISSING"
-test -f "$PLUGIN_ROOT/scripts/ace_permission_request_wrapper.sh" && echo "permission_request: EXISTS" || echo "permission_request: MISSING"
+test -f "$PLUGIN_ROOT/scripts/ace_posttoolusefailure_wrapper.sh" && echo "posttoolusefailure: EXISTS" || echo "posttoolusefailure: MISSING"
+test -f "$PLUGIN_ROOT/scripts/ace_sessionstart_compact.sh" && echo "sessionstart_compact: EXISTS" || echo "sessionstart_compact: MISSING"
 test -f "$PLUGIN_ROOT/scripts/ace_permission_denied_wrapper.sh" && echo "permission_denied: EXISTS" || echo "permission_denied: MISSING"
 test -f "$PLUGIN_ROOT/scripts/ace_stop_wrapper.sh" && echo "stop: EXISTS" || echo "stop: MISSING"
 test -f "$PLUGIN_ROOT/scripts/ace_sessionend_wrapper.sh" && echo "sessionend: EXISTS" || echo "sessionend: MISSING"
@@ -297,24 +318,23 @@ test -f "$PLUGIN_ROOT/scripts/ace_subagent_stop_wrapper.sh" && echo "subagent_st
 test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "hooks.json: EXISTS"
 ```
 
-**Expected Hooks** (11 events, 12 hook entries):
-1. `PreToolUse` → `ace_pretooluse_wrapper.sh`
-2. `PreCompact` → `ace_precompact_wrapper.sh`
-3. `SessionStart` → `ace_install_cli.sh`
-4. `UserPromptSubmit` → `ace_before_task_wrapper.sh`
-5. `PostToolUse` → `ace_posttooluse_wrapper.sh --log`
-6. `PostToolUse` (if: `Read(*)`) → `ace_posttooluse_domain_inject.sh`
-7. `PermissionRequest` → `ace_permission_request_wrapper.sh`
-8. `PermissionDenied` → `ace_permission_denied_wrapper.sh`
-9. `Stop` → `ace_stop_wrapper.sh --log --chat`
-10. `SessionEnd` → `ace_sessionend_wrapper.sh`
-11. `SubagentStart` → `ace_subagent_start_wrapper.sh`
-12. `SubagentStop` → `ace_subagent_stop_wrapper.sh --log --chat --notify`
+**Expected Hooks** (v8: 9 events, 11 hook entries):
+1. `SessionStart` → `ace_install_cli.sh` (startup|clear; plus async `--update-check`)
+2. `SessionStart` (compact) → `ace_sessionstart_compact.sh`
+3. `UserPromptSubmit` → `ace_before_task_wrapper.sh`
+4. `PostToolUse` (async) → `ace_posttooluse_wrapper.sh --log`
+5. `PostToolUse` (Read|Glob|Grep) → `ace_posttooluse_domain_inject.sh`
+6. `PostToolUseFailure` (Bash, async) → `ace_posttoolusefailure_wrapper.sh`
+7. `SubagentStart` → `ace_subagent_start_wrapper.sh`
+8. `Stop` (async) → `ace_stop_wrapper.sh`
+9. `SubagentStop` (async) → `ace_subagent_stop_wrapper.sh`
+10. `PermissionDenied` (async) → `ace_permission_denied_wrapper.sh`
+11. `SessionEnd` → `ace_sessionend_wrapper.sh`
 
 **Report**:
 - ✅ All hooks registered (11/11)
 - ⚠️ Some hooks missing (e.g., 7/10)
-- ❌ No hooks registered (0/10)
+- ❌ No hooks registered (0/11)
 
 **If Failed**:
 ```
@@ -323,11 +343,10 @@ test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "hooks.json: EXISTS"
 Expected Hook Scripts:
 - ace_install_cli.sh (ensures ace-cli is available)
 - ace_before_task_wrapper.sh (retrieves patterns before tasks)
-- ace_pretooluse_wrapper.sh (pre-tool telemetry)
 - ace_posttooluse_wrapper.sh (captures tool use after each tool call)
-- ace_posttooluse_domain_inject.sh (domain injection on Read(*))
-- ace_precompact_wrapper.sh (pre-compact state save)
-- ace_permission_request_wrapper.sh (permission request telemetry)
+- ace_posttooluse_domain_inject.sh (domain injection on Read/Glob/Grep)
+- ace_posttoolusefailure_wrapper.sh (failed Bash calls into the learn trajectory)
+- ace_sessionstart_compact.sh (re-inject patterns after compaction)
 - ace_permission_denied_wrapper.sh (permission denied redaction)
 - ace_stop_wrapper.sh (learning capture at Stop)
 - ace_sessionend_wrapper.sh (session end cleanup)
@@ -397,8 +416,8 @@ Recommended Actions:
 
 **What to Check**:
 ```bash
-# Get plugin version (resolve dynamically via $CLAUDE_PLUGIN_ROOT or cache glob)
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(ls -d ~/.claude/plugins/cache/ce-dot-net-marketplace/ace/*/ 2>/dev/null | tail -1)}"
+# Get plugin version (installPath from installed_plugins.json)
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(jq -r '.plugins["ace@ce-dot-net-marketplace"][0].installPath // empty' ~/.claude/plugins/installed_plugins.json 2>/dev/null)}"
 PLUGIN_JSON="$PLUGIN_ROOT/plugin.json"
 if [ -f "$PLUGIN_JSON" ]; then
     jq -r '.version' "$PLUGIN_JSON"
@@ -526,7 +545,7 @@ After running all checks, present results in this format:
 [3] Project Configuration................ ✅ PASS
 [4] CLI Availability..................... ✅ PASS (v4.1.0)
 [5] ACE Server Connectivity.............. ✅ PASS (HTTP 200)
-[6] Hooks Registered..................... ✅ PASS (10/10)
+[6] Hooks Registered..................... ✅ PASS (11/11)
 [7] CLI Configuration.................... ✅ PASS (device-code)
 [8] Version Status....................... ✅ PASS
 [9] Cache Diagnostics.................... ✅ PASS
@@ -550,13 +569,12 @@ Project ID: prj_d3a244129d62c198
 Organization: org_34fYIlitYk4nyFuTvtsAzA6uUJF
 
 Registered Hooks:
-• PreToolUse → ace_pretooluse_wrapper.sh
-• PreCompact → ace_precompact_wrapper.sh
 • SessionStart → ace_install_cli.sh
 • UserPromptSubmit → ace_before_task_wrapper.sh
 • PostToolUse → ace_posttooluse_wrapper.sh --log
-• PostToolUse (if: Read(*)) → ace_posttooluse_domain_inject.sh
-• PermissionRequest → ace_permission_request_wrapper.sh
+• PostToolUse (Read|Glob|Grep) → ace_posttooluse_domain_inject.sh
+• PostToolUseFailure → ace_posttoolusefailure_wrapper.sh
+• SessionStart (compact) → ace_sessionstart_compact.sh
 • PermissionDenied → ace_permission_denied_wrapper.sh
 • Stop → ace_stop_wrapper.sh --log --chat
 • SessionEnd → ace_sessionend_wrapper.sh
@@ -583,7 +601,7 @@ Report issues: https://github.com/ce-dot-net/ce-claude-marketplace/issues
 [3] Project Configuration................ ⚠️  WARN
 [4] CLI Availability..................... ✅ PASS (v4.1.0)
 [5] ACE Server Connectivity.............. ✅ PASS (HTTP 200)
-[6] Hooks Registered..................... ⚠️  WARN (7/10)
+[6] Hooks Registered..................... ⚠️  WARN (8/11)
 [7] CLI Configuration.................... ✅ PASS
 [8] Version Status....................... ⚠️  WARN
 [9] Cache Diagnostics.................... ✅ PASS
@@ -601,7 +619,6 @@ Overall Health: 🟡 NEEDS ATTENTION (3 warnings)
 
 [6] Hooks Registered
     Issue: Some hook scripts missing (8/11 found)
-    Missing: ace_permission_request_wrapper.sh, ace_permission_denied_wrapper.sh, ace_subagent_start_wrapper.sh, ace_subagent_stop_wrapper.sh
     Impact: Permission telemetry and subagent learning won't work
     Fix: Reinstall plugin or check scripts/ directory
 
