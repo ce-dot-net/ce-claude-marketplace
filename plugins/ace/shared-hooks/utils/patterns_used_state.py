@@ -2,18 +2,14 @@
 """
 Single source of truth for the ACE patterns-used state file.
 
-State file naming: ace-patterns-used-{session_id}-{agent_suffix}.json
-where agent_suffix = agent_id (for subagents) or 'main' (for the main agent).
+v8 layout (DESIGN §4): <plugin-data>/projects/<project_id>/sessions/<session_id>/
+patterns-used-<agent>.json where agent = agent_id (subagents) or 'main'.
+Paths come ONLY from plugin_data_dir; an explicit state_dir stands for the
+session dir. Optional keys user_prompt / rendered_context / hook_event_name
+(contract C1) carry data from UPS/SubagentStart to Stop and SessionStart(compact).
 
 This module centralizes the read/write/cleanup logic that was previously
 duplicated inline in ace_before_task.py (writer) and ace_after_task.py (reader).
-The path anchors to $CLAUDE_PROJECT_DIR/.claude/data/logs when CC provides it
-(confirmed available to hooks since CC 2.1.141), so the writer (before_task /
-PreToolUse) and the reader (after_task) resolve the SAME ABSOLUTE path regardless
-of each hook process's cwd — robust to any mid-session cwd change. It falls back
-to the relative '.claude/data/logs' (resolved against the wrapper's cd-to-event.cwd)
-when CLAUDE_PROJECT_DIR is unset. All consumers go through _state_dir() so writer
-and reader stay consistent by construction.
 """
 import json
 import os
@@ -33,23 +29,35 @@ if str(_PLUGIN_UTILS) not in sys.path:
     sys.path.insert(0, str(_PLUGIN_UTILS))
 from validation import is_valid_pattern_id  # noqa: E402
 
-STATE_DIR_DEFAULT = '.claude/data/logs'
+import plugin_data_dir  # noqa: E402
+
+USER_PROMPT_MAX = 4000
+RENDERED_CONTEXT_MAX = 10000
 
 
-def _state_dir(state_dir=None):
+def _project_id(project_id=None):
+    """kwarg, else ace_context.get_context()['project'], else 'default'."""
+    if project_id:
+        return project_id
+    try:
+        from ace_context import get_context
+        ctx = get_context()
+        if ctx and ctx.get('project'):
+            return ctx['project']
+    except Exception:
+        pass
+    return 'default'
+
+
+def _state_dir(state_dir=None, session_id=None, project_id=None, create=False):
     if state_dir is not None:
         return Path(state_dir)
-    # v6.6.6: anchor to $CLAUDE_PROJECT_DIR (CC provides it to hooks since 2.1.141)
-    # so writer + reader hit the SAME absolute dir even if a hook's cwd differs.
-    proj = os.environ.get('CLAUDE_PROJECT_DIR')
-    if proj:
-        return Path(proj) / STATE_DIR_DEFAULT
-    return Path(STATE_DIR_DEFAULT)
+    return plugin_data_dir.session_dir(_project_id(project_id), session_id, create=create)
 
 
-def state_file_path(session_id, agent_id, state_dir=None):
+def state_file_path(session_id, agent_id, state_dir=None, project_id=None):
     agent_suffix = agent_id if agent_id else 'main'
-    return _state_dir(state_dir) / f'ace-patterns-used-{session_id}-{agent_suffix}.json'
+    return _state_dir(state_dir, session_id, project_id) / f'patterns-used-{agent_suffix}.json'
 
 
 def _filter_retrieval_log_ids(retrieval_log_ids):
@@ -92,7 +100,9 @@ def _read_state_file(sf):
 
 def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
                          retrieval_id=None, retrieval_log_ids=None,
-                         task_session_id=None):
+                         task_session_id=None, project_id=None,
+                         user_prompt=None, rendered_context=None,
+                         hook_event_name=None):
     """Append+dedupe valid pattern IDs to the per-agent file; return the full list.
 
     F-080: optional params retrieval_id (str|None) and retrieval_log_ids (dict|None).
@@ -110,11 +120,11 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
     ids = [p for p in (pattern_ids or []) if isinstance(p, str) and is_valid_pattern_id(p)]
     has_retrieval = retrieval_id is not None or bool(retrieval_log_ids)
     has_task_session = task_session_id is not None
-    if not ids and not has_retrieval and not has_task_session:
+    has_extra = bool(user_prompt or rendered_context or hook_event_name)
+    if not ids and not has_retrieval and not has_task_session and not has_extra:
         return []
-    d = _state_dir(state_dir)
-    d.mkdir(parents=True, exist_ok=True)
-    sf = state_file_path(session_id, agent_id, state_dir)
+    sf = state_file_path(session_id, agent_id, state_dir, project_id)
+    sf.parent.mkdir(parents=True, exist_ok=True)
     try:
         existing_ids, existing_rid, existing_rlog, existing_tsid = _read_state_file(sf)
     except Exception:
@@ -137,11 +147,24 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
         'retrieval_log_ids': merged_rlog,
         'task_session_id': merged_tsid,
     }
+    # C1 optional keys: keep earlier values unless a new one is supplied.
+    try:
+        prior = json.loads(sf.read_text()) if sf.exists() else {}
+    except Exception:
+        prior = {}
+    if not isinstance(prior, dict):
+        prior = {}
+    for key, val, cap in (('user_prompt', user_prompt, USER_PROMPT_MAX),
+                          ('rendered_context', rendered_context, RENDERED_CONTEXT_MAX),
+                          ('hook_event_name', hook_event_name, None)):
+        val = val if val else prior.get(key)
+        if val:
+            state[key] = val[:cap] if cap else val
     sf.write_text(json.dumps(state))
     return existing_ids
 
 
-def load_playbook_used(session_id, agent_id, hook_event_name='Stop', state_dir=None, on_error=None):
+def load_playbook_used(session_id, agent_id, hook_event_name='Stop', state_dir=None, on_error=None, project_id=None):
     """Load + reap the patterns-used state for a (sub)agent stop event.
 
     PER-AGENT-PURE attribution (authoritative): the CLIENT owns
@@ -164,9 +187,9 @@ def load_playbook_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
     if not session_id:
         return []
     if hook_event_name == 'SubagentStop':
-        files = [state_file_path(session_id, agent_id, state_dir)]
+        files = [state_file_path(session_id, agent_id, state_dir, project_id)]
     else:
-        files = [state_file_path(session_id, None, state_dir)]
+        files = [state_file_path(session_id, None, state_dir, project_id)]
     seen = set()
     result = []
     for f in files:
@@ -191,7 +214,7 @@ def load_playbook_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
     return result
 
 
-def reap_patterns_used(session_id, agent_id, hook_event_name='Stop', state_dir=None, on_error=None):
+def reap_patterns_used(session_id, agent_id, hook_event_name='Stop', state_dir=None, on_error=None, project_id=None):
     """Unlink (reap) the per-agent patterns-used state file WITHOUT reading it.
 
     v6.6.7: the learning-skip path in ace_after_task (no project context /
@@ -213,9 +236,9 @@ def reap_patterns_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
     if not session_id:
         return
     if hook_event_name == 'SubagentStop':
-        f = state_file_path(session_id, agent_id, state_dir)
+        f = state_file_path(session_id, agent_id, state_dir, project_id)
     else:
-        f = state_file_path(session_id, None, state_dir)
+        f = state_file_path(session_id, None, state_dir, project_id)
     try:
         f.unlink(missing_ok=True)
     except Exception as e:
@@ -226,7 +249,7 @@ def reap_patterns_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
                 pass
 
 
-def load_retrieval_ids(session_id, agent_id, hook_event_name='Stop', state_dir=None):
+def load_retrieval_ids(session_id, agent_id, hook_event_name='Stop', state_dir=None, project_id=None):
     """Read the retrieval_log_ids map from the per-agent state file WITHOUT unlinking it.
 
     F-080: read-only companion to load_playbook_used.  Returns
@@ -239,9 +262,9 @@ def load_retrieval_ids(session_id, agent_id, hook_event_name='Stop', state_dir=N
     if not session_id:
         return {}
     if hook_event_name == 'SubagentStop':
-        sf = state_file_path(session_id, agent_id, state_dir)
+        sf = state_file_path(session_id, agent_id, state_dir, project_id)
     else:
-        sf = state_file_path(session_id, None, state_dir)
+        sf = state_file_path(session_id, None, state_dir, project_id)
     try:
         _ids, _rid, rlog, _tsid = _read_state_file(sf)
         return dict(rlog) if rlog else {}
@@ -249,7 +272,7 @@ def load_retrieval_ids(session_id, agent_id, hook_event_name='Stop', state_dir=N
         return {}
 
 
-def load_task_session_id(session_id, agent_id, hook_event_name='Stop', state_dir=None):
+def load_task_session_id(session_id, agent_id, hook_event_name='Stop', state_dir=None, project_id=None):
     """Read the task_session_id from the per-agent state file WITHOUT unlinking it.
 
     per-task session_id: read-only companion to load_retrieval_ids.
@@ -266,14 +289,30 @@ def load_task_session_id(session_id, agent_id, hook_event_name='Stop', state_dir
     if not session_id:
         return None
     if hook_event_name == 'SubagentStop':
-        sf = state_file_path(session_id, agent_id, state_dir)
+        sf = state_file_path(session_id, agent_id, state_dir, project_id)
     else:
-        sf = state_file_path(session_id, None, state_dir)
+        sf = state_file_path(session_id, None, state_dir, project_id)
     try:
         _ids, _rid, _rlog, tsid = _read_state_file(sf)
         return tsid or None
     except Exception:
         return None
+
+
+def load_state(session_id, agent_id, hook_event_name='Stop', state_dir=None, project_id=None):
+    """Read the whole state dict WITHOUT unlinking it ({} if missing/corrupt).
+
+    Readers of the C1 optional keys (user_prompt, rendered_context,
+    hook_event_name): Stop/SubagentStop, SessionStart(compact).
+    """
+    if not session_id:
+        return {}
+    aid = agent_id if hook_event_name == 'SubagentStop' else None
+    try:
+        raw = json.loads(state_file_path(session_id, aid, state_dir, project_id).read_text())
+        return raw if isinstance(raw, dict) else {}
+    except Exception:
+        return {}
 
 
 # ---------------------------------------------------------------------------

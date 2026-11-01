@@ -51,7 +51,7 @@ def sanitize_response(obj: Any) -> Any:
     else:
         return obj
 
-from ace_cli import run_search, check_session_pinning_available, check_auth_status
+from ace_cli import run_search, check_auth_status
 from ace_context import get_context
 from ace_relevance_logger import log_search_metrics
 
@@ -306,7 +306,7 @@ def main():
         # used for ace-relevance.jsonl / ace-spawn-log.jsonl telemetry.
         task_session_id = str(uuid.uuid4())
 
-        use_session_pinning = check_session_pinning_available()
+        use_session_pinning = True  # v8: always pin (no --version probe)
 
         # v6.0.0: Read agent_type natively from hook event (CC 2.1.69+)
         # agent_type identifies subagent type: "main", "refactorer", "coder", etc.
@@ -346,11 +346,12 @@ def main():
         # Call ace-cli search --stdin with optional session pinning.
         # Pass task_session_id (not CC conversation session_id) so the server pins
         # retrieved patterns under this task's ID — each task gets its own pin bucket.
-        patterns_response = run_search(
+        patterns_response, _search_ms = run_search(
             query=search_query,
             org=context['org'],
             project=context['project'],
-            session_id=task_session_id if use_session_pinning else None,
+            session_id=task_session_id,
+            hook_event_name='UserPromptSubmit',
         )
 
         # v5.3.5: Sanitize response to remove invalid Unicode surrogates

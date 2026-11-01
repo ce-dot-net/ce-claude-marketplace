@@ -15,6 +15,29 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional
 
 
+def _utc_now() -> str:
+    """UTC ISO-8601 with a trailing 'Z' (v8: one timestamp format everywhere)."""
+    return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+
+ARCHIVE_MAX_BYTES = 50 * 1024 * 1024  # v8: size rotation only, never a startup wipe
+
+
+def archive_relevance_log(log_dir: str = ".claude/data/logs") -> None:
+    """Rotate ace-relevance.jsonl to ace-relevance.1.jsonl when it exceeds 50 MB.
+
+    Replaces the v7 SessionStart move to ace-relevance.prev.jsonl (which wiped
+    the live log every session). Small logs are left untouched. Never raises.
+    """
+    try:
+        d = Path(log_dir)
+        log = d / "ace-relevance.jsonl"
+        if log.exists() and log.stat().st_size > ARCHIVE_MAX_BYTES:
+            os.replace(log, d / "ace-relevance.1.jsonl")
+    except Exception:
+        pass
+
+
 class ACERelevanceLogger:
     """Logger for pattern relevance metrics with rotation."""
 
@@ -72,12 +95,19 @@ class ACERelevanceLogger:
         org_id: Optional[str] = None,
         agent_type: Optional[str] = None,
         render_cohort: Optional[str] = None,
+        hook_ms: Optional[int] = None,
     ) -> None:
         """
         Log pattern search and injection metrics.
 
-        Called from UserPromptSubmit and PreToolUse hooks after pattern search.
+        patterns_returned / patterns_injected: a list of pattern dicts or an int
+        count (v8 C5: UPS logs AFTER render with the real injected count).
         """
+        returned_n = patterns_returned if isinstance(patterns_returned, int) else len(patterns_returned)
+        if isinstance(patterns_injected, int):
+            injected_n, patterns_injected = patterns_injected, []
+        else:
+            injected_n = len(patterns_injected)
         # Calculate metrics
         avg_confidence = 0.0
         if patterns_injected:
@@ -104,7 +134,7 @@ class ACERelevanceLogger:
         ]
 
         entry = {
-            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'timestamp': _utc_now(),
             'event': 'search',
             'hook': hook,
             'session_id': session_id,
@@ -113,14 +143,16 @@ class ACERelevanceLogger:
             'agent_type': agent_type or 'main',
             'user_prompt': user_prompt[:200] if user_prompt else '',  # Truncate long prompts
             'search_query': search_query[:100] if search_query else '',
-            'patterns_returned': len(patterns_returned),
-            'patterns_injected': len(patterns_injected),
-            'patterns_filtered': len(patterns_returned) - len(patterns_injected),
+            'patterns_returned': returned_n,
+            'patterns_injected': injected_n,
+            'patterns_filtered': returned_n - injected_n,
             'avg_confidence': round(avg_confidence, 3),
             'domains': domains[:10],  # Limit to 10 domains
             'top_patterns': top_patterns,
             'render_cohort': render_cohort,
         }
+        if hook_ms is not None:
+            entry['hook_ms'] = hook_ms
 
         self._write_log(entry)
 
@@ -140,7 +172,7 @@ class ACERelevanceLogger:
         Called from PreToolUse hook when domain shift is detected.
         """
         entry = {
-            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'timestamp': _utc_now(),
             'event': 'domain_shift',
             'hook': 'PreToolUse',
             'session_id': session_id,
@@ -164,7 +196,7 @@ class ACERelevanceLogger:
         Called from PostCompact hook when Claude Code compacts the conversation.
         """
         entry = {
-            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'timestamp': _utc_now(),
             'event': 'compact',
             'session_id': session_id,
         }
@@ -200,7 +232,7 @@ class ACERelevanceLogger:
                 bg_count = 0
 
             entry: Dict[str, Any] = {
-                'timestamp': datetime.now(timezone.utc).isoformat(),
+                'timestamp': _utc_now(),
                 'event': 'hook_stop_telemetry',
                 'hook_type': hook_type,
                 'session_id': session_id,
@@ -232,7 +264,7 @@ class ACERelevanceLogger:
         Called from Stop hook after task completion.
         """
         entry = {
-            'timestamp': datetime.now(timezone.utc).isoformat(),
+            'timestamp': _utc_now(),
             'event': 'execution',
             'hook': 'Stop',
             'session_id': session_id,
@@ -277,7 +309,7 @@ class ACERelevanceLogger:
                     pass
 
             # Required fields — set after extra so they cannot be clobbered
-            entry['timestamp'] = datetime.now(timezone.utc).isoformat()
+            entry['timestamp'] = _utc_now()
             entry['event'] = 'error'
             entry['hook'] = hook
             entry['location'] = location
@@ -306,6 +338,27 @@ def get_relevance_logger() -> ACERelevanceLogger:
 def log_search_metrics(**kwargs) -> None:
     """Convenience function to log search metrics."""
     get_relevance_logger().log_search_metrics(**kwargs)
+
+
+def log_search(patterns_returned=0, patterns_injected=0, hook_ms=None, hook="UserPromptSubmit",
+               session_id=None, user_prompt="", search_query="", domains=None, **kw) -> None:
+    """C5: search event with real counts (int or list) and hook latency."""
+    try:
+        get_relevance_logger().log_search_metrics(
+            hook=hook, session_id=session_id, user_prompt=user_prompt,
+            search_query=search_query, patterns_returned=patterns_returned,
+            patterns_injected=patterns_injected, domains=domains or [],
+            hook_ms=hook_ms, **kw)
+    except Exception:
+        pass
+
+
+def log_error(hook: str, location: str, session_id=None, project_id=None, error=None,
+              extra=None) -> None:
+    """C5: error event tagged with the real hook name."""
+    log_hook_error(location=location, session_id=session_id, project_id=project_id,
+                   hook=hook, error=error if error is not None else Exception(""),
+                   extra=extra)
 
 
 def log_domain_shift(**kwargs) -> None:

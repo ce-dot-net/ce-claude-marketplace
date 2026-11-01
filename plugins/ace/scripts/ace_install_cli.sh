@@ -59,14 +59,14 @@ output_warning() {
   jq -n --arg msg "$msg" '{"systemMessage": $msg}'
 }
 
-# v6.4.3: Archive ace-relevance.jsonl on fresh CC session start.
-# Why: a new CC session is a fresh analytical context; carrying the previous
-# session's relevance signals into statusline / ace-doctor / ace-insights
-# pollutes per-session analysis. One generation kept as .prev for inspection.
+# v8: size-based rotation only (>50 MB -> ace-relevance.1.jsonl). The v6.4.3
+# "mv to .prev on every fresh session" wiped the live log each session.
+# Logic lives in Python (ace_relevance_logger.archive_relevance_log); no JSON here.
 archive_relevance_log() {
-  local log_file=".claude/data/logs/ace-relevance.jsonl"
-  [ -s "$log_file" ] || return 0
-  mv -f "$log_file" "${log_file%.jsonl}.prev.jsonl" 2>/dev/null || true
+  local _py
+  _py="$(command -v python3)" || return 0
+  "$_py" -c 'import sys; sys.path.insert(0, sys.argv[1]); from ace_relevance_logger import archive_relevance_log; archive_relevance_log()' \
+    "${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}/shared-hooks/utils" 2>/dev/null || true
 }
 
 # Helper: Restore patterns from PreCompact temp file (compact/clear sources)
