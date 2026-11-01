@@ -26,6 +26,8 @@ import time
 from pathlib import Path
 from datetime import datetime
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "utils"))
+
 
 DEBOUNCE_SECONDS = 60
 
@@ -135,6 +137,11 @@ def _extract_tool_result_texts(entry: dict) -> list[str]:
 def _is_classifier_infra_denial(event) -> bool:
     """Return True iff the PermissionDenied was caused by a classifier infra abort.
 
+    v8: the documented `reason` field wins when present (cc_hooks_reference.md:2414/2435):
+    "Classifier unavailable" or "Auto mode could not evaluate this action..." = infra abort;
+    a "[Rule Name]" verdict is a genuine deny. The transcript tail is read ONLY when `reason`
+    is absent (older CC builds, v7.1.14 behaviour below).
+
     FIX 3: scans the tail NEWEST→OLDEST and takes the FIRST entry that has
     tool_result text (= the current denial's result).  Only THAT text is checked —
     older tool_results are ignored to prevent cross-event contamination.
@@ -152,6 +159,11 @@ def _is_classifier_infra_denial(event) -> bool:
     try:
         if not isinstance(event, dict):
             return False
+        reason = event.get("reason")
+        if isinstance(reason, str) and reason.strip():
+            low = reason.lower()
+            return ("classifier unavailable" in low
+                    or any(m in low for m in _INFRA_MARKERS))
         transcript_path = event.get("transcript_path")
         if not transcript_path:
             return False
@@ -189,15 +201,20 @@ def _read_event() -> dict:
         return {}
 
 
+_PROJECT_ID = None  # set by main() from the hook cwd; keeps the 2-arg debounce helpers stable
+
+
 def _debounce_dir(session_id: str) -> Path:
-    """Per-session subdir for debounce timestamps. Uses /tmp until #2 migration completes."""
-    # Phase 1 placeholder; Phase 4 will migrate to ${CLAUDE_PLUGIN_DATA}/projects/<id>/sessions/<sid>/
-    base = Path(f"/tmp/ace-denials-{session_id or 'default'}")
+    """Per-session debounce dir under plugin data (DESIGN §4), never /tmp."""
+    from plugin_data_dir import session_dir
+    # Own subdir: the sweep in _record_debounce must never touch the shared session
+    # dir (patterns-used-*.json, disabled.flag, locks, tools.db live there).
+    d = session_dir(_PROJECT_ID, session_id or "default") / "permission-denied"
     try:
-        base.mkdir(parents=True, exist_ok=True)
+        d.mkdir(parents=True, exist_ok=True)
     except OSError:
         pass
-    return base
+    return d
 
 
 def _is_debounced(tool_name: str, session_id: str) -> bool:
@@ -225,7 +242,7 @@ def _record_debounce(tool_name: str, session_id: str) -> None:
         pass
 
     # PR-review I5: opportunistic cleanup of siblings older than 10× TTL.
-    # /tmp/ace-denials-<sid>/ would otherwise grow unbounded on long-running
+    # the session dir would otherwise grow unbounded on long-running
     # CC sessions that never restart (web/Linear variants).
     try:
         cutoff = time.time() - (DEBOUNCE_SECONDS * 10)
@@ -306,35 +323,42 @@ def _send_to_cli(trace: dict) -> bool:
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
         )
-        proc.communicate(input=json.dumps(trace).encode("utf-8"), timeout=10)
+        try:
+            proc.communicate(input=json.dumps(trace).encode("utf-8"), timeout=10)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+            return False
         return proc.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+    except (FileNotFoundError, OSError):
         return False
 
 
 def main() -> int:
+    from ace_env import client_id, resolve_ids
+    from plugin_data_dir import disabled_flag
     event = _read_event()
     if not event:
         return 0
-
+    global _PROJECT_ID
+    session_id, project_id = resolve_ids(event)
+    _PROJECT_ID = project_id
+    if disabled_flag(project_id, session_id).exists():  # written by SessionStart (DESIGN §4)
+        return 0
+    os.environ["ACE_CLIENT_ID"] = client_id()  # was _ace_env.sh in the v7 shim
     tool_name = event.get("tool_name", "")
-    session_id = event.get("session_id", "")
 
     # FIX 4: debounce check runs BEFORE the transcript read so that bursts of
     # genuine denies for the same tool do NOT re-read (potentially large) transcripts.
     if _is_debounced(tool_name, session_id):
         return 0
 
-    # Guard: classifier infra-abort (e.g. LLM overloaded) fires PermissionDenied
-    # with NO denial reason in the event itself, but leaves a marker in the
-    # transcript.  Do NOT learn these — they are infrastructure noise, not
-    # genuine permission-boundary verdicts.  Infra path returns WITHOUT recording
-    # debounce (infra aborts are not genuine boundary signals).
+    # Classifier infra-abort: not a genuine permission-boundary verdict -> do NOT learn.
+    # Infra path returns WITHOUT recording debounce.
     if _is_classifier_infra_denial(event):
         return 0
 
-    trace = _build_trace(event)
-    _send_to_cli(trace)  # silently fire-and-forget on any error
+    _send_to_cli(_build_trace(event))  # silently fire-and-forget on any error
     _record_debounce(tool_name, session_id)
     return 0
 

@@ -790,3 +790,45 @@ def _make_stdin(event: dict):
     """Not used directly in these tests (we patch _read_event), but kept for reference."""
     import io
     return io.StringIO(json.dumps(event))
+
+
+class TestDebounceDoesNotTouchSessionState:
+    def test_sweep_keeps_shared_session_files(self, tmp_path, monkeypatch):
+        import os, time
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+        mod = _load_module()
+        sd = mod._debounce_dir("s1").parent
+        old = time.time() - 700
+        for n in ("patterns-used-main.json", "disabled.flag", "tools.db"):
+            f = sd / n
+            f.write_text("x")
+            os.utime(f, (old, old))
+        mod._record_debounce("Bash", "s1")
+        for n in ("patterns-used-main.json", "disabled.flag", "tools.db"):
+            assert (sd / n).exists(), n
+
+    def test_reason_path_context_window_marker_is_infra(self):
+        mod = _load_module()
+        assert mod._is_classifier_infra_denial(
+            {"reason": "Classifier transcript exceeded context window"})
+
+
+def test_session_end_keeps_dir_while_learn_lock_fresh(tmp_path, monkeypatch):
+    import subprocess, sys, json
+    env = dict(__import__("os").environ, CLAUDE_PLUGIN_DATA=str(tmp_path))
+    sys.path.insert(0, str(HOOK_PATH.parent / "utils"))
+    import plugin_data_dir as pd
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    sys.path.insert(0, str(HOOK_PATH.parent / "utils"))
+    from ace_env import resolve_ids
+    sid, pid = resolve_ids({"session_id": "s9", "cwd": str(tmp_path)})
+    d = pd.session_dir(pid, sid)
+    (d / "learn-inflight-main.lock").write_text("1")
+    (d / "patterns-used-main.json").write_text("{}")
+    subprocess.run([sys.executable, str(HOOK_PATH.parent / "ace_session_end.py")],
+                   input=json.dumps({"session_id": "s9", "cwd": str(tmp_path)}).encode(), env=env)
+    assert (d / "patterns-used-main.json").exists()
+    (d / "learn-inflight-main.lock").unlink()
+    subprocess.run([sys.executable, str(HOOK_PATH.parent / "ace_session_end.py")],
+                   input=json.dumps({"session_id": "s9", "cwd": str(tmp_path)}).encode(), env=env)
+    assert not d.exists()
