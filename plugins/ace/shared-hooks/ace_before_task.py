@@ -55,7 +55,7 @@ def sanitize_response(obj: Any) -> Any:
 
 from ace_cli import run_search, check_auth_status
 from ace_context import get_context
-from ace_relevance_logger import log_search_metrics, get_relevance_logger, _utc_now
+from ace_relevance_logger import log_search_metrics, log_search_skipped
 import ace_search_cache
 import plugin_data_dir
 
@@ -64,13 +64,19 @@ import plugin_data_dir
 MACHINE_PREFIXES = (
     '<task-notification', '<agent-message', '<cross-session-message',
     '[SYSTEM NOTIFICATION', '<local-command', '<command-name>', '<bash-input>',
-    '<bash-stdout>', '<bash-stderr>', '<system-reminder>',
+    '<bash-stdout>', '<bash-stderr>',
 )
+_LEADING_REMINDER = re.compile(r'\A\s*<system-reminder>.*?</system-reminder>\s*', re.DOTALL)
 
 
 def _skip_reason(prompt):
     """Return a reason string when the prompt must not trigger a search, else None."""
     stripped = prompt.strip()
+    # Leading injected <system-reminder> blocks are not the human's text: drop them,
+    # then judge what is left (a reminder-only prompt becomes empty -> machine).
+    stripped = _LEADING_REMINDER.sub('', stripped).strip() if stripped.startswith('<system-reminder>') else stripped
+    if not stripped and prompt.strip():
+        return 'machine_prompt'
     if stripped.startswith(MACHINE_PREFIXES):
         return 'machine_prompt'
     try:
@@ -84,11 +90,8 @@ def _skip_reason(prompt):
 
 def _log_skipped(event, reason, context):
     try:
-        get_relevance_logger()._write_log({
-            'timestamp': _utc_now(), 'event': 'search_skipped', 'hook': 'UserPromptSubmit',
-            'reason': reason, 'session_id': event.get('session_id'),
-            'project_id': (context or {}).get('project'),
-        })
+        log_search_skipped('UserPromptSubmit', reason, event.get('session_id'),
+                           (context or {}).get('project'))
     except Exception:
         pass
 
@@ -343,7 +346,7 @@ def main():
         # Get project context from .claude/settings.json
         context = get_context()
         if not context:
-            print("⚠️ [ACE] No project context found - skipping search")
+            print(json.dumps({"systemMessage": "⚠️ [ACE] No project context found - skipping search"}))
             sys.exit(0)
 
         # Use Claude's session_id for state file consistency (Issue #16)
@@ -372,7 +375,8 @@ def main():
         # fails, or errors.  The later append_patterns_used call (inside `if pattern_ids:`)
         # will merge pattern_ids + retrieval_id into this same file via merge logic.
         try:
-            append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id)
+            append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id,
+                                 user_prompt=user_prompt, hook_event_name='UserPromptSubmit')
         except Exception:
             pass  # non-fatal
 
@@ -393,6 +397,13 @@ def main():
         patterns_response = ace_search_cache.get(context['project'], 'main', search_query)
         if isinstance(patterns_response, dict):
             _cache_hit = True
+            # F-080: the cached retrieval_id / retrieval_log rows belong to an EARLIER task;
+            # crediting them to this task would double-credit them and the new tsid was never
+            # --pin-session'ed. Inject the patterns but send no credit flags (no ids at all).
+            patterns_response.pop('retrieval_id', None)
+            for _p in patterns_response.get('similar_patterns') or []:
+                if isinstance(_p, dict) and isinstance(_p.get('match_factors'), dict):
+                    _p['match_factors'].pop('retrieval_log_id', None)
         else:
             patterns_response, _search_ms = run_search(
                 query=search_query,
@@ -524,7 +535,7 @@ def main():
                                  retrieval_log_ids=_retrieval_log_map,
                                  task_session_id=task_session_id,
                                  user_prompt=user_prompt,
-                                 rendered_context=ace_context,
+                                 rendered_context=ace_context if ace_context is not None else '',
                                  hook_event_name='UserPromptSubmit')
         except Exception:
             pass
@@ -532,13 +543,15 @@ def main():
         # v5.4.2 / C5: log AFTER render with the real injected count + hook latency.
         try:
             domains = list(set(p.get('domain', 'unknown') for p in original_pattern_list if p.get('domain')))
+            _injected = set(_pattern_ids)
+            _injected_dicts = [p for p in original_pattern_list if p.get('id') in _injected]
             log_search_metrics(
                 hook='UserPromptSubmit',
                 session_id=session_id,
                 user_prompt=user_prompt,
                 search_query=search_query,
                 patterns_returned=original_pattern_list,
-                patterns_injected=len(_pattern_ids),
+                patterns_injected=_injected_dicts,
                 domains=domains,
                 project_id=context.get('project'),
                 org_id=context.get('org'),

@@ -163,7 +163,6 @@ MACHINE_PROMPTS = [
     "<bash-input>git status --short</bash-input>",
     "<bash-stdout>On branch main, nothing to commit</bash-stdout>",
     "<bash-stderr>fatal: not a git repository at all</bash-stderr>",
-    "<system-reminder>The user opened file foo.py in the IDE.</system-reminder> refactor auth",
 ]
 
 
@@ -379,3 +378,54 @@ def test_before_task_wrapper_is_thin_shim():
     assert "cd " not in code.replace("$(cd \"$(dirname", "")  # ROOT fallback only
     assert "python_path" in code
     assert "exec " in code and "ace_before_task.py" in code
+
+
+# ── review fixes (WP-B fix round) ───────────────────────────────────────────
+
+def test_reminder_prefix_on_human_prompt_still_searches(project, fake_cli, monkeypatch, capsys):
+    prompt = "<system-reminder>The user opened foo.py in the IDE.</system-reminder> " + HUMAN_PROMPT
+    out = _run(monkeypatch, capsys, prompt, project)
+    assert len(fake_cli["searches"]()) == 1
+    assert _additional_context(out)
+
+
+def test_relevance_log_keeps_avg_confidence_and_top_patterns(project, fake_cli, monkeypatch, capsys):
+    _run(monkeypatch, capsys, HUMAN_PROMPT, project)
+    e = [x for x in _relevance(project) if x.get("event") == "search"][0]
+    assert e["avg_confidence"] > 0
+    assert e["top_patterns"] and e["top_patterns"][0]["id"].startswith("ctx-")
+    assert e["patterns_injected"] == 3
+
+
+def test_cache_hit_sends_no_f080_credit_ids(project, fake_cli, monkeypatch, capsys):
+    """A cache hit must not reuse the earlier task's retrieval_id / retrieval_log rows."""
+    _run(monkeypatch, capsys, HUMAN_PROMPT, project)
+    first = _main_state()
+    assert first["retrieval_id"] == "ret-wpb-001" and first["retrieval_log_ids"]
+    sf = plugin_data_dir.session_dir(PROJECT, CC_SESSION, create=False) / "patterns-used-main.json"
+    sf.unlink()
+    out = _run(monkeypatch, capsys, HUMAN_PROMPT, project)
+    assert _additional_context(out)
+    st = _main_state()
+    assert st["pattern_ids"] and not st.get("retrieval_id") and not st["retrieval_log_ids"]
+
+
+def test_failed_search_state_keeps_user_prompt_and_event(project, fake_cli, monkeypatch, capsys):
+    fake_cli["response"] = {"error": "timeout", "message": "slow"}
+    _run(monkeypatch, capsys, HUMAN_PROMPT, project)
+    st = _main_state()
+    assert st["user_prompt"] == HUMAN_PROMPT and st["hook_event_name"] == "UserPromptSubmit"
+
+
+def test_control_arm_clears_stale_rendered_context(project, fake_cli, monkeypatch, capsys):
+    _run(monkeypatch, capsys, HUMAN_PROMPT, project)  # budget arm leaves rendered_context
+    assert _main_state()["rendered_context"]
+    monkeypatch.setenv("ACE_AB_CONTROL_PCT", "100")
+    _run(monkeypatch, capsys, HUMAN_PROMPT + " again please", project)
+    assert not _main_state().get("rendered_context")
+
+
+def test_no_project_context_message_is_json(project, fake_cli, monkeypatch, capsys):
+    (project / ".claude" / "settings.json").write_text("{}")
+    out = _run(monkeypatch, capsys, HUMAN_PROMPT, project)
+    assert isinstance(out, dict) and "systemMessage" in out
