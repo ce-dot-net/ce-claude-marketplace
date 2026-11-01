@@ -319,50 +319,8 @@ class TestBeforeTaskSessionId:
             "task_session_id in append_patterns_used must equal the one passed to run_search"
         )
 
-    def test_tmp_file_written_with_task_session_id(self, tmp_path, monkeypatch):
-        """/tmp/ace-session-{project}.txt must be written with task_session_id, not CC session."""
-        monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
-        monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
-        monkeypatch.chdir(tmp_path)
-        cc_session = "cc-conv-sess-for-tmp-test"
-
-        event = {
-            "session_id": cc_session,
-            "prompt": "build authentication middleware",
-        }
-
-        mod = _load_before_task()
-        captured_search_sid = {}
-
-        def fake_run_search(query, org=None, project=None, session_id=None, **kwargs):
-            captured_search_sid["tsid"] = session_id
-            return SAMPLE_PATTERNS_RESPONSE, 0
-
-        monkeypatch.setattr(mod, "run_search", fake_run_search)
-        monkeypatch.setattr(mod, "check_auth_status", lambda warn_threshold_hours=2.0: None)
-        monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
-        monkeypatch.setattr(mod, "append_patterns_used", MagicMock())
-        monkeypatch.setattr(mod, "log_search_metrics", MagicMock())
-
-        import io
-        monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
-        try:
-            mod.main()
-        except SystemExit:
-            pass
-
-        project = GOOD_CONTEXT["project"]
-        session_file = Path(f"/tmp/ace-session-{project}.txt")
-        if session_file.exists():
-            written = session_file.read_text().strip()
-            expected_tsid = captured_search_sid.get("tsid")
-            assert written == expected_tsid, (
-                f"/tmp/ace-session-{project}.txt must contain task_session_id={expected_tsid!r}; "
-                f"got {written!r} (CC session_id is {cc_session!r})"
-            )
-        else:
-            pytest.skip("/tmp/ace-session-{project}.txt was not written (pinning disabled?)")
+    # v8 (WP-B): /tmp/ace-session-<project>.txt is no longer written (DESIGN §0/§4);
+    # see tests/test_ups_machine_prompt_guard.py::test_no_tmp_session_file_written.
 
 
 # ════════════════════════════════════════════════════════════════════════════
