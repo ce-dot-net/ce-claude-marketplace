@@ -48,8 +48,12 @@ logs = os.path.join(out["cwd"], ".claude", "data", "logs") if out["cwd"] else ""
 # Task boundary: events since last "execution" event (Stop hook writes these)
 try:
     events = []
-    with open(os.path.join(logs, "ace-relevance.jsonl")) as f:
-        for line in f:
+    # bounded tail read (last 2MB) so refresh cost stays flat as the log grows
+    with open(os.path.join(logs, "ace-relevance.jsonl"), "rb") as f:
+        f.seek(0, 2); size = f.tell(); start = max(0, size - 2097152); f.seek(start)
+        lines = f.read().decode("utf-8", "replace").splitlines()
+        if start: lines = lines[1:]  # first line may be partial
+        for line in lines:
             try: events.append(json.loads(line))
             except Exception: pass
     last = max([i for i, e in enumerate(events) if isinstance(e, dict) and e.get("event") == "execution"] or [-1])
@@ -63,7 +67,7 @@ except Exception: pass
 # Self-eval review result (no fake helpfulness). jq-equivalent: .quality_pct // .helpful_pct // 0
 try:
     with open(os.path.join(logs, "ace-review-result.json")) as f: r = json.load(f)
-    out["quality_pct"] = r.get("quality_pct") or r.get("helpful_pct") or 0
+    q = r.get("quality_pct"); out["quality_pct"] = (q if q is not None else r.get("helpful_pct")) or 0
     out["time_saved"] = r.get("time_saved") or ""
 except Exception: pass
 for k, v in out.items(): print("%s=%s" % (k, shlex.quote(str(v))))

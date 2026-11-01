@@ -14,7 +14,7 @@ This document provides a comprehensive analysis of how the ACE (Agentic Context 
 
 ### State layout (`CLAUDE_PLUGIN_DATA`)
 
-All plugin state lives under `$CLAUDE_PLUGIN_DATA` (default `~/.claude/plugins/data/ace`) via
+All plugin state lives under `$CLAUDE_PLUGIN_DATA` (default `~/.claude/plugins/data/ace-ce-dot-net-marketplace`) via
 `shared-hooks/utils/plugin_data_dir.py`; nothing is written to the system temp dir:
 
 ```

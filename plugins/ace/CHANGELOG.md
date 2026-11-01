@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topology. Requires: Claude Code >= 2.1.300, ace-cli >= 4.1.2 (@ace-sdk/core >= 3.2.2).
 
 ### Changed
-- State moved from `/tmp` and `~/.claude/logs` to `$CLAUDE_PLUGIN_DATA` (default `~/.claude/plugins/data/ace`).
+- State moved from `/tmp` and `~/.claude/logs` to `$CLAUDE_PLUGIN_DATA` (default `~/.claude/plugins/data/ace-ce-dot-net-marketplace`).
 - Hook scripts are thin shims; one `ace-cli` spawn per search (no `--version`/`whoami` probes); hook timeouts in seconds.
 - New hooks: `PostToolUseFailure` (failed Bash calls feed learning), `SessionStart` compact re-injection.
 - Removed hooks: `PreToolUse`, `PreCompact`, `PermissionRequest`.
