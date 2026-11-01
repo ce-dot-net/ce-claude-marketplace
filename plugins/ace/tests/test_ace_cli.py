@@ -1,113 +1,60 @@
 #!/usr/bin/env python3
-"""Tests for ace_cli.py - CLI subprocess wrapper (mocked)"""
+"""Tests for ace_cli.py - CLI subprocess wrapper (mocked).
+
+v8 (DESIGN §5 C2): run_search returns (result_or_None, duration_ms) and spawns
+ace-cli exactly once. Full contract: tests/test_ace_cli_v8.py.
+"""
 
 import json
+import subprocess
 import sys
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-# Add shared-hooks to path
 sys.path.insert(0, str(Path(__file__).parent.parent / 'shared-hooks' / 'utils'))
 
 from ace_cli import run_search
 
 
+def _res(rc, stdout, stderr=b''):
+    r = MagicMock()
+    r.returncode = rc
+    r.stdout = stdout
+    r.stderr = stderr
+    return r
+
+
 def test_run_search_success():
-    """Test successful search call with context passed via environment"""
-    mock_result = MagicMock()
-    mock_result.returncode = 0
-    mock_result.stdout = json.dumps({
-        'patterns': [
-            {'content': 'Test pattern', 'helpful': 5}
-        ]
-    }).encode('utf-8')
-
-    with patch('subprocess.run', return_value=mock_result) as mock_run:
-        result = run_search('test query', org='org_123', project='prj_456')
-
-        assert result is not None
-        assert 'patterns' in result
-        assert len(result['patterns']) == 1
-        assert result['patterns'][0]['content'] == 'Test pattern'
-
-        # Verify subprocess call - uses ace-cli (renamed from ce-ace in v5.4.7)
-        args, kwargs = mock_run.call_args
-        assert args[0] == ['ace-cli', 'search', '--stdin', '--json']
-        assert 'env' in kwargs
-        assert kwargs['env']['ACE_ORG_ID'] == 'org_123'
-        assert kwargs['env']['ACE_PROJECT_ID'] == 'prj_456'
-
-        print("✅ test_run_search_success passed")
+    payload = {'patterns': [{'content': 'Test pattern', 'helpful': 5}]}
+    with patch('subprocess.run', return_value=_res(0, json.dumps(payload).encode())) as run:
+        result, ms = run_search('test query', hook_event_name='UserPromptSubmit')
+    assert result == payload
+    assert isinstance(ms, int)
+    assert run.call_count == 1
+    assert run.call_args.args[0] == ['ace-cli', 'search', '--stdin', '--json']
 
 
 def test_run_search_failure():
-    """Test search call with non-zero exit code (generic failure)"""
-    mock_result = MagicMock()
-    mock_result.returncode = 1
-    mock_result.stdout = b''  # Empty stdout
-    mock_result.stderr = b''  # Empty stderr (no auth error indicators)
-
-    with patch('subprocess.run', return_value=mock_result):
-        result = run_search('test query')
-
-        # v5.4.21: Generic failures still return None
-        assert result is None
-        print("✅ test_run_search_failure passed")
+    with patch('subprocess.run', return_value=_res(1, b'', b'')):
+        result, _ = run_search('test query', hook_event_name='UserPromptSubmit')
+    assert result is None
 
 
 def test_run_search_auth_failure():
-    """Test search call with auth error (v5.4.21)"""
-    mock_result = MagicMock()
-    mock_result.returncode = 1
-    mock_result.stdout = b'{"error": "Not logged in"}'
-    mock_result.stderr = b''
-
-    with patch('subprocess.run', return_value=mock_result):
-        result = run_search('test query')
-
-        # v5.4.21: Auth failures return structured error
-        assert result is not None
-        assert result.get('error') == 'not_authenticated'
-        assert 'ace-login' in result.get('message', '')
-        print("✅ test_run_search_auth_failure passed")
+    with patch('subprocess.run', return_value=_res(1, b'{"error": "Not logged in"}')):
+        result, _ = run_search('test query', hook_event_name='UserPromptSubmit')
+    assert result.get('error') == 'not_authenticated'
+    assert 'ace-login' in result.get('message', '')
 
 
 def test_run_search_timeout():
-    """Test search call timeout (v5.4.21)"""
-    import subprocess
-
-    with patch('subprocess.run', side_effect=subprocess.TimeoutExpired('ace-cli', 10)):
-        result = run_search('test query')
-
-        # v5.4.21: Timeout returns structured error instead of None
-        assert result is not None
-        assert result.get('error') == 'timeout'
-        assert 'timed out' in result.get('message', '').lower()
-        print("✅ test_run_search_timeout passed")
+    with patch('subprocess.run', side_effect=subprocess.TimeoutExpired('ace-cli', 15)):
+        result, _ = run_search('test query', hook_event_name='UserPromptSubmit')
+    assert result.get('error') == 'timeout'
+    assert 'timed out' in result.get('message', '').lower()
 
 
 def test_run_search_invalid_json():
-    """Test search call with invalid JSON response"""
-    mock_result = MagicMock()
-    mock_result.returncode = 0
-    mock_result.stdout = b'{ invalid json }'
-
-    with patch('subprocess.run', return_value=mock_result):
-        result = run_search('test query')
-
-        assert result is None
-        print("✅ test_run_search_invalid_json passed")
-
-
-if __name__ == '__main__':
-    print("Running ace_cli tests (mocked)...")
-    print()
-
-    test_run_search_success()
-    test_run_search_failure()
-    test_run_search_auth_failure()
-    test_run_search_timeout()
-    test_run_search_invalid_json()
-
-    print()
-    print("✅ All tests passed!")
+    with patch('subprocess.run', return_value=_res(0, b'{ invalid json }')):
+        result, _ = run_search('test query', hook_event_name='UserPromptSubmit')
+    assert result is None

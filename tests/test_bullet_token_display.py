@@ -251,8 +251,7 @@ def _run_main_with_response(mod, fake_response, event=None):
         }
 
     # Mock run_search → returns our fake_response directly
-    mock_run_search = mock.MagicMock(return_value=fake_response)
-    mock_check_pinning = mock.MagicMock(return_value=False)
+    mock_run_search = mock.MagicMock(return_value=(fake_response, 0))
     mock_check_auth = mock.MagicMock(return_value=None)   # no warning
     mock_get_context = mock.MagicMock(return_value={"project": "test-proj", "org": "test-org"})
     mock_log_metrics = mock.MagicMock()
@@ -260,7 +259,6 @@ def _run_main_with_response(mod, fake_response, event=None):
     mock_eval_check = mock.MagicMock(return_value=None)
 
     mod.run_search = mock_run_search
-    mod.check_session_pinning_available = mock_check_pinning
     mod.check_auth_status = mock_check_auth
     mod.get_context = mock_get_context
     mod.log_search_metrics = mock_log_metrics

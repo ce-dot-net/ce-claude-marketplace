@@ -1050,11 +1050,12 @@ class TestServerSideTopK:
             "is uncapped (server search_top_k config controls count)."
         )
 
-    def test_ace_cli_py_has_no_top_k(self):
-        """ace_cli.py run_search (used by before_task) must NOT build a --top-k flag."""
-        text = self.ACE_CLI_PY.read_text()
-        assert '--top-k' not in text, (
-            "ace_cli.py must NOT pass --top-k; main-path search is uncapped."
+    def test_before_task_passes_no_top_k(self):
+        """v8 C2: ace_cli.run_search CAN build --top-k (domain-shift uses 8), but the
+        main UserPromptSubmit path must never pass top_k -- it stays uncapped."""
+        text = self.BEFORE_TASK.read_text()
+        assert 'top_k' not in text and '--top-k' not in text, (
+            "ace_before_task.py must NOT pass top_k; main-path search is uncapped."
         )
 
 

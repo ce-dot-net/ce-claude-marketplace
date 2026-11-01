@@ -24,12 +24,18 @@ def test_corrupt_state_file_is_logged_and_deleted(tmp_path, monkeypatch):
       3. Unlink the corrupt file so future runs are unaffected
     """
     monkeypatch.chdir(tmp_path)
+    # v8 (DESIGN §4): state lives under $CLAUDE_PLUGIN_DATA; the relevance log
+    # stays in the project's .claude/data/logs.
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.delenv("ACE_PROJECT_ID", raising=False)
     log_dir = tmp_path / ".claude" / "data" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     session_id = "sess-corrupt"
     agent_suffix = "main"
-    state_file = log_dir / f"ace-patterns-used-{session_id}-{agent_suffix}.json"
+    state_file = (tmp_path / "pd" / "projects" / "default" / "sessions" / session_id
+                  / f"patterns-used-{agent_suffix}.json")
+    state_file.parent.mkdir(parents=True, exist_ok=True)
     state_file.write_text("{ not valid json")
 
     # Reset the relevance logger singleton so it writes to our cwd

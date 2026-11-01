@@ -678,13 +678,10 @@ class TestBeforeTaskControlArm:
         captured_output = {}
 
         def fake_run_search(**kwargs):
-            return fake_resp
+            return fake_resp, 0
 
         def fake_get_context():
             return {"org": "org-001", "project": "proj-001"}
-
-        def fake_check_pinning():
-            return False
 
         def fake_check_auth(warn_threshold_hours=2.0):
             return None
@@ -705,7 +702,6 @@ class TestBeforeTaskControlArm:
 
         with patch.object(mod, "run_search", fake_run_search), \
              patch.object(mod, "get_context", fake_get_context), \
-             patch.object(mod, "check_session_pinning_available", fake_check_pinning), \
              patch.object(mod, "check_auth_status", fake_check_auth), \
              patch.object(mod, "append_patterns_used", fake_append_patterns_used), \
              patch.object(mod, "log_search_metrics", lambda **kw: None), \
@@ -740,13 +736,10 @@ class TestBeforeTaskControlArm:
         logged_calls = []
 
         def fake_run_search(**kwargs):
-            return fake_resp
+            return fake_resp, 0
 
         def fake_get_context():
             return {"org": "org-001", "project": "proj-001"}
-
-        def fake_check_pinning():
-            return False
 
         def fake_check_auth(warn_threshold_hours=2.0):
             return None
@@ -770,7 +763,6 @@ class TestBeforeTaskControlArm:
 
         with patch.object(mod, "run_search", fake_run_search), \
              patch.object(mod, "get_context", fake_get_context), \
-             patch.object(mod, "check_session_pinning_available", fake_check_pinning), \
              patch.object(mod, "check_auth_status", fake_check_auth), \
              patch.object(mod, "append_patterns_used", fake_append_patterns_used), \
              patch.object(mod, "log_search_metrics", lambda **kw: None), \

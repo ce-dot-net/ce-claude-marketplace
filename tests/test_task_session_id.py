@@ -221,6 +221,9 @@ class TestBeforeTaskSessionId:
     def test_run_search_receives_task_session_id_not_cc_session(self, tmp_path, monkeypatch):
         """run_search must receive a fresh uuid4 task_session_id, NOT the CC session_id."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+        monkeypatch.chdir(tmp_path)
         cc_session = "cc-conversation-session-xyz"
 
         event = {
@@ -233,10 +236,9 @@ class TestBeforeTaskSessionId:
 
         def fake_run_search(query, org=None, project=None, session_id=None, **kwargs):
             captured["session_id"] = session_id
-            return SAMPLE_PATTERNS_RESPONSE
+            return SAMPLE_PATTERNS_RESPONSE, 0
 
         monkeypatch.setattr(mod, "run_search", fake_run_search)
-        monkeypatch.setattr(mod, "check_session_pinning_available", lambda: True)
         monkeypatch.setattr(mod, "check_auth_status", lambda warn_threshold_hours=2.0: None)
         monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
         monkeypatch.setattr(mod, "append_patterns_used", MagicMock())
@@ -265,6 +267,9 @@ class TestBeforeTaskSessionId:
     def test_task_session_id_persisted_in_state_file(self, tmp_path, monkeypatch):
         """The task_session_id must be stored in the patterns-used state file."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+        monkeypatch.chdir(tmp_path)
         cc_session = "cc-conv-sess-abc"
 
         event = {
@@ -277,7 +282,7 @@ class TestBeforeTaskSessionId:
 
         def fake_run_search(query, org=None, project=None, session_id=None, **kwargs):
             captured_task_session["tsid"] = session_id
-            return SAMPLE_PATTERNS_RESPONSE
+            return SAMPLE_PATTERNS_RESPONSE, 0
 
         pu_calls = []
 
@@ -287,7 +292,6 @@ class TestBeforeTaskSessionId:
             return pattern_ids
 
         monkeypatch.setattr(mod, "run_search", fake_run_search)
-        monkeypatch.setattr(mod, "check_session_pinning_available", lambda: True)
         monkeypatch.setattr(mod, "check_auth_status", lambda warn_threshold_hours=2.0: None)
         monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
         monkeypatch.setattr(mod, "append_patterns_used", fake_append_pu)
@@ -318,6 +322,9 @@ class TestBeforeTaskSessionId:
     def test_tmp_file_written_with_task_session_id(self, tmp_path, monkeypatch):
         """/tmp/ace-session-{project}.txt must be written with task_session_id, not CC session."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+        monkeypatch.chdir(tmp_path)
         cc_session = "cc-conv-sess-for-tmp-test"
 
         event = {
@@ -330,10 +337,9 @@ class TestBeforeTaskSessionId:
 
         def fake_run_search(query, org=None, project=None, session_id=None, **kwargs):
             captured_search_sid["tsid"] = session_id
-            return SAMPLE_PATTERNS_RESPONSE
+            return SAMPLE_PATTERNS_RESPONSE, 0
 
         monkeypatch.setattr(mod, "run_search", fake_run_search)
-        monkeypatch.setattr(mod, "check_session_pinning_available", lambda: True)
         monkeypatch.setattr(mod, "check_auth_status", lambda warn_threshold_hours=2.0: None)
         monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
         monkeypatch.setattr(mod, "append_patterns_used", MagicMock())
@@ -368,6 +374,9 @@ class TestSubagentStartTaskSessionId:
     def test_run_search_receives_task_session_id_not_cc_session(self, tmp_path, monkeypatch):
         """SubagentStart run_search must receive a fresh uuid4, NOT the CC session_id."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+        monkeypatch.chdir(tmp_path)
         cc_session = "cc-session-for-subagent-test"
 
         transcript_path = _make_transcript(tmp_path, [
@@ -387,10 +396,9 @@ class TestSubagentStartTaskSessionId:
 
         def fake_run_search(query, org=None, project=None, session_id=None, **kwargs):
             captured["session_id"] = session_id
-            return SAMPLE_PATTERNS_RESPONSE
+            return SAMPLE_PATTERNS_RESPONSE, 0
 
         monkeypatch.setattr(mod, "run_search", fake_run_search)
-        monkeypatch.setattr(mod, "check_session_pinning_available", lambda: True)
         monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
         monkeypatch.setattr(mod, "append_patterns_used", MagicMock())
 
@@ -414,6 +422,9 @@ class TestSubagentStartTaskSessionId:
     def test_task_session_id_stored_in_agent_state_file(self, tmp_path, monkeypatch):
         """task_session_id must be passed to append_patterns_used from SubagentStart."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+        monkeypatch.chdir(tmp_path)
         cc_session = "cc-conv-sess-sub"
 
         transcript_path = _make_transcript(tmp_path, [
@@ -433,7 +444,7 @@ class TestSubagentStartTaskSessionId:
 
         def fake_run_search(query, org=None, project=None, session_id=None, **kwargs):
             captured_search_sid["tsid"] = session_id
-            return SAMPLE_PATTERNS_RESPONSE
+            return SAMPLE_PATTERNS_RESPONSE, 0
 
         pu_calls = []
 
@@ -443,7 +454,6 @@ class TestSubagentStartTaskSessionId:
             return pattern_ids
 
         monkeypatch.setattr(mod, "run_search", fake_run_search)
-        monkeypatch.setattr(mod, "check_session_pinning_available", lambda: True)
         monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
         monkeypatch.setattr(mod, "append_patterns_used", fake_append_pu)
 
@@ -465,6 +475,9 @@ class TestSubagentStartTaskSessionId:
     def test_each_subagent_gets_distinct_task_session_id(self, tmp_path, monkeypatch):
         """Two separate SubagentStart calls produce distinct task_session_ids."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+        monkeypatch.chdir(tmp_path)
 
         transcript_path = _make_transcript(tmp_path, [
             {"subagent_type": "coder", "prompt": "Some task"},
@@ -486,10 +499,9 @@ class TestSubagentStartTaskSessionId:
 
         def fake_run_search(query, org=None, project=None, session_id=None, **kwargs):
             collected.append(session_id)
-            return SAMPLE_PATTERNS_RESPONSE
+            return SAMPLE_PATTERNS_RESPONSE, 0
 
         monkeypatch.setattr(mod, "run_search", fake_run_search)
-        monkeypatch.setattr(mod, "check_session_pinning_available", lambda: True)
         monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
         monkeypatch.setattr(mod, "append_patterns_used", MagicMock())
 
@@ -809,6 +821,9 @@ class TestUnconditionalSeedWrite:
         so 0-pattern tasks leave load_task_session_id returning None at Stop.
         """
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+        monkeypatch.chdir(tmp_path)
         cc_session = "cc-conv-sess-zero-pat-main"
         event = {"session_id": cc_session, "prompt": "build auth middleware"}
 
@@ -817,10 +832,9 @@ class TestUnconditionalSeedWrite:
         zero_pattern_response = {"similar_patterns": [], "count": 0, "retrieval_id": None}
 
         def fake_run_search(query, org=None, project=None, session_id=None, **kwargs):
-            return zero_pattern_response
+            return zero_pattern_response, 0
 
         monkeypatch.setattr(mod, "run_search", fake_run_search)
-        monkeypatch.setattr(mod, "check_session_pinning_available", lambda: True)
         monkeypatch.setattr(mod, "check_auth_status", lambda warn_threshold_hours=2.0: None)
         monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
         monkeypatch.setattr(mod, "append_patterns_used", pus.append_patterns_used)
@@ -846,12 +860,14 @@ class TestUnconditionalSeedWrite:
     def test_before_task_with_patterns_still_anchors_task_session_id(self, tmp_path, monkeypatch):
         """GREEN non-regression: ace_before_task with patterns → anchor + pattern_ids stored."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+        monkeypatch.chdir(tmp_path)
         cc_session = "cc-conv-sess-with-pat-main"
         event = {"session_id": cc_session, "prompt": "implement database schema"}
 
         mod = _load_before_task()
-        monkeypatch.setattr(mod, "run_search", lambda *a, **kw: SAMPLE_PATTERNS_RESPONSE)
-        monkeypatch.setattr(mod, "check_session_pinning_available", lambda: True)
+        monkeypatch.setattr(mod, "run_search", lambda *a, **kw: (SAMPLE_PATTERNS_RESPONSE, 0))
         monkeypatch.setattr(mod, "check_auth_status", lambda warn_threshold_hours=2.0: None)
         monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
         monkeypatch.setattr(mod, "append_patterns_used", pus.append_patterns_used)
