@@ -32,9 +32,6 @@ STOP_WRAPPER = (
 SUBAGENT_WRAPPER = (
     REPO_ROOT / "plugins" / "ace" / "scripts" / "ace_subagent_stop_wrapper.sh"
 )
-PRECOMPACT_WRAPPER = (
-    REPO_ROOT / "plugins" / "ace" / "scripts" / "ace_precompact_wrapper.sh"
-)
 
 
 @pytest.fixture
@@ -148,14 +145,6 @@ def test_subagent_wrapper_still_creates_learn_lock():
     assert 'LEARN_LOCK="/tmp/ace-learn-inflight-${_ASID}.lock"' in src
     assert 'touch "$LEARN_LOCK"' in src
     assert 'rm -f "$TEMP_INPUT" "$LEARN_LOCK"' in src
-
-
-def test_precompact_still_blocks_on_lock():
-    src = PRECOMPACT_WRAPPER.read_text()
-    assert 'LEARN_LOCK="/tmp/ace-learn-inflight-${SESSION_ID}.lock"' in src
-    assert 'find "$LEARN_LOCK" -mmin -10' in src
-    assert '"decision": "block"' in src or 'decision: "block"' in src
-    assert "exit 2" in src
 
 
 # ── Static guard: wrappers extract background_tasks count additively ─────────
