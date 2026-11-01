@@ -14,6 +14,8 @@ duplicated inline in ace_before_task.py (writer) and ace_after_task.py (reader).
 import json
 import os
 import sys
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
 
 # ace_pattern_render is in the same utils directory
@@ -41,7 +43,12 @@ def _project_id(project_id=None):
         return project_id
     try:
         from ace_context import get_context
-        ctx = get_context()
+        # Anchor to $CLAUDE_PROJECT_DIR (cwd-independent, v6.6.6 lesson): the
+        # session cwd can move to a subdir; the cwd-relative lookup would then
+        # resolve a different project id for writer vs reader.
+        ctx = get_context(os.environ.get('CLAUDE_PROJECT_DIR') or None)
+        if (not ctx or not ctx.get('project')) and os.environ.get('CLAUDE_PROJECT_DIR'):
+            ctx = get_context()
         if ctx and ctx.get('project'):
             return ctx['project']
     except Exception:
@@ -71,6 +78,41 @@ def _filter_retrieval_log_ids(retrieval_log_ids):
     }
 
 
+@contextmanager
+def _locked(sf):
+    """Exclusive flock on a sibling .lock so concurrent appends don't lose data.
+    Best-effort: without fcntl/flock the atomic replace still prevents torn files."""
+    fh = None
+    try:
+        import fcntl
+        fh = open(str(sf) + '.lock', 'a')
+        fcntl.flock(fh, fcntl.LOCK_EX)
+    except Exception:
+        pass
+    try:
+        yield
+    finally:
+        if fh is not None:
+            try:
+                fh.close()  # releases the lock
+            except Exception:
+                pass
+
+
+def _atomic_write(sf, text):
+    fd, tmp = tempfile.mkstemp(dir=str(sf.parent), prefix='.pus-', suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            f.write(text)
+        os.replace(tmp, sf)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
 def _read_state_file(sf):
     """Read state file; return (pattern_ids_list, retrieval_id, retrieval_log_ids, task_session_id).
 
@@ -85,7 +127,11 @@ def _read_state_file(sf):
     """
     if not sf.exists():
         return [], None, {}, None
-    raw = json.loads(sf.read_text())  # intentionally raises on bad JSON
+    return _parse_state(json.loads(sf.read_text()))  # intentionally raises on bad JSON
+
+
+def _parse_state(raw):
+    """(ids, retrieval_id, retrieval_log_ids, task_session_id) from parsed JSON."""
     if isinstance(raw, list):
         # Legacy bare-list format
         return raw, None, {}, None
@@ -125,42 +171,39 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
         return []
     sf = state_file_path(session_id, agent_id, state_dir, project_id)
     sf.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        existing_ids, existing_rid, existing_rlog, existing_tsid = _read_state_file(sf)
-    except Exception:
-        existing_ids, existing_rid, existing_rlog, existing_tsid = [], None, {}, None
-    seen = set(existing_ids)
-    for pid in ids:
-        if pid not in seen:
-            existing_ids.append(pid)
-            seen.add(pid)
-    # Merge retrieval_log_ids (new entries win over existing for same key)
-    merged_rlog = dict(existing_rlog)
-    merged_rlog.update(_filter_retrieval_log_ids(retrieval_log_ids or {}))
-    # retrieval_id: use new value if provided, else keep existing
-    merged_rid = retrieval_id if retrieval_id is not None else existing_rid
-    # task_session_id: use new value if provided, else keep existing
-    merged_tsid = task_session_id if task_session_id is not None else existing_tsid
-    state = {
-        'pattern_ids': existing_ids,
-        'retrieval_id': merged_rid,
-        'retrieval_log_ids': merged_rlog,
-        'task_session_id': merged_tsid,
-    }
-    # C1 optional keys: keep earlier values unless a new one is supplied.
-    try:
-        prior = json.loads(sf.read_text()) if sf.exists() else {}
-    except Exception:
-        prior = {}
-    if not isinstance(prior, dict):
-        prior = {}
-    for key, val, cap in (('user_prompt', user_prompt, USER_PROMPT_MAX),
-                          ('rendered_context', rendered_context, RENDERED_CONTEXT_MAX),
-                          ('hook_event_name', hook_event_name, None)):
-        val = val if val else prior.get(key)
-        if val:
-            state[key] = val[:cap] if cap else val
-    sf.write_text(json.dumps(state))
+    with _locked(sf):
+        try:
+            prior_raw = json.loads(sf.read_text()) if sf.exists() else {}
+        except Exception:
+            prior_raw = {}
+        existing_ids, existing_rid, existing_rlog, existing_tsid = _parse_state(prior_raw)
+        seen = set(existing_ids)
+        for pid in ids:
+            if pid not in seen:
+                existing_ids.append(pid)
+                seen.add(pid)
+        # Merge retrieval_log_ids (new entries win over existing for same key)
+        merged_rlog = dict(existing_rlog)
+        merged_rlog.update(_filter_retrieval_log_ids(retrieval_log_ids or {}))
+        # retrieval_id: use new value if provided, else keep existing
+        merged_rid = retrieval_id if retrieval_id is not None else existing_rid
+        # task_session_id: use new value if provided, else keep existing
+        merged_tsid = task_session_id if task_session_id is not None else existing_tsid
+        state = {
+            'pattern_ids': existing_ids,
+            'retrieval_id': merged_rid,
+            'retrieval_log_ids': merged_rlog,
+            'task_session_id': merged_tsid,
+        }
+        # C1 optional keys: keep earlier values unless a new one is supplied.
+        prior = prior_raw if isinstance(prior_raw, dict) else {}
+        for key, val, cap in (('user_prompt', user_prompt, USER_PROMPT_MAX),
+                              ('rendered_context', rendered_context, RENDERED_CONTEXT_MAX),
+                              ('hook_event_name', hook_event_name, None)):
+            val = val if val else prior.get(key)
+            if val:
+                state[key] = val[:cap] if cap else val
+        _atomic_write(sf, json.dumps(state))
     return existing_ids
 
 

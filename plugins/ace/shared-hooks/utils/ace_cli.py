@@ -41,10 +41,12 @@ def _log_cli_error(location: str, returncode: int, stdout_sample: str, stderr_sa
         }
         if extra:
             entry.update(extra)
-        log_path = Path('.claude/data/logs/ace-relevance.jsonl')
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(log_path, 'a') as f:
-            f.write(json.dumps(entry) + '\n')
+        import sys as _sys
+        _u = str(Path(__file__).resolve().parent)
+        if _u not in _sys.path:
+            _sys.path.insert(0, _u)
+        from ace_relevance_logger import ACERelevanceLogger
+        ACERelevanceLogger()._write_log(entry)  # shares the one rotation scheme
     except Exception:
         pass  # Logging must not fail the caller
 
@@ -67,9 +69,17 @@ def _env(org, project):
 def _spawn(cmd, **kw):
     """subprocess.run; on a sqlite 'database is locked' failure retry ONCE after
     a short random sleep (client-side, DESIGN §8; concurrent ace-cli processes)."""
+    t0 = time.monotonic()
+    budget = kw.get('timeout')
     r = subprocess.run(cmd, **kw)
     if r.returncode != 0 and 'database is locked' in _text(r.stderr).lower():
         time.sleep(random.uniform(0.2, 0.6))
+        if budget is not None:
+            # Retry only inside the original deadline (hook timeout > call timeout).
+            left = budget - (time.monotonic() - t0)
+            if left < 1:
+                return r
+            kw = dict(kw, timeout=left)
         r = subprocess.run(cmd, **kw)
     return r
 
@@ -142,15 +152,17 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
     fd, path = tempfile.mkstemp(prefix='ace-trace-', suffix='.json')
     try:
         with os.fdopen(fd, 'w') as f:
-            json.dump(trace, f)
+            json.dump(trace, f, default=str)
         cmd = [CLI_CMD, 'learn', '--transcript', path, '--json',
                '--timeout', str(max(timeout - 5, 1) * 1000), '--verbosity', verbosity]
         if retrieval_id:
             cmd += ['--retrieval-id', retrieval_id]
         if applied_log_ids:
             cmd += ['--applied-log-ids', ','.join(str(x) for x in applied_log_ids)]
-        result = _spawn(cmd, text=True, capture_output=True, timeout=timeout,
-                        env=_env(org, project))
+        # A lock failure may occur after the server POST: retrying learn could
+        # duplicate the trace / double F-080 credit, so learn never retries.
+        result = subprocess.run(cmd, text=True, capture_output=True, timeout=timeout,
+                                env=_env(org, project))
         if result.returncode != 0:
             _log_cli_error("ace_cli_learn_nonzero_exit", result.returncode, _text(result.stdout),
                            _text(result.stderr), project_id=project, hook_event_name=hook_event_name)
@@ -167,6 +179,8 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
                        hook_event_name=hook_event_name)
         return None, _ms(t0)
     except FileNotFoundError:
+        _log_cli_error("ace_cli_learn_not_found", -1, '', '', project_id=project,
+                       hook_event_name=hook_event_name)
         return None, _ms(t0)
     finally:
         try:

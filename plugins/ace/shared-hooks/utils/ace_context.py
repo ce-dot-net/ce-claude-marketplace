@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional, Dict
 
 
-def get_context() -> Optional[Dict[str, str]]:
+def get_context(base_dir: Optional[str] = None) -> Optional[Dict[str, str]]:
     """
     Read orgId and projectId from .claude/settings.json
 
@@ -20,7 +20,7 @@ def get_context() -> Optional[Dict[str, str]]:
     Returns:
         Dict with 'org' and 'project' keys, or None if not found
     """
-    settings_file = Path('.claude/settings.json')
+    settings_file = Path(base_dir, '.claude/settings.json') if base_dir else Path('.claude/settings.json')
 
     # Try reading from file first
     if not settings_file.exists():

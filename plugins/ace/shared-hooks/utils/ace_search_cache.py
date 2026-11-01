@@ -2,7 +2,7 @@
 """v8 disk search cache (DESIGN §6 Foundation).
 
 Entries: <plugin-data>/cache/search/<sha256>.json, TTL 15 min, atomic write
-(tempfile in the same dir + os.replace), LRU cap by mtime. Cross-process so a
+(tempfile in the same dir + os.replace), FIFO cap by write mtime. Cross-process so a
 repeated prompt / sibling subagent skips the ace-cli spawn. Never raises.
 """
 from __future__ import annotations
@@ -71,6 +71,14 @@ def put(project_id: str, agent_scope: str, query: str, value: Any) -> None:
 
 
 def _evict(d: Path) -> None:
+    # FIFO by write time (get() does not touch mtime, so TTL stays fixed).
+    # Callers must NOT put error dicts ({"error": ...}) - only real results.
+    for t in d.glob("*.tmp"):  # orphans from a crashed put
+        try:
+            if time.time() - t.stat().st_mtime > 60:
+                t.unlink()
+        except OSError:
+            pass
     files = sorted(d.glob("*.json"), key=lambda f: f.stat().st_mtime)
     for f in files[: max(0, len(files) - MAX_ENTRIES)]:
         try:

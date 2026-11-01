@@ -214,7 +214,29 @@ def data_root() -> Path:
     explicit = os.environ.get("CLAUDE_PLUGIN_DATA")
     if explicit:
         return Path(explicit)
-    return Path.home() / ".claude" / "plugins" / "data" / "ace"
+    return _fallback_root()
+
+
+def _fallback_root() -> Path:
+    """Non-hook consumers have no CLAUDE_PLUGIN_DATA. CC's real dir is
+    ~/.claude/plugins/data/<plugin>-<marketplace> (cc_plugins_reference.md:559):
+    derive it from CLAUDE_PLUGIN_ROOT (.../cache/<marketplace>/<plugin>/<ver>),
+    else glob data/ace-*, else plain 'ace'."""
+    base = Path.home() / ".claude" / "plugins" / "data"
+    root = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if root:
+        parts = Path(root).parts
+        if "cache" in parts:
+            i = len(parts) - 1 - parts[::-1].index("cache")
+            if len(parts) > i + 2:
+                return base / ("%s-%s" % (parts[i + 2], parts[i + 1]))
+    try:
+        hits = sorted(p for p in base.glob("ace-*") if p.is_dir())
+        if hits:
+            return hits[0]
+    except OSError:
+        pass
+    return base / "ace"
 
 
 def project_dir(project_id: Optional[str], create: bool = True) -> Path:
@@ -259,6 +281,35 @@ def disabled_flag(project_id: Optional[str], session_id: Optional[str]) -> Path:
 def learn_lock(project_id: Optional[str], session_id: Optional[str], agent: Optional[str]) -> Path:
     name = "learn-inflight-%s.lock" % _safe(agent or "main")
     return _file(session_dir(project_id, session_id, create=False) / name)
+
+
+def domain_last_file(project_id, session_id, agent) -> Path:
+    name = "domain-last-%s.txt" % _safe(agent or "main")
+    return _file(session_dir(project_id, session_id, create=False) / name)
+
+
+def tools_db(project_id, session_id) -> Path:
+    return _file(session_dir(project_id, session_id, create=False) / "tools.db")
+
+
+def patterns_used_file(project_id, session_id, agent) -> Path:
+    name = "patterns-used-%s.json" % _safe(agent or "main")
+    return _file(session_dir(project_id, session_id, create=False) / name)
+
+
+ERRORS_LOG_MAX = 5 * 1024 * 1024
+
+
+def append_error(line: str) -> None:
+    """Append one line to logs/ace-hook-errors.log; rotate (1 backup) at 5 MB. Never raises."""
+    try:
+        p = errors_log()
+        if p.exists() and p.stat().st_size > ERRORS_LOG_MAX:
+            os.replace(p, str(p) + ".1")
+        with open(p, "a") as f:
+            f.write(line.rstrip("\n") + "\n")
+    except Exception:
+        pass
 
 
 def resolve_session_id(event: Optional[dict]) -> str:

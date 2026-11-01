@@ -20,20 +20,11 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 
 
-ARCHIVE_MAX_BYTES = 50 * 1024 * 1024  # v8: size rotation only, never a startup wipe
-
-
 def archive_relevance_log(log_dir: str = ".claude/data/logs") -> None:
-    """Rotate ace-relevance.jsonl to ace-relevance.1.jsonl when it exceeds 50 MB.
-
-    Replaces the v7 SessionStart move to ace-relevance.prev.jsonl (which wiped
-    the live log every session). Small logs are left untouched. Never raises.
-    """
+    """Size-based rotation only (50 MB, .1-.3 chain), never a startup wipe.
+    Delegates to the logger's single rotation scheme. Never raises."""
     try:
-        d = Path(log_dir)
-        log = d / "ace-relevance.jsonl"
-        if log.exists() and log.stat().st_size > ARCHIVE_MAX_BYTES:
-            os.replace(log, d / "ace-relevance.1.jsonl")
+        ACERelevanceLogger(log_dir)._rotate_if_needed()
     except Exception:
         pass
 
@@ -42,7 +33,7 @@ class ACERelevanceLogger:
     """Logger for pattern relevance metrics with rotation."""
 
     # v5.4.5: Add rotation to prevent unbounded log growth
-    MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
+    MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB (v8)
     MAX_BACKUP_FILES = 3  # Keep 3 rotated files
 
     def __init__(self, log_dir: str = ".claude/data/logs"):
