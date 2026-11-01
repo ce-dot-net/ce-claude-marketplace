@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 description: Generate LLM-evaluated HTML insights report — per-task helpfulness with reasoning
 argument-hint: "[--hours N]"
 effort: high

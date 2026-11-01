@@ -63,13 +63,13 @@ class TestFloorBump:
                 f"Stale MIN_VERSION=4.1.1 still active in ace_install_cli.sh: {line!r}"
             )
 
-    def test_plugin_json_description_cc_floor_2_1_163(self):
-        """plugin.json description must mention Claude Code >= 2.1.163."""
+    def test_plugin_json_description_cc_floor_2_1_300(self):
+        """plugin.json description must mention Claude Code >= 2.1.300 (v8 floor)."""
         data = json.loads(PLUGIN_JSON.read_text())
         desc = data['description']
         # Must reference 2.1.163 as CC floor
-        assert '2.1.163' in desc, (
-            f"plugin.json description must mention CC floor 2.1.163; current desc: {desc!r}"
+        assert '2.1.300' in desc, (
+            f"plugin.json description must mention CC floor 2.1.300; current desc: {desc!r}"
         )
 
     def test_plugin_json_description_no_stale_cc_floor_2_1_139(self):

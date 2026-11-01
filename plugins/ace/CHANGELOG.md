@@ -5,6 +5,53 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.0.0]
+
+### Headline
+Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topology. Requires: Claude Code >= 2.1.300, ace-cli >= 4.1.2 (@ace-sdk/core >= 3.2.2).
+
+### Changed
+- State moved from `/tmp` and `~/.claude/logs` to `$CLAUDE_PLUGIN_DATA` (default `~/.claude/plugins/data/ace-ce-dot-net-marketplace`).
+- Hook scripts are thin shims; one `ace-cli` spawn per search (no `--version`/`whoami` probes); hook timeouts in seconds.
+- New hooks: `PostToolUseFailure` (failed Bash calls feed learning), `SessionStart` compact re-injection.
+- Removed hooks: `PreToolUse`, `PreCompact`, `PermissionRequest`.
+- 18 user-only commands set `disable-model-invocation: true` (all except ace-search, ace-learn, ace-patterns, ace-status).
+- `/ace:ace-doctor` checks Claude Code >= 2.1.300 and the plugin-data layout; plugin root comes from `installed_plugins.json`.
+- Statusline uses one Python call instead of 13 `jq` spawns (refresh the user copy with `/ace:ace-statusline-setup update`).
+- Docs: ARCHITECTURE.md updated, new `docs/technical/ADR-001-language.md`.
+
+## [7.1.14]
+
+- PermissionDenied hook skips Claude Code auto-mode classifier infra-aborts (transcript-tail detection, bounded seek-read, tool-name correlation).
+
+## [7.1.13]
+
+- Salt the A/B render-cohort hash (orthogonal to the server serve-A/B), add render_variant stamp, repair the v7.1.12 description.
+
+## [7.1.12]
+
+- Dormant-by-default A/B render cohort (control / budget-verbatim / compact-all, env-gated, deterministic by session_id).
+
+## [7.1.11]
+
+- Budget-verbatim injection render: top-N by bandit_rank within 9,500 chars so patterns fit the 10K additionalContext cap and reach the model.
+
+## [7.1.10]
+
+- Fix domain-shift hook emitting invalid JSON (sed replaced by `jq -n`); Claude Code was silently dropping injections containing quotes or unicode.
+
+## [7.1.9]
+
+- Drop the domain-shift `--allowed-domains` filter; cross-domain patterns now surface (server-confirmed domain_match anti-predicts relevance).
+
+## [7.1.8]
+
+- Server-blessed injection render: bandit_rank ordering, no client hard-drop, tiered output (-78% tokens).
+
+## [7.1.7]
+
+- `/ace:ace-graph` polish: hide isolated nodes by default, with a toggle.
+
 ## [7.1.6] - 2026-06-18
 
 ### Headline

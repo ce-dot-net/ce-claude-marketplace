@@ -1,4 +1,5 @@
 ---
+disable-model-invocation: true
 description: Bootstrap ACE playbook from docs, git history, and/or current code
 argument-hint: "[--mode hybrid|both|local-files|git-history|docs-only] [--thoroughness light|medium|deep] [--commits N] [--days N]"
 context: fork
