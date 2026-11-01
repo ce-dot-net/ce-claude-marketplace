@@ -9,7 +9,7 @@ Scope:
   2. LRU cache key includes task_intent so different intents never share a cache entry
   3. UserPromptSubmit call site (ace_before_task.py) does NOT hardcode task_intent;
      it omits the kwarg (or passes None) so the server classifies intent itself.
-  4. Domain-shift PreToolUse call site (ace_pretooluse_wrapper.sh) does NOT pass
+  4. Domain-shift call site (v8: ace_domain_shift.py) does NOT pass
      --task-intent; the server classifies intent from the search payload.
 
 The run_search() plumbing still supports task_intent when explicitly passed (used by
@@ -194,28 +194,20 @@ class TestBeforeTaskCallSiteTaskIntent:
 
 
 # ---------------------------------------------------------------------------
-# 4. Shell-level — ace_pretooluse_wrapper.sh domain-shift must NOT pass --task-intent
+# 4. Domain-shift call site (v8: Python port ace_domain_shift.py, WP-D) must
+#    NOT pass --task-intent. The PreToolUse bash wrapper this used to pin is
+#    deleted in v8 (DESIGN §3 REMOVED / §6 WP-D).
 # ---------------------------------------------------------------------------
 
-class TestPreToolUseShellCallSiteTaskIntent:
-    """
-    ace_pretooluse_wrapper.sh domain-shift ace-cli invocation must NOT include
-    --task-intent in the search command. Hardcoding 'explore' masks the server's
-    own intent classifier; the fix is to omit the flag entirely.
-    """
+class TestDomainShiftCallSiteTaskIntent:
+    """ace_domain_shift.py must not send task_intent / --task-intent: hardcoding
+    it masks the server's own intent classifier (v7.0.1 principle)."""
 
-    def test_pretooluse_wrapper_omits_task_intent(self):
-        """
-        The shell script source must NOT contain --task-intent in the
-        ace-cli search call (domain-shift branch). The server classifies
-        intent from the search payload; sending a non-null value prevents
-        the server backfill from firing (flow-A precedence).
-        """
-        wrapper = REPO / "plugins" / "ace" / "scripts" / "ace_pretooluse_wrapper.sh"
-        assert wrapper.exists(), f"ace_pretooluse_wrapper.sh not found at {wrapper}"
-
-        source = wrapper.read_text()
-        assert "--task-intent" not in source, (
-            "ace_pretooluse_wrapper.sh must NOT contain --task-intent flag; "
-            "hardcoding it masks the server intent classifier"
+    def test_domain_shift_py_omits_task_intent(self):
+        mod = REPO / "plugins" / "ace" / "shared-hooks" / "ace_domain_shift.py"
+        assert mod.exists(), f"ace_domain_shift.py not found at {mod} (DESIGN §6 WP-D)"
+        source = mod.read_text()
+        assert "--task-intent" not in source and "task_intent" not in source, (
+            "ace_domain_shift.py must NOT pass task_intent; it masks the server "
+            "intent classifier"
         )
