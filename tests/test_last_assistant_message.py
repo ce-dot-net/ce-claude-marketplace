@@ -52,7 +52,6 @@ class TestLastAssistantMessage(unittest.TestCase):
                  tools
              )), \
              patch('ace_after_task.get_user_prompt_from_transcript', return_value="implement feature X"), \
-             patch('ace_after_task.recall_session', return_value=None), \
              patch('ace_after_task.log_execution_metrics'), \
              patch('ace_after_task.is_valid_pattern_id', return_value=True), \
              patch('ace_tool_accumulator.clear_session'), \

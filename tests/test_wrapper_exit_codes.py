@@ -55,6 +55,8 @@ class TestWrapperExitCodes(unittest.TestCase):
             if not script_path.exists():
                 continue
             content = script_path.read_text()
+            if "exec \"$PY\"" in content:
+                continue  # v8 thin shim: Python catches everything, no trap needed
             if "ERR" not in content or ("trap" not in content):
                 missing_trap.append(script_name)
 
