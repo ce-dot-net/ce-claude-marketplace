@@ -1,37 +1,7 @@
 #!/usr/bin/env bash
-# ACE Before Task Wrapper - Forwards to shared-hooks/ace_before_task.py
-set -eo pipefail
-trap 'echo "[ERROR] ACE hook failed: $(basename $0) line $LINENO" >&2; exit 0' ERR
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-HOOK_SCRIPT="${PLUGIN_ROOT}/shared-hooks/ace_before_task.py"
-
-[[ -f "${HOOK_SCRIPT}" ]] || {
-  echo "[ERROR] ace_before_task.py not found: ${HOOK_SCRIPT}" >&2
-  exit 0
-}
-
-# Extract working directory from stdin and cd to it
-# This ensures ace_before_task.py can find .claude/settings.json
-INPUT_JSON=$(cat)
-
-WORKING_DIR=$(echo "$INPUT_JSON" | jq -r '.cwd // .working_directory // .workingDirectory // empty')
-if [[ -z "$WORKING_DIR" ]]; then
-  # Fallback: Infer from transcript_path (.claude/data/transcript-*.jsonl -> project root)
-  TRANSCRIPT_PATH=$(echo "$INPUT_JSON" | jq -r '.transcript_path // empty')
-  if [[ -n "$TRANSCRIPT_PATH" ]]; then
-    # transcript_path is .claude/data/transcript-*.jsonl, so go up 2 levels
-    WORKING_DIR=$(cd "$(dirname "$TRANSCRIPT_PATH")/../.." && pwd)
-  fi
-fi
-
-if [[ -n "$WORKING_DIR" ]] && [[ -d "$WORKING_DIR" ]]; then
-  cd "$WORKING_DIR" || {
-    echo "[ERROR] Failed to change to working directory: $WORKING_DIR" >&2
-    exit 0
-  }
-fi
-
-# Pass INPUT_JSON to ace_before_task.py via stdin
-echo "$INPUT_JSON" | exec python3 "${HOOK_SCRIPT}" "$@"
+# thin shim: resolve python once (cached by SessionStart), exec the python hook with stdin untouched
+ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+PY=""; [ -r "${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/ace}/python_path" ] && read -r PY < "${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/ace}/python_path"
+[ -x "$PY" ] || PY="$(command -v python3)"
+[ -n "$PY" ] || exit 0
+exec "$PY" "$ROOT/shared-hooks/ace_before_task.py" "$@"

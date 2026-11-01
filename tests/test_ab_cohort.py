@@ -692,7 +692,7 @@ class TestBeforeTaskControlArm:
         mod = self._load_before_task()
 
         event = {
-            "prompt": "Fix the bug",
+            "prompt": "Fix the bug in the parser",
             "session_id": "sess-ctrl-test-001",
             "agent_type": "main",
             "agent_id": "agent-ctrl-001",
@@ -755,7 +755,7 @@ class TestBeforeTaskControlArm:
 
         mod = self._load_before_task()
         event = {
-            "prompt": "Fix the bug",
+            "prompt": "Fix the bug in the parser",
             "session_id": "sess-ctrl-log-001",
             "agent_type": "main",
             "agent_id": "agent-ctrl-log-001",

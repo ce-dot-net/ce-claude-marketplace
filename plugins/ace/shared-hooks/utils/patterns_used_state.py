@@ -200,8 +200,10 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
         for key, val, cap in (('user_prompt', user_prompt, USER_PROMPT_MAX),
                               ('rendered_context', rendered_context, RENDERED_CONTEXT_MAX),
                               ('hook_event_name', hook_event_name, None)):
-            val = val if val else prior.get(key)
-            if val:
+            # None = not supplied (keep prior); '' is an explicit "set" (control arm clears
+            # a stale rendered_context so WP-D never re-injects it).
+            val = val if val is not None else prior.get(key)
+            if val is not None and (val or key == 'rendered_context'):
                 state[key] = val[:cap] if cap else val
         _atomic_write(sf, json.dumps(state))
     return existing_ids
