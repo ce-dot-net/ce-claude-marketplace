@@ -620,59 +620,22 @@ class TestSourceCodeAnalysis:
         """The script file must exist at the expected path."""
         assert SCRIPT_PATH.exists(), f"Script not found at {SCRIPT_PATH}"
 
+    # v8 (WP-A): ace_install_cli.sh is a §3.1 shim; the version logic moved to
+    # shared-hooks/ace_install_cli.py (tests/test_sessionstart_v8.py covers behaviour).
     def test_min_version_is_4_1_2(self):
-        """MIN_VERSION in the source must be '4.1.2'."""
-        assert 'MIN_VERSION="4.1.2"' in self.source, (
-            "Expected MIN_VERSION to be 4.1.2 in source"
-        )
+        """MIN_VERSION in the Python entry must be '4.1.2'."""
+        py = (SCRIPT_PATH.parent.parent / "shared-hooks" / "ace_install_cli.py").read_text()
+        assert 'MIN_VERSION = "4.1.2"' in py
 
-    def test_uses_sort_v_c_for_version_comparison(self):
-        """Script must use 'sort -V -C' for version comparison (not string compare)."""
-        assert "sort -V -C" in self.source, (
-            "Expected 'sort -V -C' for version sorting, not string comparison"
-        )
-
-    def test_uses_grep_oE_for_version_extraction(self):
-        """Script must use 'grep -oE' to extract semver version number."""
-        assert "grep -oE" in self.source, (
-            "Expected 'grep -oE' for version number extraction"
-        )
-
-    def test_flag_file_path_includes_session_id(self):
-        """The disable flag file path must include the session ID variable."""
-        assert 'ace-disabled-${SESSION_ID}.flag' in self.source, (
-            "Expected flag file path to include ${SESSION_ID}"
-        )
-
-    def test_output_warning_produces_json_with_systemmessage(self):
-        """output_warning must produce JSON with systemMessage key."""
-        # Find the output_warning function
-        func_match_start = self.source.index("output_warning()")
-        func_region = self.source[func_match_start:func_match_start + 200]
-        assert "systemMessage" in func_region, (
-            "output_warning must output JSON with systemMessage key"
-        )
-        assert "jq -n" in func_region, (
-            "output_warning should use jq to produce valid JSON"
-        )
-
-    def test_version_fallback_is_0_0_0(self):
-        """When --version fails, fallback must be '0.0.0'."""
-        assert '|| echo "0.0.0"' in self.source, (
-            "Expected fallback version to be 0.0.0 when --version fails"
-        )
-
-    def test_cache_file_uses_daily_date(self):
-        """The cache file path must include a date component for daily caching."""
-        assert "$(date +%Y%m%d)" in self.source, (
-            "Expected cache file to use date-based naming for daily check"
-        )
+    def test_version_compare_is_numeric_not_string(self):
+        """Tuple-of-int compare (no `!=` string compare: bogus 'Update available 4.2.2 -> 4.1.2')."""
+        py = (SCRIPT_PATH.parent.parent / "shared-hooks" / "ace_install_cli.py").read_text()
+        assert "def _tup" in py and "int(x)" in py
 
     def test_npm_show_package_name(self):
         """npm show command must check @ace-sdk/cli (new package name)."""
-        assert "npm show @ace-sdk/cli version" in self.source, (
-            "Expected npm show to check @ace-sdk/cli package"
-        )
+        py = (SCRIPT_PATH.parent.parent / "shared-hooks" / "ace_install_cli.py").read_text()
+        assert '"npm", "show", "@ace-sdk/cli", "version"' in py
 
     def test_exit_codes_are_zero(self):
         """All exit statements in the version check sections should be exit 0."""
@@ -689,13 +652,9 @@ class TestSourceCodeAnalysis:
                 )
 
     def test_disable_flag_cleared_on_new_session(self):
-        """The script must clear any previous disable flag at the start."""
-        # Find the rm -f of the disable flag before section 1
-        flag_clear_idx = self.source.index('rm -f "$ACE_DISABLED_FLAG"')
-        section1_idx = self.source.index("# 1. Check if ace-cli exists")
-        assert flag_clear_idx < section1_idx, (
-            "Disable flag must be cleared BEFORE CLI detection (new session)"
-        )
+        """The Python entry clears any previous disable flag before CLI detection."""
+        py = (SCRIPT_PATH.parent.parent / "shared-hooks" / "ace_install_cli.py").read_text()
+        assert py.index("flag.unlink()") < py.index("if not cli:")
 
     def test_no_legacy_cli_references(self):
         """v6.0.0: No references to legacy CLI command in source."""

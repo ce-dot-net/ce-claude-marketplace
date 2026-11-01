@@ -44,9 +44,9 @@ class TestFloorBump:
 
     def test_install_cli_min_version_is_4_1_2(self):
         """MIN_VERSION in ace_install_cli.sh must be 4.1.2."""
-        source = INSTALL_CLI.read_text()
-        assert 'MIN_VERSION="4.1.2"' in source, (
-            f"ace_install_cli.sh must have MIN_VERSION=\"4.1.2\"; "
+        source = (INSTALL_CLI.parent.parent / 'shared-hooks' / 'ace_install_cli.py').read_text()  # v8: shim execs python
+        assert 'MIN_VERSION = "4.1.2"' in source, (
+            f"ace_install_cli.py must have MIN_VERSION = \"4.1.2\"; "
             f"currently has: {[l for l in source.splitlines() if 'MIN_VERSION' in l]}"
         )
 

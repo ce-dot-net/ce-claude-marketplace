@@ -330,6 +330,8 @@ Expected Hook Scripts:
 - ace_permission_request_wrapper.sh (permission request telemetry)
 - ace_permission_denied_wrapper.sh (permission denied redaction)
 - ace_stop_wrapper.sh (learning capture at Stop)
+- ace_posttoolusefailure_wrapper.sh (failed Bash calls into the learn trajectory)
+- ace_sessionstart_compact.sh (re-inject patterns after compaction)
 - ace_sessionend_wrapper.sh (session end cleanup)
 - ace_subagent_start_wrapper.sh (per-subagent ACE search at spawn)
 - ace_subagent_stop_wrapper.sh (subagent learning capture)

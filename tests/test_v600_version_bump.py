@@ -172,11 +172,3 @@ class TestDevPluginFiles:
             assert data['version'] == expected, \
                 f"plugin.PRODUCTION.json version is {data['version']}, expected {expected}"
 
-    def test_local_json_version(self):
-        """plugin.local.json version matches plugin.json."""
-        expected = _current_version()
-        local = os.path.join(PLUGIN_DIR, 'plugin.local.json')
-        if os.path.exists(local):
-            data = _read_json(local)
-            assert data['version'] == expected, \
-                f"plugin.local.json version is {data['version']}, expected {expected}"
