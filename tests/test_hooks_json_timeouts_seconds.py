@@ -45,12 +45,11 @@ EXPECTED = {
     ("SubagentStart", "ace_subagent_start_wrapper.sh"): 20,
     ("Stop", "ace_stop_wrapper.sh"): 130,
     ("SubagentStop", "ace_subagent_stop_wrapper.sh"): 130,
-    ("PreToolUse", "ace_pretooluse_wrapper.sh"): 10,
     ("PostToolUse", "ace_posttooluse_wrapper.sh"): 30,
     ("PostToolUse", "ace_posttooluse_domain_inject.sh"): 15,
     ("SessionStart", "ace_install_cli.sh"): 20,
     ("SessionEnd", "ace_sessionend_wrapper.sh"): 5,
-    ("PreCompact", "ace_precompact_wrapper.sh"): 10,
+    ("SessionStart", "ace_sessionstart_compact.sh"): 10,
     ("PermissionRequest", "ace_permission_request_wrapper.sh"): 10,
     ("PermissionDenied", "ace_permission_denied_wrapper.sh"): 10,
 }

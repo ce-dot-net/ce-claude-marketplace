@@ -62,9 +62,9 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 from ace_cli import run_search  # noqa: E402
 from ace_context import get_context                              # noqa: E402
-from patterns_used_state import append_patterns_used, load_task_session_id  # noqa: E402
+from patterns_used_state import append_patterns_used, load_state  # noqa: E402
 import plugin_data_dir                                           # noqa: E402
-from ace_relevance_logger import log_search                      # noqa: E402
+from ace_relevance_logger import log_search, log_error           # noqa: E402
 from ace_pattern_render import render_patterns, render_cohort, render_compact_all  # noqa: E402
 
 # ── constants ────────────────────────────────────────────────────────────────
@@ -266,15 +266,25 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         transcript_path = event.get('transcript_path', '')
 
         context = get_context()
+        if not context:
+            sys.exit(0)  # no project: nothing to search, and no state may land in 'default/'
+        project = context['project']
 
         # §4: per-session disabled flag under plugin data.
-        if plugin_data_dir.disabled_flag(context['project'] if context else None,
-                                         plugin_data_dir.resolve_session_id(event)).exists():
+        if plugin_data_dir.disabled_flag(project, plugin_data_dir.resolve_session_id(event)).exists():
             sys.exit(0)
 
         # Resume / teammate re-wake re-fires SubagentStart (cc_hooks_reference.md:2549):
-        # this agent already has a task_session_id -> keep it, no new search.
-        if load_task_session_id(session_id, agent_id, 'SubagentStop'):
+        # this agent already has a task_session_id -> keep it, no new search. CC re-injects
+        # a re-run's context only if the earlier copy is gone, e.g. after the subagent
+        # auto-compacted (:2582), and dedupes otherwise, so re-emit the stored context.
+        # (SubagentStop reaps the state, so an agent resumed after stopping searches afresh.)
+        prior = load_state(session_id, agent_id, 'SubagentStop', project_id=project)
+        if prior.get('task_session_id'):
+            if prior.get('rendered_context'):
+                print(json.dumps({"hookSpecificOutput": {
+                    "hookEventName": "SubagentStart",
+                    "additionalContext": prior['rendered_context']}}))
             sys.exit(0)
 
         # Generate a fresh per-task session_id for this subagent.
@@ -295,15 +305,13 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         # file via the normal merge logic.
         try:
             append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id,
-                                 user_prompt=query, hook_event_name='SubagentStart')
-        except Exception:
-            pass  # non-fatal
+                                 user_prompt=query, hook_event_name='SubagentStart',
+                                 project_id=project)
+        except Exception as e:
+            log_error('SubagentStart', 'ace_subagent_start.anchor', session_id, project, e)
 
         if not query:
             # No usable query — degrade gracefully, do not search with garbage
-            sys.exit(0)
-
-        if not context:
             sys.exit(0)
 
         # ── ACE search keyed to subagent's query ──────────────────────────────
@@ -347,9 +355,9 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
             try:
                 append_patterns_used(session_id, agent_id, [],
                                      retrieval_id=retrieval_id,
-                                     task_session_id=task_session_id)
-            except Exception:
-                pass
+                                     task_session_id=task_session_id, project_id=project)
+            except Exception as e:
+                log_error('SubagentStart', 'ace_subagent_start.control', session_id, project, e)
 
         elif _cohort == 'compact':
             # Compact arm: all patterns as compact one-liners, total ≤ 9500 chars.
@@ -365,9 +373,10 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                         retrieval_id=retrieval_id,
                         retrieval_log_ids=retrieval_log_map,
                         task_session_id=task_session_id,
+                        project_id=project, rendered_context=ace_context,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    log_error('SubagentStart', 'ace_subagent_start.state', session_id, project, e)
 
         else:
             # Budget arm (default): existing budget-verbatim render (unchanged).
@@ -383,9 +392,10 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                         retrieval_id=retrieval_id,
                         retrieval_log_ids=retrieval_log_map,
                         task_session_id=task_session_id,
+                        project_id=project, rendered_context=ace_context,
                     )
-                except Exception:
-                    pass
+                except Exception as e:
+                    log_error('SubagentStart', 'ace_subagent_start.state', session_id, project, e)
 
         log_search(hook='SubagentStart', session_id=session_id, user_prompt=query,
                    search_query=query, patterns_returned=pattern_count,
@@ -422,8 +432,9 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
 
     except SystemExit:
         raise
-    except Exception:
-        # Never block the subagent — swallow all exceptions
+    except Exception as e:
+        # Never block the subagent: log (DESIGN §3.1), exit 0, no stdout
+        log_error('SubagentStart', 'ace_subagent_start.main', error=e)
         sys.exit(0)
 
 

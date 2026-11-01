@@ -75,11 +75,10 @@ class TestConsolidatedSessionStart:
     """SessionStart should be consolidated (single matcher with source branching)."""
 
     def test_single_sessionstart_matcher(self):
-        """hooks.json should have exactly 1 SessionStart entry."""
+        """v8: one catch-all install entry plus the dedicated `compact` re-inject entry."""
         data = json.loads(_read(HOOKS_JSON))
         session_start = data['hooks']['SessionStart']
-        assert len(session_start) == 1, \
-            f"Expected 1 SessionStart matcher (consolidated), got {len(session_start)}"
+        assert [e['matcher'] for e in session_start] == ['', 'compact'], session_start
 
     def test_sessionstart_reads_source_field(self):
         """SessionStart script should read source field from stdin JSON."""
@@ -102,11 +101,11 @@ class TestConsolidatedSessionStart:
             "Script should handle resume source"
 
     def test_no_separate_compact_in_hooks_json(self):
-        """hooks.json should NOT have a separate compact matcher."""
+        """v8 (DESIGN §3): the compact thin shim IS registered, for matcher `compact` only."""
         data = json.loads(_read(HOOKS_JSON))
-        hooks_str = json.dumps(data)
-        assert 'ace_sessionstart_compact' not in hooks_str, \
-            "Separate compact script should be consolidated into main SessionStart"
+        owners = [e['matcher'] for e in data['hooks']['SessionStart']
+                  if 'ace_sessionstart_compact' in json.dumps(e)]
+        assert owners == ['compact'], owners
 
 
 # ===========================================================================

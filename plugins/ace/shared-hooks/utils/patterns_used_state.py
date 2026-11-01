@@ -33,6 +33,7 @@ import plugin_data_dir  # noqa: E402
 
 USER_PROMPT_MAX = 4000
 RENDERED_CONTEXT_MAX = 10000
+RENDERED_SIDECAR = 'rendered-main.txt'
 
 
 def _project_id(project_id=None):
@@ -96,6 +97,31 @@ def _read_state_file(sf):
         tsid = raw.get('task_session_id') or None
         return ids, rid, rlog, tsid
     return [], None, {}, None
+
+
+def _rescue_rendered_context(f):
+    """Stop reaps patterns-used-main.json after every turn, but a manual /compact runs
+    BETWEEN turns (after Stop). Keep the last rendered_context in a sidecar that only
+    SessionEnd removes (with the session dir) so SessionStart(compact) can re-inject it."""
+    if f.name != 'patterns-used-main.json':
+        return
+    try:
+        rc = json.loads(f.read_text()).get('rendered_context')
+        if rc and isinstance(rc, str):
+            (f.parent / RENDERED_SIDECAR).write_text(rc[:RENDERED_CONTEXT_MAX])
+    except Exception:
+        pass
+
+
+def load_rendered_context(session_id, project_id=None, state_dir=None):
+    """Last main-agent rendered_context: live state first, else the post-Stop sidecar."""
+    rc = load_state(session_id, None, 'Stop', state_dir, project_id).get('rendered_context')
+    if rc and isinstance(rc, str):
+        return rc
+    try:
+        return (_state_dir(state_dir, session_id, project_id) / RENDERED_SIDECAR).read_text() or None
+    except Exception:
+        return None
 
 
 def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
@@ -200,6 +226,7 @@ def load_playbook_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
                     if isinstance(pid, str) and is_valid_pattern_id(pid) and pid not in seen:
                         seen.add(pid)
                         result.append(pid)
+                _rescue_rendered_context(f)
                 f.unlink()
         except Exception as e:
             if on_error:
@@ -240,6 +267,7 @@ def reap_patterns_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
     else:
         f = state_file_path(session_id, None, state_dir, project_id)
     try:
+        _rescue_rendered_context(f)
         f.unlink(missing_ok=True)
     except Exception as e:
         if on_error:

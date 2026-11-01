@@ -16,7 +16,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 import plugin_data_dir                         # noqa: E402
 from ace_context import get_context            # noqa: E402
-from patterns_used_state import load_state     # noqa: E402
+from ace_relevance_logger import log_error     # noqa: E402
+from patterns_used_state import load_rendered_context     # noqa: E402
 
 _CAP = 10000
 
@@ -35,12 +36,12 @@ def main() -> None:
         sid = plugin_data_dir.resolve_session_id(event)
         if plugin_data_dir.disabled_flag(ctx['project'], sid).exists():
             return
-        rendered = load_state(sid, None, 'Stop', project_id=ctx['project']).get('rendered_context')
+        rendered = load_rendered_context(sid, project_id=ctx['project'])
         if rendered and isinstance(rendered, str):
             print(json.dumps({"hookSpecificOutput": {
                 "hookEventName": "SessionStart", "additionalContext": rendered[:_CAP]}}))
-    except Exception:
-        pass  # never fail SessionStart
+    except Exception as e:
+        log_error('SessionStart', 'ace_session_start.main', error=e)  # DESIGN §3.1; exit 0, no stdout
 
 
 if __name__ == '__main__':

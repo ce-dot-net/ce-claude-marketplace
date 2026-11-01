@@ -17,5 +17,4 @@ def test_hooks_json_valid_and_matchers():
     def first_matcher(event):
         return hooks[event][0]["matcher"]
 
-    assert first_matcher("PreToolUse") == "*", "PreToolUse matcher must be '*'"
     assert first_matcher("PostToolUse") == "*", "PostToolUse matcher must be '*'"

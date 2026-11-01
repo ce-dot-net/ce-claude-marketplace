@@ -14,7 +14,7 @@ Three files change:
      - Capture retrieval_id + retrieval_log_map BEFORE useful_fields strip
      - Pass them through to append_patterns_used
 
-  3. plugins/ace/scripts/ace_pretooluse_wrapper.sh
+  3. plugins/ace/scripts/the removed v7 PreToolUse wrapper
      - __main__ CLI: accept --retrieval-id, extract match_factors.retrieval_log_id per pattern
 """
 import json
@@ -471,7 +471,7 @@ class TestRetrievalLogIdsNotInUsefulFields:
 
 
 # ---------------------------------------------------------------------------
-# 3. __main__ CLI — ace_pretooluse_wrapper.sh pipes search JSON to
+# 3. __main__ CLI — the removed v7 PreToolUse wrapper pipes search JSON to
 #    patterns_used_state.py; the CLI must handle --retrieval-id and extract
 #    match_factors.retrieval_log_id per pattern
 # ---------------------------------------------------------------------------

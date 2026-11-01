@@ -164,17 +164,19 @@ class ACERelevanceLogger:
         file_path: str,
         patterns_found: int,
         search_succeeded: bool,
-        project_id: Optional[str] = None
+        project_id: Optional[str] = None,
+        hook: str = 'PostToolUse',
+        **extra
     ) -> None:
         """
         Log domain shift detection and auto-search metrics.
 
-        Called from PreToolUse hook when domain shift is detected.
+        Called from the PostToolUse domain-shift hook when domain shift is detected.
         """
         entry = {
             'timestamp': _utc_now(),
             'event': 'domain_shift',
-            'hook': 'PreToolUse',
+            'hook': hook,
             'session_id': session_id,
             'project_id': project_id,
             'from_domain': from_domain,
@@ -183,6 +185,7 @@ class ACERelevanceLogger:
             'patterns_found': patterns_found,
             'search_succeeded': search_succeeded
         }
+        entry.update({k: v for k, v in extra.items() if v is not None})  # C5: patterns_injected, hook_ms, agent_id
 
         self._write_log(entry)
 

@@ -9,7 +9,7 @@ Design (from session_reuse_design in the v7.1.2 spec):
         WITHOUT writing.
       --task-session-id <value> flag: pass the value into append_patterns_used
         (stored in state file alongside pattern IDs).
-  - ace_pretooluse_wrapper.sh must:
+  - the removed v7 PreToolUse wrapper must:
       (1) before searching, read EXISTING_TSID from state file via
           patterns_used_state.py --read-task-session-id
       (2) if non-empty, pass --pin-session $EXISTING_TSID to ace-cli search
