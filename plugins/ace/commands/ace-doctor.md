@@ -37,10 +37,9 @@ ace/
 ├── scripts/           # Hook wrapper scripts
 │   ├── ace_install_cli.sh
 │   ├── ace_before_task_wrapper.sh
-│   ├── ace_pretooluse_wrapper.sh
 │   ├── ace_posttooluse_wrapper.sh
 │   ├── ace_posttooluse_domain_inject.sh
-│   ├── ace_precompact_wrapper.sh
+│   ├── ace_sessionstart_compact.sh
 │   ├── ace_permission_request_wrapper.sh
 │   ├── ace_permission_denied_wrapper.sh
 │   ├── ace_stop_wrapper.sh

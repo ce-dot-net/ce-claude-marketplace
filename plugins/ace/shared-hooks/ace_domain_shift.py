@@ -8,10 +8,12 @@ the file basename as query, strip-and-gate, record the injected ids (C1/F-080) a
 PostToolUse additionalContext (cc_hooks_reference.md:2220-2245), capped at 10,000 chars.
 No domain filter and no intent hint (server owns both; domain_match anti-predicts relevance).
 """
+import html
 import json
 import os
 import re
 import sys
+import time
 import uuid
 from pathlib import Path
 
@@ -21,7 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 import plugin_data_dir                                    # noqa: E402
 from ace_cli import run_search                            # noqa: E402
 from ace_context import get_context                       # noqa: E402
-from ace_relevance_logger import log_domain_shift         # noqa: E402
+from ace_relevance_logger import log_domain_shift, log_error  # noqa: E402
 from patterns_used_state import (append_patterns_used, load_task_session_id,  # noqa: E402
                                  strip_and_gate)
 
@@ -53,10 +55,12 @@ def match_domain_to_path(domain: str, path: str) -> bool:
 
 
 def _context(domain: str, stripped: dict) -> str:
-    """Wrap in the domain-shift tag, dropping trailing patterns until <= 10,000 chars."""
+    """Wrap in the domain-shift tag, dropping trailing patterns until <= 10,000 chars.
+    Mutates `stripped`: afterwards it holds exactly the injected patterns."""
+    attr = html.escape(domain, quote=True)  # domains.json is server-provided
     while True:
         ctx = '<ace-patterns-domain-shift domain="%s">%s</ace-patterns-domain-shift>' % (
-            domain, json.dumps(stripped))
+            attr, json.dumps(stripped))
         if len(ctx) <= _CAP or not stripped.get('similar_patterns'):
             return ctx[:_CAP]
         stripped['similar_patterns'] = stripped['similar_patterns'][:-1]
@@ -79,6 +83,7 @@ def main() -> None:
         if not ctx:
             return
         project, org = ctx['project'], ctx['org']
+        t0 = time.monotonic()
         sid = plugin_data_dir.resolve_session_id(event)
         if plugin_data_dir.disabled_flag(project, sid).exists():
             return
@@ -114,27 +119,35 @@ def main() -> None:
                                      project_id=project) or str(uuid.uuid4()))
         result, _ms = run_search(query, org=org, project=project, session_id=tsid, top_k=8,
                                  timeout=10, hook_event_name='PostToolUse')
-        patterns = (result or {}).get('similar_patterns') if isinstance(result, dict) \
-            and not result.get('error') else None
+        ok = isinstance(result, dict) and not result.get('error')
+        patterns = result.get('similar_patterns') if ok else None
         stripped = strip_and_gate(result) if patterns else None
-        found = len((stripped or {}).get('similar_patterns') or [])
+        returned = len((stripped or {}).get('similar_patterns') or [])
+        additional = _context(matched, stripped) if returned else None  # trims `stripped` to the injected set
+        kept = (stripped or {}).get('similar_patterns') or []
+        kept_ids = [p.get('id') for p in kept if isinstance(p, dict) and p.get('id')]
+        # search_succeeded = the search itself worked (0 patterns is still a success); hook=PostToolUse (C5)
         log_domain_shift(session_id=sid, from_domain=last, to_domain=matched, file_path=file_path,
-                         patterns_found=found, search_succeeded=bool(found), project_id=project)
-        if not found:
+                         patterns_found=returned, search_succeeded=ok, project_id=project,
+                         hook='PostToolUse', patterns_injected=len(kept_ids),
+                         hook_ms=int((time.monotonic() - t0) * 1000), agent_id=agent_id or None)
+        if not additional:
             return
 
+        # F-080 credit only what was actually injected (v7.1.11): match by id after the 10k trim.
+        keep = set(kept_ids)
         rlog = {}
         for p in patterns:
             rlid = (p.get('match_factors') or {}).get('retrieval_log_id') if isinstance(p, dict) else None
-            if p.get('id') and isinstance(rlid, int) and not isinstance(rlid, bool):
+            if p.get('id') in keep and isinstance(rlid, int) and not isinstance(rlid, bool):
                 rlog[p['id']] = rlid
-        append_patterns_used(sid, agent_id or None, [p.get('id') for p in patterns if p.get('id')],
+        append_patterns_used(sid, agent_id or None, kept_ids,
                              retrieval_id=result.get('retrieval_id') or None,
                              retrieval_log_ids=rlog, task_session_id=tsid, project_id=project)
         print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PostToolUse", "additionalContext": _context(matched, stripped)}}))
-    except Exception:
-        pass  # never fail the tool call
+            "hookEventName": "PostToolUse", "additionalContext": additional}}))
+    except Exception as e:
+        log_error('PostToolUse', 'ace_domain_shift.main', error=e)  # DESIGN §3.1; exit 0, no stdout
 
 
 if __name__ == '__main__':
