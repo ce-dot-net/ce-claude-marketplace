@@ -29,6 +29,9 @@ I specialize in complete, error-free plugin releases that prevent common mistake
 - [ ] Full suite green: `python3 -m pytest tests -q -p no:cacheprovider`
 - [ ] Hook e2e green: `ACE_E2E=1 python3 -m pytest tests/e2e -q`
 - [ ] Manifest valid: `claude plugin validate plugins/ace --strict` (0 hook warnings)
+- [ ] Mod suite green: `claude plugin test plugins/ace`
+- [ ] **8.0.0 rollout blocker:** the server team has confirmed AOP-1333 + AOP-1334 on prod (date + version). Without that, do not release.
+- [ ] Budget default: `ACE_RENDER_FULL_PCT` default 0 (full off) in `ace_pattern_render.render_arm` and `mod/core.ts renderCohort`; a fake-CLI trace that names no pattern carries no `--applied-log-ids` (tests/test_s31_contract.py)
 - [ ] Live checklist in `plugins/ace/docs/RELEASE_GATE_v8.md` completed (`--debug-file` session)
 - [ ] After the version bump, re-run the FULL suite again (`tests/test_v600_version_bump.py` guards the description)
 - [ ] Tag is `v{VERSION}` (git tag only; the plugin tag subcommand is not used)
@@ -264,7 +267,7 @@ A pin bump is a plugin version bump. The `ace-cli-watch` workflow opens the PR (
 1. `cd plugins/ace && npm install --package-lock-only --ignore-scripts` (lock regen), commit `package-lock.json`.
 2. `npm ci --ignore-scripts && npm rebuild better-sqlite3`, then `python3 -m pytest tests/test_cli_contract.py` must pass.
    A failure names the exact flag/field to adapt in the plugin.
-3. The `Requires:` text of all four manifests and the CHANGELOG comes from package.json (`ace-cli >= <pin>`), not from a constant.
+3. The `Requires:` text of all three manifests and the CHANGELOG comes from package.json (`ace-cli >= <pin>`), not from a constant.
 4. Bump the plugin version in the same release; re-run the full suite afterwards.
 
 ---
