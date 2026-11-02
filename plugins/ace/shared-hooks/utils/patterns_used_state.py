@@ -12,6 +12,7 @@ This module centralizes the read/write/cleanup logic that was previously
 duplicated inline in ace_before_task.py (writer) and ace_after_task.py (reader).
 """
 import json
+import re
 import os
 import sys
 import tempfile
@@ -179,7 +180,6 @@ def load_rendered_context(session_id, project_id=None, state_dir=None):
 
 
 CONTENT_CAP = 600   # per injected pattern, for the "actually used" check (§31)
-USED_FRAGMENT = 40  # a verbatim content fragment this long in the final message counts as used
 USED_MESSAGE_CAP = 50000
 
 
@@ -187,22 +187,71 @@ def _norm_ws(text):
     return " ".join(str(text or "").split())
 
 
-def used_pattern_ids(ids, contents, message):
-    """§31: the injected ids ACTUALLY USED in the final message / handback report, in injected order.
+# §31 / item H2: "actually used" = evidence in what the task DID, not in what the answer says.
+TOOL_INPUT_KEYS = ("command", "file_path", "path", "pattern", "glob", "notebook_path", "url")
+_TOKEN_STOP = {"and/or", "e.g.", "i.e.", "etc.", "n/a", "w/o", "http://", "https://", "true/false", "yes/no"}
+_STRIP = "`'\"()[]{}<>,;:!?*"
 
-    Used = its id, or a >= 40-char verbatim fragment of its (whitespace-normalized) content, appears in the
-    (whitespace-normalized) message. False positives are worse than misses: nothing else counts.
-    ponytail: content beyond CONTENT_CAP and messages beyond USED_MESSAGE_CAP are not searched.
+
+def tool_haystack(tool_inputs):
+    """Lowercased text of the tool-call inputs (Bash commands, paths, Grep/Glob patterns, Edit targets); edit and
+    write bodies are not searched. Same as the mod's toolHaystack."""
+    parts = []
+    for ti in tool_inputs or []:
+        if isinstance(ti, dict):
+            parts += [ti[k] for k in TOOL_INPUT_KEYS if isinstance(ti.get(k), str) and ti[k]]
+    return "\n".join(parts).lower()
+
+
+def _qualifies(w):
+    if len(w) < 4 or w in _TOKEN_STOP:
+        return False
+    if "/" in w or "_" in w or "::" in w or re.search(r"[a-z][A-Z]", w):
+        return True
+    if re.fullmatch(r"--?[A-Za-z][A-Za-z0-9_-]*", w):
+        return True
+    return bool(re.search(r"[A-Za-z0-9_]\.[A-Za-z0-9_]", w))  # dotted identifier or a file name with an extension
+
+
+def distinctive_tokens(content):
+    """Lowercased distinctive tokens of a pattern: backticked spans (and their first two words: command +
+    subcommand), paths, CLI flags, identifiers with '_', '.', '::' or camelCase; length >= 4. Mod parity."""
+    text = str(content or "")[:CONTENT_CAP]
+    toks = set()
+    for span in re.findall(r"`([^`\n]+)`", text):
+        span = " ".join(span.split())
+        if len(span) >= 4:
+            toks.add(span.lower())
+        words = span.split(" ")
+        if len(words) >= 2 and len(words[0] + " " + words[1]) >= 4:
+            toks.add((words[0] + " " + words[1]).lower())
+    for w in text.split():
+        w = w.strip(_STRIP).rstrip(".")
+        if _qualifies(w):
+            toks.add(w.lower())
+    return {t for t in toks if t not in _TOKEN_STOP}
+
+
+def used_pattern_ids(ids, contents, message, haystack=""):
+    """§31 / item H2: the injected ids ACTUALLY USED, in injected order. Used = its id appears in the final
+    message / report or the tool inputs, or >= 2 of its distinctive tokens appear in the tool-call inputs
+    (`haystack`, tool_haystack). A token in more than 30% of the injected patterns (and more than one) is too
+    generic and does not count. ponytail: substring match; word-boundary matching if false positives show up.
     """
     msg = _norm_ws(message)[:USED_MESSAGE_CAP]
-    if not msg:
-        return []
-    n = USED_FRAGMENT
-    windows = {msg[i:i + n] for i in range(len(msg) - n + 1)}
+    hay = haystack or ""
+    ids = [p for p in ids or [] if isinstance(p, str) and p]
+    toks = {pid: distinctive_tokens((contents or {}).get(pid)) for pid in ids}
+    df = {}
+    for ts in toks.values():
+        for t in ts:
+            df[t] = df.get(t, 0) + 1
+    generic = {t for t, n in df.items() if n > 1 and n > 0.3 * len(ids)}
     out = []
-    for pid in ids or []:
-        c = _norm_ws((contents or {}).get(pid))[:CONTENT_CAP]
-        if (isinstance(pid, str) and pid and pid in msg) or any(c[i:i + n] in windows for i in range(len(c) - n + 1)):
+    for pid in ids:
+        if pid in msg or pid.lower() in hay:
+            out.append(pid)
+        elif hay and sum(1 for t in toks[pid] - generic if t in hay) >= 2:
             out.append(pid)
     return out
 

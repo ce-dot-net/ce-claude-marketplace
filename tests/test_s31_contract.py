@@ -5,7 +5,8 @@
   ACE_RENDER_FULL_PCT (default 50, 8.0.0 user ruling); no conversation id -> budget. Python never renders full.
 - Trace: render_variant 'budget'|'full' (strip + lowercase), OMITTED when unknown; conversation_id = CC session_id
   (<= 512), subagents inherit; session_id (pin) unchanged; playbook_used = all injected ids.
-- applied_log_ids = only ACTUALLY USED ids for every variant: the id or a >= 40-char verbatim content fragment
+- applied_log_ids = only ACTUALLY USED ids for every variant (item H2): the id in the answer/report, or >= 2
+  distinctive content tokens in the task's tool-call inputs (the 40-char answer-fragment rule is gone)
   in the final message / handback report; else []. False positives are worse than misses.
 """
 import json
@@ -75,15 +76,16 @@ def test_used_by_id():
     assert used_pattern_ids([A, B], {}, "I followed pattern %s here." % B) == [B]
 
 
-def test_used_by_40_char_verbatim_fragment_whitespace_normalized():
+def test_the_answer_text_alone_is_no_evidence():
+    """Item H2: a verbatim fragment in the answer no longer counts (the 40-char rule is gone)."""
     msg = "As the playbook says: always build it with jq -n --arg\n   instead of sed escaping. Done."
-    assert used_pattern_ids([A, B], {A: CONTENT_A, B: CONTENT_B}, msg) == [A]
+    assert used_pattern_ids([A, B], {A: CONTENT_A, B: CONTENT_B}, msg) == []
 
 
-def test_39_chars_is_not_enough():
-    frag = CONTENT_A[10:49]
-    assert len(frag) == 39
-    assert used_pattern_ids([A], {A: CONTENT_A}, "x " + frag + " y") == []
+def test_two_tokens_in_the_tool_inputs_are_evidence():
+    from patterns_used_state import tool_haystack
+    hay = tool_haystack([{"command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version"}, {"file_path": "/p/plugin-local/x.json"}])
+    assert used_pattern_ids([A, B], {A: CONTENT_A, B: "Prefer `scripts/ace-cli --version` over a plugin-local/x.json check"}, "", hay) == [B]
 
 
 def test_nothing_recognizable_means_empty():
@@ -92,7 +94,7 @@ def test_nothing_recognizable_means_empty():
 
 
 def test_order_follows_the_injected_ids():
-    msg = CONTENT_B + " and also " + CONTENT_A
+    msg = B + " and also " + A
     assert used_pattern_ids([A, B], {A: CONTENT_A, B: CONTENT_B}, msg) == [A, B]
 
 
@@ -116,15 +118,25 @@ def _learn(box, event, agent="main", **state):
     return learn
 
 
+CONTENT_JQ = "Build hook output with `jq -n --arg` and check it with `python3 -m json.tool` afterwards."
+
+
 @pytest.mark.parametrize("variant", ["budget", "full"])
 def test_applied_log_ids_only_the_used_ones_for_every_variant(box, variant):
-    msg = "Built the hook output with jq: always build it with jq -n --arg instead of sed escaping."
-    learn = _learn(box, box.stop_event("s31-a", last_assistant_message=msg), pattern_ids=[A, B], retrieval_id="ret-31",
-                   retrieval_log_ids={A: 7, B: 8}, pattern_contents={A: CONTENT_A, B: CONTENT_B}, render_variant=variant)
+    """Item H2: evidence = tokens in the task's tool inputs (or the id); the answer text alone does not count."""
+    sid = "s31-a-" + variant
+    box.write_state(sid, user_prompt="refactor the parser module", pattern_ids=[A, B], retrieval_id="ret-31",
+                    retrieval_log_ids={A: 7, B: 8}, pattern_contents={A: CONTENT_JQ, B: CONTENT_B}, render_variant=variant)
+    box.seed_tools(sid, WORK + [("Bash", {"command": "jq -n --arg x 1 '{a:$x}' | python3 -m json.tool"}, {"stdout": "{}"})])
+    p = box.run_after_task(box.stop_event(sid, last_assistant_message=CONTENT_B), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
+    assert p.returncode == 0, p.stderr
+    (learn,) = box.cli_calls("learn")
     t = learn["trace"]
     assert flag_value(learn["argv"], "--applied-log-ids") == "7" and t["applied_log_ids"] == [7]
     assert t["playbook_used"] == [A, B] and t["render_variant"] == variant
     assert flag_value(learn["argv"], "--retrieval-id") == "ret-31"
+    (row,) = box.relevance_rows("execution")
+    assert row["used_ids_count"] == 1 and row["used_source"] == "tokens"
 
 
 def test_nothing_used_sends_empty_applied_ids_in_the_trace(box):
@@ -173,10 +185,10 @@ def test_permission_denied_trace_carries_conversation_id_and_a_normalized_varian
 
 # ── used check reads the FULL handback report (mod parity, USED_MESSAGE_CAP) ────────────
 
-def test_pattern_quoted_after_char_4000_of_a_long_handback_is_credited(box):
+def test_pattern_named_after_char_4000_of_a_long_handback_is_credited(box):
     from test_r3d_hook_behavior import _handback_transcript
-    report = "filler. " * 700 + CONTENT_A  # quote starts well past char 4000
-    assert report.index(CONTENT_A) > 4000
+    report = "filler. " * 700 + "applied " + A  # the id starts well past char 4000
+    assert report.index(A) > 4000
     sid, agent = "s31-hb", "a31"
     box.write_state(sid, agent, user_prompt="refactor the parser module", pattern_ids=[A, B], retrieval_id="ret-31",
                     retrieval_log_ids={A: 7, B: 8}, pattern_contents={A: CONTENT_A, B: CONTENT_B})

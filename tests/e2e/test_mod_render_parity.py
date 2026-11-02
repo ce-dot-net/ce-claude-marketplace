@@ -41,15 +41,8 @@ ENVS = [{}, {"ACE_AB_CONTROL_PCT": "50"}, {"ACE_AB_CONTROL_PCT": "20", "ACE_AB_C
         {"ACE_RENDER_FULL_PCT": "40"}, {"ACE_RENDER_FULL_PCT": "bad"}, {"ACE_AB_CONTROL_PCT": "70", "ACE_AB_COMPACT_PCT": "40"},
         {"ACE_AB_CONTROL_PCT": "-1"}, {"ACE_AB_COMPACT_PCT": "100"}]
 _C = "Refuse a planted symlink in the rotation chain before moving the relevance log — naïve café ☃ résumé."
-USED = [  # §31 "actually used": [ids, contents, message]
-    [["ctx-1111111111-aaaa", "p2"], {"ctx-1111111111-aaaa": _C}, "we did: " + _C[20:70]],
-    [["ctx-1111111111-aaaa"], {"ctx-1111111111-aaaa": _C}, "we did: " + _C[20:59]],
-    [["ctx-1111111111-aaaa"], {"ctx-1111111111-aaaa": _C}, _C[30:80].replace(" ", "\n\t  ")],
-    [["a-1", "b-2", "c-3"], {}, "used c-3 and a-1"],
-    [["a-1"], {"a-1": _C}, ""],
-    [["a-1"], {"a-1": "x" * 700}, "y" + "x" * 45],
-    [["a-1"], {"a-1": "x" * 599 + "Z" * 50}, "x" * 39 + "Z"],
-]
+_UC = json.loads((R.MOD / "tests" / "fixtures" / "used_cases.ts").read_text()[len("export default "):])
+USED = [[c["ids"], c["contents"], c["message"], c["tool_inputs"]] for c in _UC]  # item H2 shared fixture
 VARIANTS = ["full", " Budget\n", "FULL", "control", "compact", "", "fullish"]
 ROOTS = [["/h", "/h/.claude/plugins/cache/ce-dot-net-marketplace/ace/8.0.0", "ace"],
          ["/h", "/repo/plugins/ace", "ace"]]
@@ -154,8 +147,9 @@ def test_render_arm_python_ts_parity(node_out, monkeypatch):
 
 
 def test_used_pattern_ids_python_ts_parity(node_out):
-    assert node_out["used"] == [used_pattern_ids(*v) for v in USED]
-    assert node_out["used"][:4] == [["ctx-1111111111-aaaa"], [], ["ctx-1111111111-aaaa"], ["a-1", "c-3"]]
+    from patterns_used_state import tool_haystack
+    assert node_out["used"] == [used_pattern_ids(i, c, m, tool_haystack(t)) for i, c, m, t in USED]
+    assert node_out["used"] == [c["expected"] for c in _UC]
 
 
 def test_normalize_variant_python_ts_parity(node_out):
