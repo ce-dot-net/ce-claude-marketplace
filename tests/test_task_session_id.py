@@ -463,6 +463,7 @@ class TestSubagentStartTaskSessionId:
         monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
         monkeypatch.setattr(mod, "append_patterns_used", MagicMock())
 
+        monkeypatch.setenv("ACE_LOCAL_REUSE", "")  # §32 reuse off: this test is about per-agent pins
         for aid in ["sub-agent-aaa", "sub-agent-bbb"]:
             try:
                 mod.main(event=make_event(aid))

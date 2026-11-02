@@ -647,6 +647,79 @@ test('a turn.start that lands while the spawn state is still being written is no
   expect(h.searches().length).toBe(1)  // no late search queued
 })
 
+// ---------- DESIGN §32: hybrid local reuse (domain-shift + agent.spawn) ----------
+
+const dsSearches = (h: any) => h.searches().filter((s: any) => s.argv.includes('--top-k'))
+
+test('§32 domain shift: a different agent with the same query is served from the cache (no spawn), cache_hit logged', async ($, on) => {
+  const h = host(on)
+  await submit($)
+  await $.tool.call({ tool: 'Read', file_path: '/proj/ace-cli/notes.md' } as any)
+  const r: any = await $.tool.call({ tool: 'Read', file_path: '/proj/ace-cli/notes.md', agentId: 'agent-1' } as any)
+  expect(dsSearches(h).length).toBe(1)
+  expect(r.context[r.context.length - 1].startsWith('<ace-patterns-domain-shift domain="ace-cli">')).toBe(true)
+  expect(h.rows().filter((x: any) => x.event === 'domain_shift').map((x: any) => x.cache_hit)).toEqual([false, true])
+})
+
+test('§32 domain shift: the same agent never gets the same entry twice (server again)', async ($, on) => {
+  const h = host(on)
+  await submit($)
+  await $.tool.call({ tool: 'Read', file_path: '/proj/ace-cli/notes.md' } as any)
+  h.files.delete(`${SDIR}/domain-last-main.txt`)
+  await $.tool.call({ tool: 'Read', file_path: '/proj/ace-cli/notes.md' } as any)
+  expect(dsSearches(h).length).toBe(2)
+})
+
+test('§32 domain shift: a stale (> 15 min) entry goes to the server', async ($, on) => {
+  const h = host(on)
+  await submit($)
+  await $.tool.call({ tool: 'Read', file_path: '/proj/ace-cli/notes.md' } as any)
+  h.advance(16 * MIN)
+  await $.tool.call({ tool: 'Read', file_path: '/proj/ace-cli/notes.md', agentId: 'agent-1' } as any)
+  expect(dsSearches(h).length).toBe(2)
+})
+
+test('§32 domain shift: an empty server result is never cached or served', async ($, on) => {
+  const h = host(on, { search: (argv) => ({ stdout: argv.includes('--top-k') ? JSON.stringify({ similar_patterns: [], count: 0 }) : S100 }) })
+  await submit($)
+  await $.tool.call({ tool: 'Read', file_path: '/proj/ace-cli/notes.md' } as any)
+  await $.tool.call({ tool: 'Read', file_path: '/proj/ace-cli/notes.md', agentId: 'agent-1' } as any)
+  expect(dsSearches(h).length).toBe(2)
+})
+
+test('§32 domain shift: a different query goes to the server; ACE_LOCAL_REUSE=subagent turns domain reuse off', async ($, on) => {
+  const h = host(on, { env: { ACE_LOCAL_REUSE: 'subagent' } })
+  await submit($)
+  await $.tool.call({ tool: 'Read', file_path: '/proj/ace-cli/notes.md' } as any)
+  await $.tool.call({ tool: 'Read', file_path: '/proj/ace-cli/notes.md', agentId: 'agent-1' } as any)
+  expect(dsSearches(h).length).toBe(2)
+})
+
+test('§32 agent.spawn: the same task text for a new agent is served from the cache, keeping the cached retrieval_id', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  const p1 = 'review the domain shift python port for parity bugs'
+  await spawn($, p1)
+  const r2: any = await spawn($, p1)
+  expect(h.searches().length).toBe(1)
+  expect(r2.seenPrompt).toBe(p1 + '\n\n' + G.full_sub_8)
+  expect(h.state('agent-2')!.retrieval_id).toBe(JSON.parse(S8).retrieval_id)
+  expect(h.rows().filter((x: any) => x.hook === 'SubagentStart').map((x: any) => x.cache_hit)).toEqual([false, true])
+})
+
+test('§32 agent.spawn: ACE_LOCAL_REUSE=domain and a different task text both go to the server', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_LOCAL_REUSE: 'domain' } })
+  await spawn($, 'review the domain shift python port for parity bugs')
+  await spawn($, 'review the domain shift python port for parity bugs')
+  expect(h.searches().length).toBe(2)
+})
+
+test('§32 agent.spawn: a different task text is a different key (server)', async ($, on) => {
+  const h2 = host(on, { search: () => ({ stdout: S8 }) })
+  await spawn($, 'audit the learn trace builder for missing fields')
+  await spawn($, 'audit the learn trace builder for other things')
+  expect(h2.searches().length).toBe(2)
+})
+
 // ---------- tool.call Read: domain shift ----------
 
 test('domain shift: Read in a known domain → one --top-k 8 search, NO pin (§16 P8), context attached, once per domain', async ($, on) => {

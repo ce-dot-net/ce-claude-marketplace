@@ -85,3 +85,51 @@ def _evict(d: Path) -> None:
             f.unlink()
         except OSError:
             pass
+
+
+# ── DESIGN §32: hybrid local reuse (domain-shift + SubagentStart; the main UPS search never reads this) ──
+
+def reuse_enabled(kind: str) -> bool:
+    raw = os.environ.get("ACE_LOCAL_REUSE")
+    allowed = {x.strip() for x in ("domain,subagent" if raw is None else raw).split(",")}
+    return kind in allowed
+
+
+def _real(value: Any) -> bool:
+    return (isinstance(value, dict) and not value.get("error")
+            and isinstance(value.get("similar_patterns"), list) and bool(value["similar_patterns"]))
+
+
+def _mark_used(project_id, kind, query, agent_id) -> bool:
+    """True the first time this agent claims this entry (atomic O_EXCL marker beside the entry)."""
+    try:
+        base = _path(project_id, kind, query)
+        who = hashlib.sha256(str(agent_id or "").encode("utf-8")).hexdigest()[:16]
+        fd = os.open(str(base.with_suffix(".used-" + who)), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        os.close(fd)
+        return True
+    except Exception:
+        return False
+
+
+def reuse_get(project_id: str, kind: str, query: str, agent_id: str) -> Optional[Any]:
+    """A real hit (same project, exact normalized query, < 15 min, >= 1 pattern) not yet served to this agent."""
+    if not reuse_enabled(kind) or not project_id or not normalize_query(query):
+        return None
+    hit = get(project_id, kind, query)
+    if _real(hit) and _mark_used(project_id, kind, query, agent_id):
+        return hit
+    return None
+
+
+def reuse_put(project_id: str, kind: str, query: str, agent_id: str, value: Any) -> None:
+    """A server result refreshes the entry; the agent that fetched it has used it (no second local serve)."""
+    if reuse_enabled(kind) and project_id and _real(value):
+        put(project_id, kind, query, value)
+        try:  # a refresh starts a new use-cycle for the other agents
+            base = _path(project_id, kind, query)
+            for m in base.parent.glob(base.stem + ".used-*"):
+                m.unlink()
+        except OSError:
+            pass
+        _mark_used(project_id, kind, query, agent_id)

@@ -6,7 +6,7 @@ import {
   pyLoads, pyDumps, sanitize, renderFull, renderBudget, renderCompact, renderDomainShift, renderCohort, renderPatternsDict,
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
-  detachedLearnArgv, FALLBACK_ON_3, parseAceReview, parseDiffStat, evalInjection, searchRow, searchSummary, searchErrorLine, sessionTitle,
+  detachedLearnArgv, FALLBACK_ON_3, reuseKey, reuseEnabled, REUSE_TTL_MS, parseAceReview, parseDiffStat, evalInjection, searchRow, searchSummary, searchErrorLine, sessionTitle,
   subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, appliedLogIds, usedPatternIds, injectedContents, type StateUpdate, type ToolRec, type Cohort,
 } from './core.ts'
 
@@ -167,6 +167,33 @@ async function search($: any, s: Sess, query: string, pin: string | undefined, t
   return { resp, error, ms: await $.clock.now() - t0, pinFailed, pinSkipped, pinMs, stderr: String(r.stderr).slice(0, 300), engine: 'cli', engineWhy }
 }
 
+// DESIGN §32: hybrid local reuse of ace_search_cache (domain-shift + SubagentStart only; the main prompt search never reads it).
+// A hit = same project, exact normalized query, < 15 min, >= 1 pattern, not yet served to this agent. Server results refresh it.
+const realResp = (r: any) => !!r && !r.error && Array.isArray(r.similar_patterns) && r.similar_patterns.length > 0
+async function reuseGet($: any, L: Load, s: Sess, kind: string, query: string, agent: string): Promise<any | null> {
+  try {
+    if (!reuseEnabled(await $.env.get('ACE_LOCAL_REUSE'), kind)) return null
+    const key = reuseKey(s.project, kind, query), path = `${s.root}/cache/search/${key}.json`
+    if (L.reuseUsed.has(`${key}\0${agent}`)) return null
+    const st = await $.fs.stat(path)
+    if (await $.clock.now() - st.mtimeMs > REUSE_TTL_MS) return null
+    const resp = sanitize(pyLoads(await $.fs.read(path) as string))
+    if (!realResp(resp)) return null
+    L.reuseUsed.add(`${key}\0${agent}`)
+    return resp
+  } catch { return null }
+}
+async function reuseStore($: any, L: Load, s: Sess, kind: string, query: string, agent: string, resp: any) {
+  try {
+    if (!realResp(resp) || !reuseEnabled(await $.env.get('ACE_LOCAL_REUSE'), kind)) return
+    const key = reuseKey(s.project, kind, query)
+    await writePrivate($, `${s.root}/cache/search/${key}.json`, pyDumps(resp))
+    for (const u of [...L.reuseUsed]) if (u.startsWith(key + '\0')) L.reuseUsed.delete(u)  // a refresh starts a new use-cycle
+    L.reuseUsed.add(`${key}\0${agent}`)
+  } catch { /* the cache is an optimisation */ }
+}
+const hitResult = (resp: any) => ({ resp, error: undefined, ms: 0, pinFailed: false, pinSkipped: undefined, pinMs: undefined, stderr: '', engine: 'cache', engineWhy: 'cache_hit' })
+
 // Per-load state, created in register (a reload starts over). What a learn needs is on disk: the F-080 state, the tool
 // records, a mid-turn prompt. Lost on a reload: the Stop effort, title, in-flight claims, pending late searches.
 type Load = {
@@ -185,6 +212,7 @@ type Load = {
   agentEffort: Map<string, string>              // classic.SubagentStop's effort for that agent's turn.complete
   lastClaim: Map<string, string>                // key -> newest claimed domain: only that one writes domain-last
   markerAt: number
+  reuseUsed: Set<string>                         // §32: `${entry}\0${agent}` already served to that agent
   stopDefer: string[] | null                    // classic.Stop: background task types while delegated work runs (§16 P2)
   deferred: string | undefined                  // tsid of the main task whose learn waits for its delegated work
   handback: Map<string, string>                 // agentId -> last SubagentHandback message (§16 P1)
@@ -538,12 +566,14 @@ async function beforeSpawn($: any, L: Load, s: Sess, e: any) {
     await relLog($, s, { timestamp: await nowIso($), event: 'search_skipped', hook: 'SubagentStart', reason: skip, session_id: s.sessionId, project_id: s.project, source: 'mod' })
     return { out: e, state }
   }
-  const sr = await search($, s, query, tsid, undefined, SEARCH_MS)
+  const cached = await reuseGet($, L, s, 'subagent', query, 'spawn:' + tsid)  // a spawn is a new agent: it has used nothing yet
+  const sr: any = cached ? hitResult(cached) : await search($, s, query, tsid, undefined, SEARCH_MS)
+  if (!cached) await reuseStore($, L, s, 'subagent', query, 'spawn:' + tsid, sr.resp)
   if (!sr.resp) {
     await logSubagentError($, s, sr)
     return { out: e, state }
   }
-  const r = await subagentRender($, s, sr, query, e.subagentType, tsid, t0, state.parentTaskId, { workflow: e.workflow?.runId })
+  const r = await subagentRender($, s, sr, query, e.subagentType, tsid, t0, state.parentTaskId, { workflow: e.workflow?.runId, cache_hit: !!cached })
   return { out: r.context ? { ...e, prompt: `${e.prompt}\n\n${r.context}` } : e,
     state: { ...state, ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort,
       contents: injectedContents(r.patterns, r.ids) } }
@@ -576,13 +606,15 @@ async function domainShift($: any, L: Load, e: any, key: string): Promise<string
     const t1 = await $.clock.now()
     const state = await readState($, s, key)
     const tsid: string = state?.task_session_id ?? uuid()
-    const sr = await search($, s, query, undefined, 8, DOMAIN_MS)  // §16 P8: no pin; tsid only for the state merge
+    const cached = await reuseGet($, L, s, 'domain', query, key)
+    const sr: any = cached ? hitResult(cached) : await search($, s, query, undefined, 8, DOMAIN_MS)  // §16 P8: no pin; tsid only for the state merge
+    if (!cached) await reuseStore($, L, s, 'domain', query, key, sr.resp)
     // A failed search stays retryable. Parallel domains: the newest claim writes, so the finishing order cannot flip it.
     if (sr.resp && L.lastClaim.get(key) === matched) await $.fs.write(lastFile, matched)
     const rd = sr.resp && (sr.resp.similar_patterns || []).length ? renderDomainShift(sr.resp, matched) : null
     await relLog($, s, { timestamp: await nowIso($), event: 'domain_shift', hook: 'PostToolUse', session_id: s.sessionId, project_id: s.project,
       from_domain: last, to_domain: matched, file_path: file.slice(0, 200), patterns_found: rd?.shown ?? 0, search_succeeded: !!sr.resp,
-      patterns_injected: rd?.ids.length ?? 0, hook_ms: await $.clock.now() - t1, agent_id: e.agentId ?? null, search_ms: sr.ms, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, source: 'mod' })
+      patterns_injected: rd?.ids.length ?? 0, hook_ms: await $.clock.now() - t1, agent_id: e.agentId ?? null, cache_hit: !!cached, search_ms: sr.ms, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, source: 'mod' })
     if (!rd || !rd.shown) return null
     // F-080: merge the injected ids + log ids; keep the task's FIRST retrieval_id.
     await updateState($, L, s, key, { ids: rd.ids, rlog: rd.rlog, tsid, retrievalId: state?.retrieval_id ? undefined : sr.resp.retrieval_id || undefined,
@@ -602,7 +634,7 @@ export const register: Register = (on) => {
   const L: Load = { sess: null, pendingMain: undefined, pendingTitle: undefined, stopEffort: undefined, domains: null,
     turnAnchor: new Map(), tools: new Map(), spawnPrompts: new Map(), placeholders: new Set(), late: new Map(), agentTypes: new Map(),
     earlyStart: new Map(), agentEffort: new Map(), lastClaim: new Map(), markerAt: 0, claims: new Set(), queues: new Map(),
-    stopDefer: null, deferred: undefined, handback: new Map() }
+    stopDefer: null, deferred: undefined, handback: new Map(), reuseUsed: new Set() }
   const effortOf = (e: any): unknown => e.effort && typeof e.effort === 'object' ? e.effort.level : e.effort
 
   on('session.start', async ($, e, next) => {
