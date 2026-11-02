@@ -74,6 +74,25 @@ def _write_if_changed(path, text):
         pass
 
 
+def sweep_orphans(current_sid):
+    """P-13: remove <root>/projects/*/sessions/<dir> untouched for 7 days (crashed / locked-out SessionEnd).
+    Local, bounded, best-effort; never the current session, never non-dirs."""
+    from plugin_data_dir import data_root
+    cutoff, n = time.time() - 7 * 86400, 0
+    try:
+        for d in (data_root() / "projects").glob("*/sessions/*"):
+            if n >= 200:
+                break
+            try:
+                if d.is_dir() and d.name != current_sid and d.stat().st_mtime < cutoff:
+                    shutil.rmtree(str(d), ignore_errors=True)
+                    n += 1
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
 def update_check(cli):
     """Async daily npm check: refreshes the cache file ONLY and prints nothing
     (cc_hooks_reference.md:4093 - an async hook's systemMessage goes to Claude, never the user).
@@ -195,6 +214,10 @@ def main():
     sid, pid = resolve_ids(ev)
     cli = shutil.which("ace-cli")
     if "--update-check" in sys.argv[1:]:
+        try:
+            sweep_orphans(ev.get("session_id"))
+        except Exception:
+            pass
         update_check(cli)
         msgs = []
     else:
