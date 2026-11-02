@@ -375,7 +375,7 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   }
   const playbook: string[] = state.pattern_ids ?? []
   const rlog: Record<string, number> = state.retrieval_log_ids ?? {}
-  const variant = traceVariant(state.render_variant)  // §31: stored at render time, normalized, omitted when unknown
+  const variant = traceVariant(state.render_variant, s.sessionId, await cohortEnv($))  // §31: stored label, else the conversation arm
   const applied = appliedLogIds(usedPatternIds(playbook, state.pattern_contents ?? {}, usedText), rlog)  // §31: used only
   const tsid: string | undefined = state.task_session_id ?? undefined
   const effort = effortEvent || await $.env.get('CLAUDE_EFFORT') || 'normal'

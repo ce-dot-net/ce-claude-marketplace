@@ -17,7 +17,7 @@ import S100 from './fixtures/search_100.ts'
 import S8 from './fixtures/search_8.ts'
 import SEDGE from './fixtures/search_edge.ts'
 import G from './fixtures/golden.ts'
-import { statusLine } from '../core.ts'
+import { statusLine, hasSubstantialWork, traceVariant } from '../core.ts'
 import { pyLoads, PRIVATE_WRITE_SH } from '../core.ts'
 
 const HOME = '/home/u', CWD = '/proj', SID = 'sess-1', PRJ = 'prj_t'
@@ -969,22 +969,22 @@ test('§31 a 39-char fragment or an unrelated answer credits nothing', async ($,
   expect(h.trace(L).applied_log_ids).toEqual([])  // server contract: [] when nothing was used
 })
 
-test('§31 compact/control are no server label: render_variant omitted, never recomputed or defaulted', async ($, on) => {
+test('§31 compact/control are no server label: the trace falls back to the conversation arm (this host pins full)', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }) })
   await mainTask($, h)
   const path = `${SDIR}/patterns-used-main.json`
   h.put(path, h.files.get(path)!.replace('"render_variant": "full"', '"render_variant": " COMPACT "'))
   await done($)
-  expect('render_variant' in h.trace(h.learns()[0]!)).toBe(false)
+  expect(h.trace(h.learns()[0]!).render_variant).toBe('full')
 })
 
-test('§31 nothing rendered (search failed): no label in state or trace', async ($, on) => {
+test('§31 nothing rendered (search failed): no label in state, the trace carries the conversation arm (server request)', async ($, on) => {
   const h = host(on, { search: () => ({ exitCode: 1, stderr: 'boom' }) })
   await mainTask($, h)
   expect(h.state()!.render_variant).toBeUndefined()
   await done($)
   const t = h.trace(h.learns()[0]!)
-  expect('render_variant' in t).toBe(false)
+  expect(t.render_variant).toBe('full')
   expect(t.conversation_id).toBe(SID)
 })
 
@@ -1406,4 +1406,19 @@ test('status line: what the model got, arm, top domains; one line', async () => 
   expect(statusLine({ injected: 8, returned: 8, cohort: 'full', domains: ['x'] })).toBe('ACE · 8 patterns · full · x')
   expect(statusLine({ injected: 1, returned: 1, cohort: 'budget', domains: [] })).toBe('ACE · 1 pattern · budget')
   expect(statusLine({ injected: 0, returned: 0, cohort: 'budget', domains: [] })).toBe('ACE · no patterns for this prompt')
+})
+
+test('learn gate: a state-changing tool, or >= 3 tool calls of any kind (research tasks learn too)', async () => {
+  const r = (tool: string) => ({ tool, action: '', result: '', failed: false, start_ms: 0, end_ms: 0 })
+  expect(hasSubstantialWork([r('Read'), r('Grep')])).toBe(false)
+  expect(hasSubstantialWork([r('Read'), r('Grep'), r('WebFetch')])).toBe(true)
+  expect(hasSubstantialWork([r('Bash')])).toBe(true)
+  expect(hasSubstantialWork([])).toBe(false)
+})
+
+test('trace label without a search: the conversation arm (server request); a stored label wins', async () => {
+  expect(traceVariant(undefined, 'conv-1', { ACE_RENDER_FULL_PCT: '100' })).toBe('full')
+  expect(traceVariant('budget', 'conv-1', { ACE_RENDER_FULL_PCT: '100' })).toBe('budget')
+  expect(traceVariant(undefined, undefined, {})).toBe(undefined)
+  expect(traceVariant(undefined, 'conv-1', { ACE_AB_CONTROL_PCT: '100', ACE_RENDER_FULL_PCT: '0' })).toBe(undefined)
 })

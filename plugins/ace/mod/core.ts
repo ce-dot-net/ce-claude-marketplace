@@ -250,7 +250,10 @@ export const isTrivialTask = (t: string, extra: string[] = []) =>
   isMachinePrompt(t.toLowerCase(), extra) || TRIVIAL.some(r => r.test(t.toLowerCase()))
 
 const STATE_CHANGING = ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit']
-export const hasSubstantialWork = (tools: ToolRec[]) => tools.some(t => STATE_CHANGING.some(s => t.tool.includes(s)))
+// v8: a state-changing tool, or a research task of >= MIN_RESEARCH_CALLS calls of any kind (Read/Grep/WebFetch/Agent...)
+export const MIN_RESEARCH_CALLS = 3
+export const hasSubstantialWork = (tools: ToolRec[]) =>
+  tools.length >= MIN_RESEARCH_CALLS || tools.some(t => STATE_CHANGING.some(s => t.tool.includes(s)))
 
 // One trajectory step, summarized when the call settles (results can be huge; Python keeps them in sqlite).
 export type ToolRec = { tool: string; action: string; result: string; failed: boolean; start_ms: number; end_ms: number; commit?: string }
@@ -495,7 +498,9 @@ export const normalizeVariant = (v: unknown): 'budget' | 'full' | undefined => {
   return t === 'budget' || t === 'full' ? t : undefined
 }
 // §31: the variant stored at render time, normalized; never recomputed, never defaulted (a missing label = unknown).
-export const traceVariant = (stored: unknown): string | undefined => normalizeVariant(stored)
+// a stored label wins; without one (no search before this trace) the conversation's arm (server request 2026-11-02)
+export const traceVariant = (stored: unknown, conversationId?: string, env: Record<string, string | undefined> = {}): string | undefined =>
+  normalizeVariant(stored) ?? (conversationId ? normalizeVariant(renderCohort(conversationId, env)) : undefined)
 
 // §31 "actually used" (patterns_used_state.used_pattern_ids): the id, or a >= 40-char verbatim fragment of the
 // whitespace-normalized content, in the whitespace-normalized final message / handback report. Injected order.

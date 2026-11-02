@@ -66,9 +66,15 @@ def _tool(name: str) -> tuple:
     return (name, "{}", "{}", f"tu_{name}", None)
 
 
-def test_has_substantial_work_rejects_read_only():
-    tools = [_tool("Read"), _tool("Grep"), _tool("Glob")]
+def test_has_substantial_work_rejects_a_short_read_only_task():
+    tools = [_tool("Read"), _tool("Grep")]
     assert has_substantial_work_from_accumulated(tools) is False
+
+
+def test_has_substantial_work_accepts_a_research_task_of_3_calls():
+    """v8: research/analysis tasks (>= 3 tool calls, any tool) carry learnings too."""
+    tools = [_tool("Read"), _tool("Grep"), _tool("WebFetch")]
+    assert has_substantial_work_from_accumulated(tools) is True
 
 
 def test_has_substantial_work_accepts_edit():

@@ -492,10 +492,14 @@ def normalize_render_variant(value) -> Optional[str]:
     return v if v in ("budget", "full") else None
 
 
-def trace_render_variant(stored: Optional[str], session_id: Optional[str] = None) -> Optional[str]:
-    """render_variant for a trace (§31): the variant stored at render time, normalized; unknown -> None (OMIT,
-    never default to budget). session_id is unused (kept for callers)."""
-    return normalize_render_variant(stored)
+def trace_render_variant(stored: Optional[str], session_id: Optional[str] = None, mod: bool = False) -> Optional[str]:
+    """render_variant for a trace (§31): the variant stored at render time, normalized. Without one (no search
+    before this trace), the conversation's arm as the active chain renders it (server request 2026-11-02): the
+    mod renders the full arm as full, the Python chain as budget. control/compact or no conversation -> None (omit)."""
+    v = normalize_render_variant(stored)
+    if v or not session_id:
+        return v
+    return normalize_render_variant(render_arm(session_id) if mod else render_cohort(session_id))
 
 
 def render_compact_all(

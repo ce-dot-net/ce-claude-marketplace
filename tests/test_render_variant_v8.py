@@ -137,14 +137,14 @@ def test_full_sends_no_applied_log_ids(box):
 
 def test_control_variant_is_no_server_label(box):
     learn = _main_learn(box, retrieval_id="ret-c", render_variant="control")
-    assert "render_variant" not in learn["trace"], "§31: only budget|full are sent"
+    assert learn["trace"].get("render_variant") in ("budget", "full"), "§31: only budget|full are sent (control -> conversation arm)"
 
 
 def test_trace_without_pin_or_label_omits_both(box):
     learn = _main_learn(box, task_session_id=None)
     t = learn["trace"]
     assert "session_id" not in t
-    assert "render_variant" not in t, "§31: unknown is omitted, never defaulted to budget"
+    assert t["render_variant"] == "budget", "no stored label -> the conversation arm (Python chain: budget)"
     assert t["conversation_id"] == "s-rv"
 
 
