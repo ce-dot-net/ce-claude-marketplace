@@ -21,9 +21,17 @@ I specialize in complete, error-free plugin releases that prevent common mistake
 
 ## Important Context
 
-**ACE Plugin Architecture**: The ACE plugin now uses CLI-based architecture with the `ce-ace` CLI tool (npm package: @ce-dot-net/ce-ace-cli). No MCP server or subagents. This repo only handles Claude Code plugin releases.
+**ACE Plugin Architecture**: The ACE plugin uses a CLI-based architecture with the `ace-cli` tool (npm package: @ace-sdk/cli). No MCP server or subagents. This repo only handles Claude Code plugin releases.
 
 ## Release Checklist (I ALWAYS Follow This)
+
+### 0. Release Gate (BEFORE any version bump or tag)
+- [ ] Full suite green: `python3 -m pytest tests -q -p no:cacheprovider`
+- [ ] Hook e2e green: `ACE_E2E=1 python3 -m pytest tests/e2e -q`
+- [ ] Manifest valid: `claude plugin validate plugins/ace --strict` (0 hook warnings)
+- [ ] Live checklist in `plugins/ace/docs/RELEASE_GATE_v8.md` completed (`--debug-file` session)
+- [ ] After the version bump, re-run the FULL suite again (`tests/test_v600_version_bump.py` guards the description)
+- [ ] Tag is `v{VERSION}` (git tag only; the plugin tag subcommand is not used)
 
 ### 1. Version Verification
 - [ ] Find ALL files with version numbers:
@@ -245,17 +253,10 @@ A release is successful when:
 - API redesign
 - **Example**: 3.2.14 → 4.0.0
 
-## Notes on ce-ace CLI
+## Notes on ace-cli
 
-The ACE CLI tool (@ce-dot-net/ce-ace-cli) is maintained separately:
-- **Repo**: ce-ace-cli (separate from this marketplace repo)
-- **Package**: npm @ce-dot-net/ce-ace-cli
-- **Current Version**: v1.0.3+ (includes tune command support)
-
-The ACE plugin uses CLI-based architecture with subprocess calls via hooks. Users install the CLI globally:
-```bash
-npm install -g @ce-dot-net/ce-ace-cli
-```
+The ACE CLI (`ace-cli`, npm @ace-sdk/cli) is maintained separately and is off-limits here; hooks call it as a subprocess.
+Users install it globally: `npm install -g @ace-sdk/cli`.
 
 ---
 
