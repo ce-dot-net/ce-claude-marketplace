@@ -24,16 +24,16 @@ def test_async_stop_prints_nothing_on_learn_and_on_skip(box):
     assert p.stdout == ""
 
 
-def test_subagent_stop_uses_own_transcript_not_sibling_prompt(box):
+def test_subagent_stop_prefers_stored_query_over_transcript(box):
     sid = "s-sib"
     agent = "aaa111"
     box.seed_tools(sid, WORK, agent_id=agent)
-    # state holds the sibling's (wrong) guessed query; the agent's own transcript says otherwise
+    # §13.2 (r3a) flipped the r2 order: SubagentStart's stored query wins, transcript is the fallback
     box.write_state(sid, agent=agent, user_prompt="Audit the CSS theme tokens for dark mode")
     p = box.run_after_task(box.subagent_event(sid, agent), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
     assert p.stdout == ""
     task = box.cli_calls("learn")[0]["trace"]["task"]
-    assert "refactor the parser module" in task and "CSS" not in task
+    assert "CSS theme tokens" in task and "refactor the parser module" not in task
 
 
 def test_learn_is_detached_by_default(box):

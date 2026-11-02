@@ -208,6 +208,8 @@ def summarize_tool_response(tool_name: str, tool_response: dict) -> str:
     if not isinstance(tool_response, dict):
         # str, or the content ARRAY MCP tools return (crashed the dict-only path)
         tool_response = tool_response if isinstance(tool_response, str) else str(tool_response)
+        if tool_name in ['Edit', 'Write']:  # PostToolBatch serializes the tool_result text (§9 G4)
+            return "Failed" if 'tool_use_error' in tool_response else "Success"
         if len(tool_response) > 100:
             return tool_response[:100] + '...'
         return tool_response
@@ -221,8 +223,12 @@ def summarize_tool_response(tool_name: str, tool_response: dict) -> str:
 
     # Handle success responses
     if tool_name in ['Edit', 'Write']:
-        success = tool_response.get('success', False)
-        return "Success" if success else "Failed"
+        # Success shapes: legacy {success}, structured Output ({filePath, type|structuredPatch}),
+        # transcript {content: 'File created…'}; errors were returned above ('error' key).
+        c = tool_response.get('content')
+        ok = (tool_response.get('success') or 'filePath' in tool_response
+              or (isinstance(c, str) and 'tool_use_error' not in c))
+        return "Success" if ok else "Failed"
 
     elif tool_name == 'Read':
         content = tool_response.get('content', '')
@@ -517,6 +523,9 @@ def skip_learning(reason, event=None, agent_id=None, session_id=None, working_di
 TRANSCRIPT_TAIL_BYTES = 2 * 1024 * 1024
 
 
+_SYSREM = regex_module.compile(r'<system-reminder>.*?</system-reminder>', regex_module.S)
+
+
 def get_user_prompt_from_transcript(transcript_path: str) -> str:
     """
     Fallback task description: the last real user prompt in the LAST 2 MB of the
@@ -550,14 +559,17 @@ def get_user_prompt_from_transcript(transcript_path: str) -> str:
                 if isinstance(content, list):
                     if any(isinstance(b, dict) and b.get('type') == 'tool_result' for b in content):
                         continue
-                    user_prompt = '\n'.join(
+                    content = '\n'.join(
                         b.get('text', '') for b in content
                         if isinstance(b, dict) and b.get('type') == 'text')
-                    if user_prompt.strip():
-                        return user_prompt[:2000]
-
-                elif isinstance(content, str) and len(content.strip()) > 10:
-                    return content[:2000]
+                    min_len = 0
+                else:
+                    min_len = 10
+                if isinstance(content, str):
+                    # CC injects CLAUDE.md as <system-reminder> blocks in the first user entry
+                    content = _SYSREM.sub('', content).strip()
+                    if len(content) > min_len:
+                        return content[:2000]
 
         return "No user prompt found"
 
@@ -733,7 +745,7 @@ def main():
         if not context:
             skip_learning("No project context found", event)
             sys.exit(0)
-        if plugin_data_dir.is_disabled(context['project'], session_id):
+        if plugin_data_dir.is_disabled(context['project'], session_id) or plugin_data_dir.is_mod_active(context['project'], session_id):
             sys.exit(0)  # session flag (CLI unusable) or project flag (P-26)
 
         # Handle SubagentStop: use agent's transcript. transcript_path is the MAIN session's
@@ -785,13 +797,8 @@ def main():
             pass
 
         # STEP 1: task description — state `user_prompt` (C1), else bounded transcript tail
-        # SubagentStop: the subagent's OWN transcript is authoritative (SubagentStart's stored
-        # query is a guess that can be a concurrent sibling's prompt); state is the fallback.
+        # SubagentStop: SubagentStart's stored query first (§13.2); transcript is only the fallback.
         user_prompt = ''
-        if hook_event_name == 'SubagentStop' and transcript_path:
-            user_prompt = get_user_prompt_from_transcript(transcript_path)
-            if user_prompt == "No user prompt found":
-                user_prompt = ''
         if not user_prompt and not no_agent_state:
             user_prompt = (load_state(session_id, agent_id, hook_event_name).get('user_prompt') or '').strip()
         if not user_prompt:

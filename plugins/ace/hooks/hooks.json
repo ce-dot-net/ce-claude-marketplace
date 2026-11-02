@@ -125,7 +125,7 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_stop_wrapper.sh",
             "args": [],
-            "async": true
+            "timeout": 15
           }
         ]
       }
@@ -138,7 +138,7 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_subagent_stop_wrapper.sh",
             "args": [],
-            "async": true
+            "timeout": 15
           }
         ]
       }

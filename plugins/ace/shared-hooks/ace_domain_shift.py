@@ -89,7 +89,7 @@ def main() -> None:
         project, org = ctx['project'], ctx['org']
         t0 = time.monotonic()
         sid = plugin_data_dir.resolve_session_id(event)
-        if plugin_data_dir.is_disabled(project, sid):
+        if plugin_data_dir.is_disabled(project, sid) or plugin_data_dir.is_mod_active(project, sid):
             return
         try:
             domains = json.loads(plugin_data_dir.domains_file(project).read_text())

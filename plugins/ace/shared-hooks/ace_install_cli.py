@@ -42,7 +42,7 @@ def _cli_version(cli):
     except Exception:
         out = ""
     m = _VER.search(out)
-    ver = m.group(0) if m else "0.0.0"
+    ver = m.group(0) if m else None  # None = unknown (cold probe timed out): never disable on it
     if m:  # never cache a failed probe
         try:
             _atomic_write(f, json.dumps({"path": real, "mtime": mtime, "version": ver}))
@@ -135,7 +135,7 @@ def update_notice(cli):
     except Exception:
         return None
     cur = _cli_version(cli)
-    if _VER.fullmatch(latest or "") and _tup(latest) > _tup(cur):
+    if cur and _VER.fullmatch(latest or "") and _tup(latest) > _tup(cur):
         return "💡 [ACE] Update available: v%s → v%s. Run: npm install -g @ace-sdk/cli" % (cur, latest)
     return None
 
@@ -173,7 +173,11 @@ def startup(ev, sid, pid, cli):
         disable("CLI not installed")
         return ["⛔ [ACE] ace-cli not found. Install: npm install -g @ace-sdk/cli. ACE hooks DISABLED."]
     cur = _cli_version(cli)
-    if _tup(cur) < _tup(MIN_VERSION):
+    if cur is None:
+        from plugin_data_dir import append_error
+        append_error("%s version_unknown cli=%s (probe timed out/unparseable; ACE stays enabled)"
+                     % (time.strftime("%Y-%m-%dT%H:%M:%S"), cli))
+    elif _tup(cur) < _tup(MIN_VERSION):
         disable("CLI version %s < %s" % (cur, MIN_VERSION))
         return ["⛔ [ACE] Outdated CLI: v%s (requires >= v%s). Upgrade: npm install -g @ace-sdk/cli. "
                 "ACE hooks DISABLED." % (cur, MIN_VERSION)]
