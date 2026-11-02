@@ -60,12 +60,13 @@ def test_skip_learning_degenerate_subagentstop_never_reaps_main(monkeypatch):
 
 def test_skip_learning_writes_eval_request_on_skipped_stop(monkeypatch):
     import ace_after_task as at
-    monkeypatch.setattr(at, "load_state", lambda *a, **k: {"pattern_ids": ["ctx-1-a", "ctx-2-b"]})
+    st = {"avg_relevance": 70, "domains": 2}
+    monkeypatch.setattr(at, "load_state", lambda *a, **k: {"pattern_ids": ["ctx-1-a", "ctx-2-b"], "eval_stats": st})
     monkeypatch.setattr(at, "reap_patterns_used", lambda *a: None)
     calls = []
-    monkeypatch.setattr(at, "write_eval_request", lambda n, t: calls.append((n, t)))
+    monkeypatch.setattr(at, "write_eval_request", lambda n, t, s=None: calls.append((n, t, s)))
     at.skip_learning("x", {"session_id": "s1", "hook_event_name": "Stop"})
-    assert calls == [(2, 0)]
+    assert calls == [(2, 0, st)]
 
 
 def test_learn_goes_through_run_learn_not_a_private_spawn():

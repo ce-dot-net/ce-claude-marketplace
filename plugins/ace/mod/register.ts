@@ -6,7 +6,7 @@ import {
   pyLoads, pyDumps, sanitize, renderFull, renderBudget, renderCompact, renderDomainShift, renderCohort, renderPatternsDict,
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
-  detachedLearnArgv, FALLBACK_ON_3, reuseKey, reuseEnabled, REUSE_TTL_MS, parseAceReview, parseDiffStat, evalInjection, searchRow, searchSummary, searchErrorLine, statusLine, topDomains, sessionTitle,
+  detachedLearnArgv, FALLBACK_ON_3, reuseKey, reuseEnabled, REUSE_TTL_MS, parseAceReview, parseDiffStat, evalInjection, evalStats, num, searchRow, searchSummary, searchErrorLine, statusLine, topDomains, sessionTitle,
   subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, appliedLogIds, usedPatternIds, injectedContents, type StateUpdate, type ToolRec, type Cohort,
 } from './core.ts'
 
@@ -415,7 +415,8 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   }
 
   if (hook === 'Stop' && playbook.length && await logsSafe($, s, 'ace-eval-request.json')) {
-    await $.fs.write(`${s.logs}/ace-eval-request.json`, pyDumps({ patterns_injected: playbook.length, avg_relevance: 0, domains: 0,
+    await $.fs.write(`${s.logs}/ace-eval-request.json`, pyDumps({ patterns_injected: playbook.length,
+      avg_relevance: num(state.eval_stats?.avg_relevance) ?? 0, domains: num(state.eval_stats?.domains) ?? 0,
       tools_executed: recs.length, success: true, timestamp: (await nowIso($)).replace(/\.\d+Z$/, 'Z') }))
   }
   await reap($, L, s, key, state)
@@ -486,7 +487,7 @@ async function onPrompt($: any, L: Load, e: any): Promise<any> {
   const r = await renderArm($, sr.resp, 'ace-patterns', 'agent-type="main"', s.sessionId, new Set(seen))
   if (r.cohort === 'full' && r.ids.length) await writePrivate($, seenFile, JSON.stringify([...new Set([...seen, ...r.ids])]))
   await save({ ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, tsid, userPrompt: e.text, rendered: r.rendered, hook: 'UserPromptSubmit',
-    renderVariant: r.cohort, contents: injectedContents(r.patterns, r.ids) })
+    renderVariant: r.cohort, contents: injectedContents(r.patterns, r.ids), evalStats: evalStats(r.patterns, sr.resp.similar_patterns || []) })
   const ds = domainsSummary(sr.resp)
   if (Object.keys(ds).length) {
     L.domains = domainNames(ds)

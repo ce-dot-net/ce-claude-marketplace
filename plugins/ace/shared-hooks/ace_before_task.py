@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 from validation import is_valid_pattern_id
-from patterns_used_state import append_patterns_used, injected_contents, task_session_id_for
+from patterns_used_state import append_patterns_used, eval_stats, injected_contents, task_session_id_for
 from ace_pattern_render import render_patterns, render_cohort, render_compact_all
 
 
@@ -241,9 +241,11 @@ def check_eval_request_and_review():
 
             # Build additionalContext for silent eval injection
             # Frame for HUMAN DEVELOPER perspective — ask for ACE_REVIEW marker
+            # never "0% relevance" / "0 domains": an unknown number is left out
+            stats = (f"{avg_relevance}% relevance, " if avg_relevance else "") + (f"{domains} domains, " if domains else "")
             eval_context = (
                 f"<!-- ACE Self-Eval Request: Previous task used {patterns_injected} patterns "
-                f"({avg_relevance}% relevance, {domains} domains, {tools_executed} tools). "
+                f"({stats}{tools_executed} tools). "
                 f"As a human developer, how much time did these patterns save? "
                 f"Without ACE, a developer would search docs, explore codebases, ask colleagues, or trial-and-error. "
                 f"Rate from a HUMAN DEVELOPER perspective, not AI perspective. "
@@ -578,6 +580,7 @@ def main():
 
         # CRITICAL: Save pattern IDs for reinforcement learning (+ C1 keys).
         # Ids are the budget-limited injected ids; control arm saves the F-080 anchor only.
+        _inj = set(_pattern_ids or [])
         try:
             append_patterns_used(session_id, agent_id, _pattern_ids,
                                  retrieval_id=_retrieval_id,
@@ -586,7 +589,9 @@ def main():
                                  user_prompt=user_prompt,
                                  rendered_context=_rendered_for_state if _rendered_for_state is not None else '',
                                  hook_event_name='UserPromptSubmit', render_variant=_cohort,
-                                 pattern_contents=injected_contents(original_pattern_list, _pattern_ids))
+                                 pattern_contents=injected_contents(original_pattern_list, _pattern_ids),
+                                 eval_stats=eval_stats([p for p in original_pattern_list if p.get('id') in _inj],
+                                                       original_pattern_list))
         except Exception as e:
             from ace_relevance_logger import log_error
             log_error('UserPromptSubmit', 'ace_before_task.state_write', session_id, context['project'], e)

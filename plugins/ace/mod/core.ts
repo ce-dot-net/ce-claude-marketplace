@@ -310,6 +310,14 @@ export function parseAceReview(msg: string): { quality_pct: number; time_saved: 
   return { quality_pct: Number(m[1]), time_saved: t ? t[0].replace(' saved', '') : '' }
 }
 
+// patterns_used_state.eval_stats: mean confidence of the INJECTED x100 (truncated, 0..100; non-number 0), distinct RETURNED domains
+export function evalStats(injected: any[], returned: any[]): { avg_relevance: number; domains: number } {
+  const conf = (injected ?? []).map(p => { const c = num(p?.confidence); return c !== undefined && Number.isFinite(c) ? c : 0 })
+  const rel = conf.length ? Math.trunc(conf.reduce((x, y) => x + y, 0) / conf.length * 100) : 0
+  const doms = new Set((returned ?? []).filter(p => p && p.domain).map(p => String(p.domain)))
+  return { avg_relevance: Math.max(0, Math.min(100, rel)), domains: doms.size }
+}
+
 // ace_before_task.check_eval_request_and_review text. §24: the file is repo-controlled and reaches the model's
 // context, so every field is a number (finite int/float; anything else 0), never text.
 export function evalInjection(d: any): string {
@@ -318,8 +326,10 @@ export function evalInjection(d: any): string {
     if (v instanceof PyFloat) return Number.isFinite(v.v) ? pyFloatRepr(v.v) : '0'
     return typeof v === 'number' && Number.isFinite(v) ? String(v) : '0'
   }
+  // never "0% relevance" / "0 domains": an unknown number is left out
+  const stats = (g('avg_relevance') !== '0' ? `${g('avg_relevance')}% relevance, ` : '') + (g('domains') !== '0' ? `${g('domains')} domains, ` : '')
   return `<!-- ACE Self-Eval Request: Previous task used ${g('patterns_injected')} patterns ` +
-    `(${g('avg_relevance')}% relevance, ${g('domains')} domains, ${g('tools_executed')} tools). ` +
+    `(${stats}${g('tools_executed')} tools). ` +
     `As a human developer, how much time did these patterns save? ` +
     `Without ACE, a developer would search docs, explore codebases, ask colleagues, or trial-and-error. ` +
     `Rate from a HUMAN DEVELOPER perspective, not AI perspective. ` +
@@ -559,7 +569,7 @@ export function dataRootFromPluginRoot(home: string, root: string, name: string,
 // ---------- patterns_used_state.append_patterns_used: same merge, same key order, same bytes ----------
 export type StateUpdate = { ids?: string[]; retrievalId?: string | null; rlog?: Record<string, number>; tsid?: string | null
   userPrompt?: string; rendered?: string; hook?: string; parentTaskId?: string; agentType?: string; renderVariant?: string
-  contents?: Record<string, string> }
+  contents?: Record<string, string>; evalStats?: { avg_relevance: number; domains: number } }
 export function mergeState(prior: any, u: StateUpdate): any {
   const p = prior && typeof prior === 'object' && !Array.isArray(prior) ? prior : {}
   const ids: string[] = Array.isArray(p.pattern_ids) ? [...p.pattern_ids] : Array.isArray(prior) ? [...prior] : []
@@ -583,6 +593,8 @@ export function mergeState(prior: any, u: StateUpdate): any {
   const pc: Record<string, string> = { ...(p.pattern_contents && typeof p.pattern_contents === 'object' ? p.pattern_contents : {}) }
   for (const [id, t] of Object.entries(u.contents ?? {})) if (isValidPatternId(id) && typeof t === 'string' && t) pc[id] = cpSlice(t, CONTENT_CAP)
   if (Object.keys(pc).length) state.pattern_contents = pc  // §31 (Python writes it after its optional keys too)
+  const es = u.evalStats ?? p.eval_stats  // self-eval numbers of the task's search, read by Stop (Python key order)
+  if (es && typeof es === 'object' && !Array.isArray(es)) state.eval_stats = es
   const at = u.agentType ?? p.agent_type // mod-only: its turn.complete carries no agent type; Python ignores the key
   if (at) state.agent_type = at
   return state

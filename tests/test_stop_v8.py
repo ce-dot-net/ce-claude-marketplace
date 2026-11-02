@@ -551,6 +551,18 @@ def test_eval_request_written_by_python_when_patterns_were_injected(box):
     assert data["timestamp"].endswith("Z")
 
 
+def test_eval_request_carries_the_task_eval_stats(box):
+    """Item 1: avg_relevance / domains come from the task's search (state eval_stats), not a hardcoded 0."""
+    sid = "sess-eval-stats"
+    box.seed_tools(sid, WORK)
+    box.write_state(sid, user_prompt="implement the retry policy for the uploader",
+                    pattern_ids=["ctx-abc123", "ctx-def456"], eval_stats={"avg_relevance": 80, "domains": 2})
+    proc = box.run_after_task(box.stop_event(sid), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
+    assert proc.returncode == 0, proc.stderr
+    data = json.loads((box.project / ".claude" / "data" / "logs" / "ace-eval-request.json").read_text())
+    assert (data["avg_relevance"], data["domains"]) == (80, 2)
+
+
 def test_dead_event_logger_is_gone():
     """final review: ace_event_logger.py had no caller and wrote through symlinks; it is deleted."""
     assert not EVENT_LOGGER.exists()

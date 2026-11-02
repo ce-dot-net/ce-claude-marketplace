@@ -213,12 +213,23 @@ def injected_contents(patterns, ids):
     return {pid: str(by_id[pid])[:CONTENT_CAP] for pid in ids or [] if by_id.get(pid)}  # injected order (mod parity)
 
 
+def eval_stats(injected, returned):
+    """Self-eval numbers of a search (v7.1.14 ace_stop_wrapper.sh): mean confidence of the INJECTED
+    patterns x 100 (truncated, 0..100; a non-number counts 0) and the distinct domains of the RETURNED ones."""
+    import math
+    conf = [c if isinstance(c, (int, float)) and not isinstance(c, bool) and math.isfinite(c) else 0
+            for c in (p.get("confidence") if isinstance(p, dict) else None for p in injected or [])]
+    rel = int(sum(conf) / len(conf) * 100) if conf else 0
+    doms = {str(p["domain"]) for p in returned or [] if isinstance(p, dict) and p.get("domain")}
+    return {"avg_relevance": max(0, min(100, rel)), "domains": len(doms)}
+
+
 def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
                          retrieval_id=None, retrieval_log_ids=None,
                          task_session_id=None, project_id=None,
                          user_prompt=None, rendered_context=None,
                          hook_event_name=None, reset=False, parent_task_id=None, query_source=None,
-                         render_variant=None, pattern_contents=None):
+                         render_variant=None, pattern_contents=None, eval_stats=None):
     """Append+dedupe valid pattern IDs to the per-agent file; return the full list.
 
     F-080: optional params retrieval_id (str|None) and retrieval_log_ids (dict|None).
@@ -240,7 +251,7 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
     has_retrieval = retrieval_id is not None or bool(retrieval_log_ids)
     has_task_session = task_session_id is not None
     has_extra = bool(user_prompt or rendered_context or hook_event_name or parent_task_id or query_source
-                     or render_variant or pattern_contents)
+                     or render_variant or pattern_contents or eval_stats)
     if not ids and not has_retrieval and not has_task_session and not has_extra:
         return []
     sf = state_file_path(session_id, agent_id, state_dir, project_id)
@@ -289,6 +300,9 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
                 pc[pid] = text[:CONTENT_CAP]
         if pc:
             state['pattern_contents'] = pc
+        es = eval_stats if isinstance(eval_stats, dict) else prior.get('eval_stats')
+        if isinstance(es, dict):
+            state['eval_stats'] = es  # self-eval numbers of the task's search, read by Stop
         _atomic_write(sf, json.dumps(state))
     return existing_ids
 
