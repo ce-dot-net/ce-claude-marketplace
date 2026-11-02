@@ -92,6 +92,7 @@ def _cpu(argv, **kw):
     return p, (after.ru_utime - before.ru_utime) + (after.ru_stime - before.ru_stime)
 
 
+@pytest.mark.real_engine
 @pytest.mark.skipif(E.real_core_dir() is None, reason="real ace-cli/@ace-sdk/core not installed")
 def test_engine_search_cpu_vs_cli(tmp_path):
     srv = E.FakeServer(tmp_path)
@@ -105,6 +106,6 @@ def test_engine_search_cpu_vs_cli(tmp_path):
                             env=dict(env, PATH=E.path_with(bin_dir)))
         print("engine CPU %.3fs vs ace-cli CPU %.3fs" % (lib_cpu, cli_cpu))
         assert cli.returncode == 0 and lib.returncode == 0, lib.stderr
-        assert lib_cpu < 1.5, "engine spawn CPU %.3fs" % lib_cpu
+        assert lib_cpu < 0.6, "engine spawn CPU %.3fs" % lib_cpu
     finally:
         srv.stop()

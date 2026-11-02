@@ -44,16 +44,11 @@ GUARD_JS = r"""
 const orig = globalThis.fetch;
 globalThis.fetch = async (url, init) => {
   const u = new URL(String(url));
-  if (u.hostname === '127.0.0.1' || u.hostname === 'localhost') {
-    const code = (e) => { const c = e && e.cause; return (c && (c.code || c.message)) || String(e); };
-    const note = (e, what) => process.stderr.write('GUARD: ' + u.pathname + ' ' + what + ': ' + code(e) + '\n');
-    // a loaded host can time out the localhost connect once: retry once, recording it (§26)
-    return orig(url, init).catch((e) => {
-      if (!/ETIMEDOUT|ECONNRESET|CONNECT_TIMEOUT/.test(code(e))) { note(e, 'failed'); throw e; }
-      note(e, 'retrying after');
-      return orig(url, init).catch((e2) => { note(e2, 'failed'); throw e2; });
-    });
-  }
+  if (u.hostname === '127.0.0.1' || u.hostname === 'localhost') return orig(url, init).catch((e) => {
+    const c = e && e.cause;  // §26: undici says only "fetch failed"; keep the cause in stderr for diagnosis
+    process.stderr.write('GUARD: ' + u.pathname + ' failed: ' + ((c && (c.code || c.message)) || e) + '\n');
+    throw e;
+  });
   if (u.hostname.endsWith('code-engine.app')) { process.stderr.write('GUARD: refused ' + u.host + '\n'); process.exit(97); }
   throw new TypeError('fetch failed (test guard: offline)');  // e.g. ace-cli's npm update check
 };

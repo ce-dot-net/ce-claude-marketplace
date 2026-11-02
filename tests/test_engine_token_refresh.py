@@ -17,7 +17,7 @@ import engine_harness as E
 
 sys.path.insert(0, str(E.UTILS))
 
-pytestmark = [pytest.mark.skipif(E.node_bin() is None, reason="node not installed"),
+pytestmark = [pytest.mark.real_engine, pytest.mark.skipif(E.node_bin() is None, reason="node not installed"),
               pytest.mark.skipif(E.real_core_dir() is None, reason="real ace-cli/@ace-sdk/core not installed")]
 
 

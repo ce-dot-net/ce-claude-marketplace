@@ -68,7 +68,23 @@ else:
 _state = {}
 
 
+_OPT_IN = ("real_engine", "live_server")
+
+
+def pytest_collection_modifyitems(config, items):
+    """real_engine (real @ace-sdk/core subprocesses vs the localhost fake server, load-sensitive) and live_server
+    (the real ACE server) are out of the default gate: run them with `-m real_engine` / `-m live_server`."""
+    if config.getoption("markexpr", ""):
+        return
+    keep = [i for i in items if not any(i.get_closest_marker(m) for m in _OPT_IN)]
+    if len(keep) != len(items):
+        config.hook.pytest_deselected(items=[i for i in items if i not in keep])
+        items[:] = keep
+
+
 def pytest_configure(config):
+    config.addinivalue_line("markers", "real_engine: real @ace-sdk/core vs the fake server; opt in with -m real_engine")
+    config.addinivalue_line("markers", "live_server: talks to the real ACE server; opt in with -m live_server")
     config.addinivalue_line(
         "markers", "real_ace_cli: run without the fake ace-cli on PATH (opt out of the hermetic fake)"
     )
