@@ -34,7 +34,7 @@ def _mod_state_text():
 
 @pytest.fixture
 def data_root(tmp_path, monkeypatch):
-    root = tmp_path / "plugin-data"
+    root = tmp_path / "ace-plugin-data"  # §16 P5: only an ace* CLAUDE_PLUGIN_DATA is honoured
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(root))
     return root
 

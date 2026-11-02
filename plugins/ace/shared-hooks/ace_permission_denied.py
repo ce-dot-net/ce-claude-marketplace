@@ -281,6 +281,14 @@ def _structural_fingerprint(tool_name: str, tool_input) -> str:
     return f"input_keys={keys}"
 
 
+def _render_variant(session_id):
+    try:
+        from ace_pattern_render import render_cohort
+        return render_cohort(session_id)
+    except Exception:
+        return "budget"
+
+
 def _build_trace(event: dict) -> dict:
     """Build ExecutionTrace shape per SDK-team guidance."""
     tool_name = event.get("tool_name", "unknown")
@@ -313,6 +321,7 @@ def _build_trace(event: dict) -> dict:
         "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
         "agent_type": "permission_gate",
         "session_id": session_id,
+        "render_variant": _render_variant(session_id),  # §28: on every trace
         # Domain tag — client-side classification; server respects this for searchPatterns
         "domains": ["permission-boundary"],
     }

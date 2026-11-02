@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 import mod_reference as R
-from ace_pattern_render import render_cohort, render_compact_all, render_patterns, render_patterns_dict
+from ace_pattern_render import render_arm, render_cohort, render_compact_all, render_patterns, render_patterns_dict
 
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(not NODE, reason="node not installed")
@@ -114,6 +114,18 @@ def test_render_cohort_salted_bucket_and_knobs(node_out, monkeypatch):
                 monkeypatch.setenv(k, env.get(k, "0"))
             assert got[1:] == [render_cohort(s) for s in SIDS[1:]]
     assert set(node_out["cohorts"][0]) == {"full"}  # default: everyone gets the full render
+
+
+def test_render_arm_python_ts_parity(node_out, monkeypatch):
+    """§28: the production Python render_arm and the mod's renderCohort are ONE function (same salt, knobs, order).
+    render_cohort is the Python chain's rendered variant: the full arm renders as budget."""
+    for env, got in zip(ENVS, node_out["cohorts"]):
+        for k in ("ACE_AB_CONTROL_PCT", "ACE_AB_COMPACT_PCT", "ACE_RENDER_FULL_PCT"):
+            monkeypatch.delenv(k, raising=False)
+            if k in env:
+                monkeypatch.setenv(k, env[k])
+        assert got == [render_arm(s or None) for s in SIDS], env
+        assert [render_cohort(s or None) for s in SIDS] == ["budget" if a == "full" else a for a in got], env
 
 
 def test_data_root_derives_from_plugin_root(node_out):

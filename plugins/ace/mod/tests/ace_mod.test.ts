@@ -613,7 +613,7 @@ const done = ($: any, answer = 'done', agentId?: string) =>
   $.turn.complete({ answer, durationMs: 5, isAborted: false, turnId: agentId ? 'ta' : 't1', reason: 'answer', ...(agentId ? { agentId } : {}) } as any)
 
 test('turn.complete main: detached learn (--no-stream, F-080 flags, --timeout 300000), lock taken before the spawn', async ($, on) => {
-  const h = host(on, { search: () => ({ stdout: S8 }) })
+  const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_RENDER_FULL_PCT: '0' } })  // budget arm: F-080 applied ids (§29)
   await mainTask($, h)
   await done($)
   expect(h.learns().length).toBe(1)
@@ -650,11 +650,66 @@ test('trace parity with ace_after_task.py: fields, effort from classic.Stop, git
   expect(t.session_id).toBe(tsid)
   expect(t.render_variant).toBe('full')
   expect(t.retrieval_id).toBe(JSON.parse(S8).retrieval_id)
-  expect(t.applied_log_ids.every((x: any) => Number.isInteger(x))).toBe(true)
+  expect(t.applied_log_ids).toBeUndefined()  // §29: full -> no applied ids
   expect(t.effort_level).toBe('high')
   expect(t.effort_weight).toBe(1.5)
   expect(t.git.commit_hash).toBe('abc123')
   expect(t.git.branch).toBe('main')
+})
+
+// ---------- §28 render_variant contract / §29 applied_log_ids under full ----------
+
+test('§29 full (default): no --applied-log-ids, trace without applied ids; retrieval_id + playbook_used unchanged', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  expect(h.state()!.render_variant).toBe('full')
+  await done($)
+  const L = h.learns()[0]!, a = h.learnArgv(L), t = h.trace(L)
+  expect(a.includes('--applied-log-ids')).toBe(false)
+  expect(t.applied_log_ids).toBeUndefined()
+  const st8 = JSON.parse(G.state_main_8)
+  expect(h.flag(a, '--retrieval-id')).toBe(st8.retrieval_id)
+  expect(t.retrieval_id).toBe(st8.retrieval_id)
+  expect(t.playbook_used).toEqual(st8.pattern_ids)
+  expect(t.render_variant).toBe('full')
+})
+
+test('§29 compact keeps the applied ids; the variant is read back from state, never recomputed at learn', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  const path = `${SDIR}/patterns-used-main.json`
+  h.put(path, h.files.get(path)!.replace('"render_variant": "full"', '"render_variant": "compact"'))
+  await done($)
+  const L = h.learns()[0]!, t = h.trace(L)
+  expect(t.render_variant).toBe('compact')
+  const st8 = JSON.parse(G.state_main_8)
+  expect(h.flag(h.learnArgv(L), '--applied-log-ids')).toBe(st8.pattern_ids.filter((id: string) => id in st8.retrieval_log_ids).map((id: string) => st8.retrieval_log_ids[id]).join(','))
+})
+
+test('§28 the arm buckets on the CC session id (bucket 66 here), CONTROL=70: every task gets control', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_AB_CONTROL_PCT: '70' } })
+  for (let i = 0; i < 8; i++) {
+    await submit($, HUMAN + ' round ' + i)
+    expect(h.state()!.render_variant).toBe('control')
+  }
+  expect(new Set(h.searches().map(h.pin)).size).toBe(8)  // the pin stays per task (§12)
+})
+
+test('§28 the arm buckets on the CC session id (bucket 66 here), CONTROL=60: every task gets full', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_AB_CONTROL_PCT: '60' } })
+  for (let i = 0; i < 8; i++) {
+    await submit($, HUMAN + ' round ' + i)
+    expect(h.state()!.render_variant).toBe('full')
+  }
+  expect(new Set(h.searches().map(h.pin)).size).toBe(8)  // the pin stays per task (§12)
+})
+
+test('§28 a subagent inherits the conversation arm and stores it', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_AB_CONTROL_PCT: '70' } })
+  await submit($)
+  await spawn($, 'review the domain shift python port for parity bugs')
+  expect(h.state('agent-1')!.render_variant).toBe('control')
+  expect(h.state('agent-1')!.task_session_id).not.toBe(h.state()!.task_session_id)
 })
 
 test('trace_truncate parity: > 50 steps → truncation marker first + metadata.trace_truncated', async ($, on) => {
@@ -726,7 +781,8 @@ test('turn.complete subagent: learn with the SUBAGENT pin, parent_task_id, own l
   const L = h.learns()[0]!
   const t = h.trace(L)
   expect(t.session_id).toBe(sub)
-  expect(t.parent_task_id).toBe(main)
+  expect(t.parent_agent_id).toBe(main)  // §16 P3: server field name; parent_task_id stays local
+  expect(t.parent_task_id).toBeUndefined()
   expect(t.agent_id).toBe('agent-1')
   expect(t.agent_type).toBe('general-purpose')
   expect(t.result.success).toBe(true)
