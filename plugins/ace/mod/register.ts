@@ -6,7 +6,7 @@ import {
   pyLoads, pyDumps, sanitize, renderFull, renderBudget, renderCompact, renderDomainShift, renderCohort, renderPatternsDict,
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
-  detachedLearnArgv, FALLBACK_ON_3, reuseKey, reuseEnabled, REUSE_TTL_MS, parseAceReview, parseDiffStat, evalInjection, evalStats, num, learnLine, searchRow, searchSummary, searchErrorLine, statusLine, topDomains, sessionTitle,
+  detachedLearnArgv, FALLBACK_ON_3, reuseKey, reuseEnabled, REUSE_TTL_MS, parseAceReview, parseDiffStat, evalStats, learnLine, selfEvalPrompt, parseUsedIds, searchRow, searchSummary, searchErrorLine, statusLine, topDomains, sessionTitle,
   subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, appliedLogIds, usedPatternIds, injectedContents, type StateUpdate, type ToolRec, type Cohort,
 } from './core.ts'
 
@@ -380,56 +380,76 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   const playbook: string[] = state.pattern_ids ?? []
   const rlog: Record<string, number> = state.retrieval_log_ids ?? {}
   const variant = traceVariant(state.render_variant, s.sessionId, await cohortEnv($))  // §31: stored label, else the conversation arm
-  const used = usedPatternIds(playbook, state.pattern_contents ?? {}, usedText, recs.map(r => r.hay).filter(Boolean).join('\n'))
-  const applied = appliedLogIds(used, rlog)  // §31 / item H2: used only (this agent's own tools and report)
+  const tokenUsed = usedPatternIds(playbook, state.pattern_contents ?? {}, usedText, recs.map(r => r.hay).filter(Boolean).join('\n'))
   const tsid: string | undefined = state.task_session_id ?? undefined
   const effort = effortEvent || await $.env.get('CLAUDE_EFFORT') || 'normal'
-  let git: any
-  try {
-    git = await gitContext($, s.cwd)
-    const commits = recs.filter(r => r.commit).map(r => r.commit)
-    if (git && commits.length) git.session_commits = commits
-  } catch { /* git context is optional */ }
-  const { trace, success } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
-    tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied,
-    nowIso: await nowIso($), renderVariant: variant, conversationId: s.sessionId, effort, git, summaryCap })
-
-  // Lock BEFORE the spawn (session.end keeps the dir); the trace lives under <root>/tmp as run_learn's does.
+  // Lock BEFORE anything async (session.end keeps the dir); state and tools are captured, so reap now: a new prompt may
+  // start while the self-eval runs.
   const lock = `${s.sdir}/learn-inflight-${safe(key)}.lock`
   await $.fs.write(lock, '')
-  const traceFile = `${s.root}/tmp/ace-trace-${uuid()}.json`
-  await writePrivate($, traceFile, pyDumps(trace))
-  const row = async (sent: boolean) => ({ timestamp: await nowIso($), event: 'execution', hook, session_id: s.sessionId,
-    project_id: s.project, agent_type: agentType, patterns_used_count: playbook.length, pattern_ids: playbook.slice(0, 20),
-    tools_executed: recs.length, state_changing_tools: recs.filter(r => ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit'].some(x => r.tool.includes(x))).length,
-    success, execution_time_seconds: Math.round((await $.clock.now() - t0) / 10) / 100, learning_sent: sent,
-    used_ids_count: used.length, used_source: used.length ? 'tokens' : 'none' })
-  const log = `${s.logs}/ace-relevance.jsonl`
-  const python = (await readText($, `${s.root}/python_path`))?.trim()
-  const verbosity = await $.env.get('ACE_VERBOSITY') || 'detailed'
-  const cliLearn = learnArgv(traceFile, state.retrieval_id ?? undefined, applied, verbosity, [...await cliHead($), 'learn'])
-  const engLearn = await engineScript($, 'learn.js')
-  const learnCmd = engLearn  // §14: the engine learns; ace-cli only when it exits 3 (nothing sent)
-    ? [...learnArgv(traceFile, state.retrieval_id ?? undefined, applied, verbosity, ['node', engLearn]), FALLBACK_ON_3, ...cliLearn]
-    : cliLearn
-  const argv = detachedLearnArgv({ learnArgv: learnCmd,
-    trace: traceFile, lock, log, rowOk: pyDumps(await row(true)), rowFail: pyDumps(await row(false)), errLog: `${s.root}/logs/ace-hook-errors.log`, python })
-  const spawned = await run($, argv, { env: aceEnv(s), timeoutMs: LAUNCHER_MS })
-  if (!spawned || spawned.exitCode !== 0) {  // no child will clean up, or write the metrics row
-    await rm($, lock, traceFile)
-    await relLog($, s, await row(false))
+  await reap($, L, s, key, state)
+
+  const dispatch = async (modelUsed: string[] | null): Promise<boolean> => {
+    const m = new Set(modelUsed ?? []), tk = new Set(tokenUsed)
+    const used = playbook.filter(id => m.has(id) || tk.has(id))  // item H: H1 ∪ H2, injected set, injected order
+    const source = m.size && tk.size ? 'both' : m.size ? 'model' : tk.size ? 'tokens' : 'none'
+    const applied = appliedLogIds(used, rlog)  // §31: used only (this agent's own tools, report, self-eval)
+    let git: any
+    try {
+      git = await gitContext($, s.cwd)
+      const commits = recs.filter(r => r.commit).map(r => r.commit)
+      if (git && commits.length) git.session_commits = commits
+    } catch { /* git context is optional */ }
+    const { trace, success } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
+      tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied,
+      nowIso: await nowIso($), renderVariant: variant, conversationId: s.sessionId, effort, git, summaryCap })
+    const traceFile = `${s.root}/tmp/ace-trace-${uuid()}.json`
+    await writePrivate($, traceFile, pyDumps(trace))
+    const row = async (sent: boolean) => ({ timestamp: await nowIso($), event: 'execution', hook, session_id: s.sessionId,
+      project_id: s.project, agent_type: agentType, patterns_used_count: playbook.length, pattern_ids: playbook.slice(0, 20),
+      tools_executed: recs.length, state_changing_tools: recs.filter(r => ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit'].some(x => r.tool.includes(x))).length,
+      success, execution_time_seconds: Math.round((await $.clock.now() - t0) / 10) / 100, learning_sent: sent,
+      used_ids_count: used.length, used_source: source })
+    const log = `${s.logs}/ace-relevance.jsonl`
+    const python = (await readText($, `${s.root}/python_path`))?.trim()
+    const verbosity = await $.env.get('ACE_VERBOSITY') || 'detailed'
+    const cliLearn = learnArgv(traceFile, state.retrieval_id ?? undefined, applied, verbosity, [...await cliHead($), 'learn'])
+    const engLearn = await engineScript($, 'learn.js')
+    const learnCmd = engLearn  // §14: the engine learns; ace-cli only when it exits 3 (nothing sent)
+      ? [...learnArgv(traceFile, state.retrieval_id ?? undefined, applied, verbosity, ['node', engLearn]), FALLBACK_ON_3, ...cliLearn]
+      : cliLearn
+    const argv = detachedLearnArgv({ learnArgv: learnCmd,
+      trace: traceFile, lock, log, rowOk: pyDumps(await row(true)), rowFail: pyDumps(await row(false)), errLog: `${s.root}/logs/ace-hook-errors.log`, python })
+    const spawned = await run($, argv, { env: aceEnv(s), timeoutMs: LAUNCHER_MS })
+    if (!spawned || spawned.exitCode !== 0) {  // no child will clean up, or write the metrics row
+      await rm($, lock, traceFile)
+      await relLog($, s, await row(false))
+    }
+    await relLog($, s, { timestamp: await nowIso($), event: 'learn_dispatched', hook, session_id: s.sessionId, agent_id: agentId ?? null,
+      agent_type: agentType, task_session_id: tsid ?? null, parent_task_id: state.parent_task_id ?? null, retrieval_id: state.retrieval_id ?? null,
+      applied_log_ids: applied.length, patterns_used: playbook.length, tools_executed: recs.length, success, spawn_exit: spawned?.exitCode ?? null,
+      used_source: source, source: 'mod' })
+    return !!spawned && spawned.exitCode === 0
   }
 
-  if (hook === 'Stop' && playbook.length && await logsSafe($, s, 'ace-eval-request.json')) {
-    await $.fs.write(`${s.logs}/ace-eval-request.json`, pyDumps({ patterns_injected: playbook.length,
-      avg_relevance: num(state.eval_stats?.avg_relevance) ?? 0, domains: num(state.eval_stats?.domains) ?? 0,
-      tools_executed: recs.length, success: true, timestamp: (await nowIso($)).replace(/\.\d+Z$/, 'Z') }))
+  // item D / H1: main agent, patterns injected -> a Haiku self-eval (review + evidenced ids) before the learn goes out.
+  // Not awaited: the turn ends now; a failed or timed-out call falls back to the token evidence (H2).
+  if (hook === 'Stop' && playbook.length && (await $.env.get('ACE_SELF_EVAL')) !== '0') {  // a rejecting call falls back too
+    void selfEval($, s, prompt, answer, playbook, state.pattern_contents ?? {}, recs).catch(() => null)
+      .then(m => dispatch(m))
+      .catch(async err => { await rm($, lock).catch(() => {}); await relLog($, s, { timestamp: await nowIso($), event: 'error', hook, location: 'mod.self_eval', error: String(err).slice(0, 300), source: 'mod' }) })
+    return true
   }
-  await reap($, L, s, key, state)
-  await relLog($, s, { timestamp: await nowIso($), event: 'learn_dispatched', hook, session_id: s.sessionId, agent_id: agentId ?? null,
-    agent_type: agentType, task_session_id: tsid ?? null, parent_task_id: state.parent_task_id ?? null, retrieval_id: state.retrieval_id ?? null,
-    applied_log_ids: applied.length, patterns_used: playbook.length, tools_executed: recs.length, success, spawn_exit: spawned?.exitCode ?? null, source: 'mod' })
-  return !!spawned && spawned.exitCode === 0
+  return dispatch(null)
+}
+
+const SELF_EVAL_MS = 15_000
+async function selfEval($: any, s: Sess, task: string, answer: string, ids: string[], contents: Record<string, string>, recs: ToolRec[]): Promise<string[] | null> {
+  const r = await $.model.complete({ model: 'haiku', effort: 'low', timeoutMs: SELF_EVAL_MS, prompt: selfEvalPrompt({ task, answer, ids, contents, tools: recs }) })
+  if (!r?.isAnswered || typeof r.text !== 'string') return null
+  const review = parseAceReview(r.text)
+  if (review && await logsSafe($, s, 'ace-review-result.json')) await $.fs.write(`${s.logs}/ace-review-result.json`, pyDumps(review))
+  return parseUsedIds(r.text, ids)
 }
 
 async function onPrompt($: any, L: Load, e: any): Promise<any> {
@@ -467,16 +487,12 @@ async function onPrompt($: any, L: Load, e: any): Promise<any> {
     if (await $.fs.exists(pendingFile(s))) await rm($, pendingFile(s))
   }
 
-  // previous Stop's self-eval request -> its own context entry (G9: never concatenated)
+  // item D: no HTML-comment self-eval request in the conversation while the mod runs (its Haiku self-eval replaces it);
+  // a request a Python Stop left (guarded seat, earlier run) is removed, never injected
   const evalFile = `${s.logs}/ace-eval-request.json`
-  let evalCtx: string | null = null
-  if (await $.fs.exists(evalFile)) {
-    const d = await readJson($, evalFile)
-    if (d && typeof d === 'object') evalCtx = evalInjection(d)
-    await rm($, evalFile)
-  }
+  if (await $.fs.exists(evalFile)) await rm($, evalFile)
   const withEval = (entries: string[]) => {
-    const all = [...(e.context ?? []), ...entries, ...(evalCtx ? [evalCtx] : [])]
+    const all = [...(e.context ?? []), ...entries]
     return all.length ? { ...e, context: all } : e
   }
 

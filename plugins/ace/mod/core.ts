@@ -332,6 +332,32 @@ export function learnLine(review: { quality_pct?: unknown; time_saved?: unknown 
   return line
 }
 
+// item D / H1: the Haiku self-eval request (a $.model.complete prompt, never the conversation): the task, its tool
+// calls, the injected patterns as `id: content` lines and the final answer, each capped; two lines back.
+export function selfEvalPrompt(a: { task: string; answer: string; ids: string[]; contents: Record<string, string>; tools: ToolRec[] }): string {
+  const lines: string[] = []
+  let n = 0
+  for (const id of a.ids) {
+    const l = `${id}: ${normWs(a.contents?.[id] ?? '')}`
+    if (n + l.length + 1 > 6000) break
+    lines.push(l); n += l.length + 1
+  }
+  const tools = cpSlice(a.tools.map(t => `${t.tool}: ${t.action}${t.failed ? ' (failed)' : ''}`).join('\n'), 4000)
+  return 'You review one finished coding task for a pattern library. Patterns were injected into the agent before it worked.\n' +
+    '<task>\n' + cpSlice(a.task, 2000) + '\n</task>\n<tool_calls>\n' + tools + '\n</tool_calls>\n' +
+    '<patterns>\n' + lines.join('\n') + '\n</patterns>\n<final_answer>\n' + cpSlice(a.answer, 4000) + '\n</final_answer>\n' +
+    'Answer with exactly two lines and nothing else:\n' +
+    'ACE_REVIEW: N% | Xm saved | one-line reason   (N = how much the patterns helped; X = minutes a human developer saved)\n' +
+    'ACE_USED: the comma-separated ids of the patterns the task DEMONSTRABLY applied (visible in its tool calls or answer), or none'
+}
+// ACE_USED ids, whitelisted against the injected set, injected order
+export function parseUsedIds(text: string, injected: string[]): string[] {
+  const m = /ACE_USED:\s*([^\n]*)/.exec(text || '')
+  if (!m) return []
+  const named = new Set(m[1].split(/[\s,;]+/).map(x => x.replace(/^[`'"<\[(]+|[`'">\]).]+$/g, '')).filter(Boolean))
+  return injected.filter(id => named.has(id))
+}
+
 // ace_before_task.check_eval_request_and_review text. §24: the file is repo-controlled and reaches the model's
 // context, so every field is a number (finite int/float; anything else 0), never text.
 export function evalInjection(d: any): string {
