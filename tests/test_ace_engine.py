@@ -171,6 +171,72 @@ def test_status_cli_prints_selection_json(tmp_path):
     assert json.loads(r.stdout)["engine"] == "cli"
 
 
+# ---------------------------------------------------------------- §23 plugin-local + preflight
+
+def _run_in_copy(plugin, code, path, cwd):
+    """Run `code` against the plugin copy's ace_engine/ace_cli (ENGINE_DIR follows __file__)."""
+    env = dict(os.environ, PATH=path)
+    env.pop("ACE_ENGINE", None)
+    r = subprocess.run([sys.executable, "-c", "import json,sys; sys.path.insert(0, %r)\n%s"
+                        % (str(plugin / "shared-hooks" / "utils"), code)],
+                       capture_output=True, text=True, env=env, cwd=str(cwd), timeout=60)
+    assert r.returncode == 0, r.stderr
+    return json.loads(r.stdout)
+
+
+@needs_node
+def test_plugin_local_core_runs_the_engine_without_any_ace_cli(tmp_path):
+    """§18 clean machine, §23: node + plugin-local core, no ace-cli on PATH."""
+    plugin = E.make_plugin_local(tmp_path)
+    path = E.path_with(E.make_prefix(tmp_path, core=None, with_cli=False))
+    sel = _run_in_copy(plugin, "import ace_engine; print(json.dumps(ace_engine.select()))", path, tmp_path)
+    assert sel["engine"] == "lib" and sel["core_version"] == "3.3.2", sel
+    res = _run_in_copy(plugin, "import ace_cli; print(json.dumps(ace_cli.run_search('q', org='o', project='p')[0]))",
+                       path, tmp_path)
+    assert res == E.CORE_RESPONSE
+
+
+@needs_node
+def test_plugin_local_core_ignores_an_unusable_ace_cli_shim(tmp_path):
+    """volta/asdf: ace-cli on PATH is a shim whose realpath is not @ace-sdk/cli. PATH must not matter."""
+    plugin = E.make_plugin_local(tmp_path)
+    bin_dir = E.make_prefix(tmp_path, core=None, with_cli=False)
+    shim = bin_dir / "ace-cli"
+    shim.write_text("#!/bin/sh\nexit 1\n")
+    shim.chmod(0o755)
+    sel = _run_in_copy(plugin, "import ace_engine; print(json.dumps(ace_engine.select()))", E.path_with(bin_dir), tmp_path)
+    assert sel["engine"] == "lib", sel
+
+
+def test_cli_head_comes_from_the_caller(env, tmp_path):
+    """r3d: cli_argv() may return [node, cli.js]; the builders must not hard-code the head."""
+    e = env.use(E.make_prefix(tmp_path))
+    argv, stdin = e.engine.search_command("q", session_id="t", top_k=8, cli=["/n", "/cli.js"])
+    assert argv == ["/n", "/cli.js", "search", "--stdin", "--json", "--pin-session", "t", "--top-k", "8"]
+    assert stdin == b"q"
+    assert e.engine.learn_command("/t.json", cli=["/n", "/cli.js"])[:3] == ["/n", "/cli.js", "learn"]
+
+
+def test_ace_engine_does_not_own_the_cli_spawn_head():
+    """r3d's lint: only ace_cli may locate the CLI; ace_engine gets the head from its caller."""
+    src = (E.UTILS / "ace_engine.py").read_text(encoding="utf-8")
+    assert "CLI_CMD" not in src and "['ace-cli'" not in src and 'which(\'ace-cli' not in src
+
+
+@needs_node
+@pytest.mark.parametrize("script", ["search.js", "learn.js", "resolve.js"])
+def test_preflight_rejects_a_partial_engine_dir(env, tmp_path, monkeypatch, script):
+    """Node exits 1 on an unloadable script, which learn reads as 'may have sent': never get there."""
+    e = env.use(E.make_prefix(tmp_path))
+    partial = tmp_path / "engine"
+    partial.mkdir()
+    for f in {"search.js", "learn.js", "resolve.js"} - {script}:
+        (partial / f).write_text("")
+    monkeypatch.setattr(e.engine, "ENGINE_DIR", partial)
+    node, reason = e.engine.preflight()
+    assert node is None and "engine" in reason and script in reason
+
+
 # ---------------------------------------------------------------- run_search through the engine
 
 @needs_node
@@ -245,7 +311,7 @@ def test_run_search_no_ace_cli_at_all(env, tmp_path):
 
 
 @needs_node
-@pytest.mark.parametrize("mode", ["crash", "throw", "garbage"])
+@pytest.mark.parametrize("mode", ["crash", "throw", "garbage", "drift"])
 def test_run_search_engine_failure_falls_back_to_cli(env, tmp_path, monkeypatch, mode):
     monkeypatch.setenv("ACE_FAKE_CORE_MODE", mode)
     e = env.use(E.make_prefix(tmp_path))
@@ -316,6 +382,19 @@ def test_run_learn_removes_temp_trace_on_lib_path(env, tmp_path):
     assert e.core_ops("learn"), "lib path ran"
 
 
+@needs_node
+def test_run_learn_engine_timeout_is_logged_and_not_retried(env, tmp_path, monkeypatch):
+    """§14: every spawn is logged. The POST may have been sent, so no CLI retry either."""
+    monkeypatch.setenv("ACE_FAKE_CORE_MODE", "hang")
+    e = env.use(E.make_prefix(tmp_path))
+    out, _ = e.cli.run_learn(dict(TRACE), org="o", project="p", timeout=2, hook_event_name="Stop")
+    assert out is None
+    assert e.cli_calls("learn") == []
+    assert [r for r in e.engine_rows() if r["engine"] == "lib" and r["reason"] == "timeout" and r["ok"] is False]
+    rows = E.read_jsonl(tmp_path / ".claude/data/logs/ace-relevance.jsonl")
+    assert any("timeout" in str(r.get("error_type", r)) and r.get("event") == "error" for r in rows), rows
+
+
 # ---------------------------------------------------------------- doctor + ADR (mod-callable interface)
 
 def test_doctor_shows_active_engine():
@@ -323,6 +402,9 @@ def test_doctor_shows_active_engine():
     assert "ace_engine.py --status" in doc
     assert "ACE_ENGINE=cli" in doc
     assert "engine" in doc.lower() and "lib" in doc
+    engine_line = [l for l in doc.splitlines() if l.startswith("- ℹ️ Engine: cli")][0]
+    assert "npm install -g" not in engine_line, "§23: repair is /ace:ace-install-cli, global is the last mention"
+    assert "/ace:ace-install-cli" in engine_line
 
 
 def test_adr_records_engine_decision_and_mod_interface():
@@ -332,4 +414,7 @@ def test_adr_records_engine_decision_and_mod_interface():
               "$.process.run", "session_id", "top_k", "--no-stream", "exit 3"):
         assert s in text, "ADR-001 must document " + s
     assert "8.0.0" in text
+    assert "X-ACE-Client: cli" in text and "ACE_CLIENT_ID" in text, "r3a pins these"
+    for s in ("Windows", "WSL2", "Volta", "asdf", "nvm", "core_too_new", "node_modules/@ace-sdk/core"):
+        assert s in text, "ADR-001 must document " + s
     assert "v8.1 plan" not in text, "§14: in-process core is IN 8.0.0, not deferred to 8.1"

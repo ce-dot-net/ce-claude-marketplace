@@ -257,3 +257,22 @@ def test_real_core_learn_nonzero_on_server_error(tmp_path, mode):
         assert [q for q in srv.requests() if q["path"] == "/traces"], "the trace POST was attempted"
     finally:
         srv.stop()
+
+
+@needs_real
+def test_stalled_graph_refresh_does_not_hold_the_search_result(tmp_path, monkeypatch):
+    """The result is on stdout before the core's background edge refresh; a stalled refresh must not
+    outlive the hook budget (subprocess.run would time out and discard the printed patterns)."""
+    monkeypatch.setenv("FAKE_GRAPH_DELAY", "40")
+    srv = E.FakeServer(tmp_path)
+    try:
+        (tmp_path / "pfx").mkdir()
+        env = E.sdk_env(tmp_path, srv, PATH=E.path_with(E.make_prefix(tmp_path / "pfx", core="real")))
+        r = subprocess.run([E.node_bin(), str(E.ENGINE / "search.js")],
+                           input=json.dumps({"query": "hook json", "org": "org_fake", "project": "prj_fake"}),
+                           capture_output=True, text=True, env=env, timeout=10)
+        assert r.returncode == 0, r.stderr
+        assert json.loads(r.stdout)["retrieval_id"] == "ret-fake-1"
+        assert any("graph" in q["path"] for q in srv.requests()), "the refresh must really have started"
+    finally:
+        srv.stop()

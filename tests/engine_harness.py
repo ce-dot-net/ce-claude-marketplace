@@ -78,10 +78,12 @@ class AceClient {
     if (mode() === 'crash') process.exit(7);
     if (mode() === 'garbage') { process.stdout.write('not json at all\n'); process.exit(0); }
     if (mode() === 'throw') throw new Error('Server error (500): boom');
+    if (mode() === 'drift') return {};
     return RESP;
   }
   async storeExecutionTrace(t) {
     log({ op: 'learn', trace: t });
+    if (mode() === 'hang') await new Promise(() => setInterval(() => {}, 1000));
     if (mode() === 'throw') throw new Error('Server error (500): boom');
     return { analysis_performed: true, learning_statistics: { patterns_created: 1, patterns_updated: 0 } };
   }
@@ -176,6 +178,22 @@ def make_prefix(root: Path, core="fake", version="3.3.2", layout="nested", missi
         else:
             _write_fake_core(core_dir, version, missing=missing, no_export=no_export)
     return bin_dir
+
+
+def make_plugin_local(root: Path, version="3.3.2", layout="hoisted", core="fake") -> Path:
+    """A copy of the plugin with a §23 ${CLAUDE_PLUGIN_ROOT}/node_modules install. Returns the plugin root."""
+    plugin = root / "plugin"
+    for sub in ("engine", ".claude-plugin", "shared-hooks/utils"):
+        shutil.copytree(str(PLUGIN / sub), str(plugin / sub),
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    nm = plugin / "node_modules" / "@ace-sdk"
+    core_dir = nm / "cli" / "node_modules" / "@ace-sdk" / "core" if layout == "nested" else nm / "core"
+    core_dir.parent.mkdir(parents=True)
+    if core == "real":
+        os.symlink(str(real_core_dir()), str(core_dir))
+    else:
+        _write_fake_core(core_dir, version)
+    return plugin
 
 
 def path_with(bin_dir: Path) -> str:

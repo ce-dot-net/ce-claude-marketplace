@@ -211,7 +211,7 @@ python3 "${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils/ace_engine.py" --status
 - ⚠️ ace-cli installed but old version
 - ❌ ace-cli not found
 - ✅ Engine: lib (core version from the status JSON)
-- ℹ️ Engine: cli, with the `reason` from the status JSON. This is a working fallback, not an error. `ACE_ENGINE=cli` forces it; `core_too_old`, `core_missing`, `file_missing` and `export_missing` mean the installed core does not pass the gate, so suggest `npm install -g @ace-sdk/cli`.
+- ℹ️ Engine: cli, with the `reason` from the status JSON. This is a working fallback, not an error, so report it without alarm. `ACE_ENGINE=cli` forces it. `core_missing` is normal on volta, asdf and pnpm wrappers, where ace-cli itself is fine. `core_too_old`, `core_too_new`, `file_missing` and `export_missing` mean the core found does not pass the gate; to get the engine back, suggest `/ace:ace-install-cli`.
 
 **If Failed**:
 ```
