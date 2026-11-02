@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""DESIGN §28 (render_variant client contract) + §29 (RELEASE BLOCKER: applied_log_ids under `full`), Python chain.
+"""DESIGN §28/§29, as amended by §31 (final contract: default budget, unknown label omitted), Python chain.
 
 - render_arm(): arms in bucket order control, compact, full, rest budget; ACE_RENDER_FULL_PCT default 100;
   bucket = sha256("render:" + CC session_id)[:8] % 100. render_cohort() is what the PYTHON chain renders:
@@ -45,14 +45,6 @@ def clean_env(monkeypatch):
 
 # ── arms ────────────────────────────────────────────────────────────────────────────────
 
-def test_default_arm_is_full_and_python_renders_budget(clean_env):
-    for i in range(200):
-        sid = str(uuid.uuid4())
-        assert render_arm(sid) == "full"
-        assert render_cohort(sid) == "budget"
-    assert render_arm(None) == "full" and render_cohort(None) == "budget"
-
-
 @pytest.mark.parametrize("ctrl,comp,full", [(10, 10, 30), (0, 0, 50), (25, 0, 100), (5, 20, 0)])
 def test_arm_order_control_compact_full_budget(clean_env, ctrl, comp, full):
     clean_env.setenv("ACE_AB_CONTROL_PCT", str(ctrl))
@@ -66,12 +58,6 @@ def test_arm_order_control_compact_full_budget(clean_env, ctrl, comp, full):
                 else "full" if b < ctrl + comp + eff_full else "budget")
         assert render_arm(sid) == want, (sid, b)
         assert render_cohort(sid) == ("budget" if want == "full" else want)
-
-
-@pytest.mark.parametrize("bad", ["x", "-5", ""])
-def test_invalid_full_pct_means_100(clean_env, bad):
-    clean_env.setenv("ACE_RENDER_FULL_PCT", bad)
-    assert render_arm("any-session") == "full"
 
 
 # ── bucket input = CC session_id; state carries the rendered variant ────────────────────
@@ -149,25 +135,17 @@ def test_full_sends_no_applied_log_ids(box):
     assert t["render_variant"] == "full"
 
 
-@pytest.mark.parametrize("variant", ["budget", "compact"])
-def test_budget_and_compact_keep_applied_log_ids(box, variant):
-    learn = _main_learn(box, pattern_ids=IDS, retrieval_id="ret-b",
-                        retrieval_log_ids={IDS[0]: 7, IDS[1]: 8}, render_variant=variant)
-    assert flag_value(learn["argv"], "--applied-log-ids") == "7,8"
-    assert learn["trace"]["applied_log_ids"] == [7, 8]
-    assert learn["trace"]["render_variant"] == variant
-
-
-def test_control_variant_is_stamped(box):
+def test_control_variant_is_no_server_label(box):
     learn = _main_learn(box, retrieval_id="ret-c", render_variant="control")
-    assert learn["trace"]["render_variant"] == "control"
+    assert "render_variant" not in learn["trace"], "§31: only budget|full are sent"
 
 
-def test_trace_without_pin_still_carries_render_variant(box):
+def test_trace_without_pin_or_label_omits_both(box):
     learn = _main_learn(box, task_session_id=None)
     t = learn["trace"]
     assert "session_id" not in t
-    assert t["render_variant"] == "budget", "no stored variant: what the Python chain renders for this conversation"
+    assert "render_variant" not in t, "§31: unknown is omitted, never defaulted to budget"
+    assert t["conversation_id"] == "s-rv"
 
 
 def test_subagent_trace_carries_stored_variant(box):

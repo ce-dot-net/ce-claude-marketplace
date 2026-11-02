@@ -282,13 +282,14 @@ def _structural_fingerprint(tool_name: str, tool_input) -> str:
 
 
 def _render_variant(session_id):
+    """§31: 'budget'|'full' for this conversation's chain (the mod renders its arm, Python only budget); None = omit."""
     try:
         from plugin_data_dir import is_mod_active
-        from ace_pattern_render import render_arm, render_cohort
-        # the mod renders `full`; the Python chain cannot (§28: name what was actually rendered)
-        return render_arm(session_id) if is_mod_active(_PROJECT_ID, session_id) else render_cohort(session_id)
+        from ace_pattern_render import normalize_render_variant, render_arm, render_cohort
+        return normalize_render_variant(render_arm(session_id) if is_mod_active(_PROJECT_ID, session_id)
+                                        else render_cohort(session_id))
     except Exception:
-        return "budget"
+        return None
 
 
 def _build_trace(event: dict) -> dict:
@@ -312,7 +313,7 @@ def _build_trace(event: dict) -> dict:
         "result": f"denied: {reason}",
     }]
 
-    return {
+    trace = {
         "task": task,
         "trajectory": trajectory,
         "result": {
@@ -323,10 +324,14 @@ def _build_trace(event: dict) -> dict:
         "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
         "agent_type": "permission_gate",
         "session_id": session_id,
-        "render_variant": _render_variant(session_id),  # §28: on every trace
+        "conversation_id": str(session_id)[:512],  # §31: the stable CC session id
         # Domain tag — client-side classification; server respects this for searchPatterns
         "domains": ["permission-boundary"],
     }
+    variant = _render_variant(session_id)
+    if variant:  # §31: omitted when unknown
+        trace["render_variant"] = variant
+    return trace
 
 
 def _send_to_cli(trace: dict) -> bool:

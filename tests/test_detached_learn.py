@@ -58,7 +58,7 @@ def test_hook_returns_fast_while_detached_learn_runs(box):
     box.seed_tools(sid, WORK)
     box.write_state(sid, user_prompt="implement the detached learn hardening")
     t0 = time.monotonic()
-    p = box.run_after_task(box.stop_event(sid), **_env(FAKE_LEARN_SLEEP="2"))
+    p = box.run_after_task(box.stop_event(sid, last_assistant_message="Applied ctx-1."), **_env(FAKE_LEARN_SLEEP="2"))  # §31: used
     took = time.monotonic() - t0
     assert p.returncode == 0 and p.stdout == "", p.stderr
     assert took < 1.2, "hook must not wait for the learn (took %.2fs)" % took
@@ -167,7 +167,7 @@ def test_sessionend_during_detached_learn_keeps_dir_then_learn_completes(box):
     box.seed_tools(sid, WORK)
     box.write_state(sid, user_prompt="implement the race-safe session end",
                     pattern_ids=["ctx-1"], retrieval_id="ret-9", retrieval_log_ids={"ctx-1": 41})
-    p = box.run_after_task(box.stop_event(sid), **_env(FAKE_LEARN_SLEEP="2"))
+    p = box.run_after_task(box.stop_event(sid, last_assistant_message="Applied ctx-1."), **_env(FAKE_LEARN_SLEEP="2"))  # §31: used
     assert p.returncode == 0
     end = box.run_shim("ace_sessionend_wrapper.sh",
                        {"session_id": sid, "hook_event_name": "SessionEnd", "reason": "other",

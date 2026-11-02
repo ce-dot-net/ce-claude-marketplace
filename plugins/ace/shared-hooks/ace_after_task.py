@@ -933,9 +933,12 @@ def main():
         # the state file is still present when load_playbook_used later unlinks it.
         retrieval_log_map = {} if no_agent_state else load_retrieval_ids(session_id, agent_id, hook_event_name)
         _stored_variant = None  # §28: the variant rendered at search time (read before the state is reaped)
+        _contents = {}          # §31: injected pattern contents, for the "actually used" check
         if not no_agent_state:
             try:
-                _stored_variant = load_state(session_id, agent_id, hook_event_name).get('render_variant')
+                _st = load_state(session_id, agent_id, hook_event_name)
+                _stored_variant = _st.get('render_variant')
+                _contents = _st.get('pattern_contents') if isinstance(_st.get('pattern_contents'), dict) else {}
             except Exception:
                 pass
         # Also read retrieval_id and task_session_id from the state file (before unlink).
@@ -979,19 +982,20 @@ def main():
             ),
         )
 
-        # F-080: Compute applied_log_ids = intersection of playbook_used with retrieval_log_map.
-        # Order follows playbook_used (not the map). Only ints (no bools).
-        applied_log_ids = [
-            retrieval_log_map[pid] for pid in playbook_used if pid in retrieval_log_map
-        ]
+        # §31: render_variant = what was rendered ('budget'|'full'), OMITTED when unknown (never defaulted).
         try:
             _render_variant = _trace_render_variant(_stored_variant, session_id)
         except Exception:
-            _render_variant = 'budget'  # never omit it (§28); this chain renders budget by default
-        if _render_variant == 'full':
-            # §29 RELEASE BLOCKER: under `full` (~100 shown) the injected set is no "applied" signal; crediting it
-            # WARMs every pattern. Server ruling: empty list. retrieval_id + playbook_used stay unchanged.
-            applied_log_ids = []
+            _render_variant = None
+        # §31: applied_log_ids = only the injected patterns ACTUALLY USED (id or a >= 40-char verbatim content
+        # fragment in the final message / handback report), for every variant. Order follows playbook_used.
+        _handback = handback_summary(agent_transcript_path) if hook_event_name == 'SubagentStop' and agent_transcript_path else None
+        try:
+            from patterns_used_state import used_pattern_ids
+            _used = used_pattern_ids(playbook_used, _contents, "\n".join(x for x in (_handback, last_assistant_message) if x))
+        except Exception:
+            _used = []  # false positives are worse than misses
+        applied_log_ids = [retrieval_log_map[pid] for pid in _used if pid in retrieval_log_map]
         # Use retrieval_id read from state file (before load_playbook_used unlinked it).
         retrieval_id = _retrieval_id_from_state
 
@@ -1051,7 +1055,7 @@ def main():
             "result": {
                 "success": not has_errors,
                 "output": f"Executed {len(tools)} tool calls",
-                "summary": (handback_summary(agent_transcript_path) if hook_event_name == 'SubagentStop' and agent_transcript_path else None)
+                "summary": _handback
                            or (last_assistant_message[:2000] if last_assistant_message else None),  # v5.5.0: CC 2.1.51+
             },
             "playbook_used": playbook_used,
@@ -1064,8 +1068,11 @@ def main():
         if task_session_id:
             trace["session_id"] = task_session_id
         # else: omit — server leaves session_id NULL, no false cross-task correlation
-        # §28: render_variant on EVERY trace (with or without a pin) = what was actually rendered.
-        trace["render_variant"] = _render_variant
+        # §31: render_variant only when known; conversation_id = the stable CC session id (subagents share it)
+        if _render_variant:
+            trace["render_variant"] = _render_variant
+        if session_id:
+            trace["conversation_id"] = str(session_id)[:512]
         if agent_id:
             trace["agent_id"] = agent_id
         if _parent_task_id:

@@ -63,7 +63,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 from ace_cli import run_search  # noqa: E402
 from ace_context import get_context                              # noqa: E402
-from patterns_used_state import append_patterns_used, load_state  # noqa: E402
+from patterns_used_state import append_patterns_used, injected_contents, load_state  # noqa: E402
 import plugin_data_dir                                           # noqa: E402
 from ace_relevance_logger import log_search, log_error, log_search_skipped           # noqa: E402
 from ace_pattern_render import render_patterns, render_cohort, render_compact_all  # noqa: E402
@@ -435,6 +435,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                         retrieval_log_ids=retrieval_log_map,
                         task_session_id=task_session_id,
                         project_id=project, rendered_context=ace_context, render_variant=_cohort,
+                        pattern_contents=injected_contents(patterns_response.get('similar_patterns'), pattern_ids),
                     )
                 except Exception as e:
                     log_error('SubagentStart', 'ace_subagent_start.state', session_id, project, e)
@@ -454,6 +455,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                         retrieval_log_ids=retrieval_log_map,
                         task_session_id=task_session_id,
                         project_id=project, rendered_context=ace_context, render_variant=_cohort,
+                        pattern_contents=injected_contents(patterns_response.get('similar_patterns'), pattern_ids),
                     )
                 except Exception as e:
                     log_error('SubagentStart', 'ace_subagent_start.state', session_id, project, e)

@@ -7,7 +7,7 @@ import {
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
   detachedLearnArgv, FALLBACK_ON_3, parseAceReview, parseDiffStat, evalInjection, searchRow, searchSummary, searchErrorLine, sessionTitle,
-  subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, unrenderedVariant, appliedLogIds, type StateUpdate, type ToolRec, type Cohort,
+  subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, appliedLogIds, usedPatternIds, injectedContents, type StateUpdate, type ToolRec, type Cohort,
 } from './core.ts'
 
 const SEARCH_MS = 25000, DOMAIN_MS = 17000 // §11 A2: blocking budget per search, retry included
@@ -273,8 +273,14 @@ async function cohortEnv($: any) {
 
 // §13.1 cohort arms; `rendered` = the ≤ 10K re-inject copy (C1). control: search + anchor, nothing injected.
 // §28: bucket on the STABLE CC session id (one arm per conversation; subagents share it), never the per-task pin.
-async function renderArm($: any, resp: any, tag: string, attrs: string, sessionId: string) {
+// §31 dedupe (main prompts only): under full, ids already injected in this conversation since the last compaction
+// (`seen`) are left out; nothing new -> nothing injected.
+async function renderArm($: any, resp: any, tag: string, attrs: string, sessionId: string, seen?: Set<string>) {
   const cohort: Cohort = renderCohort(sessionId, await cohortEnv($))
+  if (cohort === 'full' && seen?.size) {
+    resp = { ...resp, similar_patterns: (resp.similar_patterns || []).filter((p: any) => !seen.has(p?.id)) }
+    if (!resp.similar_patterns.length) return { cohort, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: '', truncated: false }
+  }
   if (cohort === 'control') return { cohort, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: '', truncated: false }
   const r = cohort === 'compact' ? renderCompact(resp, tag, attrs) : cohort === 'budget' ? renderBudget(resp, tag, attrs) : renderFull(resp, tag, attrs)
   const rendered = cohort === 'full' ? renderFull(resp, tag, attrs, STATE_CAP).context : r.context
@@ -340,9 +346,8 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   }
   const playbook: string[] = state.pattern_ids ?? []
   const rlog: Record<string, number> = state.retrieval_log_ids ?? {}
-  const env = await cohortEnv($)
-  const variant = traceVariant(state.render_variant, s.sessionId, env)  // stored at render time, never recomputed (§29)
-  const applied = appliedLogIds(playbook, rlog, variant)
+  const variant = traceVariant(state.render_variant)  // §31: stored at render time, normalized, omitted when unknown
+  const applied = appliedLogIds(usedPatternIds(playbook, state.pattern_contents ?? {}, answer), rlog)  // §31: used only
   const tsid: string | undefined = state.task_session_id ?? undefined
   const effort = effortEvent || await $.env.get('CLAUDE_EFFORT') || 'normal'
   let git: any
@@ -353,7 +358,7 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   } catch { /* git context is optional */ }
   const { trace, success } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
     tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied,
-    nowIso: await nowIso($), renderVariant: variant, effort, git, summaryCap })
+    nowIso: await nowIso($), renderVariant: variant, conversationId: s.sessionId, effort, git, summaryCap })
 
   // Lock BEFORE the spawn (session.end keeps the dir); the trace lives under <root>/tmp as run_learn's does.
   const lock = `${s.sdir}/learn-inflight-${safe(key)}.lock`
@@ -441,13 +446,18 @@ async function onPrompt($: any, L: Load, e: any): Promise<any> {
   const query = expandAbbreviations(text)
   const sr = await search($, s, query, tsid, undefined, SEARCH_MS)
   if (!sr.resp) {
-    await save({ tsid, userPrompt: e.text, hook: 'UserPromptSubmit', renderVariant: unrenderedVariant(s.sessionId, await cohortEnv($)) })
+    await save({ tsid, userPrompt: e.text, hook: 'UserPromptSubmit' })  // nothing rendered: no label (§31 omit)
     await relLog($, s, { timestamp: await nowIso($), event: 'error', hook: 'UserPromptSubmit', location: 'mod.search', error: sr.error ?? null, stderr_sample: sr.stderr, pin_failed: sr.pinFailed || undefined, pin_ms: sr.pinMs, session_id: s.sessionId, project_id: s.project, hook_ms: await $.clock.now() - t0, source: 'mod' })
     $.ui.log(searchErrorLine(sr.error))
     return withEval([])
   }
-  const r = await renderArm($, sr.resp, 'ace-patterns', 'agent-type="main"', s.sessionId)
-  await save({ ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, tsid, userPrompt: e.text, rendered: r.rendered, hook: 'UserPromptSubmit', renderVariant: r.cohort })
+  const seenFile = `${s.sdir}/full-injected.json`  // §31; the SessionStart compact hook removes it
+  const seenRaw = await readJson($, seenFile)
+  const seen: string[] = Array.isArray(seenRaw) ? seenRaw.filter((x: unknown) => typeof x === 'string') : []
+  const r = await renderArm($, sr.resp, 'ace-patterns', 'agent-type="main"', s.sessionId, new Set(seen))
+  if (r.cohort === 'full' && r.ids.length) await writePrivate($, seenFile, JSON.stringify([...new Set([...seen, ...r.ids])]))
+  await save({ ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, tsid, userPrompt: e.text, rendered: r.rendered, hook: 'UserPromptSubmit',
+    renderVariant: r.cohort, contents: injectedContents(r.patterns, r.ids) })
   const ds = domainsSummary(sr.resp)
   if (Object.keys(ds).length) {
     L.domains = domainNames(ds)
@@ -498,7 +508,8 @@ async function lateInject($: any, L: Load, s: Sess, key: string): Promise<string
   const sr = await search($, s, query, tsid, undefined, DOMAIN_MS)
   if (!sr.resp) { await logSubagentError($, s, sr); return null }
   const r = await subagentRender($, s, sr, query, st.agent_type ?? 'unknown', tsid, t0, st.parent_task_id, { late: true })
-  await updateState($, L, s, key, { ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort })
+  await updateState($, L, s, key, { ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort,
+    contents: injectedContents(r.patterns, r.ids) })
   return r.context
 }
 
@@ -520,7 +531,7 @@ async function beforeSpawn($: any, L: Load, s: Sess, e: any) {
   const tsid = uuid()     // §12: every subagent is its own ACE session; the parent's id is correlation only
   const parent = await readState($, s, e.parentAgentId ?? 'main')
   const query = subagentQuery(e.prompt)
-  const state: StateUpdate = { tsid, userPrompt: query, hook: 'SubagentStart', parentTaskId: parent?.task_session_id ?? undefined, agentType: e.subagentType, renderVariant: unrenderedVariant(s.sessionId, await cohortEnv($)) }
+  const state: StateUpdate = { tsid, userPrompt: query, hook: 'SubagentStart', parentTaskId: parent?.task_session_id ?? undefined, agentType: e.subagentType }
   const skip = L.placeholders.has(e.prompt) ? 'workflow_placeholder' : skipReason(query, s.minChars, s.extraPrefixes)
   if (skip) {
     await relLog($, s, { timestamp: await nowIso($), event: 'search_skipped', hook: 'SubagentStart', reason: skip, session_id: s.sessionId, project_id: s.project, source: 'mod' })
@@ -533,7 +544,8 @@ async function beforeSpawn($: any, L: Load, s: Sess, e: any) {
   }
   const r = await subagentRender($, s, sr, query, e.subagentType, tsid, t0, state.parentTaskId, { workflow: e.workflow?.runId })
   return { out: r.context ? { ...e, prompt: `${e.prompt}\n\n${r.context}` } : e,
-    state: { ...state, ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort } }
+    state: { ...state, ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort,
+      contents: injectedContents(r.patterns, r.ids) } }
 }
 
 // ace_domain_shift.main
@@ -572,7 +584,8 @@ async function domainShift($: any, L: Load, e: any, key: string): Promise<string
       patterns_injected: rd?.ids.length ?? 0, hook_ms: await $.clock.now() - t1, agent_id: e.agentId ?? null, search_ms: sr.ms, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, source: 'mod' })
     if (!rd || !rd.shown) return null
     // F-080: merge the injected ids + log ids; keep the task's FIRST retrieval_id.
-    await updateState($, L, s, key, { ids: rd.ids, rlog: rd.rlog, tsid, retrievalId: state?.retrieval_id ? undefined : sr.resp.retrieval_id || undefined })
+    await updateState($, L, s, key, { ids: rd.ids, rlog: rd.rlog, tsid, retrievalId: state?.retrieval_id ? undefined : sr.resp.retrieval_id || undefined,
+      contents: injectedContents(rd.patterns, rd.ids) })
     return rd.context
   } finally { L.claims.delete(claim) }
 }
@@ -678,8 +691,7 @@ export const register: Register = (on) => {
         if (e.fork && !forkSearch) {  // §16 P7: a fork inherits the parent context incl. the injected block
           const parent = await readState($, s, e.parentAgentId ?? 'main')
           pending = { out: e, state: { tsid: uuid(), userPrompt: subagentQuery(e.prompt), hook: 'SubagentStart',
-            parentTaskId: parent?.task_session_id ?? undefined, agentType: e.subagentType || 'fork',
-            renderVariant: unrenderedVariant(s.sessionId, await cohortEnv($)) } }
+            parentTaskId: parent?.task_session_id ?? undefined, agentType: e.subagentType || 'fork' } }
           await relLog($, s, { timestamp: await nowIso($), event: 'search_skipped', hook: 'SubagentStart', reason: 'fork_inherits_context', session_id: s.sessionId, project_id: s.project, source: 'mod' })
         } else if (e.resume) {  // a rewrite of a resume is not applied. Same run with state: same task (§12). Reaped: a new one.
           const key = e.resume.agentId

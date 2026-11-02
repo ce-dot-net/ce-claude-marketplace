@@ -23,7 +23,7 @@ import plugin_data_dir                                    # noqa: E402
 from ace_cli import run_search                            # noqa: E402
 from ace_context import get_context                       # noqa: E402
 from ace_relevance_logger import log_domain_shift, log_error  # noqa: E402
-from patterns_used_state import (append_patterns_used, load_task_session_id,  # noqa: E402
+from patterns_used_state import (append_patterns_used, injected_contents, load_task_session_id,  # noqa: E402
                                  strip_and_gate, task_session_id_for)
 
 _TOOLS = ('Read', 'Glob', 'Grep')
@@ -198,7 +198,8 @@ def _search_and_inject(event, ctx, project, org, sid, agent_id, last_file, last,
         has_rid = False
     append_patterns_used(sid, agent_id or None, kept_ids,
                          retrieval_id=None if has_rid else (result.get('retrieval_id') or None),
-                         retrieval_log_ids=rlog, task_session_id=tsid, project_id=project)
+                         retrieval_log_ids=rlog, task_session_id=tsid, project_id=project,
+                         pattern_contents=injected_contents(kept, kept_ids))
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PostToolUse", "additionalContext": additional}}))
 

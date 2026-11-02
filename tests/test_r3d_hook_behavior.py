@@ -164,8 +164,8 @@ def test_trace_never_carries_agent_transcript_path(box):
 
 def test_trace_file_has_the_server_declared_fields(box):
     t = _subagent_trace(box, "a-f", str(box.agent_transcript("a-f")), parent_task_id="p")
-    for k in ("render_variant", "session_id", "agent_id", "agent_type", "parent_agent_id"):
-        assert k in t, k
+    for k in ("session_id", "conversation_id", "agent_id", "agent_type", "parent_agent_id"):
+        assert k in t, k  # §31: render_variant only when known (test_s31_contract.py)
     assert t["session_id"] == "own-uuid", "own pin, never the parent's"
 
 

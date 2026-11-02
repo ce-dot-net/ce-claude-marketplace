@@ -167,9 +167,9 @@ def render_bucket(session_id):
 
 def mod_render_cohort(session_id, env):
     """The mod's cohort (§13.1): render_cohort's salted bucket and ACE_AB_* knobs (same validation as
-    ace_pattern_render._read_ab_pcts) plus ACE_RENDER_FULL_PCT (default 100, invalid -> 100), clamped
+    ace_pattern_render._read_ab_pcts) plus ACE_RENDER_FULL_PCT (default 0, invalid -> 0), clamped
     to what control+compact leave. Arms in bucket order: control, compact, full, budget.
-    No anchor -> 'full' (the default arm; never experiment without one)."""
+    §31: default 0, invalid -> 0; no anchor -> 'budget'."""
     try:
         ctrl, comp = int(env.get("ACE_AB_CONTROL_PCT", "0")), int(env.get("ACE_AB_COMPACT_PCT", "0"))
         if ctrl < 0 or comp < 0 or min(ctrl, 100) + min(comp, 100) > 100:
@@ -178,14 +178,14 @@ def mod_render_cohort(session_id, env):
     except (TypeError, ValueError):
         ctrl, comp = 0, 0
     try:
-        full = int(env.get("ACE_RENDER_FULL_PCT", "100"))
+        full = int(env.get("ACE_RENDER_FULL_PCT", "0"))
         if full < 0:
             raise ValueError
     except (TypeError, ValueError):
-        full = 100
+        full = 0
     full = min(full, 100 - ctrl - comp)
     if not session_id:
-        return "full"
+        return "budget"
     b = render_bucket(session_id)
     return ("control" if b < ctrl else "compact" if b < ctrl + comp
             else "full" if b < ctrl + comp + full else "budget")
@@ -202,7 +202,8 @@ def expected_main_state(search_text, prompt=HUMAN_PROMPT, tsid=TSID_PLACEHOLDER)
         pus.append_patterns_used("s", None, ids, state_dir=d, retrieval_id=resp.get("retrieval_id"),
                                  retrieval_log_ids=rlog, task_session_id=tsid, user_prompt=prompt,
                                  rendered_context=rendered, hook_event_name="UserPromptSubmit", reset=True,
-                                 render_variant="full")  # §28: the mod renders the full arm by default
+                                 render_variant="full",  # the mod's full arm (ACE_RENDER_FULL_PCT=100 in the TS host)
+                                 pattern_contents=pus.injected_contents(resp.get("similar_patterns"), ids))  # §31
         return (Path(d) / "patterns-used-main.json").read_text()
 
 

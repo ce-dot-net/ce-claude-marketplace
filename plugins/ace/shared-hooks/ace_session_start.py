@@ -36,6 +36,10 @@ def main() -> None:
         sid = plugin_data_dir.resolve_session_id(event)
         if plugin_data_dir.is_disabled(ctx['project'], sid):
             return
+        try:  # §31: the mod's per-conversation full dedupe starts over after a compaction
+            (plugin_data_dir.session_dir(ctx['project'], sid, create=False) / 'full-injected.json').unlink()
+        except OSError:
+            pass
         rendered = load_rendered_context(sid, project_id=ctx['project'])
         if rendered and isinstance(rendered, str):
             print(json.dumps({"hookSpecificOutput": {
