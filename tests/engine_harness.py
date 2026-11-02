@@ -23,9 +23,12 @@ import time
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-PLUGIN = REPO / "plugins" / "ace"
+# hermetic: with a developer/CI `npm ci` in plugins/ace, the repo engine would find the REAL plugin-local core
+# (DESIGN §23) and bypass every fake. The copy has no node_modules and is the root the hooks use (conftest).
+from plugin_copy import hermetic_root  # noqa: E402
+PLUGIN = hermetic_root()
 ENGINE = PLUGIN / "engine"
-UTILS = PLUGIN / "shared-hooks" / "utils"
+UTILS = REPO / "plugins" / "ace" / "shared-hooks" / "utils"
 FAKE_SERVER = Path(__file__).resolve().parent / "engine_fake_server.py"
 
 CORE_RESPONSE = {"similar_patterns": [{"id": "from-lib", "content": "engine pattern", "section": "strategies",
