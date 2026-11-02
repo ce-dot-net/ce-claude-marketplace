@@ -31,14 +31,14 @@ SESSION = "sess-v8-1"
 
 @pytest.fixture
 def env(monkeypatch, tmp_path):
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
     monkeypatch.delenv("ACE_PROJECT_ID", raising=False)
     monkeypatch.chdir(tmp_path)  # no .claude/settings.json here
     import plugin_data_dir
     import patterns_used_state
     importlib.reload(plugin_data_dir)
-    return importlib.reload(patterns_used_state), tmp_path / "pd"
+    return importlib.reload(patterns_used_state), tmp_path / "ace-pd"
 
 
 def test_default_path_under_plugin_data(env):

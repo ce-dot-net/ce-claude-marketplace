@@ -14,7 +14,7 @@ CLAUDE_PLUGIN_DATA at import time already see the sandbox:
   ({"argv": [...], "stdin": "..."}) to $ACE_FAKE_CLI_LOG and prints
   {"count":0,"similar_patterns":[]} for `search`, {} for `learn` and anything else,
   a version string for `--version`. Never calls the network. An `npm` stub sits
-  next to it (exit 0, no output) so update checks stay offline.
+  next to it (exit 0, no output) so nothing a hook does can reach the registry.
   Opt out with @pytest.mark.real_ace_cli (the fake dir is removed from PATH).
 - Every test runs with cwd = its own tmp dir, so hooks that resolve
   `.claude/data/logs` relative to cwd never write into the repo checkout.
@@ -76,13 +76,13 @@ def pytest_configure(config):
     root = Path(tempfile.mkdtemp(prefix="ace-tests-"))
     home = root / "home"
     fake_bin = root / "fake-bin"
-    for d in (home, fake_bin, root / "plugin-data", root / "xdg-config", root / "xdg-data"):
+    for d in (home, fake_bin, root / "ace-plugin-data", root / "xdg-config", root / "xdg-data"):
         d.mkdir(parents=True, exist_ok=True)
 
     fake = fake_bin / "ace-cli"
     fake.write_text(_FAKE_CLI % {"python": sys.executable, "search": json.dumps(FAKE_SEARCH_OUTPUT)})
     fake.chmod(0o755)
-    # npm stub: ace_install_cli.sh runs `npm show @ace-sdk/cli version` (update check) -> no network.
+    # npm stub: the only npm a hook may run is `npm rebuild better-sqlite3` (DESIGN §23) -> no network.
     npm = fake_bin / "npm"
     npm.write_text("#!/bin/sh\nexit 0\n")
     npm.chmod(0o755)
@@ -98,7 +98,7 @@ def pytest_configure(config):
     os.environ.update({
         "ACE_LEARN_INLINE": "1",  # Stop/SubagentStop learn detaches by default; tests need it synchronous
         "HOME": str(home),
-        "CLAUDE_PLUGIN_DATA": str(root / "plugin-data"),
+        "CLAUDE_PLUGIN_DATA": str(root / "ace-plugin-data"),
         "XDG_CONFIG_HOME": str(root / "xdg-config"),
         "XDG_DATA_HOME": str(root / "xdg-data"),
         "ACE_FAKE_CLI_LOG": str(root / "fake-ace-cli.log"),
@@ -123,7 +123,7 @@ def _hermetic_test(request, monkeypatch, tmp_path):
     # Per-test plugin data (WP-B): the disk search cache / session state must not
     # leak between tests (a cache hit would skip the spawn a later test counts).
     # Kept under the per-run ace-tests-* root so the sandbox guard still holds.
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", tempfile.mkdtemp(prefix="pd-", dir=str(_state["root"] / "plugin-data")))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", tempfile.mkdtemp(prefix="ace-pd-", dir=str(_state["root"] / "ace-plugin-data")))
     if request.node.get_closest_marker("real_ace_cli"):
         fake = str(_state["fake_bin"])
         monkeypatch.setenv(

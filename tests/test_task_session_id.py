@@ -221,7 +221,7 @@ class TestBeforeTaskSessionId:
     def test_run_search_receives_task_session_id_not_cc_session(self, tmp_path, monkeypatch):
         """run_search must receive a fresh uuid4 task_session_id, NOT the CC session_id."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
         monkeypatch.chdir(tmp_path)
         cc_session = "cc-conversation-session-xyz"
@@ -267,7 +267,7 @@ class TestBeforeTaskSessionId:
     def test_task_session_id_persisted_in_state_file(self, tmp_path, monkeypatch):
         """The task_session_id must be stored in the patterns-used state file."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
         monkeypatch.chdir(tmp_path)
         cc_session = "cc-conv-sess-abc"
@@ -332,7 +332,7 @@ class TestSubagentStartTaskSessionId:
     def test_run_search_receives_task_session_id_not_cc_session(self, tmp_path, monkeypatch):
         """SubagentStart run_search must receive a fresh uuid4, NOT the CC session_id."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
         monkeypatch.chdir(tmp_path)
         cc_session = "cc-session-for-subagent-test"
@@ -380,7 +380,7 @@ class TestSubagentStartTaskSessionId:
     def test_task_session_id_stored_in_agent_state_file(self, tmp_path, monkeypatch):
         """task_session_id must be passed to append_patterns_used from SubagentStart."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
         monkeypatch.chdir(tmp_path)
         cc_session = "cc-conv-sess-sub"
@@ -433,7 +433,7 @@ class TestSubagentStartTaskSessionId:
     def test_each_subagent_gets_distinct_task_session_id(self, tmp_path, monkeypatch):
         """Two separate SubagentStart calls produce distinct task_session_ids."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
         monkeypatch.chdir(tmp_path)
 
@@ -779,7 +779,7 @@ class TestUnconditionalSeedWrite:
         so 0-pattern tasks leave load_task_session_id returning None at Stop.
         """
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
         monkeypatch.chdir(tmp_path)
         cc_session = "cc-conv-sess-zero-pat-main"
@@ -818,7 +818,7 @@ class TestUnconditionalSeedWrite:
     def test_before_task_with_patterns_still_anchors_task_session_id(self, tmp_path, monkeypatch):
         """GREEN non-regression: ace_before_task with patterns → anchor + pattern_ids stored."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
         monkeypatch.chdir(tmp_path)
         cc_session = "cc-conv-sess-with-pat-main"

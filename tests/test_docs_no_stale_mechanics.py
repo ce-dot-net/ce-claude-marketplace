@@ -56,3 +56,19 @@ def test_scan_covers_the_expected_files():
     names = {p.name for p in _doc_files()}
     assert {"README.md", "ARCHITECTURE.md", "CONFIGURATION.md", "TROUBLESHOOTING.md",
             "ace-doctor.md", "ace-cleanup.md"} <= names
+
+
+# DESIGN §20.3: every update/install hint points at /ace:ace-install-cli, the one place allowed to
+# mention the global fallback (§19). Wider net than _doc_files: hooks, scripts and the release agent too.
+def _hint_files():
+    repo = PLUGIN.parent.parent
+    files = _doc_files() + [repo / ".claude" / "agents" / "release-manager.md"]
+    files += sorted((PLUGIN / "shared-hooks").rglob("*.py")) + sorted((PLUGIN / "scripts").glob("*.sh"))
+    return [p for p in files if p.name != "ace-install-cli.md"]
+
+
+@pytest.mark.parametrize("path", _hint_files(), ids=lambda p: p.name)
+def test_no_global_install_hint_outside_the_repair_command(path):
+    bad = [i for i, l in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1)
+           if re.search(r"npm (?:install|i) -g\b.*@ace-sdk/cli", l)]
+    assert bad == [], "%s:%s must point at /ace:ace-install-cli" % (path.name, bad[:5])

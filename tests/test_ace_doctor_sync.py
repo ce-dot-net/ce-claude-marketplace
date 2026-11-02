@@ -233,12 +233,10 @@ class TestVersionStrings:
             "now 4.0.1."
         )
 
-    def test_ace_cli_floor_is_4_1_2(self):
+    def test_ace_cli_floor_comes_from_package_json(self):
         doc = _doc()
-        # Must mention 4.1.2 as the minimum CLI version somewhere
-        assert "4.1.2" in doc, (
-            "ace-doctor.md does not mention ace-cli floor version 4.1.2."
-        )
+        # DESIGN §23: the exact pin in package.json is the single source of truth
+        assert "package.json" in doc, "ace-doctor.md must read the ace-cli pin from package.json."
 
 
 # ---------------------------------------------------------------------------

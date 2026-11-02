@@ -67,7 +67,7 @@ class World:
     def __init__(self):
         self.root = Path(tempfile.mkdtemp(prefix="ace-e2e-r3a-"))
         self.home, self.data, self.tmpdir, self.proj, self.bin = (
-            self.root / d for d in ("home", "plugin-data", "tmp", "proj", "bin"))
+            self.root / d for d in ("home", "ace-plugin-data", "tmp", "proj", "bin"))
         for d in (self.home, self.data, self.tmpdir, self.proj / ".claude", self.proj / "src" / "auth",
                   self.bin, self.root / "xdg-config" / "ace", self.root / "xdg-data"):
             d.mkdir(parents=True)

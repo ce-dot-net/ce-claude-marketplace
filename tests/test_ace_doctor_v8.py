@@ -1,6 +1,6 @@
 """WP-E (v8.0.0) — /ace:ace-doctor and command-markdown hygiene.
 
-DESIGN §6 WP-E: ace-doctor.md gets a CC version check (`claude --version` >= 2.1.300),
+DESIGN §6 WP-E: ace-doctor.md gets a CC version check (`claude --version` >= 2.1.311, §16 P6),
 a plugin-data layout check (§4), and resolves installPath from installed_plugins.json
 instead of `ls -d .../ace/*/ | tail -1` (critic "Coverage gaps": stale cache-dir lookup).
 DESIGN §3: PreToolUse / PreCompact / PermissionRequest are removed; PostToolUseFailure added.
@@ -19,11 +19,11 @@ def _doc():
     return DOCTOR.read_text(encoding="utf-8")
 
 
-def test_doctor_checks_claude_code_version_floor_2_1_300():
-    """DESIGN §1: WP-E adds a CC-version check to /ace:ace-doctor (floor 2.1.300)."""
+def test_doctor_checks_claude_code_version_floor_2_1_311():
+    """§16 P6: CC-version check in /ace:ace-doctor (floor 2.1.311)."""
     doc = _doc()
     assert "claude --version" in doc
-    assert "2.1.300" in doc
+    assert "2.1.311" in doc and "2.1.300" not in doc
 
 
 def test_doctor_resolves_install_path_from_installed_plugins_json():

@@ -213,7 +213,7 @@ def test_run_search_called_with_transcript_query_type_matched(tmp_path, monkeypa
     must be used. task_intent must NOT be passed.
     """
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -252,7 +252,7 @@ def test_run_search_called_with_transcript_query_type_matched(tmp_path, monkeypa
 def test_tail_scan_picks_most_recent_matching_type(tmp_path, monkeypatch):
     """When multiple blocks match agent_type, the LAST one (tail-scan first) is used."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -286,7 +286,7 @@ def test_tail_scan_picks_most_recent_matching_type(tmp_path, monkeypatch):
 def test_type_match_skips_mismatched_types(tmp_path, monkeypatch):
     """A 'general-purpose' block must not be returned for agent_type='coder'."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -327,7 +327,7 @@ def test_type_match_skips_mismatched_types(tmp_path, monkeypatch):
 def test_global_fallback_when_no_type_match(tmp_path, monkeypatch):
     """When no block matches agent_type, the most-recent Task/Agent block is used."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -362,7 +362,7 @@ def test_global_fallback_when_no_type_match(tmp_path, monkeypatch):
 def test_global_fallback_when_subagent_type_absent(tmp_path, monkeypatch):
     """When block.input has no subagent_type, global fallback must still find it."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -399,7 +399,7 @@ def test_global_fallback_when_subagent_type_absent(tmp_path, monkeypatch):
 def test_description_used_when_prompt_absent(tmp_path, monkeypatch):
     """When block.input has no 'prompt', 'description' must be used as fallback."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -436,7 +436,7 @@ def test_description_used_when_prompt_absent(tmp_path, monkeypatch):
 def test_long_prompt_is_truncated(tmp_path, monkeypatch):
     """Prompts longer than ~500 chars must be truncated before passing to run_search."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     long_prompt = "A" * 1200
@@ -474,7 +474,7 @@ def test_long_prompt_is_truncated(tmp_path, monkeypatch):
 def test_no_run_search_when_transcript_missing(tmp_path, monkeypatch):
     """When transcript_path doesn't exist, run_search must NOT be called."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     event = _make_event(tmp_path, transcript_path=str(tmp_path / "nonexistent.jsonl"))
@@ -496,7 +496,7 @@ def test_no_run_search_when_transcript_missing(tmp_path, monkeypatch):
 def test_no_run_search_when_transcript_has_no_task_blocks(tmp_path, monkeypatch):
     """When transcript has no Task/Agent tool_use blocks, run_search must NOT be called."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     # Transcript with only user/system entries, no Task tool_use
@@ -528,7 +528,7 @@ def test_no_run_search_when_transcript_has_no_task_blocks(tmp_path, monkeypatch)
 def test_no_run_search_when_transcript_empty(tmp_path, monkeypatch):
     """When transcript is empty/blank, run_search must NOT be called."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript = tmp_path / "empty.jsonl"
@@ -552,7 +552,7 @@ def test_no_run_search_when_transcript_empty(tmp_path, monkeypatch):
 def test_no_run_search_when_transcript_path_absent(tmp_path, monkeypatch):
     """When transcript_path key is absent from event, run_search must NOT be called."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     event = _make_event(tmp_path)
@@ -575,7 +575,7 @@ def test_no_run_search_when_transcript_path_absent(tmp_path, monkeypatch):
 def test_graceful_when_transcript_is_all_malformed_json(tmp_path, monkeypatch):
     """When every line of the transcript is malformed JSON, must not crash."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript = tmp_path / "bad.jsonl"
@@ -603,7 +603,7 @@ def test_graceful_when_transcript_is_all_malformed_json(tmp_path, monkeypatch):
 def test_run_search_task_intent_kwarg_not_passed(tmp_path, monkeypatch):
     """task_intent must not appear in the run_search call at all (not even as None)."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -641,7 +641,7 @@ def test_run_search_task_intent_kwarg_not_passed(tmp_path, monkeypatch):
 def test_append_patterns_used_called_with_subagent_agent_id(tmp_path, monkeypatch):
     """Pattern IDs must be persisted keyed to the subagent's agent_id."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -676,7 +676,7 @@ def test_per_agent_state_file_written_for_subagent(tmp_path, monkeypatch):
     import patterns_used_state as pus
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -716,7 +716,7 @@ def test_per_agent_state_file_written_for_subagent(tmp_path, monkeypatch):
 def test_graceful_when_run_search_returns_none(tmp_path, monkeypatch):
     """Hook must not raise even when run_search returns None."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -738,7 +738,7 @@ def test_graceful_when_run_search_returns_none(tmp_path, monkeypatch):
 def test_graceful_when_no_context(tmp_path, monkeypatch):
     """Hook must not raise when get_context returns None."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -760,7 +760,7 @@ def test_graceful_when_no_context(tmp_path, monkeypatch):
 def test_graceful_when_run_search_raises(tmp_path, monkeypatch):
     """Hook must not propagate exceptions from run_search."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -791,7 +791,7 @@ def test_graceful_when_run_search_raises(tmp_path, monkeypatch):
 def test_output_contains_additional_context_when_patterns_found(tmp_path, monkeypatch, capsys):
     """When patterns are found, stdout JSON must include hookSpecificOutput.additionalContext."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -833,7 +833,7 @@ def test_output_contains_additional_context_when_patterns_found(tmp_path, monkey
 def test_org_and_project_passed_to_run_search_from_context(tmp_path, monkeypatch):
     """org and project must come from get_context(), not hardcoded or from env directly."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -882,7 +882,7 @@ def test_session_id_from_event_passed_to_run_search(tmp_path, monkeypatch):
     """
     import uuid as _uuid
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -944,7 +944,7 @@ def test_main_accepts_event_kwarg():
 def test_no_append_when_agent_id_is_none(tmp_path, monkeypatch):
     """When agent_id is None, append_patterns_used must NOT be called."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -972,7 +972,7 @@ def test_no_append_when_agent_id_is_none(tmp_path, monkeypatch):
 def test_no_run_search_when_agent_id_is_none(tmp_path, monkeypatch):
     """When agent_id is None, run_search must NOT be called (early exit)."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -1000,7 +1000,7 @@ def test_no_run_search_when_agent_id_is_none(tmp_path, monkeypatch):
 def test_no_append_when_agent_id_absent(tmp_path, monkeypatch):
     """When the agent_id key is entirely absent from the event, must be a no-op."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -1034,7 +1034,7 @@ def test_agent_id_none_does_not_write_main_state_file(tmp_path, monkeypatch):
     import patterns_used_state as pus
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -1093,7 +1093,7 @@ def test_hooks_json_subagent_start_timeout_covers_run_search_budget():
 def test_agent_tool_use_name_also_matched(tmp_path, monkeypatch):
     """Tool_use blocks with name='Agent' (not just 'Task') must also be scanned."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
 
@@ -1160,7 +1160,7 @@ def test_task_session_id_persisted_when_search_returns_zero_patterns(tmp_path, m
     import patterns_used_state as pus
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -1205,7 +1205,7 @@ def test_task_session_id_persisted_when_search_returns_error_dict(tmp_path, monk
     import patterns_used_state as pus
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -1242,7 +1242,7 @@ def test_task_session_id_persisted_when_search_returns_none(tmp_path, monkeypatc
     import patterns_used_state as pus
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -1274,7 +1274,7 @@ def test_pattern_ids_still_stored_when_patterns_present(tmp_path, monkeypatch):
     import patterns_used_state as pus
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -1458,7 +1458,7 @@ def test_subagent_start_transcript_scan_bounded_to_2mb(tmp_path, monkeypatch):
     """WP-D, critic T7/T12: the parent-transcript reverse scan reads at most the
     last 2 MB — a spawn block older than that is not found (no full read of
     multi-hundred-MB transcripts) → no search."""
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.chdir(tmp_path)
     filler = json.dumps({"type": "user", "message": {"role": "user", "content": "x" * 1000}})
     lines = [_v8_tool_use_line("Agent", {"subagent_type": "coder", "prompt": "too old to see"})]
@@ -1529,7 +1529,7 @@ def test_subagent_start_state_records_user_prompt_and_hook_event_name(tmp_path):
 def test_subagent_start_search_timeout_is_25s(tmp_path, monkeypatch):
     """DESIGN §11 A2: python-side search timeout 25 s (hooks.json gives the hook 30 s;
     p7: 15 s killed healthy searches under load)."""
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Implement the SubagentStart hook"}])

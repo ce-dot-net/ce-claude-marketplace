@@ -122,7 +122,7 @@ def _run_main(tmp_path, monkeypatch, event,
     state_dir = tmp_path / ".claude" / "data" / "logs"
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
     monkeypatch.chdir(tmp_path)
 
@@ -398,7 +398,7 @@ class TestStage2DegenerateSkip:
         """
         event = _empty_agent_subagent_event(tmp_path, transcript_uuid=None)
         # Write a state file under 'None' agent (the '-main' suffix) to verify it gets reaped
-        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
         pus.append_patterns_used(
             SESSION, None, [PID_A],
@@ -531,7 +531,7 @@ class TestPartialAnchorNotSkipped:
     def test_retrieval_id_only_not_skipped(self, tmp_path, monkeypatch):
         """retrieval_id present (no tsid, no applied_log_ids, sentinel prompt) → NOT skipped."""
         # Build state with retrieval_id but no task_session_id
-        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
         pus.append_patterns_used(
             SESSION, WORK_UUID, [PID_A],
@@ -570,7 +570,7 @@ class TestMainStopNotAffected:
         learn is called (or skipped for other reasons, but not the degenerate guard).
         """
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
         monkeypatch.chdir(tmp_path)
 

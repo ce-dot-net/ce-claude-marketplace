@@ -74,7 +74,7 @@ def fake(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", str(b) + os.pathsep + os.environ["PATH"])
     log = tmp_path / "calls.jsonl"
     monkeypatch.setenv("ACE_FAKE_CLI_LOG", str(log))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     monkeypatch.delenv("ACE_PIN_BACKOFF_MIN", raising=False)
     monkeypatch.chdir(tmp_path)
     import plugin_data_dir

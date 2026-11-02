@@ -25,7 +25,7 @@ ROOT_PREFIX = "${CLAUDE_PLUGIN_ROOT}/scripts/"
 # DESIGN §3 table as amended by §9 G1/G4/G8, §10 S8 and §11 A2 (round 2):
 # (event, matcher, script, args, async, timeout, statusMessage)
 EXPECTED = {
-    ("SessionStart", "startup|clear", "ace_install_cli.sh", (), False, 30, None),
+    ("SessionStart", "startup|clear", "ace_install_cli.sh", (), False, 30, "ACE: checking ace-cli…"),  # §16 P9
     ("SessionStart", "startup", "ace_install_cli.sh", ("--update-check",), True, None, None),
     ("SessionStart", "compact", "ace_sessionstart_compact.sh", (), False, 10, None),
     ("UserPromptSubmit", "", "ace_before_task_wrapper.sh", (), False, 30,

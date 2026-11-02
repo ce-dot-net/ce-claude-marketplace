@@ -93,9 +93,9 @@ def test_state_file_path_scheme(tmp_path, monkeypatch):
     p_sub = pus.state_file_path(SESSION, SUBAGENT_UUID, state_dir=str(tmp_path))
     assert p_sub.name == f"patterns-used-{SUBAGENT_UUID}.json"
     # v8: default (no state_dir) lives under $CLAUDE_PLUGIN_DATA/projects/<p>/sessions/<s>/
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     p_default = pus.state_file_path(SESSION, None, project_id="prj_x")
-    assert p_default == (tmp_path / "pd" / "projects" / "prj_x" / "sessions" / SESSION
+    assert p_default == (tmp_path / "ace-pd" / "projects" / "prj_x" / "sessions" / SESSION
                          / "patterns-used-main.json")
 
 

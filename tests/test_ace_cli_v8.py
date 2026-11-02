@@ -29,7 +29,7 @@ RESP = {"similar_patterns": [{"id": "ctx-1234567890-abcd", "content": "x"}], "co
 @pytest.fixture
 def cli(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)  # relevance log lands in tmp .claude/data/logs
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     import ace_cli
     mod = importlib.reload(ace_cli)
     try:

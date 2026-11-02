@@ -57,7 +57,7 @@ def proj(tmp_path, monkeypatch):
     p = tmp_path / "proj"
     (p / ".claude").mkdir(parents=True)
     (p / ".claude" / "settings.json").write_text(json.dumps({"projectId": "prj_to", "orgId": "org_to"}))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     monkeypatch.chdir(p)
     try:
         import ace_relevance_logger
@@ -119,7 +119,7 @@ def test_ups_search_timeout(proj, spawns, monkeypatch, capsys):
 
 
 def test_domain_shift_search_timeout(proj, spawns, monkeypatch, tmp_path, capsys):
-    d = tmp_path / "pd" / "projects" / "prj_to"
+    d = tmp_path / "ace-pd" / "projects" / "prj_to"
     d.mkdir(parents=True)
     (d / "domains.json").write_text(json.dumps({"auth:local": {"count": 2}}))
     mod = _load("ace_domain_shift")

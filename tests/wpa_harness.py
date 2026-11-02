@@ -52,7 +52,7 @@ class Env:
     def __init__(self, tmp_path: Path, with_cli: bool = True, cli_version: str = "4.2.2"):
         self.tmp = tmp_path
         self.home = tmp_path / "home"
-        self.data = tmp_path / "plugin-data"
+        self.data = tmp_path / "ace-plugin-data"
         self.project = tmp_path / "project"
         self.bin = tmp_path / "bin"
         self.cli_log = tmp_path / "fake-cli.log"

@@ -170,7 +170,7 @@ def run_fixture(name):
     root = plugin_root()
     token = "e2e" + uuid.uuid4().hex[:12]
     sandbox = Path(tempfile.mkdtemp(prefix="ace-e2e-"))
-    home, data, tmpdir, proj = (sandbox / d for d in ("home", "plugin-data", "tmp", "proj"))
+    home, data, tmpdir, proj = (sandbox / d for d in ("home", "ace-plugin-data", "tmp", "proj"))
     for d in (home, data, tmpdir, proj / ".claude", proj / "src" / "auth"):
         d.mkdir(parents=True)
     project_id, session_id, agent_id = "prj_" + token, token + "-session", "agent-" + token

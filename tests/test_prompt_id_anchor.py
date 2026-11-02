@@ -6,8 +6,9 @@ PreToolUse -> SubagentStart -> every subagent hook -> SubagentStop -> Stop -> Se
 background subagents keep the spawning prompt_id. So:
 - UPS: task_session_id = prompt_id (else uuid4); `--pin-session <prompt_id>`; state tsid = prompt_id.
 - SubagentStart (DESIGN §12, overrides G2): fresh uuid4 per agent, parent prompt_id only as parent_task_id.
-- domain-shift (main agent): pin keyed by prompt_id; inside a subagent: that subagent's own id — no uuid minting when prompt_id is present, and a
-  stale tsid left in the state by an earlier prompt does not win over the current prompt_id.
+- domain-shift (§16 P8): NO --pin-session (the server never credits those rows; sqlite pin is the lock
+  source). The state tsid stays: main agent = prompt_id; inside a subagent = that subagent's own id — no uuid
+  minting when prompt_id is present, and a stale tsid left by an earlier prompt does not win over prompt_id.
 Hooks run through their shims (HookEnv: fake ace-cli on PATH, tmp CLAUDE_PLUGIN_DATA).
 """
 import json
@@ -121,10 +122,10 @@ def _read(env, prompt_id=PROMPT_ID, agent_id=None):
     return env.run("ace_posttooluse_domain_inject.sh", ev)
 
 
-def test_domain_shift_pins_prompt_id_without_state(env):
-    """G2: no uuid minting — with no state yet, the pin is the event prompt_id."""
+def test_domain_shift_state_tsid_is_prompt_id_without_state(env):
+    """G2: no uuid minting — with no state yet, the state tsid is the event prompt_id."""
     _read(env)
-    assert _pins(env) == [PROMPT_ID]
+    assert _pins(env) == [None], "P8: domain-shift passes no --pin-session"
     assert env.read_state(SID)["task_session_id"] == PROMPT_ID
 
 
@@ -133,25 +134,28 @@ def test_domain_shift_prompt_id_beats_stale_state_tsid(env):
     machine prompt did not reset it) must not be reused for the current prompt."""
     env.write_state(SID, None, task_session_id="tsid-from-previous-prompt")
     _read(env)
-    assert _pins(env) == [PROMPT_ID]
+    assert _pins(env) == [None]
+    assert env.read_state(SID)["task_session_id"] == PROMPT_ID
 
 
 def test_domain_shift_in_subagent_uses_subagent_id_not_prompt_id(env):
-    """§12: inside a subagent the pin is the subagent's own id from SubagentStart."""
+    """§12: inside a subagent the state tsid is the subagent's own id from SubagentStart."""
     env.write_state(SID, "agent-ds", task_session_id="sub-own-id")
     _read(env, agent_id="agent-ds")
-    assert _pins(env) == ["sub-own-id"]
+    assert _pins(env) == [None]
     assert env.read_state(SID, "agent-ds")["task_session_id"] == "sub-own-id"
 
 
 def test_domain_shift_in_subagent_without_state_mints_uuid4(env):
     _read(env, agent_id="agent-ds2")
-    pins = _pins(env)
-    assert len(pins) == 1 and pins[0] != PROMPT_ID and uuid.UUID(pins[0]).version == 4
+    assert _pins(env) == [None]
+    tsid = env.read_state(SID, "agent-ds2")["task_session_id"]
+    assert tsid != PROMPT_ID and uuid.UUID(tsid).version == 4
 
 
 def test_domain_shift_without_prompt_id_reuses_state_tsid(env):
     """Back-compat (no prompt_id): reuse the state tsid. Regression guard."""
     env.write_state(SID, None, task_session_id="tsid-main-from-ups")
     _read(env, prompt_id=None)
-    assert _pins(env) == ["tsid-main-from-ups"]
+    assert _pins(env) == [None]
+    assert env.read_state(SID)["task_session_id"] == "tsid-main-from-ups"

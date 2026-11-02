@@ -182,7 +182,7 @@ def test_accumulator_skips_repo_without_ace_config(tmp_path):
     assert not list(box.pd.glob("projects/default/sessions/s-plain/tools.db"))
 
 
-# ── SubagentStop: own id + parent_task_id ────────────────────────────────────
+# ── SubagentStop: own id + parent_agent_id ───────────────────────────────────
 
 def test_subagent_stop_learn_uses_subagent_id_and_parent(tmp_path):
     box = Box(tmp_path)
@@ -196,7 +196,7 @@ def test_subagent_stop_learn_uses_subagent_id_and_parent(tmp_path):
     learns = box.cli_calls("learn")
     assert len(learns) == 1
     tr = learns[0]["trace"]
-    assert tr["session_id"] == "own-uuid" and tr["parent_task_id"] == "parent-prompt-id"
+    assert tr["session_id"] == "own-uuid" and tr["parent_agent_id"] == "parent-prompt-id"
 
 
 def test_main_stop_falls_back_to_prompt_id_without_state_tsid(tmp_path):

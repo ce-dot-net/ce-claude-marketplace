@@ -795,7 +795,7 @@ def _make_stdin(event: dict):
 class TestDebounceDoesNotTouchSessionState:
     def test_sweep_keeps_shared_session_files(self, tmp_path, monkeypatch):
         import os, time
-        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
         mod = _load_module()
         sd = mod._debounce_dir("s1").parent
         old = time.time() - 700
@@ -815,10 +815,10 @@ class TestDebounceDoesNotTouchSessionState:
 
 def test_session_end_keeps_dir_while_learn_lock_fresh(tmp_path, monkeypatch):
     import subprocess, sys, json
-    env = dict(__import__("os").environ, CLAUDE_PLUGIN_DATA=str(tmp_path))
+    env = dict(__import__("os").environ, CLAUDE_PLUGIN_DATA=str(tmp_path / "ace-pd"))
     sys.path.insert(0, str(HOOK_PATH.parent / "utils"))
     import plugin_data_dir as pd
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     sys.path.insert(0, str(HOOK_PATH.parent / "utils"))
     from ace_env import resolve_ids
     sid, pid = resolve_ids({"session_id": "s9", "cwd": str(tmp_path)})

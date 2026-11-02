@@ -180,7 +180,7 @@ def test_subagent_stop_uses_stored_subagentstart_query_first(box):
 def test_version_probe_timeout_does_not_disable(tmp_path, monkeypatch):
     import ace_install_cli as m
     import plugin_data_dir
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     cli = tmp_path / "ace-cli"
     cli.write_text("#!/bin/sh\nsleep 20\n")
     cli.chmod(0o755)
@@ -192,25 +192,25 @@ def test_version_probe_timeout_does_not_disable(tmp_path, monkeypatch):
     assert not plugin_data_dir.disabled_flag("prj_r3a", "sid-r3a").exists(), \
         "a timed-out/unknown version must never write disabled.flag"
     assert not any("Outdated" in x or "DISABLED" in x for x in msgs), msgs
-    logged = "".join(p.read_text(errors="replace") for p in (tmp_path / "pd").rglob("*") if p.is_file())
+    logged = "".join(p.read_text(errors="replace") for p in (tmp_path / "ace-pd").rglob("*") if p.is_file())
     assert "version_unknown" in logged, "unknown version must be logged as version_unknown"
 
 
 # ── §13.1 mod-active marker helpers ─────────────────────────────────────────────────────
 
 def test_mod_active_marker_path(tmp_path, monkeypatch):
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     import plugin_data_dir as pdd
     p = pdd.mod_active_marker("prj_m", "sid_m")
-    assert p == tmp_path / "pd" / "projects" / "prj_m" / "sessions" / "sid_m" / "mod-active"
+    assert p == tmp_path / "ace-pd" / "projects" / "prj_m" / "sessions" / "sid_m" / "mod-active"
 
 
 def test_is_mod_active_fresh_stale_absent(tmp_path, monkeypatch):
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     import plugin_data_dir as pdd
     assert pdd.is_mod_active("prj_m", "sid_m") is False
-    assert not (tmp_path / "pd" / "projects").exists(), "is_mod_active must never create dirs"
-    p = tmp_path / "pd" / "projects" / "prj_m" / "sessions" / "sid_m" / "mod-active"
+    assert not (tmp_path / "ace-pd" / "projects").exists(), "is_mod_active must never create dirs"
+    p = tmp_path / "ace-pd" / "projects" / "prj_m" / "sessions" / "sid_m" / "mod-active"
     p.parent.mkdir(parents=True)
     p.write_text("")
     assert pdd.is_mod_active("prj_m", "sid_m") is True
@@ -223,9 +223,9 @@ def test_is_mod_active_fresh_stale_absent(tmp_path, monkeypatch):
 
 
 def test_is_mod_active_sanitizes_ids(tmp_path, monkeypatch):
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     import plugin_data_dir as pdd
-    assert "projects" in str(pdd.mod_active_marker("../../etc", "../x").resolve().relative_to(tmp_path / "pd"))
+    assert "projects" in str(pdd.mod_active_marker("../../etc", "../x").resolve().relative_to(tmp_path / "ace-pd"))
 
 
 # ── §13.2 ACE_CLIENT_ID truth (m3 REFUTED P-8) ───────────────────────────────────────────

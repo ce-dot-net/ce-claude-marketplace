@@ -185,26 +185,26 @@ def test_domain_shift_passes_top_k_8(env):
     assert "--allowed-domains" not in argv and "--task-intent" not in argv
 
 
-def test_domain_shift_pins_existing_task_session_id(env):
-    """WP-D: `--pin-session <tsid from state>` — reuse the agent's task_session_id
-    written by UPS (C1) so domain-shift retrievals land in the same task bucket."""
+def test_domain_shift_reuses_task_session_id_without_pinning(env):
+    """§16 P8: the task's tsid stays for STATE merging, but the search passes NO --pin-session
+    (the server never credits domain-shift rows; the sqlite pin is the lock source)."""
     env.write_state(SID, None, task_session_id="tsid-main-from-ups")
     env.run(SHIM, _read_event(env, str(env.proj / "src/auth/login_handler.py")))
     calls = _search_calls(env)
     assert calls, "no search issued"
-    assert flag_value(calls[0]["argv"], "--pin-session") == "tsid-main-from-ups"
+    assert "--pin-session" not in calls[0]["argv"]
+    assert env.read_state(SID)["task_session_id"] == "tsid-main-from-ups"
 
 
 def test_domain_shift_seeds_fresh_task_session_id_when_state_has_none(env):
-    """v7.1.2 Change A kept: no tsid in state → fresh uuid4 pinned AND stored."""
+    """v7.1.2 Change A kept for STATE: no tsid in state → fresh uuid4 stored; §16 P8: not pinned."""
     env.run(SHIM, _read_event(env, str(env.proj / "src/auth/login_handler.py")))
     calls = _search_calls(env)
     assert calls, "no search issued"
-    pinned = flag_value(calls[0]["argv"], "--pin-session")
-    assert pinned, "no --pin-session passed"
-    uuid.UUID(pinned)
+    assert "--pin-session" not in calls[0]["argv"]
     state = env.read_state(SID)
-    assert state and state.get("task_session_id") == pinned
+    assert state, "state not written"
+    uuid.UUID(state["task_session_id"])
 
 
 def test_domain_shift_emits_posttooluse_additional_context_json(env):
