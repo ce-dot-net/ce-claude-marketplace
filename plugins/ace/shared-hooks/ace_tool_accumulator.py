@@ -136,7 +136,12 @@ def record_tool(session_id, agent_id, tool_name, tool_input_summary, tool_respon
                  agent_id or None, start_ms, end_ms, duration_ms, 1 if success else 0, error_first_line))
             conn.commit()
         except sqlite3.IntegrityError:
-            pass  # duplicate tool_use_id — normal for hook retries
+            if not success:  # failure wins over an earlier success row (async PostToolBatch race)
+                conn.execute('UPDATE tool_uses SET success=0, error_first_line=?, tool_response=?,'
+                             ' duration_ms=COALESCE(?, duration_ms) WHERE tool_use_id=?',
+                             (error_first_line, tool_response_summary, duration_ms, tool_use_id))
+                conn.commit()
+            # else: duplicate tool_use_id — normal for hook retries; an existing failure row stays
         finally:
             conn.close()
         return True
@@ -266,9 +271,50 @@ def hook_main(failure: bool) -> None:
         log_hook_exception(hook, e)
 
 
+def _resp_text(resp):
+    """PostToolBatch tool_response is a string or a content-block array (cc_hooks_reference.md:2381)."""
+    if isinstance(resp, list):
+        return "\n".join(b.get('text', '') if isinstance(b, dict) else str(b) for b in resp)
+    return resp
+
+
+def _batch_resp(resp):
+    """Always valid JSON (the trajectory builder json.loads it): strings become JSON strings."""
+    resp = _resp_text(resp)
+    return json.dumps(resp[:MAX_FIELD_CHARS - 192]) if isinstance(resp, str) else _dump(resp)
+
+
+def batch_main() -> None:
+    """PostToolBatch entry: tool_calls[] on stdin, silent, 0 CLI calls."""
+    try:
+        ev = read_event()
+        if not isinstance(ev, dict):
+            raise ValueError('hook event is not a JSON object')
+        cwd = ev.get('cwd') or ev.get('working_directory')
+        if cwd and os.path.isdir(cwd):
+            os.chdir(cwd)
+        sid = ev.get('session_id')
+        calls = ev.get('tool_calls')
+        if not sid or not isinstance(calls, list):
+            return
+        ctx = get_context() or {}
+        if plugin_data_dir.disabled_flag(ctx.get('project') or 'default', sid).exists():
+            return
+        for c in calls:
+            if not (isinstance(c, dict) and c.get('tool_name') and c.get('tool_use_id')):
+                continue
+            record_tool(sid, ev.get('agent_id'), c['tool_name'], _dump(c.get('tool_input')),
+                        _batch_resp(c.get('tool_response')), True, None, tool_use_id=c['tool_use_id'])
+    except Exception as e:
+        log_hook_exception('PostToolBatch', e)
+
+
 def main():
-    """Hook mode (`--log`/`--no-log`/`--failure`) or the debug CLI (get/clear/stats)."""
+    """Hook mode (`--log`/`--no-log`/`--failure`/`--batch`) or the debug CLI (get/clear/stats)."""
     flags = [a for a in sys.argv[1:] if a.startswith('--')]
+    if sys.argv[1:2] == ['--batch']:
+        batch_main()
+        return
     if not sys.argv[1:] or sys.argv[1] in ('--log', '--no-log', '--failure'):
         hook_main('--failure' in flags)
         return
