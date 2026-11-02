@@ -151,13 +151,14 @@ def render_domain_shift(resp, domain):
 
 def eval_injection(req):
     """ace_before_task.check_eval_request_and_review text for one request dict."""
-    return ("<!-- ACE Self-Eval Request: Previous task used %s patterns (%s%% relevance, %s domains, %s tools). "
+    stats = (("%s%% relevance, " % req["avg_relevance"]) if req.get("avg_relevance") else "") + \
+        (("%s domains, " % req["domains"]) if req.get("domains") else "")
+    return ("<!-- ACE Self-Eval Request: Previous task used %s patterns (%s%s tools). "
             "As a human developer, how much time did these patterns save? "
             "Without ACE, a developer would search docs, explore codebases, ask colleagues, or trial-and-error. "
             "Rate from a HUMAN DEVELOPER perspective, not AI perspective. "
             "Include in your response: ACE_REVIEW: N%% | Xm saved | one-line reason -->"
-            % (req.get("patterns_injected", 0), req.get("avg_relevance", 0), req.get("domains", 0),
-               req.get("tools_executed", 0)))
+            % (req.get("patterns_injected", 0), stats, req.get("tools_executed", 0)))
 
 
 def render_bucket(session_id):
@@ -203,7 +204,9 @@ def expected_main_state(search_text, prompt=HUMAN_PROMPT, tsid=TSID_PLACEHOLDER)
                                  retrieval_log_ids=rlog, task_session_id=tsid, user_prompt=prompt,
                                  rendered_context=rendered, hook_event_name="UserPromptSubmit", reset=True,
                                  render_variant="full",  # the mod's full arm (ACE_RENDER_FULL_PCT=100 in the TS host)
-                                 pattern_contents=pus.injected_contents(resp.get("similar_patterns"), ids))  # §31
+                                 pattern_contents=pus.injected_contents(resp.get("similar_patterns"), ids),  # §31
+                                 eval_stats=pus.eval_stats([p for p in resp.get("similar_patterns") if p.get("id") in ids],
+                                                           resp.get("similar_patterns")))
         return (Path(d) / "patterns-used-main.json").read_text()
 
 
@@ -225,6 +228,8 @@ def generated_files():
         "state_main_8": expected_main_state(s8),
         "eval_injection": eval_injection({"patterns_injected": 100, "avg_relevance": 0, "domains": 0,
                                           "tools_executed": 2, "success": True}),
+        "eval_injection_stats": eval_injection({"patterns_injected": 8, "avg_relevance": 61, "domains": 3,
+                                                "tools_executed": 2, "success": True}),
     }
     out[FIX_JSON / "golden.json"] = json.dumps(goldens, indent=1, sort_keys=True) + "\n"
     out[FIX_TS / "golden.ts"] = "export default " + json.dumps(goldens, sort_keys=True) + " as Record<string, string>\n"

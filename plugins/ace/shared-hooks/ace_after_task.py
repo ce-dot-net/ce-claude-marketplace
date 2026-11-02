@@ -504,9 +504,10 @@ def skip_learning(reason, event=None, agent_id=None, session_id=None, working_di
         aid = agent_id or event.get('agent_id') or None
         try:
             if hook == 'Stop':
-                n = len(load_state(sid, None, hook).get('pattern_ids') or [])
+                st = load_state(sid, None, hook)
+                n = len(st.get('pattern_ids') or [])
                 if n:
-                    write_eval_request(n, 0)
+                    write_eval_request(n, 0, st.get('eval_stats'))
         except Exception:
             pass
         if hook != 'SubagentStop' or aid:
@@ -609,14 +610,15 @@ def parse_ace_review(message, review_file='.claude/data/logs/ace-review-result.j
         pass
 
 
-def write_eval_request(patterns_injected, tools_executed, path='.claude/data/logs/ace-eval-request.json'):
+def write_eval_request(patterns_injected, tools_executed, stats=None, path='.claude/data/logs/ace-eval-request.json'):
     """Next UserPromptSubmit (ace_before_task.check_eval_request_and_review) turns this into a silent self-eval."""
     try:
         f = plugin_data_dir.open_project_log(path, append=False)  # §24: no symlink out of the project
         if f is not None:
             with f:
                 f.write(json.dumps({
-                    'patterns_injected': patterns_injected, 'avg_relevance': 0, 'domains': 0,
+                    'patterns_injected': patterns_injected,
+                    'avg_relevance': (stats or {}).get('avg_relevance', 0), 'domains': (stats or {}).get('domains', 0),
                     'tools_executed': tools_executed, 'success': True,
                     'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}))
     except Exception:
@@ -869,7 +871,7 @@ def main():
 
         # STEP 1: task description — state `user_prompt` (C1), else bounded transcript tail
         # SubagentStop: SubagentStart's stored query first (§13.2); transcript is only the fallback.
-        stored, src = '', ''
+        stored, src, st = '', '', {}
         if not no_agent_state:
             st = load_state(session_id, agent_id, hook_event_name)
             stored, src = (st.get('user_prompt') or '').strip(), st.get('query_source')
@@ -1160,7 +1162,7 @@ def main():
 
         # Self-eval request for the next UserPromptSubmit (Stop only)
         if hook_event_name == 'Stop' and playbook_used:
-            write_eval_request(len(playbook_used), len(tools))
+            write_eval_request(len(playbook_used), len(tools), st.get('eval_stats'))
 
         # STEP 9: Clear accumulated tools (cleanup)
         # Scope to this agent: a subagent stop must not wipe the main agent's rows; a

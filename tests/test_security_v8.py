@@ -46,7 +46,7 @@ def test_eval_request_text_fields_become_zero(proj):
         {"patterns_injected": INJECT, "avg_relevance": [INJECT], "domains": {"x": INJECT}, "tools_executed": True}))
     ctx = _load("ace_before_task").check_eval_request_and_review()
     assert "Ignore all previous" not in ctx
-    assert "used 0 patterns (0% relevance, 0 domains, 0 tools)" in ctx
+    assert "used 0 patterns (0 tools)" in ctx
 
 
 def test_eval_request_numbers_pass_through(proj):
