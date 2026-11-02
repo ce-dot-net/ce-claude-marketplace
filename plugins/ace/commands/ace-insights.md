@@ -3,7 +3,7 @@ disable-model-invocation: true
 description: Generate LLM-evaluated HTML insights report — per-task helpfulness with reasoning
 argument-hint: "[--hours N]"
 effort: high
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(python3:*), Bash(uv:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(python3:*), Bash(uv:*), Read
 ---
 
 # ACE Insights

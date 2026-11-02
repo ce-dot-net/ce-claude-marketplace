@@ -10,7 +10,18 @@ This document provides a comprehensive analysis of how the ACE (Agentic Context 
 
 ## v8.0.0: Plugin-Data State, Single-Spawn CLI, Slim Hook Topology
 
-**Requires**: Claude Code >= 2.1.300, ace-cli >= 4.1.2, @ace-sdk/core >= 3.2.2.
+**Requires**: Claude Code >= 2.1.311, ace-cli = the exact pin in `package.json`, @ace-sdk/core >= 3.2.2. Windows is not supported (WSL2 works).
+
+### CLI delivery (DESIGN section 23): plugin and ace-cli go hand in hand
+
+`plugins/ace/package.json` pins `@ace-sdk/cli` to one exact version and `package-lock.json` is committed. Claude Code runs
+`npm ci --ignore-scripts` in the plugin directory on install/update, so the CLI lands in `${CLAUDE_PLUGIN_ROOT}/node_modules/@ace-sdk/cli`
+and every plugin version runs exactly the CLI it was tested with. There is no self-managed installer, no range and no daily
+`npm view` in the hooks. Resolution (`ace_cli.cli_argv()`, no spawn): plugin-local `[node, cli.js]`, then a global `ace-cli` that is
+not older than the pin, else none (one message naming `/ace:ace-install-cli`; never `disabled.flag`). `scripts/ace-cli` is the
+wrapper commands call (same order, hides the CLI's own update notifier). CC installs with `--ignore-scripts`, so an async SessionStart
+row runs `npm rebuild better-sqlite3` once per plugin version. `tests/test_cli_contract.py` checks every flag and field against the
+pinned CLI; the `ace-cli-watch` workflow opens a PR when npm has a newer version.
 
 ### State layout (`CLAUDE_PLUGIN_DATA`)
 

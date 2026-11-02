@@ -24,21 +24,11 @@ Claude Code → Hooks → ace-cli → ACE Server
 
 ## 🚀 Quick Install (3 Steps)
 
-### Step 1: Install ace-cli
+### Step 1: ace-cli comes with the plugin
 
-```bash
-npm install -g @ace-sdk/cli
+Claude Code installs the exact `@ace-sdk/cli` version pinned in the plugin's `package.json` when the plugin is installed or
+updated (Node.js is required). Nothing to install by hand. If the CLI is missing, run in Claude Code:
 ```
-
-**Verify installation:**
-```bash
-ace-cli --version
-# Should show: v1.0.14 or higher
-```
-
-**Alternative**: Use the interactive installer:
-```bash
-# In Claude Code:
 /ace:ace-install-cli
 ```
 
@@ -118,10 +108,7 @@ If you're upgrading from the old MCP-based architecture:
    # Remove "ace-pattern-learning" entry
    ```
 
-2. **Install ace-cli**:
-   ```bash
-   npm install -g @ace-sdk/cli
-   ```
+2. **ace-cli**: installed with the plugin; run `/ace:ace-install-cli` if it is missing.
 
 3. **Update plugin**:
    ```bash
@@ -151,20 +138,10 @@ Your playbook data is preserved on the server - no data loss during migration!
 
 ### "ace-cli not found"
 
-**Problem**: `ace-cli` command not in PATH.
+**Problem**: the plugin-local ace-cli is missing and no global one is on PATH.
 
-**Solution**:
-```bash
-# Reinstall globally
-npm install -g @ace-sdk/cli
-
-# Verify installation
-which ace-cli ace-cli --version
-
-# If still not found, check npm global bin path
-npm bin -g
-# Add to PATH if needed
-```
+**Solution**: run `/ace:ace-install-cli`. It reports the CLI source, runs `claude plugin update ace@ce-dot-net-marketplace`
+and, if needed, `npm ci --ignore-scripts` in the plugin directory.
 
 ### "ACE authentication failed"
 
@@ -209,13 +186,7 @@ chmod +x ~/.config/claude-code/marketplaces/ce-dot-net-marketplace/plugins/ace/s
 
 **Problem**: ace-cli not installed.
 
-**Solution**:
-```bash
-npm install -g @ace-sdk/cli
-
-# Or use interactive installer
-/ace:ace-install-cli
-```
+**Solution**: run `/ace:ace-install-cli`. ACE activates by itself once the CLI exists (no restart flag to clear).
 
 ---
 

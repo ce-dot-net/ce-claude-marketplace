@@ -8,6 +8,8 @@ The search cache moved to ace_search_cache (disk) and is consulted by the hooks.
 
 import json
 import os
+import re
+import shutil
 import subprocess
 import tempfile
 import time
@@ -16,8 +18,76 @@ from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
 
 
-# v6.0.0: Legacy CLI removed, ace-cli is the only supported command
-CLI_CMD = 'ace-cli'
+CLI_CMD = 'ace-cli'  # name of the global fallback; spawns go through _cmd()/cli_argv()
+_NOT_FOUND = "ace-cli not found. Run /ace:ace-install-cli"
+# ace-cli's own update notifier (4.2.2 dist/utils/version-checker.js): a pinned CLI says it whenever npm is ahead.
+_NOTIFIER = re.compile(r'Update available: v|Run: npm install -g @ace-sdk')
+
+
+def _pin():
+    """The exact ace-cli version this plugin version was tested with (package.json, DESIGN §23)."""
+    root = os.environ.get('CLAUDE_PLUGIN_ROOT') or str(Path(__file__).resolve().parents[2])
+    try:
+        v = json.loads((Path(root) / 'package.json').read_text())['dependencies']['@ace-sdk/cli']
+        return v if re.fullmatch(r'\d+\.\d+\.\d+', v) else None
+    except Exception:
+        return None
+
+
+def _tup(v):
+    return tuple(int(x) for x in v.split('.'))
+
+
+def _global_below_pin(path) -> bool:
+    """True only when SessionStart's cli_version.json cache says this very binary is older than the pin.
+    No cache / unknown version = accepted (never spawn a probe here; never disable on unknown)."""
+    try:
+        pin, real = _pin(), os.path.realpath(path)
+        c = json.loads(_plugin_dir().cli_version_file().read_text())
+        return bool(pin and c.get('path') == real and c.get('mtime') == os.stat(real).st_mtime
+                    and c.get('version') and _tup(c['version']) < _tup(pin))
+    except Exception:
+        return False
+
+
+def global_cli():
+    """Path of an `ace-cli` on PATH, or None (the fallback; version floor is applied by _resolve)."""
+    return shutil.which('ace-cli')
+
+
+def _resolve():
+    """(argv prefix, source): plugin-local [node, cli.js] -> global [ace-cli] (>= pin) -> (None, None).
+    The ONE place that locates ace-cli. No spawn. Plugin-local needs CLAUDE_PLUGIN_ROOT (hooks always have it)."""
+    root, node = os.environ.get('CLAUDE_PLUGIN_ROOT'), shutil.which('node')
+    if root and node:
+        js = Path(root) / 'node_modules' / '@ace-sdk' / 'cli' / 'dist' / 'cli.js'
+        if js.is_file():
+            return [node, str(js)], 'plugin-local'
+    g = global_cli()
+    if g and not _global_below_pin(g):
+        return ['ace-cli'], 'global'  # by name: the child resolves it on the same PATH
+    return None, None
+
+
+def cli_argv():
+    return _resolve()[0]
+
+
+def cli_source():
+    return _resolve()[1]
+
+
+def _cmd(*args):
+    argv = cli_argv()
+    if not argv:
+        raise FileNotFoundError('ace-cli')
+    return argv + list(args)
+
+
+def clean_stderr(text) -> str:
+    """Drop ace-cli's own 'Update available ... npm install -g' notifier lines (DESIGN §20.2)."""
+    return '\n'.join(l for l in (text or '').splitlines() if not _NOTIFIER.search(l)).strip()
+
 
 _AUTH_MSG = {"error": "not_authenticated", "message": "Not logged in. Run /ace-login first."}
 
@@ -119,7 +189,7 @@ def _log_pin(session_id, hook_event_name, **fields) -> None:
 
 
 def _is_auth_failure(stderr: str, stdout: str) -> bool:
-    return (any(x in stderr.lower() for x in ['unauthorized', '401', 'not logged in', 'no api token'])
+    return (any(x in stderr.lower() for x in ['unauthorized', '401', 'not logged in', 'no api token', 'token_expired'])
             or any(x in stdout.lower() for x in ['not logged in', 'no api token']))
 
 
@@ -144,7 +214,7 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
         if pin and _pin_backoff_active():  # sessions.db lock is sticky (p2): don't even try
             pin = None
             _log_pin(session_id, hook_event_name, pin_skipped="backoff")
-        base = [CLI_CMD, 'search', '--stdin', '--json']
+        base = _cmd('search', '--stdin', '--json')
         tail = ['--top-k', str(top_k)] if top_k else []
         stdin = query.encode('utf-8', errors='replace')
 
@@ -152,19 +222,19 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
             return subprocess.run(c, input=stdin, capture_output=True, timeout=to, env=_env(org, project))
 
         result = spawn(base + (['--pin-session', pin] if pin else []) + tail, timeout)
-        stderr = _text(result.stderr)
+        stderr = clean_stderr(_text(result.stderr))
         stdout = _text(result.stdout)
         # A1: a pinned search that dies on the sessions.db lock (or prints nothing) is
         # re-run ONCE without the pin; the pinned command itself is never re-run.
         locked = 'database is locked' in stderr.lower()
         if pin and (locked or (not stdout.strip() and not _is_auth_failure(stderr, stdout))):
             _log_pin(session_id, hook_event_name, pin_failed=True)
-            if locked:  # only the sticky lock justifies suspending pins globally (p2/p6)
-                _touch_backoff()
+            if locked or 'bindings file' in stderr.lower():  # sticky lock, or `--ignore-scripts` without the
+                _touch_backoff()  # better-sqlite3 binary (until the SessionStart rebuild): don't pay 2 spawns per prompt
             remaining = timeout - (time.monotonic() - t0)
             if remaining >= 2:  # A2: never overrun the hook budget with a floored retry
                 result = spawn(base + tail, remaining)
-                stderr = _text(result.stderr)
+                stderr = clean_stderr(_text(result.stderr))
                 stdout = _text(result.stdout)
         if result.returncode != 0:
             if _is_auth_failure(stderr, stdout):
@@ -190,7 +260,7 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
         return {"error": "timeout", "message": "Search timed out. Check your connection."}, _ms(t0)
     except FileNotFoundError:
         return {"error": "cli_not_found",
-                "message": "ace-cli not found. Run: npm install -g @ace-sdk/cli"}, _ms(t0)
+                "message": _NOT_FOUND}, _ms(t0)
 
 
 def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_ids=None,
@@ -214,8 +284,8 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
     try:
         with os.fdopen(fd, 'w') as f:
             json.dump(trace, f, default=str)
-        cmd = [CLI_CMD, 'learn', '--transcript', path, '--json',
-               '--timeout', str(int(timeout * 1000)), '--verbosity', verbosity, '--no-stream']  # stream mode exits 0 on server 401/500 (m3)
+        cmd = _cmd('learn', '--transcript', path, '--json',
+                   '--timeout', str(int(timeout * 1000)), '--verbosity', verbosity, '--no-stream')  # stream mode exits 0 on server 401/500 (m3)
         if retrieval_id:
             cmd += ['--retrieval-id', retrieval_id]
         if applied_log_ids:
@@ -226,7 +296,7 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
                                 env=_env(org, project))
         if result.returncode != 0:
             _log_cli_error("ace_cli_learn_nonzero_exit", result.returncode, _text(result.stdout),
-                           _text(result.stderr), project_id=project, hook_event_name=hook_event_name)
+                           clean_stderr(_text(result.stderr)), project_id=project, hook_event_name=hook_event_name)
             return None, _ms(t0)
         try:
             return json.loads(result.stdout), _ms(t0)
@@ -288,7 +358,7 @@ def check_auth_status(warn_threshold_hours: float = 2.0) -> Optional[str]:
     """
     try:
         result = subprocess.run(
-            [CLI_CMD, 'whoami', '--json'],
+            _cmd('whoami', '--json'),
             capture_output=True,
             text=True,
             timeout=5

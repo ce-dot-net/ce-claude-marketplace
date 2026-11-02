@@ -90,6 +90,7 @@ class ACERelevanceLogger:
         hook_ms: Optional[int] = None,
         cache_hit: Optional[bool] = None,
         parent_task_id: Optional[str] = None,
+        query_source: Optional[str] = None,
     ) -> None:
         """
         Log pattern search and injection metrics.
@@ -151,6 +152,8 @@ class ACERelevanceLogger:
             entry['cache_hit'] = cache_hit
         if parent_task_id:
             entry['parent_task_id'] = parent_task_id
+        if query_source:
+            entry['query_source'] = query_source
 
         self._write_log(entry)
 

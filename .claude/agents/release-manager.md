@@ -256,7 +256,16 @@ A release is successful when:
 ## Notes on ace-cli
 
 The ACE CLI (`ace-cli`, npm @ace-sdk/cli) is maintained separately and is off-limits here; hooks call it as a subprocess.
-Users install it globally: `npm install -g @ace-sdk/cli`.
+Users get it with the plugin: `plugins/ace/package.json` pins the exact version and `package-lock.json` is committed; Claude Code
+installs both on plugin install/update. A global CLI is only a fallback (`/ace:ace-install-cli`).
+
+### ace-cli pin bump (hand in hand)
+A pin bump is a plugin version bump. The `ace-cli-watch` workflow opens the PR (package.json + regenerated lock); before releasing:
+1. `cd plugins/ace && npm install --package-lock-only --ignore-scripts` (lock regen), commit `package-lock.json`.
+2. `npm ci --ignore-scripts && npm rebuild better-sqlite3`, then `python3 -m pytest tests/test_cli_contract.py` must pass.
+   A failure names the exact flag/field to adapt in the plugin.
+3. The `Requires:` text of all four manifests and the CHANGELOG comes from package.json (`ace-cli = <pin>`), not from a constant.
+4. Bump the plugin version in the same release; re-run the full suite afterwards.
 
 ---
 

@@ -76,14 +76,14 @@ eval "$PYOUT"
 used_pct=${used_pct:-0}; rl_5h_pct=${rl_5h_pct:-0}; rl_7d_pct=${rl_7d_pct:-0}
 
 # ── Format Unix epoch resets_at to human-readable local time ──
-# Cross-platform: date -r (BSD/macOS) with GNU/Linux fallback; pure-integer guard.
+# Cross-platform: date -r (BSD/macOS) with GNU/Linux fallback (--date=@); pure-integer guard.
 fmt_reset() {
   local ts="$1"
   [ -z "$ts" ] || [ "$ts" = "null" ] && { echo ""; return; }
   case "$ts" in
     *[!0-9]*) echo "$ts"; return;;   # not a pure integer (e.g. already ISO) → show as-is
   esac
-  date -r "$ts" '+%a %H:%M' 2>/dev/null || date -d "@$ts" '+%a %H:%M' 2>/dev/null || echo "$ts"
+  date -r "$ts" '+%a %H:%M' 2>/dev/null || date --date="@$ts" '+%a %H:%M' 2>/dev/null || echo "$ts"
 }
 rl_5h_resets=$(fmt_reset "$rl_5h_resets")
 rl_7d_resets=$(fmt_reset "$rl_7d_resets")

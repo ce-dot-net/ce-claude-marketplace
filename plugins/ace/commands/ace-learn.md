@@ -1,6 +1,6 @@
 ---
 description: Capture learning from completed work interactively
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(git:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(git:*), Read
 ---
 
 # ACE Learn
@@ -137,8 +137,8 @@ fi
 ### Step 5: Call ace-cli with Flags
 
 ```bash
-if ! command -v ace-cli >/dev/null 2>&1; then
-  echo "❌ ace-cli not found - Install: npm install -g @ace-sdk/cli"
+if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
+  echo "❌ ACE CLI not found - Install: /ace:ace-install-cli"
   exit 1
 fi
 
@@ -175,11 +175,11 @@ LEARN_PAYLOAD=$(jq -n \
 
 # Call ace-cli learn with --stdin for richer payload
 if [ -n "$ORG_ID" ]; then
-  echo "$LEARN_PAYLOAD" | ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" \
+  echo "$LEARN_PAYLOAD" | ACE CLI --json --org "$ORG_ID" --project "$PROJECT_ID" \
     learn --stdin
 else
   # Single-org mode (no --org flag)
-  echo "$LEARN_PAYLOAD" | ace-cli --json --project "$PROJECT_ID" \
+  echo "$LEARN_PAYLOAD" | ACE CLI --json --project "$PROJECT_ID" \
     learn --stdin
 fi
 

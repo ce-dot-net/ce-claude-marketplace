@@ -1,5 +1,8 @@
 # C4 Container Level: ACE Plugin System Deployment
 
+> **Historical (v7 layout).** This document describes the v7 plugin; it is not current for v8 (for example it says SessionStart auto-installs ace-cli: it never does, and v8 delivers the pinned CLI through Claude Code's plugin dependencies). See `plugins/ace/docs/technical/ARCHITECTURE.md`.
+
+
 ## Containers
 
 ### 1. ACE Plugin Container

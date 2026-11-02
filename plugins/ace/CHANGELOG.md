@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [8.0.0]
 
 ### Headline
-Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topology. Requires: Claude Code >= 2.1.300, ace-cli >= 4.1.2 (@ace-sdk/core >= 3.2.2).
+Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topology. Requires: Claude Code >= 2.1.311, ace-cli = the exact pin in package.json (4.2.2; @ace-sdk/core >= 3.2.2). Windows not supported (macOS, Linux, WSL2).
 
 ### Changed
 - State moved from `/tmp` and `~/.claude/logs` to `$CLAUDE_PLUGIN_DATA` (default `~/.claude/plugins/data/ace-ce-dot-net-marketplace`).
@@ -22,21 +22,30 @@ Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topol
 - `/ace:ace-doctor` flags `~/.ace-cache/sessions.db` over 100 MB and recent `database is locked` errors; new `/ace:ace-cleanup --legacy` (dry run, `--yes`, `--sessions-db`) removes v7 leftovers.
 - Measured blocking hook time per session: 7.1.14 60-111 s vs v8 2.3-3.3 s; UserPromptSubmit alone 27-37 s before.
 - 18 user-only commands set `disable-model-invocation: true` (all except ace-search, ace-learn, ace-patterns, ace-status).
-- `/ace:ace-doctor` checks Claude Code >= 2.1.300 and the plugin-data layout; plugin root comes from `installed_plugins.json`.
+- `/ace:ace-doctor` checks Claude Code >= 2.1.311, the CLI source/version, the OS and runtimes and the plugin-data layout; plugin root comes from `installed_plugins.json`.
 - Statusline uses one Python call instead of 13 `jq` spawns (refresh the user copy with `/ace:ace-statusline-setup update`).
 - Docs: ARCHITECTURE.md updated, new `docs/technical/ADR-001-language.md`, `docs/RELEASE_GATE_v8.md`; stale v1/v3 docs deleted.
 
 - Round 3a: subagent learn uses SubagentStart's stored query first (transcript fallback skips `<system-reminder>` blocks); Write/Edit are traced as Success; a timed-out `ace-cli --version` probe no longer disables ACE (logged as `version_unknown`); `ace-cli learn` runs with `--no-stream` so server 401/500 surface; dead `ensure_authenticated` removed; Python hooks early-exit while the mod's `mod-active` marker is younger than 10 min.
 - Info for server/SDK teams: ace-cli hard-codes the header `X-ACE-Client: cli`; the plugin's `ACE_CLIENT_ID` env var never reaches the server through the CLI (kept, harmless).
 
+- Round 3d, CLI delivery (plugin and ace-cli go hand in hand): `package.json` pins `@ace-sdk/cli` to one exact version and `package-lock.json` is committed; Claude Code installs it into `${CLAUDE_PLUGIN_ROOT}/node_modules` on plugin install/update. No self-managed installer, no version range, no runtime `npm install`, no daily `npm view` in the hooks. Resolution: plugin-local pin, then a global ace-cli that is not older than the pin (doctor marks a different one "untested"), else one message naming `/ace:ace-install-cli`. A missing CLI never writes `disabled.flag`: ACE starts working by itself once the CLI appears. `/ace:ace-install-cli` is now a short repair command (report source and version, `claude plugin update`, then `npm ci --ignore-scripts`). Commands call `scripts/ace-cli` (plugin-local first, hides ace-cli's own "Update available ... npm install -g" notifier). Because Claude Code installs with `--ignore-scripts`, an async SessionStart row runs `npm rebuild better-sqlite3` once per plugin version (otherwise `--pin-session` fails and the graph cache stays empty); a missing sqlite binary suspends pins like the sticky lock.
+- Repo tooling: `tests/test_cli_contract.py` runs the pinned CLI against a fake server and checks every flag and JSON field the plugin uses; `.github/workflows/ace-cli-watch.yml` opens one PR (pin bump + lock regen + suite) when npm has a newer version; the release-manager treats a pin bump as a plugin version bump.
+- Claude Code floor is 2.1.311 (SubagentStop double-fire fix). SessionStart compares `CLAUDE_CODE_VERSION`: below the floor it prints one message and ACE pauses itself for the session.
+- SubagentStop summary is the last `SubagentHandback` message of the agent transcript (cap 4,000 chars), else `last_assistant_message`.
+- Stop defers while delegated work of the task still runs (`background_tasks` with a running `subagent` or `workflow`; monitors and shells do not count): nothing is learned, state and tool rows are kept, a `learn_deferred` row is logged, and the next Stop learns the whole task with the original prompt.
+- The trace carries `parent_agent_id` (the server-declared name; the local state keeps `parent_task_id`); `agent_transcript_path` is never sent.
+- Forks (`agent_type` `fork`) inherit the parent's injected block: they get their own session state but no second search or injection (`ACE_SUBAGENT_INJECT_FORKS=1` restores the search). Workflow agents resolve their query from their own transcript, then the parent task's prompt, then the parent-transcript scan (`query_source` is logged).
+- Domain-shift searches pass no `--pin-session` (the server never credits those rows). `CLAUDE_PLUGIN_DATA` is only accepted when its directory name starts with `ace` (other plugins export theirs into the shared env file). Small fixes: `token_expired` is an auth failure, the PermissionDenied transcript tail reads 256 KB and skips `api-request` lines, the startup row shows a status message, `date -d` is gone from the statusline (portability lint test).
+
 ### Accepted losses
 - Successful tool calls carry no `duration_ms` (PostToolBatch has none; only `PostToolUseFailure` rows do).
-- Exec-form hooks run the `.sh` shims directly: macOS/Linux only (Windows needs `bash` as `command`; unsupported).
+- Exec-form hooks run the `.sh` shims directly: macOS/Linux/WSL2 only. Windows is not supported (a regression against the shell form; real support later).
 - `PermissionDenied` learn runs inside the async hook and can be cut by `claude -p` teardown.
 - PreToolUse domain-shift systemMessage notices are gone (the domain-shift injection itself stays on PostToolUse).
 - Startup `whoami` auth warnings are gone; `/ace:ace-doctor` shows them instead.
 - Bash-error troubleshooting injection is replaced by accumulator-only PostToolUseFailure learning.
-- The `parent_agent_id` trace field is no longer sent.
+- A new human prompt that arrives before the `<task-notification>` of a deferred Stop resets the main state: that deferred task is not learned.
 - Trace timestamps are now UTC.
 - Legacy `~/.ace/config.json` apiToken warnings are gone.
 - `/rewind` undo is not reflected in accumulator rows.

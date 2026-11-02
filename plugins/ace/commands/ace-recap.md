@@ -3,7 +3,7 @@ disable-model-invocation: true
 model: claude-haiku-4-5
 description: Show top patterns + last session summary on return to a session
 argument-hint: "[--hours N]"
-allowed-tools: Bash(python3:*), Bash(jq:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(python3:*), Bash(jq:*), Read
 ---
 
 # ACE Recap

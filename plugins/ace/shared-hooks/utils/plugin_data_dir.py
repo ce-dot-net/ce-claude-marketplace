@@ -40,7 +40,8 @@ def _mk(path: Path) -> Path:
 
 def data_root() -> Path:
     explicit = os.environ.get("CLAUDE_PLUGIN_DATA")
-    if explicit:
+    # §16 P5: other plugins export THEIR CLAUDE_PLUGIN_DATA into the shared CLAUDE_ENV_FILE; ours is ace-*.
+    if explicit and Path(explicit).name.startswith("ace"):
         return Path(explicit)
     return _fallback_root()
 

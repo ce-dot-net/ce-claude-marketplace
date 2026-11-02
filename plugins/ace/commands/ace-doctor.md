@@ -2,7 +2,7 @@
 disable-model-invocation: true
 model: claude-haiku-4-5
 description: Comprehensive ACE installation and health diagnostic
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(curl:*), Bash(ls:*), Bash(test:*), Bash(claude:*), Bash(cat:*), Bash(tail:*), Bash(sort:*), Bash(python3:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(uname:*), Bash(bash:*), Bash(node:*), Bash(curl:*), Bash(ls:*), Bash(test:*), Bash(claude:*), Bash(cat:*), Bash(tail:*), Bash(sort:*), Bash(python3:*), Read
 ---
 
 # ACE Doctor - Installation & Health Diagnostic
@@ -21,27 +21,34 @@ Run all checks in parallel for speed, then present organized results.
 
 ## 🏥 Diagnostic Checks
 
-### Check 0: Claude Code Version and Plugin Data
+### Check 0: Environment, Claude Code Version and Plugin Data
 
 **What to Check**:
 ```bash
-# Claude Code floor is 2.1.300
+# One screen a remote user can paste back: OS, shells, runtimes
+uname -sm
+bash --version | head -1
+python3 --version
+node --version
+# Windows is not supported (macOS, Linux and WSL2 only): the hook shims are exec-form .sh files
+
+# Claude Code floor is 2.1.311 (SubagentStop double-fire fix)
 claude --version
-# Compare against 2.1.300 (sort -V): older => WARN, hooks use features from <= 2.1.300
+# Compare against 2.1.311: older => WARN, ACE pauses itself (SessionStart writes disabled.flag and says so)
 
 # Plugin data layout (v8): Claude Code substitutes the exact token below (cc_hooks_reference.md:480).
-# If it comes through unsubstituted, use the real dir: ~/.claude/plugins/data/ace-ce-dot-net-marketplace
+# Other plugins export THEIR CLAUDE_PLUGIN_DATA into the shared env file: only a path containing /ace is ours.
 DATA="${CLAUDE_PLUGIN_DATA}"
-[ -z "$DATA" ] || [ "$DATA" = "\${CLAUDE_PLUGIN_DATA}" ] && DATA="$HOME/.claude/plugins/data/ace-ce-dot-net-marketplace"
+case "$DATA" in */ace*) ;; *) DATA="$HOME/.claude/plugins/data/ace-ce-dot-net-marketplace" ;; esac
 ls -la "$DATA"
 test -r "$DATA/python_path" && cat "$DATA/python_path"   # written by SessionStart
-test -r "$DATA/cli_version.json" && cat "$DATA/cli_version.json"
+test -r "$DATA/cli_version.json" && cat "$DATA/cli_version.json"   # version of a GLOBAL ace-cli (fallback only)
 test -f "$DATA/logs/ace-hook-errors.log" && tail -5 "$DATA/logs/ace-hook-errors.log"   # non-empty => hook errors
 ```
 
 **Report**:
-- PASS: Claude Code >= 2.1.300, python_path and cli_version.json present, ace-hook-errors.log empty or absent
-- WARN: Claude Code older than 2.1.300, or python_path / cli_version.json missing (start a new session), or errors in ace-hook-errors.log
+- PASS: Claude Code >= 2.1.311, python_path present, ace-hook-errors.log empty or absent
+- WARN: Claude Code older than 2.1.311, or python_path missing (start a new session), or errors in ace-hook-errors.log
 
 ---
 
@@ -131,7 +138,7 @@ jq -e '.apiToken' "$CONFIG_PATH" >/dev/null 2>&1 && echo "WARN: stale apiToken f
 ❌ Global Configuration: MISSING
 
 Recommended Actions:
-1. Run: ace-cli login    (completes device-code auth and writes ~/.ace/config.json)
+1. Run: /ace:ace-login    (completes device-code auth and writes ~/.config/ace/config.json)
 2. Then run: /ace:ace-configure --global   (writes org/project IDs to plugin config)
 ```
 
@@ -143,7 +150,7 @@ The config file exists but is missing required v4.x fields (e.g. auth.token).
 This usually means a stale v1.x config is present.
 
 Recommended Actions:
-1. Run: ace-cli login    (re-authenticates via device-code and refreshes config)
+1. Run: /ace:ace-login    (re-authenticates via device-code and refreshes config)
 2. Then run: /ace:ace-configure --global   (re-writes org/project IDs)
 ```
 
@@ -192,34 +199,56 @@ Recommended Actions:
 
 ---
 
-### Check 4: CLI Availability
+### Check 4: CLI Availability (plugin-local pin)
+
+Each plugin version runs exactly the ace-cli it was tested with: the exact pin in `package.json`, installed by
+Claude Code into `${CLAUDE_PLUGIN_ROOT}/node_modules` on plugin install/update. A global ace-cli is only a fallback.
 
 **What to Check**:
 ```bash
-# Check if ace-cli is installed and working
-command -v ace-cli >/dev/null 2>&1 && echo "INSTALLED" || echo "NOT FOUND"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(jq -r '.plugins["ace@ce-dot-net-marketplace"][0].installPath // empty' ~/.claude/plugins/installed_plugins.json 2>/dev/null)}"
+PIN=$(jq -r '.dependencies["@ace-sdk/cli"]' "$PLUGIN_ROOT/package.json")
+echo "pinned (package.json): $PIN"
 
-# If installed, check version
-ace-cli --version
+# CLI source: plugin-local first
+LOCAL="$PLUGIN_ROOT/node_modules/@ace-sdk/cli"
+if test -f "$LOCAL/dist/cli.js"; then
+  echo "CLI source: plugin-local $(jq -r .version "$LOCAL/package.json")"
+else
+  echo "packages not installed in $PLUGIN_ROOT/node_modules"
+fi
+# sqlite binary (without it the CLI runs RAM-only: no pins, empty graph cache until SessionStart rebuilds it)
+test -f "$PLUGIN_ROOT/node_modules/better-sqlite3/build/Release/better_sqlite3.node" && echo "sqlite binary: present" || echo "sqlite binary: missing"
+
+# A global ace-cli (fallback)
+GLOBAL_CLI="$(command -v 'ace-cli')"
+test -n "$GLOBAL_CLI" && echo "global ace-cli: $GLOBAL_CLI $("$GLOBAL_CLI" --version 2>/dev/null)"
+
+# Which engine is active
+test -d "$PLUGIN_ROOT/engine" && echo "engine: in-process (@ace-sdk/core), CLI as fallback" || echo "engine: CLI"
+
+# The wrapper commands use (plugin-local first, then global)
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version
 ```
 
 **Report**:
-- ✅ ace-cli installed and accessible
-- ⚠️ ace-cli installed but old version
-- ❌ ace-cli not found
+- ✅ plugin-local CLI present, version == pin
+- ⚠️ only a global CLI: "untested" when its version differs from the pin (works, but this plugin version was not tested with it)
+- ⚠️ both present: suggest `npm rm -g @ace-sdk/cli` (the plugin-local one wins anyway)
+- ⚠️ packages not installed: run `claude plugin update ace@ce-dot-net-marketplace`; if still missing, `/ace:ace-install-cli`
+- ⚠️ sqlite binary missing: starts working after the next session start (SessionStart runs `npm rebuild better-sqlite3` once per plugin version)
+- ❌ neither: run `/ace:ace-install-cli`
 
 **If Failed**:
 ```
 ❌ CLI: NOT FOUND
 
 Possible Causes:
-1. ace-cli not installed globally
-2. npm global bin path not in PATH
+1. Claude Code could not install the plugin packages (no npm, offline, CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC set)
+2. Node.js is not installed (it is required)
 
 Recommended Actions:
-1. Install: npm install -g @ace-sdk/cli
-2. Check version: ace-cli --version
-3. Verify PATH includes npm global bin: npm bin -g
+1. Run: /ace:ace-install-cli
 ```
 
 ---
@@ -264,7 +293,7 @@ Recommended Actions:
 1. Test connection: curl https://ace-api.code-engine.app/api/health
 2. Check firewall settings
 3. Try different network (WiFi vs. Ethernet)
-4. Confirm auth status: ace-cli whoami --json
+4. Confirm auth status: /ace:ace-login
 ```
 
 **If 401 Unauthorized**:
@@ -321,8 +350,8 @@ test -f "$PLUGIN_ROOT/scripts/ace_subagent_stop_wrapper.sh" && echo "subagent_st
 test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "hooks.json: EXISTS"
 ```
 
-**Expected Hooks** (v8 round 2: PostToolBatch + PreToolUse(Agent) included incl. async --update-check):
-1. `SessionStart` → `ace_install_cli.sh` (startup|clear; plus async `--update-check`)
+**Expected Hooks** (v8 round 2: PostToolBatch + PreToolUse(Agent) included incl. the async row: orphan sweep + one-time sqlite rebuild):
+1. `SessionStart` → `ace_install_cli.sh` (startup|clear; plus the async row, flag `--update-check`)
 2. `SessionStart` (compact) → `ace_sessionstart_compact.sh`
 3. `UserPromptSubmit` → `ace_before_task_wrapper.sh`
 4. `PostToolBatch` (async, one event per parallel tool batch) → accumulator script (`ace_posttooluse_wrapper.sh --batch`)
@@ -345,7 +374,7 @@ test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "hooks.json: EXISTS"
 ❌ Hooks: NOT REGISTERED
 
 Expected Hook Scripts:
-- ace_install_cli.sh (ensures ace-cli is available)
+- ace_install_cli.sh (checks the Claude Code version and that a CLI is present)
 - ace_before_task_wrapper.sh (retrieves patterns before tasks)
 - ace_posttooluse_wrapper.sh (captures tool use after each tool call)
 - ace_posttooluse_domain_inject.sh (domain injection on Read/Glob/Grep)
@@ -377,7 +406,7 @@ XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 test -f "$XDG_HOME/ace/config.json" && echo "CONFIG: EXISTS" || echo "CONFIG: MISSING"
 
 # Verify authenticated via whoami
-ace-cli whoami --json 2>/dev/null | jq -e '.authenticated == true' >/dev/null 2>&1 \
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json 2>/dev/null | jq -e '.authenticated == true' >/dev/null 2>&1 \
   && echo "AUTH: authenticated" \
   || echo "AUTH: not authenticated — run /ace:ace-login"
 
@@ -406,13 +435,12 @@ jq -e '.apiToken' "$XDG_HOME/ace/config.json" >/dev/null 2>&1 \
 ```
 ⚠️ CLI Configuration: STALE FORMAT
 
-Current: organizations/apiKey format (ace-cli v1.x — deprecated)
+Current: organizations/apiKey format (v1.x — deprecated)
 Expected: device-code token format (ace-cli 4.x)
 
 Recommended Actions:
-1. Update ace-cli: npm install -g @ace-sdk/cli@latest
-2. Run: ace-cli login
-3. Or run: /ace:ace-login
+1. Update the plugin: claude plugin update ace@ce-dot-net-marketplace
+2. Run: /ace:ace-login
 ```
 
 ---
@@ -430,42 +458,31 @@ else
     echo "unknown"
 fi
 
-# Get ace-cli version
-if command -v ace-cli >/dev/null 2>&1; then
-    ace-cli --version 2>/dev/null || echo "unknown"
-else
-    echo "not installed"
-fi
+# ace-cli: the pin this plugin version was tested with, and the one that actually runs
+jq -r '.dependencies["@ace-sdk/cli"]' "$PLUGIN_ROOT/package.json"
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version 2>/dev/null || echo "not installed"
 
 # Check for Python hooks (shared-hooks/)
 if [ -d "${PLUGIN_ROOT}/shared-hooks" ]; then
     echo "Python hooks: present"
 else
-    echo "Python hooks: missing (required for v7.x)"
+    echo "Python hooks: missing"
 fi
 ```
 
-**Expected Versions** (as of 2026):
-- Plugin: v7.0.0+
-- ace-cli: v4.1.2+
+**Expected Versions**:
+- Plugin: the installed marketplace version
+- ace-cli: exactly the pin in `package.json` (plugin and CLI go hand in hand; a new CLI reaches you with the next plugin update)
 
 **Report**:
-- ✅ All components up to date
-- ⚠️ Plugin outdated (< v7.0.0)
-- ⚠️ CLI outdated (< v4.1.2)
-- ❌ Critical version mismatch
+- ✅ CLI version == pin
+- ⚠️ CLI differs from the pin (untested combination)
+- ❌ No CLI
 
-**If Updates Available**:
+**If Updates Are Wanted**:
 ```
-⚠️ Updates Recommended
-
-Plugin: v7.0.0 → latest
-ace-cli: v4.1.2 → latest
-
-Recommended Actions:
-1. Update ace-cli: npm install -g @ace-sdk/cli@latest
-2. Update plugin from marketplace (if available)
-3. Restart Claude Code
+Update the plugin: claude plugin update ace@ce-dot-net-marketplace
+(the bundled ace-cli is installed with it), then restart Claude Code.
 ```
 
 ---
@@ -512,7 +529,7 @@ if locked:
     warned = True
     print("WARN: %d lock incident(s) ('database is locked' / pin_failed / pin backoff) in ace-relevance.jsonl in the last 24 h" % locked)
 if warned:
-    print("Fix: stop running ace-cli processes (pkill -f ace-cli), then delete ~/.ace-cache/sessions.db,")
+    print("Fix: stop running ACE CLI processes (pkill -f 'ace-cli|@ace-sdk/cli'), then delete ~/.ace-cache/sessions.db,")
     print("     sessions.db-wal and sessions.db-shm (a 24 h-TTL cache, safe to drop) - or run")
     print("     /ace:ace-cleanup --legacy --yes --sessions-db")
 else:
@@ -532,15 +549,15 @@ ACE uses **two distinct caches** that behave differently and are cleared by diff
 #### Cache 1: In-Memory Client Cache (LRU)
 
 - Held in the running ace-cli process memory
-- Cleared by: `ace-cli cache clear` (any `--type` flag: `sqlite`, `ram`, or `all`)
+- Cleared by: the CLI's `cache clear` command (any `--type` flag); it only touches this in-memory cache
 - Scope: per-process; lost on process exit automatically
 
-**Important (ace-cli 4.1.1)**: `cache clear` only clears the in-memory cache. It does **not** clear the SQLite graph cache on disk.
+**Important**: `cache clear` only clears the in-memory cache. It does **not** clear the SQLite graph cache on disk.
 
 #### Cache 2: SQLite Graph Cache
 
 - Location: `~/.ace-cache/<org>__<project>.db`
-- Contains: pattern graph data with a **7-day TTL**
+- Contains: pattern graph data with a **7-day TTL**; filled only by ace-cli >= 4.2.1 with a working better-sqlite3 binary (the pinned CLI + the SessionStart rebuild)
 - **NOT cleared by `cache clear`** — must be manually removed or wait for TTL expiry
 - Inspect with:
 
@@ -685,8 +702,8 @@ Overall Health: 🟡 NEEDS ATTENTION (3 warnings)
 
 [8] Version Status
     Issue: Updates available
-    Plugin: v7.0.0 → latest
-    CLI: v4.1.2 → latest
+    Plugin: installed → latest
+    CLI: pinned version → newer plugin
     Fix: See recommended actions below
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -695,7 +712,7 @@ Overall Health: 🟡 NEEDS ATTENTION (3 warnings)
 
 Run these commands in order:
 1. /ace:ace-configure
-2. npm install -g @ace-sdk/cli@latest
+2. claude plugin update ace@ce-dot-net-marketplace
 3. Restart Claude Code
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

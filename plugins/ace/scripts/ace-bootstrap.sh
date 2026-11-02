@@ -1,10 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! command -v ace-cli >/dev/null 2>&1; then
-  echo "❌ ace-cli not found - Install: npm install -g @ace-sdk/cli"
-  exit 1
-fi
+ACE_CLI="$(dirname "${BASH_SOURCE[0]}")/ace-cli"  # the wrapper: plugin-local first, then global
 
 _ace_setting() {  # $1 settings key, $2 env-block key; stdlib JSON read, no jq
   python3 -c 'import json,sys
@@ -28,6 +25,6 @@ echo "🔄 Bootstrapping ACE playbook (mode=$MODE, thoroughness=$THOROUGHNESS)..
 echo "This may take 10-30 seconds..."
 
 # CLI reads org/project from env vars automatically
-ace-cli bootstrap \
+"$ACE_CLI" bootstrap \
   --mode "$MODE" \
   --thoroughness "$THOROUGHNESS"

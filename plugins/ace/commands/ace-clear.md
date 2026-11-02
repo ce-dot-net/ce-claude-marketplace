@@ -2,7 +2,7 @@
 disable-model-invocation: true
 description: Clear ACE playbook (reset all learned bullets)
 argument-hint: "[--confirm]"
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Clear
@@ -15,8 +15,8 @@ Reset the ACE playbook by clearing all learned bullets.
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! command -v ace-cli >/dev/null 2>&1; then
-  echo "❌ ace-cli not found - Install: npm install -g @ace-sdk/cli"
+if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
+  echo "❌ ACE CLI not found - Install: /ace:ace-install-cli"
   exit 1
 fi
 
@@ -36,7 +36,7 @@ if [ "$CONFIRMATION" != "yes" ]; then
   exit 1
 fi
 
-ace-cli --org "$ORG_ID" --project "$PROJECT_ID" clear --confirm
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --org "$ORG_ID" --project "$PROJECT_ID" clear --confirm
 ```
 
 ## What Gets Deleted
