@@ -28,6 +28,10 @@
 
 ### 1. Install the plugin (the ACE CLI comes with it)
 
+```
+/plugin install ace --marketplace ce-dot-net/ce-claude-marketplace
+```
+
 Claude Code installs the exact `@ace-sdk/cli` version pinned in `package.json` (`package-lock.json`) into the plugin
 directory when you install or update the plugin. Plugin and CLI go hand in hand: every plugin version runs the CLI it was
 tested with, and a new CLI reaches you with the next plugin update. If the CLI is missing, run `/ace:ace-install-cli`.
