@@ -23,6 +23,8 @@ import pytest
 import mod_reference as R
 
 NODE = shutil.which("node")
+from test_mod_render_parity import _strip_types_ok  # noqa: E402
+pytestmark = pytest.mark.skipif(not _strip_types_ok(NODE), reason="node >= 22.6 with --experimental-strip-types required")
 HERE = Path(__file__).resolve().parent
 TSID = "11111111-2222-4333-8444-555555555555"
 PRJ, SID = "prj_shared", "sess-shared"

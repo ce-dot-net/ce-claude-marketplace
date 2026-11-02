@@ -19,7 +19,18 @@ from ace_pattern_render import (normalize_render_variant, render_arm, render_coh
 from patterns_used_state import used_pattern_ids
 
 NODE = shutil.which("node")
-pytestmark = pytest.mark.skipif(not NODE, reason="node not installed")
+def _strip_types_ok(node):
+    """The mod is TypeScript; these tests run it with node --experimental-strip-types (node >= 22.6).
+    Users never need this (Claude Code runs the mod itself); only the test harness does."""
+    if not node:
+        return False
+    try:
+        return subprocess.run([node, "--experimental-strip-types", "-e", "0"], capture_output=True, timeout=30).returncode == 0
+    except Exception:
+        return False
+
+
+pytestmark = pytest.mark.skipif(not _strip_types_ok(NODE), reason="node >= 22.6 with --experimental-strip-types required")
 HERE = Path(__file__).resolve().parent
 M1 = Path(os.environ.get("ACE_MOD_M1_FIXTURES", "/tmp/ace-v8-dry/m1-mod-full-chain/fixtures"))
 FIXTURES = sorted(str(p) for p in R.FIX_JSON.glob("search_*.json")) + \
