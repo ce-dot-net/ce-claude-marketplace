@@ -19,6 +19,7 @@ let sent = false;
   if (opt('--retrieval-id')) trace.retrieval_id = opt('--retrieval-id');
   const applied = (opt('--applied-log-ids') || '').split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n));
   if (applied.length) trace.applied_log_ids = applied;
+  else if (!Array.isArray(trace.applied_log_ids)) trace.applied_log_ids = []; // server contract: [] when nothing was used
   const ctx = await createContext({});
   const client = new AceClient(ctx, { customHeaders: clientHeaders() });
   try {

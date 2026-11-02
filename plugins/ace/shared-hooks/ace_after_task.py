@@ -1083,8 +1083,7 @@ def main():
         # F-080: Enrich trace with retrieval provenance (omit keys when absent/empty).
         if retrieval_id:
             trace["retrieval_id"] = retrieval_id
-        if applied_log_ids:
-            trace["applied_log_ids"] = applied_log_ids
+        trace["applied_log_ids"] = applied_log_ids  # server contract: [] when nothing was used, never omitted
 
         # v6.5.0 Item #9: effort level signal (CC 2.1.133+ provides this in hook input).
         # Plugin-side weight mapping per SDK-team guidance (Q4):

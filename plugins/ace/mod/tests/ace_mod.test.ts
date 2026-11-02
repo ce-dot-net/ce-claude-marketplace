@@ -754,7 +754,7 @@ test('trace parity with ace_after_task.py: fields, effort from classic.Stop, git
   expect(t.render_variant).toBe('full')
   expect(t.conversation_id).toBe(SID)  // §31: the stable CC session id
   expect(t.retrieval_id).toBe(JSON.parse(S8).retrieval_id)
-  expect(t.applied_log_ids).toBeUndefined()  // §31: 'all done' uses no pattern
+  expect(t.applied_log_ids).toEqual([])  // §31: 'all done' uses no pattern; the server wants [] not omitted
   expect(t.effort_level).toBe('high')
   expect(t.effort_weight).toBe(1.5)
   expect(t.git.commit_hash).toBe('abc123')
@@ -891,7 +891,7 @@ test('§31 a 39-char fragment or an unrelated answer credits nothing', async ($,
   await done($, 'x ' + st8.pattern_contents[Object.keys(st8.retrieval_log_ids)[0]].slice(-39) + ' y')
   const L = h.learns()[0]!
   expect(h.learnArgv(L).includes('--applied-log-ids')).toBe(false)
-  expect(h.trace(L).applied_log_ids).toBeUndefined()
+  expect(h.trace(L).applied_log_ids).toEqual([])  // server contract: [] when nothing was used
 })
 
 test('§31 compact/control are no server label: render_variant omitted, never recomputed or defaulted', async ($, on) => {

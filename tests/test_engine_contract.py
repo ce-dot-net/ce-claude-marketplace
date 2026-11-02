@@ -279,3 +279,11 @@ def test_stalled_graph_refresh_does_not_hold_the_search_result(tmp_path, monkeyp
         assert any("graph" in q["path"] for q in srv.requests()), "the refresh must really have started"
     finally:
         srv.stop()
+
+
+def test_learn_without_applied_flag_sends_an_empty_list(fake_core, tmp_path):
+    bin_dir, log = fake_core
+    r = _learn_js(bin_dir, ["--transcript", str(_trace(tmp_path)), "--json"], ACE_FAKE_CORE_LOG=str(log))
+    assert r.returncode == 0, r.stderr
+    t = [x for x in E.read_jsonl(log) if x["op"] == "learn"][0]["trace"]
+    assert t["applied_log_ids"] == []
