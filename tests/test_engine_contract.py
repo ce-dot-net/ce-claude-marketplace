@@ -205,6 +205,8 @@ def test_real_core_search_parity_with_ace_cli_on_fake_server(real, tmp_path):
     assert lib.returncode == 0, lib.stderr
     assert json.loads(lib.stdout) == json.loads(cli.stdout)
     bodies = [q["body"] for q in srv.requests() if q["path"].startswith("/patterns/search")]
+    for body in bodies:  # searchPatterns generates these two per call (temp_search_<Date.now()>)
+        del body["pattern"]["id"], body["pattern"]["created_at"]
     assert len(bodies) == 2 and bodies[0] == bodies[1], "same search request body as the CLI"
 
 
