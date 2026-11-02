@@ -37,7 +37,7 @@ sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 
 from ace_context import get_context
 from utils.git_utils import get_git_context, detect_commits_in_session
-from ace_relevance_logger import log_execution_metrics, log_hook_error, log_stop_telemetry
+from ace_relevance_logger import log_event, log_execution_metrics, log_hook_error, log_stop_telemetry
 from patterns_used_state import (load_playbook_used, reap_patterns_used,
                                  load_retrieval_ids, load_task_session_id, load_state)
 import plugin_data_dir
@@ -677,6 +677,8 @@ def main():
     4. `ace-cli learn` under a per-agent in-flight lock, eval request, cleanup
     """
     hook_name = 'AfterTask'
+    lock_taken = handed_off = False
+    lock_file = None
     try:
         # Track execution start time for metrics
         execution_start_time = time.time()
@@ -761,6 +763,13 @@ def main():
         log_stop_telemetry(session_id=session_id, hook_type=hook_event_name,
                            background_tasks_count=len(bg) if isinstance(bg, list) else 0,
                            learn_lock_present=lock_present, learn_lock_age_seconds=lock_age)
+        # S9: hold the learn lock BEFORE reading any session state so a SessionEnd in between keeps
+        # the dir (released in `finally` on every skip path; the learn job owns it once dispatched).
+        try:
+            lock_file.touch()
+            lock_taken = True
+        except OSError:
+            pass
 
         # STEP 1: task description — state `user_prompt` (C1), else bounded transcript tail
         # SubagentStop: the subagent's OWN transcript is authoritative (SubagentStart's stored
@@ -882,13 +891,7 @@ def main():
         # Stage 2 exits early (degenerate skip).  Guarded + non-fatal.
         if _keymap_telemetry is not None:
             try:
-                _rel_km = Path('.claude/data/logs')
-                _rel_km.mkdir(parents=True, exist_ok=True)
-                with open(_rel_km / 'ace-relevance.jsonl', 'a') as _rf_km:
-                    _rf_km.write(json.dumps({
-                        "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
-                        **_keymap_telemetry,
-                    }) + "\n")
+                log_event(**_keymap_telemetry)
             except Exception:
                 pass  # non-fatal
 
@@ -915,17 +918,9 @@ def main():
                 except Exception:
                     pass  # reaping is best-effort
                 try:
-                    _rel_dg = Path('.claude/data/logs')
-                    _rel_dg.mkdir(parents=True, exist_ok=True)
-                    with open(_rel_dg / 'ace-relevance.jsonl', 'a') as _rf_dg:
-                        _rf_dg.write(json.dumps({
-                            "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
-                            "event": "subagent_degenerate_skip",
-                            "session_id": session_id,
-                            "agent_id": event.get('agent_id') or None,
-                            "agent_id_recovered": _agent_id_recovered,
-                            "reason": "fully anchorless: no session_id/retrieval_id/prompt",
-                        }) + "\n")
+                    log_event("subagent_degenerate_skip", session_id=session_id,
+                              agent_id=event.get('agent_id') or None, agent_id_recovered=_agent_id_recovered,
+                              reason="fully anchorless: no session_id/retrieval_id/prompt")
                 except Exception:
                     pass  # non-fatal telemetry
                 sys.exit(0)  # async hook: print nothing (doc :4093)
@@ -935,17 +930,8 @@ def main():
         # 'agent_id' on ace-relevance.jsonl proves per-agent attribution end-to-end
         # on a live subagent session. Guarded + non-fatal — never fail the learn pipeline.
         try:
-            _rel = Path('.claude/data/logs')
-            _rel.mkdir(parents=True, exist_ok=True)
-            with open(_rel / 'ace-relevance.jsonl', 'a') as _rf:
-                _rf.write(json.dumps({
-                    "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
-                    "event": "playbook_load",
-                    "hook": hook_event_name,
-                    "session_id": session_id,
-                    "agent_id": agent_id,
-                    "count": len(playbook_used),
-                }) + "\n")
+            log_event("playbook_load", hook=hook_event_name, session_id=session_id,
+                      agent_id=agent_id, count=len(playbook_used))
         except Exception:
             pass  # non-fatal
 
@@ -959,7 +945,7 @@ def main():
                 "summary": last_assistant_message[:2000] if last_assistant_message else None,  # v5.5.0: CC 2.1.51+
             },
             "playbook_used": playbook_used,
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "agent_type": agent_type  # v5.4.11: Attribute learning to agent type
         }
         # per-task session_id: use task_session_id if stored; else OMIT session_id entirely.
@@ -1063,6 +1049,7 @@ def main():
             clear_session(session_id, working_dir, agent_id=agent_id if hook_event_name == 'SubagentStop' else None)
 
         if job:
+            handed_off = True
             dispatch_learn(job, session_id)
         sys.exit(0)
 
@@ -1071,6 +1058,12 @@ def main():
         log_hook_exception(hook_name, e)
         print(f"[ERROR] ACE after-task hook failed: {e}", file=sys.stderr)
         sys.exit(0)
+    finally:
+        if lock_taken and not handed_off:
+            try:
+                lock_file.unlink()
+            except OSError:
+                pass
 
 
 if __name__ == '__main__':
