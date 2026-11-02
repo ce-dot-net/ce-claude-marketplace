@@ -234,11 +234,11 @@ def run_fixture(name):
         # Stop/SubagentStop learn only after substantial work (Edit/Write/Bash) was accumulated by
         # PostToolUse; without it the hook exits early and never reaches `learn`. Seed through the
         # real accumulator hook so this stays independent of where the plugin keeps its db.
-        seed_raw = load("PostToolUse_Write")
+        seed_raw = load("PostToolBatch")
         seed = json.loads(seed_raw)
-        # (PostToolUse `*` moved to PostToolBatch in round 2; seed the accumulator script directly.)
-        seeder = {"command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_posttooluse_wrapper.sh", "args": ["--log"]}
-        _run_hook(argv_of(seeder), seed_raw, str(proj), env)
+        # Seed through the real hooks.json PostToolBatch accumulator row (§9 G4).
+        for seeder in routed_hooks(hooks_json, "PostToolBatch", seed):
+            _run_hook(argv_of(seeder), seed_raw, str(proj), env)
 
     for hook in routed_hooks(hooks_json, event_name, event):
         rc, out, err, wall, left_bg = _run_hook(argv_of(hook), raw, str(proj), env)

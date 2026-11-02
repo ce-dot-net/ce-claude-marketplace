@@ -1,0 +1,21 @@
+{
+  "session_id": "__SESSION__",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "__CWD__",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolBatch",
+  "tool_calls": [
+    {
+      "tool_name": "Write",
+      "tool_input": {"file_path": "__CWD__/file.txt", "content": "file content"},
+      "tool_use_id": "toolu_01ABC123",
+      "tool_response": "File created successfully at: __CWD__/file.txt"
+    },
+    {
+      "tool_name": "Bash",
+      "tool_input": {"command": "ls"},
+      "tool_use_id": "toolu_02ABC123",
+      "tool_response": [{"type": "text", "text": "file.txt"}]
+    }
+  ]
+}
