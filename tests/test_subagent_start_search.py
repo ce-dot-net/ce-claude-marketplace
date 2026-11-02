@@ -1548,3 +1548,34 @@ def test_subagent_start_search_timeout_is_25s(tmp_path, monkeypatch):
     except SystemExit:
         pass
     assert seen.get("timeout") == 25
+
+
+def test_subagent_search_row_gets_the_pattern_lists_like_the_mod(tmp_path, monkeypatch):
+    """Item 7: the mod's SubagentStart search row has top_patterns / avg_confidence / domains; the Python
+    row passed integer counts, so those were empty. It now passes the returned and injected pattern dicts."""
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_RENDER_FULL_PCT", "0")
+    monkeypatch.chdir(tmp_path)
+    transcript_path = _make_transcript(tmp_path, [{"subagent_type": "coder", "prompt": "Implement the SubagentStart hook"}])
+    mod = _load_subagent_start()
+    rows = []
+    monkeypatch.setattr(mod, "run_search", lambda query, **kw: (SAMPLE_PATTERNS_RESPONSE, 0))
+    monkeypatch.setattr(mod, "get_context", lambda: GOOD_CONTEXT)
+    monkeypatch.setattr(mod, "append_patterns_used", MagicMock())
+    monkeypatch.setattr(mod, "log_search", lambda **kw: rows.append(kw))
+    try:
+        mod.main(event=_make_event(tmp_path, transcript_path=transcript_path, agent_type="coder"))
+    except SystemExit:
+        pass
+    (row,) = rows
+    assert [p["id"] for p in row["patterns_returned"]] == [p["id"] for p in SAMPLE_PATTERNS_RESPONSE["similar_patterns"]]
+    assert [p["id"] for p in row["patterns_injected"]] == [p["id"] for p in SAMPLE_PATTERNS_RESPONSE["similar_patterns"]]
+    assert sorted(row["domains"]) == ["claude-plugins", "python"]
+    import ace_relevance_logger as rl
+    got = []
+    monkeypatch.setattr(rl.ACERelevanceLogger, "_write_log", lambda self, e: got.append(e))
+    monkeypatch.setattr(rl, "_logger", None)
+    rl.log_search(**row)
+    assert got[0]["avg_confidence"] == 0.775 and len(got[0]["top_patterns"]) == 2
