@@ -47,9 +47,10 @@ EXPECTED_ROUTES = {
     "PostToolBatch": [("ace_posttooluse_wrapper.sh", True)],
     "PostToolUseFailure_Bash": [("ace_posttoolusefailure_wrapper.sh", True)],
     "SubagentStart": [("ace_subagent_start_wrapper.sh", False)],
-    "SubagentStop": [("ace_subagent_stop_wrapper.sh", True)],
-    "SubagentStop_empty_agent_type": [("ace_subagent_stop_wrapper.sh", True)],
-    "Stop": [("ace_stop_wrapper.sh", True)],
+    # §13.2 (r3a): Stop/SubagentStop are SYNC (timeout 15) so `claude -p` teardown cannot kill them
+    "SubagentStop": [("ace_subagent_stop_wrapper.sh", False)],
+    "SubagentStop_empty_agent_type": [("ace_subagent_stop_wrapper.sh", False)],
+    "Stop": [("ace_stop_wrapper.sh", False)],
     "PermissionDenied": [("ace_permission_denied_wrapper.sh", True)],
     "SessionEnd": [("ace_sessionend_wrapper.sh", False)],
 }

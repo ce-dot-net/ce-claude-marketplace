@@ -37,8 +37,10 @@ EXPECTED = {
     ("PostToolUseFailure", "*", "ace_posttoolusefailure_wrapper.sh", (), True, None, None),
     ("SubagentStart", "", "ace_subagent_start_wrapper.sh", (), False, 30,
      "ACE: loading patterns for subagent…"),
-    ("Stop", "", "ace_stop_wrapper.sh", (), True, None, None),
-    ("SubagentStop", "", "ace_subagent_stop_wrapper.sh", (), True, None, None),
+    # §13.2 (r3a): Stop/SubagentStop SYNC, timeout 15 — async hooks are killed at `claude -p`
+    # teardown before the shim runs (cc_hooks_reference.md:4084-4087; m2 F-V2 0/9 learns).
+    ("Stop", "", "ace_stop_wrapper.sh", (), False, 15, None),
+    ("SubagentStop", "", "ace_subagent_stop_wrapper.sh", (), False, 15, None),
     ("PermissionDenied", "", "ace_permission_denied_wrapper.sh", (), True, None, None),
     ("SessionEnd", "", "ace_sessionend_wrapper.sh", (), False, None, None),
 }
