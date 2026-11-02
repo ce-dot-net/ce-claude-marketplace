@@ -361,9 +361,14 @@ def log_search(patterns_returned=0, patterns_injected=0, hook_ms=None, hook="Use
 def log_error(hook: str, location: str, session_id=None, project_id=None, error=None,
               extra=None) -> None:
     """C5: error event tagged with the real hook name."""
+    err = error if error is not None else Exception("")
     log_hook_error(location=location, session_id=session_id, project_id=project_id,
-                   hook=hook, error=error if error is not None else Exception(""),
-                   extra=extra)
+                   hook=hook, error=err, extra=extra)
+    try:  # DESIGN §4: one error log for all hooks
+        import plugin_data_dir
+        plugin_data_dir.append_error("%s %s %s: %s" % (_utc_now(), hook, location, str(err)[:300]))
+    except Exception:
+        pass
 
 
 def log_domain_shift(**kwargs) -> None:

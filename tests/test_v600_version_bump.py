@@ -101,8 +101,9 @@ class TestWrapperVersionConstants:
     """
 
     def test_wrapper_version_constants_updated(self):
-        """v8: the Stop logic runs in ace_after_task.py, which sets ACE_CLIENT_ID from plugin.json."""
-        content = _read(os.path.join(PLUGIN_DIR, 'shared-hooks', 'ace_after_task.py'))
+        """v8: every ace-cli spawn goes through ace_cli._env, which sets ACE_CLIENT_ID from plugin.json."""
+        content = _read(os.path.join(PLUGIN_DIR, 'shared-hooks', 'utils', 'ace_env.py'))
+        content += _read(os.path.join(PLUGIN_DIR, 'shared-hooks', 'utils', 'ace_cli.py'))
         assert "claude-code-plugin/" in content and "ACE_CLIENT_ID" in content
 
     def test_all_wrapper_versions_match(self):

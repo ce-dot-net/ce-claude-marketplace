@@ -64,7 +64,7 @@ except Exception:
 CLI_CMD = 'ace-cli'
 
 
-from utils.machine_prompts import MACHINE_PROMPT_PREFIXES  # shared with WP-B UPS guard
+from utils.machine_prompts import is_machine_prompt  # shared with WP-B UPS guard
 
 
 def is_trivial_task(task_description: str) -> bool:
@@ -118,7 +118,7 @@ def is_trivial_task(task_description: str) -> bool:
 
     task_lower = task_description.lower()
     # DESIGN §8: machine-generated "prompts" (same prefix list as the UPS guard)
-    if task_lower.lstrip().startswith(MACHINE_PROMPT_PREFIXES):
+    if is_machine_prompt(task_lower):
         return True
     for pattern in trivial_patterns:
         if regex_module.search(pattern, task_lower, regex_module.IGNORECASE):
@@ -466,11 +466,12 @@ def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = 
     return trajectory, tools
 
 
-def skip_learning(reason, event=None, agent_id=None):
+def skip_learning(reason, event=None, agent_id=None, session_id=None, working_dir=None):
     """
-    Skip learning with user feedback.
-
-    Per ACE Research Paper: Users should understand when learning is skipped.
+    Skip learning. Prints NOTHING: Stop/SubagentStop are async hooks and CC delivers an
+    async hook's systemMessage to Claude, not the user (cc_hooks_reference.md:4093).
+    Also clears this agent's accumulator rows so a skipped turn (machine prompt, trivial,
+    read-only) does not leak its tool rows into the next task's trajectory.
 
     v6.6.7: also reaps this agent's patterns-used state file (per-agent-pure)
     so a skipped (sub)agent doesn't leave an orphan until the SessionEnd GC.
@@ -499,11 +500,12 @@ def skip_learning(reason, event=None, agent_id=None):
                 reap_patterns_used(sid, aid, hook)
             except Exception:
                 pass  # reaping is best-effort; never break the skip path
-
-    return {
-        "continue": True,
-        "systemMessage": f"[ACE] Learning skipped: {reason}"
-    }
+            if session_id:
+                try:
+                    from ace_tool_accumulator import clear_session
+                    clear_session(session_id, working_dir, agent_id=aid if hook == 'SubagentStop' else None)
+                except Exception:
+                    pass
 
 
 TRANSCRIPT_TAIL_BYTES = 2 * 1024 * 1024
@@ -602,6 +604,67 @@ def _resolve_effort_level(event):
     return raw if isinstance(raw, str) and raw else "normal"
 
 
+def run_learn_job(job):
+    """The slow part (ace-cli learn, up to 120 s) under the per-agent in-flight lock, then metrics.
+    Prints nothing. Runs inline (tests: ACE_LEARN_INLINE=1) or in the detached child."""
+    lock = Path(job['lock'])
+    response = None
+    try:
+        lock.touch()
+    except OSError:
+        pass
+    try:
+        # X-ACE-Client attribution: set at the shared root (ace_cli._env), nothing to do here.
+        response, _ms = run_learn(
+            job['trace'], retrieval_id=job.get('retrieval_id'), applied_log_ids=job.get('applied_log_ids'),
+            org=job['org'], project=job['project'], verbosity=job.get('verbosity', 'detailed'),
+            hook_event_name=job['hook_event_name'])
+    except Exception as e:
+        log_hook_exception('AfterTask.learn', e)
+    finally:
+        try:
+            lock.unlink()
+        except OSError:
+            pass
+    try:
+        log_execution_metrics(learning_sent=response is not None, **job['metrics'])
+    except Exception:
+        pass
+
+
+def dispatch_learn(job, session_id):
+    """Start the learn fully detached so `claude -p` teardown cannot kill it
+    (cc_hooks_reference.md:4086). The job travels via a file in the plugin-data session dir
+    (no /tmp); the learn lock is taken BEFORE the spawn so SessionEnd leaves the dir alone."""
+    if not os.environ.get('ACE_LEARN_INLINE'):
+        try:
+            import uuid
+            f = plugin_data_dir.session_dir(job['project'], session_id) / ('learn-job-%s.json' % uuid.uuid4().hex)
+            f.write_text(json.dumps(job))
+            try:
+                Path(job['lock']).touch()
+            except OSError:
+                pass
+            subprocess.Popen([sys.executable, os.path.abspath(__file__), '--learn-from', str(f)],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+            return
+        except Exception as e:
+            log_hook_exception('AfterTask.dispatch', e)
+    run_learn_job(job)
+
+
+def learn_child(path):
+    try:
+        job = json.loads(Path(path).read_text())
+    finally:
+        try:
+            os.unlink(path)
+        except OSError:
+            pass
+    run_learn_job(job)
+
+
 def main():
     """
     ACE After Task Hook (Stop / SubagentStop) — runs learning IN the hook process
@@ -653,8 +716,7 @@ def main():
         # Get project context
         context = get_context()
         if not context:
-            output = skip_learning("No project context found", event)
-            print(json.dumps(output))
+            skip_learning("No project context found", event)
             sys.exit(0)
         if plugin_data_dir.disabled_flag(context['project'], session_id).exists():
             sys.exit(0)  # set by SessionStart when the CLI is unusable
@@ -683,6 +745,10 @@ def main():
             except Exception:
                 pass  # non-fatal — fall back to original (empty) agent_id
 
+        # No recoverable agent_id: every per-agent state read would resolve to the MAIN agent's
+        # file (prompt, tsid, F-080 ids, and load_playbook_used would delete it) -> read none.
+        no_agent_state = hook_event_name == 'SubagentStop' and not agent_id
+
         # Telemetry: real learn-lock state at hook start + background task count
         lock_file = plugin_data_dir.learn_lock(
             context['project'], session_id, agent_id if hook_event_name == 'SubagentStop' else None)
@@ -697,15 +763,23 @@ def main():
                            learn_lock_present=lock_present, learn_lock_age_seconds=lock_age)
 
         # STEP 1: task description — state `user_prompt` (C1), else bounded transcript tail
-        user_prompt = (load_state(session_id, agent_id, hook_event_name).get('user_prompt') or '').strip()
+        # SubagentStop: the subagent's OWN transcript is authoritative (SubagentStart's stored
+        # query is a guess that can be a concurrent sibling's prompt); state is the fallback.
+        user_prompt = ''
+        if hook_event_name == 'SubagentStop' and transcript_path:
+            user_prompt = get_user_prompt_from_transcript(transcript_path)
+            if user_prompt == "No user prompt found":
+                user_prompt = ''
+        if not user_prompt and not no_agent_state:
+            user_prompt = (load_state(session_id, agent_id, hook_event_name).get('user_prompt') or '').strip()
         if not user_prompt:
             user_prompt = get_user_prompt_from_transcript(transcript_path) if transcript_path \
                 else "No user prompt found"
 
         # STEP 2: QUALITY GATE - trivial / machine-generated prompts (before any db work)
         if is_trivial_task(user_prompt):
-            output = skip_learning("Trivial task (ACE command or simple query)", event, agent_id)
-            print(json.dumps(output))
+            skip_learning("Trivial task (ACE command or simple query)", event, agent_id,
+                          session_id=session_id, working_dir=working_dir)
             sys.exit(0)
 
         # STEP 3: trajectory from accumulated tools (GROUND TRUTH).
@@ -718,8 +792,8 @@ def main():
 
         # STEP 4: QUALITY GATE - Check for substantial work
         if not has_substantial_work_from_accumulated(tools):
-            output = skip_learning("No substantial work (no Edit/Write/Bash tools)", event, agent_id)
-            print(json.dumps(output))
+            skip_learning("No substantial work (no Edit/Write/Bash tools)", event, agent_id,
+                          session_id=session_id, working_dir=working_dir)
             sys.exit(0)
 
         # STEP 5: Build ExecutionTrace (ACE Paper compliant format)
@@ -758,19 +832,19 @@ def main():
         # F-080: Read retrieval metadata BEFORE load_playbook_used unlinks the file.
         # load_retrieval_ids is read-only (does NOT unlink). Must call it first so
         # the state file is still present when load_playbook_used later unlinks it.
-        retrieval_log_map = load_retrieval_ids(session_id, agent_id, hook_event_name)
+        retrieval_log_map = {} if no_agent_state else load_retrieval_ids(session_id, agent_id, hook_event_name)
         # Also read retrieval_id and task_session_id from the state file (before unlink).
         # Both load_retrieval_ids and load_task_session_id are read-only.
         _retrieval_id_from_state = None
         try:
             from patterns_used_state import _read_state_file, state_file_path
             _sf = state_file_path(session_id, agent_id if hook_event_name == 'SubagentStop' else None)
-            if _sf.exists():
+            if _sf.exists() and not no_agent_state:
                 _, _retrieval_id_from_state, _, _ = _read_state_file(_sf)
         except Exception:
             pass  # non-fatal
         # Read task_session_id before load_playbook_used unlinks the state file.
-        task_session_id = load_task_session_id(session_id, agent_id, hook_event_name)
+        task_session_id = None if no_agent_state else load_task_session_id(session_id, agent_id, hook_event_name)
 
         # Load pattern IDs for reinforcement learning (per-agent scope in v6.4.0).
         # Delegated to patterns_used_state.load_playbook_used (single source of
@@ -781,7 +855,7 @@ def main():
         # consumes another agent's file (no state steal, no cross-agent merge);
         # orphans are reaped by the SessionEnd GC. GAP3 self-heal: a per-file error
         # routes to log_hook_error via on_error.
-        playbook_used = load_playbook_used(
+        playbook_used = [] if no_agent_state else load_playbook_used(
             session_id,
             agent_id,
             hook_event_name,
@@ -812,7 +886,7 @@ def main():
                 _rel_km.mkdir(parents=True, exist_ok=True)
                 with open(_rel_km / 'ace-relevance.jsonl', 'a') as _rf_km:
                     _rf_km.write(json.dumps({
-                        "timestamp": datetime.now().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
                         **_keymap_telemetry,
                     }) + "\n")
             except Exception:
@@ -836,7 +910,8 @@ def main():
             )
             if _is_degenerate:
                 try:
-                    reap_patterns_used(session_id, agent_id, hook_event_name)
+                    if agent_id:  # no id -> reap would resolve to the MAIN agent's file
+                        reap_patterns_used(session_id, agent_id, hook_event_name)
                 except Exception:
                     pass  # reaping is best-effort
                 try:
@@ -844,7 +919,7 @@ def main():
                     _rel_dg.mkdir(parents=True, exist_ok=True)
                     with open(_rel_dg / 'ace-relevance.jsonl', 'a') as _rf_dg:
                         _rf_dg.write(json.dumps({
-                            "timestamp": datetime.now().isoformat(),
+                            "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
                             "event": "subagent_degenerate_skip",
                             "session_id": session_id,
                             "agent_id": event.get('agent_id') or None,
@@ -853,12 +928,7 @@ def main():
                         }) + "\n")
                 except Exception:
                     pass  # non-fatal telemetry
-                output = {
-                    "continue": True,
-                    "systemMessage": "[ACE] SubagentStop skipped: anchorless degenerate trace",
-                }
-                print(json.dumps(output))
-                sys.exit(0)
+                sys.exit(0)  # async hook: print nothing (doc :4093)
 
         # agent_id-contract proof: record which agent_id the READ side used and how
         # many IDs it recovered. Diffing this against the wrapper's write-side
@@ -869,7 +939,7 @@ def main():
             _rel.mkdir(parents=True, exist_ok=True)
             with open(_rel / 'ace-relevance.jsonl', 'a') as _rf:
                 _rf.write(json.dumps({
-                    "timestamp": datetime.now().isoformat(),
+                    "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
                     "event": "playbook_load",
                     "hook": hook_event_name,
                     "session_id": session_id,
@@ -945,9 +1015,6 @@ def main():
         if git_context:
             trace["git"] = git_context
 
-        # STEP 7: Build user-visible message (output depends on verbosity setting)
-        message_lines = []
-
         # v6.5.0 Item #16 (PR-review I2): truncate large traces before wire-send.
         # Target <2MB; preserves all failed steps + last 50 trajectory steps;
         # drops base64 blobs and oversized tool_response payloads.
@@ -961,163 +1028,28 @@ def main():
         except Exception:
             pass  # never fail the learn pipeline on truncation issues
 
-        # STEP 8: Send to ace-cli learn via --transcript (temp file)
+        # STEP 8: hand the learn to a detached child (see dispatch_learn) - async Stop hooks are
+        # killed at `claude -p` teardown (cc_hooks_reference.md:4086), so the 120 s learn must not
+        # run inside this process. Async hooks print NOTHING (doc :4093: stdout reaches Claude).
         try:
-            # X-ACE-Client attribution (was exported by the bash wrapper via _ace_env.sh);
-            # run_learn copies os.environ, so set it here.
-            try:
-                _ver = json.loads((Path(__file__).resolve().parent.parent / '.claude-plugin' /
-                                   'plugin.json').read_text()).get('version') or '0.0.0'
-            except Exception:
-                _ver = '0.0.0'
-            os.environ['ACE_PLUGIN_VERSION'] = _ver
-            os.environ['ACE_CLIENT_ID'] = 'claude-code-plugin/' + _ver
-
-            # Get verbosity from env, default to 'detailed' for meaningful feedback
-            verbosity = os.environ.get('ACE_VERBOSITY', 'detailed')
-
-            # v6.6.3: --transcript (temp file), NOT --stdin. ace-cli learn --stdin
-            # cannot read payloads > ~64KB (OS pipe buffer) -> "Failed to read from
-            # stdin" + BrokenPipe -> any trace over ~64KB silently failed to learn.
-            # F-080: pass retrieval_id + applied_log_ids flags when present.
-            # Per-agent in-flight lock (plugin data): held while ace-cli learn runs.
-            try:
-                lock_file.touch()
-            except OSError:
-                pass
-            try:
-                # C2: run_learn (timeout 120 s, retry-once on 'database is locked').
-                response, _learn_ms = run_learn(
-                    trace, retrieval_id=retrieval_id, applied_log_ids=applied_log_ids,
-                    org=context['org'], project=context['project'], verbosity=verbosity,
-                    hook_event_name=hook_event_name)
-            finally:
-                try:
-                    lock_file.unlink()
-                except OSError:
-                    pass
-
-            if response is not None:
-                try:
-                    stats = response.get('learning_statistics', {})
-
-                    # Handle nested learning_statistics structure from CLI v3.0.0+
-                    # Response can be: {learning_statistics: {patterns_created: ...}}
-                    # Or nested: {learning_statistics: {learning_statistics: {patterns_created: ...}}}
-                    if 'learning_statistics' in stats:
-                        stats = stats.get('learning_statistics', {})
-
-                    if stats:
-                        created = stats.get('patterns_created', 0)
-                        updated = stats.get('patterns_updated', 0)
-                        # F-080: ace-cli 4.0.1 uses patterns_deduplicated; 4.0.0 used patterns_merged
-                        merged = stats.get('patterns_deduplicated', stats.get('patterns_merged', 0))
-                        pruned = stats.get('patterns_pruned', 0)
-                        conf = stats.get('average_confidence', 0)
-                        # F-080: cumulative_v15_reward_delta is PRIMARY; helpful_delta is fallback
-                        _v15 = stats.get('cumulative_v15_reward_delta')
-                        helpful_delta = stats.get('helpful_delta', 0)
-                        by_section = stats.get('by_section', {})
-                        analysis_time = stats.get('analysis_time_seconds', 0)
-
-                        if verbosity == 'compact':
-                            # Single line: ✅ [ACE] 📚 +2 patterns 🔄 1 merged ⭐ 85% quality
-                            parts = []
-                            if created > 0:
-                                parts.append(f"📚 +{created} patterns")
-                            if merged > 0 or updated > 0:
-                                parts.append(f"🔄 {merged + updated} merged")
-                            if conf > 0:
-                                parts.append(f"⭐ {int(conf * 100)}% quality")
-                            if parts:
-                                message_lines.append(f"✅ [ACE] {' '.join(parts)}")
-                            else:
-                                message_lines.append("✅ [ACE] Learning captured!")
-                        else:
-                            # Detailed mode with full breakdown
-                            message_lines.append("✅ [ACE] Learning captured!")
-
-                            # Only show stats if there's something to report
-                            if created > 0 or updated > 0 or pruned > 0 or conf > 0 or analysis_time > 0:
-                                message_lines.append("")
-                                message_lines.append("📚 ACE Learning:")
-
-                                # Line 1: patterns
-                                line1_parts = []
-                                if created > 0:
-                                    line1_parts.append(f"📝 +{created} new")
-                                if updated > 0:
-                                    line1_parts.append(f"🔄 {updated} updated")
-                                if pruned > 0:
-                                    line1_parts.append(f"🧹 {pruned} pruned")
-                                if line1_parts:
-                                    message_lines.append(f"   {'  '.join(line1_parts)}")
-
-                                # Line 2: quality & reward/helpful delta
-                                line2_parts = []
-                                if conf > 0:
-                                    line2_parts.append(f"⭐ {int(conf * 100)}% quality")
-                                # F-080: cumulative_v15_reward_delta is PRIMARY display metric
-                                if _v15 is not None:
-                                    line2_parts.append(f"📈 {_v15:+.1f} reward delta")
-                                elif helpful_delta != 0:
-                                    line2_parts.append(f"📈 {helpful_delta:+d} reward delta")
-                                if line2_parts:
-                                    message_lines.append(f"   {'  '.join(line2_parts)}")
-
-                                # Line 3: sections
-                                if by_section:
-                                    sections = [k.split('_')[0].title() for k, v in by_section.items() if v > 0]
-                                    if sections:
-                                        message_lines.append(f"   📂 {', '.join(sections)}")
-
-                                # Line 4: timing
-                                if analysis_time > 0:
-                                    message_lines.append(f"   ⏱️ {analysis_time:.1f}s analysis")
-                    else:
-                        # No stats returned (compact mode from CLI or old CLI version)
-                        message_lines.append("✅ [ACE] Learning captured!")
-                except json.JSONDecodeError:
-                    message_lines.append("✅ [ACE] Learning captured!")
-            else:
-                message_lines.append("⚠️ [ACE] Learning capture failed (see ace-hook-errors.log)")
-                message_lines.append("   You can manually capture with: /ace-learn")
-
-        except subprocess.TimeoutExpired:
-            message_lines.append("⚠️ [ACE] Learning capture timed out")
-            message_lines.append("   You can manually capture with: /ace-learn")
-        except FileNotFoundError:
-            message_lines.append("⚠️ [ACE] ace-cli not found - install with: npm install -g @ace-sdk/cli")
-        except Exception as e:
-            message_lines.append(f"⚠️ [ACE] Learning capture error: {e}")
-            message_lines.append("   You can manually capture with: /ace-learn")
-
-        message_lines.append("")
-
-        # STEP 8.5: Log execution metrics for relevance analysis (v5.4.2)
-        try:
-            # Count state-changing tools for metrics
             state_changing_tools = ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit']
-            state_changing_count = sum(
-                1 for tool_name, _, _, _, *_ in tools
-                if any(t in tool_name for t in state_changing_tools)
-            )
-
-            execution_time = time.time() - execution_start_time
-
-            log_execution_metrics(
-                session_id=session_id,
-                patterns_used=playbook_used,
-                tools_executed=len(tools),
-                state_changing_tools=state_changing_count,
-                success=not has_errors,
-                execution_time_seconds=execution_time,
-                learning_sent='✅' in message_lines[0] if message_lines else False,
-                project_id=context.get('project'),
-                agent_type=agent_type
-            )
-        except Exception:
-            pass  # Non-fatal: continue without metrics logging
+            job = {
+                "trace": trace, "retrieval_id": retrieval_id, "applied_log_ids": applied_log_ids,
+                "org": context['org'], "project": context['project'],
+                "verbosity": os.environ.get('ACE_VERBOSITY', 'detailed'),
+                "hook_event_name": hook_event_name, "lock": str(lock_file),
+                "metrics": {
+                    "session_id": session_id, "patterns_used": playbook_used,
+                    "tools_executed": len(tools),
+                    "state_changing_tools": sum(1 for t in tools if any(x in t[0] for x in state_changing_tools)),
+                    "success": not has_errors,
+                    "execution_time_seconds": time.time() - execution_start_time,
+                    "project_id": context.get('project'), "agent_type": agent_type,
+                },
+            }
+        except Exception as e:
+            log_hook_exception(hook_name, e)
+            job = None
 
         # Self-eval request for the next UserPromptSubmit (Stop only)
         if hook_event_name == 'Stop' and playbook_used:
@@ -1130,8 +1062,8 @@ def main():
         if hook_event_name != 'SubagentStop' or agent_id:
             clear_session(session_id, working_dir, agent_id=agent_id if hook_event_name == 'SubagentStop' else None)
 
-        # Async hook: output is advisory only (logged by CC, not shown)
-        print(json.dumps({"systemMessage": "\n".join(message_lines)}))
+        if job:
+            dispatch_learn(job, session_id)
         sys.exit(0)
 
     except Exception as e:
@@ -1142,4 +1074,10 @@ def main():
 
 
 if __name__ == '__main__':
+    if len(sys.argv) > 2 and sys.argv[1] == '--learn-from':
+        try:
+            learn_child(sys.argv[2])
+        except Exception as e:
+            log_hook_exception('AfterTask.child', e)
+        sys.exit(0)
     main()

@@ -207,9 +207,11 @@ def _query_from_own_transcript(transcript_path: str, session_id: str, agent_id: 
     """
     if not (transcript_path and session_id and agent_id):
         return None
-    pattern = os.path.join(glob.escape(os.path.dirname(transcript_path)), glob.escape(session_id),
-                           'subagents', '**', 'agent-%s.jsonl' % glob.escape(agent_id))
-    for path in glob.glob(pattern, recursive=True):
+    # direct path first, then workflows/<wf_id>/ (no recursive walk: O(n) per spawn in fan-out)
+    base = os.path.join(glob.escape(os.path.dirname(transcript_path)), glob.escape(session_id), 'subagents')
+    name = 'agent-%s.jsonl' % glob.escape(agent_id)
+    for path in (glob.glob(os.path.join(base, name)) or glob.glob(os.path.join(base, '*', name))
+                 or glob.glob(os.path.join(base, '*', '*', name))):
         try:
             with open(path, 'rb') as f:
                 head = f.read(65536).decode('utf-8', errors='replace')

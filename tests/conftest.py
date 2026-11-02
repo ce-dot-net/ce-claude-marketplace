@@ -96,6 +96,7 @@ def pytest_configure(config):
             del os.environ[key]
 
     os.environ.update({
+        "ACE_LEARN_INLINE": "1",  # Stop/SubagentStop learn detaches by default; tests need it synchronous
         "HOME": str(home),
         "CLAUDE_PLUGIN_DATA": str(root / "plugin-data"),
         "XDG_CONFIG_HOME": str(root / "xdg-config"),

@@ -93,8 +93,8 @@ def test_sessionend_fits_plugin_budget(tmp_path):
     assert time.monotonic() - t0 < 1.5
 
 
-def test_sessionend_hooks_json_timeout_is_5s():
-    """DESIGN §3: SessionEnd sync, timeout 5 (seconds)."""
+def test_sessionend_hooks_json_has_no_timeout():
+    """cc_hooks_reference.md:3584: a plugin hook's SessionEnd timeout cannot raise the 1.5 s budget."""
     hooks = json.loads((SCRIPTS.parent / "hooks" / "hooks.json").read_text())["hooks"]
     timeouts = [h.get("timeout") for g in hooks["SessionEnd"] for h in g["hooks"]]
-    assert timeouts == [5]
+    assert timeouts == [None]

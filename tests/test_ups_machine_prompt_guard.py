@@ -240,32 +240,41 @@ def test_human_prompt_single_ace_cli_spawn_with_pin_session(project, fake_cli, m
     assert _additional_context(out)
 
 
-# ── (3) disk cache ──────────────────────────────────────────────────────────
+# ── (3) no UPS disk cache (F-080: every turn searches with --pin-session) ───
 
-def test_repeated_prompt_served_from_disk_cache_without_spawn(project, fake_cli, monkeypatch, capsys):
-    """DESIGN §6 WP-B (3), critic §5 item 5: the second identical prompt within the
-    TTL is answered from the Foundation disk cache — zero additional ace-cli spawns."""
+def test_repeated_prompt_searches_again_with_pin_session(project, fake_cli, monkeypatch, capsys):
+    """A repeated short follow-up must NOT be served from a cache: the cache hit carried no
+    retrieval_id / applied_log_ids and never pinned the new tsid, losing F-080 credit."""
     _run(monkeypatch, capsys, HUMAN_PROMPT, project)
-    first = len(fake_cli["calls"])
-    assert first >= 1
+    first_tsid = _main_state()["task_session_id"]
     out = _run(monkeypatch, capsys, HUMAN_PROMPT, project)
-    assert len(fake_cli["calls"]) == first, "cache hit must not spawn ace-cli"
-    assert _additional_context(out), "cache hit must still inject"
+    assert len(fake_cli["calls"]) == 2
+    argv = fake_cli["calls"][1]
+    assert argv[argv.index("--pin-session") + 1] == _main_state()["task_session_id"] != first_tsid
+    st = _main_state()
+    assert st["retrieval_id"] == "ret-wpb-001" and st["retrieval_log_ids"]
+    assert _additional_context(out)
 
 
-def test_cache_hit_still_writes_state_and_logs_cache_hit(project, fake_cli, monkeypatch, capsys):
-    """DESIGN §6 WP-B (3): a cache hit still writes the main state file (pattern ids,
-    task_session_id) and logs the search event with `cache_hit: true`."""
+def test_new_task_resets_stale_state_from_interrupted_turn(project, fake_cli, monkeypatch, capsys):
+    """Stop does not run on interrupt: the next UPS must not merge the old ids/retrieval_id."""
     _run(monkeypatch, capsys, HUMAN_PROMPT, project)
     sf = plugin_data_dir.session_dir(PROJECT, CC_SESSION, create=False) / "patterns-used-main.json"
-    sf.unlink(missing_ok=True)
-    _run(monkeypatch, capsys, HUMAN_PROMPT, project)
-    state = _main_state()
-    assert state and state.get("pattern_ids") and state.get("task_session_id")
-    searches = [e for e in _relevance(project) if e.get("event") == "search"]
-    assert len(searches) == 2
-    assert not searches[0].get("cache_hit")
-    assert searches[1].get("cache_hit") is True
+    st = json.loads(sf.read_text())
+    st["pattern_ids"].append("ctx-1111111111-aaaa")
+    st["retrieval_id"] = "RID_OLD"
+    st["retrieval_log_ids"]["ctx-1111111111-aaaa"] = 99
+    sf.write_text(json.dumps(st))
+    fake_cli["response"] = {"error": "timeout", "message": "slow"}
+    _run(monkeypatch, capsys, HUMAN_PROMPT + " second", project)
+    new = _main_state()
+    assert "ctx-1111111111-aaaa" not in new["pattern_ids"] and not new.get("retrieval_id")
+
+
+def test_multiple_leading_reminder_blocks_are_machine(project, fake_cli, monkeypatch, capsys):
+    p = "<system-reminder>x</system-reminder><system-reminder>y</system-reminder>"
+    _run(monkeypatch, capsys, p, project)
+    assert fake_cli["searches"]() == []
 
 
 # ── (4) domains.json, state C1 keys, relevance log after render ─────────────
@@ -395,19 +404,6 @@ def test_relevance_log_keeps_avg_confidence_and_top_patterns(project, fake_cli, 
     assert e["avg_confidence"] > 0
     assert e["top_patterns"] and e["top_patterns"][0]["id"].startswith("ctx-")
     assert e["patterns_injected"] == 3
-
-
-def test_cache_hit_sends_no_f080_credit_ids(project, fake_cli, monkeypatch, capsys):
-    """A cache hit must not reuse the earlier task's retrieval_id / retrieval_log rows."""
-    _run(monkeypatch, capsys, HUMAN_PROMPT, project)
-    first = _main_state()
-    assert first["retrieval_id"] == "ret-wpb-001" and first["retrieval_log_ids"]
-    sf = plugin_data_dir.session_dir(PROJECT, CC_SESSION, create=False) / "patterns-used-main.json"
-    sf.unlink()
-    out = _run(monkeypatch, capsys, HUMAN_PROMPT, project)
-    assert _additional_context(out)
-    st = _main_state()
-    assert st["pattern_ids"] and not st.get("retrieval_id") and not st["retrieval_log_ids"]
 
 
 def test_failed_search_state_keeps_user_prompt_and_event(project, fake_cli, monkeypatch, capsys):

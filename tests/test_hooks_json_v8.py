@@ -27,7 +27,7 @@ EXPECTED = {
     ("SessionStart", "startup|clear", "ace_install_cli.sh", (), False, 20, None),
     ("SessionStart", "startup", "ace_install_cli.sh", ("--update-check",), True, None, None),
     ("SessionStart", "compact", "ace_sessionstart_compact.sh", (), False, 10, None),
-    ("UserPromptSubmit", "", "ace_before_task_wrapper.sh", (), False, 20,
+    ("UserPromptSubmit", "", "ace_before_task_wrapper.sh", (), False, 30,
      "ACE: searching patterns…"),
     ("PostToolUse", "*", "ace_posttooluse_wrapper.sh", ("--log",), True, None, None),
     ("PostToolUse", "Read|Glob|Grep", "ace_posttooluse_domain_inject.sh", (), False, 15,
@@ -38,7 +38,7 @@ EXPECTED = {
     ("Stop", "", "ace_stop_wrapper.sh", (), True, None, None),
     ("SubagentStop", "", "ace_subagent_stop_wrapper.sh", (), True, None, None),
     ("PermissionDenied", "", "ace_permission_denied_wrapper.sh", (), True, None, None),
-    ("SessionEnd", "", "ace_sessionend_wrapper.sh", (), False, 5, None),
+    ("SessionEnd", "", "ace_sessionend_wrapper.sh", (), False, None, None),
 }
 
 

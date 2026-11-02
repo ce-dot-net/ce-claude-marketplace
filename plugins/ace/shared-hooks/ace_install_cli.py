@@ -75,7 +75,9 @@ def _write_if_changed(path, text):
 
 
 def update_check(cli):
-    """Async daily npm check (cc_hooks_reference.md async: output reaches the next turn)."""
+    """Async daily npm check: refreshes the cache file ONLY and prints nothing
+    (cc_hooks_reference.md:4093 - an async hook's systemMessage goes to Claude, never the user).
+    The sync startup() reads the cache via update_notice()."""
     if os.environ.get("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC") or not cli:
         return None
     from plugin_data_dir import data_root
@@ -101,6 +103,18 @@ def update_check(cli):
             _atomic_write(cache, json.dumps({"date": today, "latest": latest}))
         except OSError:
             pass
+    return None
+
+
+def update_notice(cli):
+    """Sync, no network: 'Update available' line from the cache the async check wrote."""
+    if os.environ.get("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC") or not cli:
+        return None
+    from plugin_data_dir import data_root
+    try:
+        latest = json.loads((data_root() / "update-check.json").read_text()).get("latest", "")
+    except Exception:
+        return None
     cur = _cli_version(cli)
     if _VER.fullmatch(latest or "") and _tup(latest) > _tup(cur):
         return "💡 [ACE] Update available: v%s → v%s. Run: npm install -g @ace-sdk/cli" % (cur, latest)
@@ -169,6 +183,9 @@ def startup(ev, sid, pid, cli):
                 f.write('export ACE_CLIENT_ID="%s"\n' % client_id())
         except OSError:
             pass
+    n = update_notice(cli)
+    if n:
+        msgs.append(n)
     return msgs
 
 
@@ -178,7 +195,8 @@ def main():
     sid, pid = resolve_ids(ev)
     cli = shutil.which("ace-cli")
     if "--update-check" in sys.argv[1:]:
-        msgs = [m for m in [update_check(cli)] if m]
+        update_check(cli)
+        msgs = []
     else:
         msgs = startup(ev, sid, pid, cli)
     if msgs:

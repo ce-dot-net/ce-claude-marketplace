@@ -63,6 +63,13 @@ def _env(org, project):
         env['ACE_ORG_ID'] = org
     if project:
         env['ACE_PROJECT_ID'] = project
+    if not env.get('ACE_CLIENT_ID'):  # X-ACE-Client attribution for every search/learn
+        try:
+            from ace_env import client_id, plugin_version
+            env['ACE_CLIENT_ID'] = client_id()
+            env.setdefault('ACE_PLUGIN_VERSION', plugin_version())
+        except Exception:
+            pass
     return env
 
 
@@ -107,7 +114,7 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
         if top_k:
             cmd.extend(['--top-k', str(top_k)])
 
-        result = _spawn(cmd, input=query.encode('utf-8'), capture_output=True,
+        result = _spawn(cmd, input=query.encode('utf-8', errors='replace'), capture_output=True,
                         timeout=timeout, env=_env(org, project))
         stderr = _text(result.stderr)
         stdout = _text(result.stdout)
