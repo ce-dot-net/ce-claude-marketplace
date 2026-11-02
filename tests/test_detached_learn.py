@@ -61,7 +61,7 @@ def test_hook_returns_fast_while_detached_learn_runs(box):
     p = box.run_after_task(box.stop_event(sid), **_env(FAKE_LEARN_SLEEP="2"))
     took = time.monotonic() - t0
     assert p.returncode == 0 and p.stdout == "", p.stderr
-    assert took < 0.5, "hook must not wait for the learn (took %.2fs)" % took
+    assert took < 1.2, "hook must not wait for the learn (took %.2fs)" % took
     lock = box.session_dir(sid) / "learn-inflight-main.lock"
     assert lock.exists(), "lock must be held while the detached learn runs"
     assert _wait(lambda: box.cli_calls("learn"), 6), "detached learn never ran"

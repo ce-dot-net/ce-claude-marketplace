@@ -151,6 +151,7 @@ The ace-cli uses this priority order:
    - `ACE_API_TOKEN`
    - `ACE_ORG_ID`
    - `ACE_PROJECT_ID`
+   - `ACE_MACHINE_PROMPT_PREFIXES` - comma-separated extra prompt prefixes (besides `<task-notification>` etc.) that count as machine prompts and skip search and learn, e.g. local daemon messages
    - `ACE_MIN_PROMPT_CHARS` - prompts shorter than this skip the pattern search (hook-side)
    - `ACE_PIN_BACKOFF_MIN` - minutes to back off pinning a task session after a pin failure (pin-backoff)
    - Learning is always async (detached); there is no switch for it.

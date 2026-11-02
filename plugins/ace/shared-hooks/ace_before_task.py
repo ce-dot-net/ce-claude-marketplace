@@ -347,8 +347,7 @@ def main():
         # Get project context from .claude/settings.json
         context = _ctx or get_context()
         if not context:
-            print(json.dumps({"systemMessage": "⚠️ [ACE] No project context found - skipping search"}))
-            sys.exit(0)
+            sys.exit(0)  # silent: /ace:ace-doctor reports a missing project context
 
         # Use Claude's session_id for state file consistency (Issue #16)
         # ace_after_task.py reads event.get('session_id') — we must use the same key
@@ -416,7 +415,9 @@ def main():
         # v5.4.21: Check for error responses from run_search()
         if not patterns_response:
             # Search failed - check if it's an auth error
-            auth_warning = check_auth_status(warn_threshold_hours=2.0)
+            # the 5 s whoami probe must fit the 30 s hook timeout after a slow (<=25 s) search
+            auth_warning = (check_auth_status(warn_threshold_hours=2.0)
+                            if time.monotonic() - t_start < 18 else None)
             if auth_warning:
                 # Auth issue detected - show auth warning instead of generic error
                 output = {"systemMessage": auth_warning}
@@ -531,8 +532,9 @@ def main():
                                  user_prompt=user_prompt,
                                  rendered_context=_rendered_for_state if _rendered_for_state is not None else '',
                                  hook_event_name='UserPromptSubmit')
-        except Exception:
-            pass
+        except Exception as e:
+            from ace_relevance_logger import log_error
+            log_error('UserPromptSubmit', 'ace_before_task.state_write', session_id, context['project'], e)
 
         # v5.4.2 / C5: log AFTER render with the real injected count + hook latency.
         try:

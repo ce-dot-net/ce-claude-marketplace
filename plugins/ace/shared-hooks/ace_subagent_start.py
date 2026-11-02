@@ -62,7 +62,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 from ace_cli import run_search  # noqa: E402
 from ace_context import get_context                              # noqa: E402
-from patterns_used_state import append_patterns_used, load_state, task_session_id_for  # noqa: E402
+from patterns_used_state import append_patterns_used, load_state  # noqa: E402
 import plugin_data_dir                                           # noqa: E402
 from ace_relevance_logger import log_search, log_error           # noqa: E402
 from ace_pattern_render import render_patterns, render_cohort, render_compact_all  # noqa: E402
@@ -248,9 +248,9 @@ def _consume_stash(project, sid, prompt_id, agent_type) -> Optional[str]:
     try:
         f = plugin_data_dir.agent_prompt_file(project, sid, prompt_id, agent_type)
         data = json.loads(f.read_text())
-        f.unlink()
         if (data or {}).get('ambiguous'):
-            return None
+            return None  # tombstone stays: later same-type spawns of this prompt also fall back
+        f.unlink()
         q = str((data or {}).get('prompt') or (data or {}).get('description') or '').strip()
         return q[:_QUERY_MAX_CHARS] or None
     except (OSError, ValueError, AttributeError):
@@ -310,7 +310,10 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         # Passed to run_search as the --pin-session value and stored in the state
         # file so SubagentStop's ace_after_task can set trace["session_id"] to this
         # value (correlates search↔learn per-subagent-task, not per conversation).
-        task_session_id = task_session_id_for(event)  # G2: spawning prompt_id, else uuid4
+        # DESIGN §12: every subagent is its own ACE session -> fresh uuid4, never the parent's
+        # prompt_id (that stays only as parent_task_id).
+        task_session_id = str(uuid.uuid4())
+        parent_task_id = event.get('prompt_id') or None
 
         # SubagentStart input has no prompt field (cc_hooks_reference.md:2553-2566):
         # own transcript first (Workflow agents), else bounded parent-transcript tail scan.
@@ -327,7 +330,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         try:
             append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id,
                                  user_prompt=query, hook_event_name='SubagentStart',
-                                 project_id=project)
+                                 project_id=project, parent_task_id=parent_task_id)
         except Exception as e:
             log_error('SubagentStart', 'ace_subagent_start.anchor', session_id, project, e)
 
@@ -423,7 +426,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                    patterns_injected=len(pattern_ids),
                    hook_ms=int((time.monotonic() - t_start) * 1000),
                    project_id=context['project'], org_id=context['org'],
-                   agent_type=agent_type, render_cohort=_cohort)
+                   agent_type=agent_type, render_cohort=_cohort, parent_task_id=parent_task_id)
 
         if ace_context is not None:
             output = {

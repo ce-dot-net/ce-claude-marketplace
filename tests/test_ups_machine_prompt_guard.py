@@ -424,4 +424,4 @@ def test_control_arm_clears_stale_rendered_context(project, fake_cli, monkeypatc
 def test_no_project_context_message_is_json(project, fake_cli, monkeypatch, capsys):
     (project / ".claude" / "settings.json").write_text("{}")
     out = _run(monkeypatch, capsys, HUMAN_PROMPT, project)
-    assert isinstance(out, dict) and "systemMessage" in out
+    assert out is None  # silent exit: /ace:ace-doctor reports a missing project context

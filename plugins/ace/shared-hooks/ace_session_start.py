@@ -34,7 +34,7 @@ def main() -> None:
         if not ctx:
             return
         sid = plugin_data_dir.resolve_session_id(event)
-        if plugin_data_dir.disabled_flag(ctx['project'], sid).exists():
+        if plugin_data_dir.is_disabled(ctx['project'], sid):
             return
         rendered = load_rendered_context(sid, project_id=ctx['project'])
         if rendered and isinstance(rendered, str):

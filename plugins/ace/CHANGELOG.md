@@ -16,7 +16,7 @@ Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topol
 - New hooks: `PostToolUseFailure` (failed Bash calls feed learning), `SessionStart` compact re-injection.
 - Removed hooks: the domain-shift `PreToolUse` path, `PreCompact`, `PermissionRequest`. `PreToolUse` returns only with matcher `Agent` (prompt stash).
 - Round 2: `PostToolBatch` (async, one event per parallel batch) replaces the per-tool `PostToolUse` accumulator; `PostToolUseFailure` matcher is `*`.
-- `prompt_id` is the task anchor and `--pin-session` value (uuid fallback); the `Agent` PreToolUse hook stashes the subagent prompt in `agent-prompts/` so SubagentStart no longer scans the transcript.
+- Main agent: `prompt_id` is the task anchor and `--pin-session` value (uuid fallback). Every subagent is its own ACE session: SubagentStart mints a fresh uuid4 (parent `prompt_id` kept only as `parent_task_id`); the `Agent` PreToolUse hook stashes the subagent prompt in `agent-prompts/` so SubagentStart no longer scans the transcript.
 - Learning (Stop/SubagentStop) runs as a detached process and survives `claude -p` teardown; `ACE_ASYNC_LEARNING` is removed (always async, `ACE_LEARN_INLINE=1` for tests). All async hooks print nothing.
 - A failed session pin is dropped with a pin-backoff (`ACE_PIN_BACKOFF_MIN`); new `ACE_MIN_PROMPT_CHARS` skips searches for trivial prompts.
 - `/ace:ace-doctor` flags `~/.ace-cache/sessions.db` over 100 MB and recent `database is locked` errors; new `/ace:ace-cleanup --legacy` (dry run, `--yes`, `--sessions-db`) removes v7 leftovers.
@@ -27,6 +27,9 @@ Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topol
 - Docs: ARCHITECTURE.md updated, new `docs/technical/ADR-001-language.md`, `docs/RELEASE_GATE_v8.md`; stale v1/v3 docs deleted.
 
 ### Accepted losses
+- Successful tool calls carry no `duration_ms` (PostToolBatch has none; only `PostToolUseFailure` rows do).
+- Exec-form hooks run the `.sh` shims directly: macOS/Linux only (Windows needs `bash` as `command`; unsupported).
+- `PermissionDenied` learn runs inside the async hook and can be cut by `claude -p` teardown.
 - PreToolUse domain-shift systemMessage notices are gone (the domain-shift injection itself stays on PostToolUse).
 - Startup `whoami` auth warnings are gone; `/ace:ace-doctor` shows them instead.
 - Bash-error troubleshooting injection is replaced by accumulator-only PostToolUseFailure learning.

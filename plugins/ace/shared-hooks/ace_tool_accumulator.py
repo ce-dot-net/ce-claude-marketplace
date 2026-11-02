@@ -3,8 +3,11 @@
 ACE Tool Accumulator - SQLite storage for PostToolUse / PostToolUseFailure data.
 
 v8 (DESIGN §4, §5 C4):
-  PostToolUse        -> `ace_tool_accumulator.py --log`      (event on stdin) -> record_tool(success=True)
-  PostToolUseFailure -> `ace_tool_accumulator.py --failure`  (event on stdin) -> record_tool(success=False)
+  PostToolBatch      -> `ace_tool_accumulator.py --batch`    (tool_calls[] on stdin) -> record_tool(success=True)
+  PostToolUseFailure -> `ace_tool_accumulator.py --failure`  (event on stdin) -> record_tool(success=False,
+                        or success=None = interrupted/aborted, never counted as a failure)
+  (no PostToolUse row any more, DESIGN §9 G4; accepted loss P-10: PostToolBatch has no
+   duration_ms, so only failure rows carry timing.)
   Stop               -> get_session_tools()  (ace_after_task builds the trajectory)
 
 The db lives in the per-session plugin-data dir
@@ -17,6 +20,7 @@ The hook mode prints nothing and never spawns ace-cli.
 import argparse
 import json
 import os
+import re
 import sqlite3
 import sys
 from contextlib import contextmanager
@@ -123,7 +127,8 @@ def init_db(db_path) -> sqlite3.Connection:
 
 def record_tool(session_id, agent_id, tool_name, tool_input_summary, tool_response_summary,
                 success=True, error_first_line=None, tool_use_id=None,
-                start_ms=None, end_ms=None, duration_ms=None, working_dir=None, db_path=None) -> bool:
+                start_ms=None, end_ms=None, duration_ms=None, working_dir=None, db_path=None,
+                reposition=False) -> bool:
     """C4: append one tool row. Returns True when stored (duplicate tool_use_id counts as stored)."""
     try:
         conn = init_db(db_path or get_db_path(session_id, working_dir))
@@ -133,13 +138,19 @@ def record_tool(session_id, agent_id, tool_name, tool_input_summary, tool_respon
                 ' agent_id, start_ms, end_ms, duration_ms, success, error_first_line, timestamp)'
                 " VALUES (?,?,?,?,?,?,?,?,?,?,?,datetime('now'))",
                 (session_id, tool_name, tool_input_summary, tool_response_summary, tool_use_id,
-                 agent_id or None, start_ms, end_ms, duration_ms, 1 if success else 0, error_first_line))
+                 agent_id or None, start_ms, end_ms, duration_ms,
+                 None if success is None else (1 if success else 0), error_first_line))
             conn.commit()
         except sqlite3.IntegrityError:
-            if not success:  # failure wins over an earlier success row (async PostToolBatch race)
-                conn.execute('UPDATE tool_uses SET success=0, error_first_line=?, tool_response=?,'
+            if success is not True:  # failure/interrupt wins over an earlier success row (PostToolBatch race)
+                conn.execute('UPDATE tool_uses SET success=?, error_first_line=?, tool_response=?,'
                              ' duration_ms=COALESCE(?, duration_ms) WHERE tool_use_id=?',
-                             (error_first_line, tool_response_summary, duration_ms, tool_use_id))
+                             (None if success is None else 0, error_first_line, tool_response_summary,
+                              duration_ms, tool_use_id))
+                conn.commit()
+            if reposition:  # the failure row arrived before its batch: restore batch order
+                conn.execute('UPDATE tool_uses SET id=(SELECT MAX(id)+1 FROM tool_uses) WHERE tool_use_id=?',
+                             (tool_use_id,))
                 conn.commit()
             # else: duplicate tool_use_id — normal for hook retries; an existing failure row stays
         finally:
@@ -254,14 +265,17 @@ def hook_main(failure: bool) -> None:
         sid, tool, tuid = ev.get('session_id'), ev.get('tool_name'), ev.get('tool_use_id')
         if not (sid and tool and tuid):
             return
-        ctx = get_context() or {}
-        if plugin_data_dir.disabled_flag(ctx.get('project') or 'default', sid).exists():
-            return
+        ctx = get_context()
+        if not ctx or plugin_data_dir.is_disabled(ctx['project'], sid):
+            return  # no ACE project (nothing reads these rows) or P-26 disabled
         if failure:
             # doc cc_hooks_reference.md:2287-2330 — `error` is display text, key on its first line
             err = str(ev.get('error') or '')
             first = (err.splitlines() or [''])[0][:200]
-            resp, success = json.dumps({'error': err[:2000]}), False
+            if ev.get('is_interrupt'):  # abort, not a tool-reported error (cc_hooks_reference.md:2322)
+                first, resp, success = 'interrupted', json.dumps({'interrupted': True}), None
+            else:
+                resp, success = json.dumps({'error': err[:2000]}), False
         else:
             first, resp, success = None, _dump(ev.get('tool_response')), True
         record_tool(sid, ev.get('agent_id'), tool, _dump(ev.get('tool_input')), resp, success, first,
@@ -276,6 +290,9 @@ def _resp_text(resp):
     if isinstance(resp, list):
         return "\n".join(b.get('text', '') if isinstance(b, dict) else str(b) for b in resp)
     return resp
+
+
+_DENIED = re.compile(r'\s*(<tool_use_error>|Permission to use .{0,200}?has been denied)', re.S)
 
 
 def _batch_resp(resp):
@@ -297,14 +314,18 @@ def batch_main() -> None:
         calls = ev.get('tool_calls')
         if not sid or not isinstance(calls, list):
             return
-        ctx = get_context() or {}
-        if plugin_data_dir.disabled_flag(ctx.get('project') or 'default', sid).exists():
+        ctx = get_context()
+        if not ctx or plugin_data_dir.is_disabled(ctx['project'], sid):
             return
         for c in calls:
             if not (isinstance(c, dict) and c.get('tool_name') and c.get('tool_use_id')):
                 continue
+            text = _resp_text(c.get('tool_response'))
+            m = _DENIED.match(text) if isinstance(text, str) else None  # deny rules appear ONLY here
             record_tool(sid, ev.get('agent_id'), c['tool_name'], _dump(c.get('tool_input')),
-                        _batch_resp(c.get('tool_response')), True, None, tool_use_id=c['tool_use_id'])
+                        _batch_resp(c.get('tool_response')), not m,
+                        text.strip().splitlines()[0][:200] if m else None,
+                        tool_use_id=c['tool_use_id'], reposition=True)
     except Exception as e:
         log_hook_exception('PostToolBatch', e)
 

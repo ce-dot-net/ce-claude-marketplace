@@ -25,6 +25,7 @@ def _seed(env, sid, lock_age_s=None, agent="main"):
     d = env.session_dir(sid)
     d.mkdir(parents=True)
     (d / "patterns-used-main.json").write_text("{}")
+    os.utime(str(d / "patterns-used-main.json"), (time.time() - 300, time.time() - 300))
     if lock_age_s is not None:
         lk = d / ("learn-inflight-%s.lock" % agent)
         lk.touch()

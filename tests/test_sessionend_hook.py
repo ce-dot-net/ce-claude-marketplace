@@ -29,6 +29,9 @@ def _seed(env, sid):
     (d / "patterns-used-main.json").write_text("{}")
     (d / "domain-last-main.txt").write_text("python")
     (d / "disabled.flag").write_text("x")
+    import os, time  # files younger than 60 s keep the dir (Stop may still be starting)
+    for f in d.iterdir():
+        os.utime(str(f), (time.time() - 300, time.time() - 300))
     return d
 
 

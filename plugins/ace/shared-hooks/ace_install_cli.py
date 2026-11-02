@@ -162,6 +162,13 @@ def startup(ev, sid, pid, cli):
     except Exception:
         pass
 
+    try:  # auto-sync the installed statusline copy on plugin update
+        dst, src = Path.home() / ".claude" / "ace_statusline.sh", Path(__file__).resolve().parent.parent / "scripts" / "ace_statusline.sh"
+        if dst.is_file() and src.is_file() and dst.read_bytes() != src.read_bytes():
+            shutil.copyfile(str(src), str(dst))
+            dst.chmod(0o755)
+    except OSError:
+        pass
     if not cli:
         disable("CLI not installed")
         return ["⛔ [ACE] ace-cli not found. Install: npm install -g @ace-sdk/cli. ACE hooks DISABLED."]
@@ -188,13 +195,6 @@ def startup(ev, sid, pid, cli):
             Path(".claude/data/logs", stale).unlink()
         except OSError:
             pass
-    try:  # auto-sync the installed statusline copy on plugin update
-        dst, src = Path.home() / ".claude" / "ace_statusline.sh", Path(__file__).resolve().parent.parent / "scripts" / "ace_statusline.sh"
-        if dst.is_file() and src.is_file() and dst.read_bytes() != src.read_bytes():
-            shutil.copyfile(str(src), str(dst))
-            dst.chmod(0o755)
-    except OSError:
-        pass
     env_file = os.environ.get("CLAUDE_ENV_FILE")
     if env_file and not os.environ.get("ACE_CLIENT_ID"):  # DESIGN §8: same id as _ace_env.sh
         try:
@@ -230,6 +230,10 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except Exception:
-        pass
+    except Exception as _e:
+        try:
+            from ace_relevance_logger import log_error
+            log_error('SessionStart', 'ace_install_cli.main', error=_e)
+        except Exception:
+            pass
     sys.exit(0)
