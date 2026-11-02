@@ -31,6 +31,8 @@ EXPECTED = {
     ("UserPromptSubmit", "", "ace_before_task_wrapper.sh", (), False, 30,
      "ACE: searching patterns…"),
     ("PreToolUse", "Agent", "ace_pretooluse_agent_stash.sh", (), False, 5, None),
+    # TEMPORARY until WP-H: the per-tool accumulator row stays; PostToolBatch --batch is a no-op
+    ("PostToolUse", "*", "ace_posttooluse_wrapper.sh", ("--log",), True, None, None),
     ("PostToolBatch", "", "ace_posttooluse_wrapper.sh", ("--batch",), True, None, None),
     ("PostToolUse", "Read|Glob|Grep", "ace_posttooluse_domain_inject.sh", (), False, 20,
      "ACE: domain shift…"),
@@ -87,7 +89,8 @@ def test_no_per_tool_posttooluse_accumulator():
     """§9 G4: PostToolBatch (one event per batch, no matcher support, doc :311/:2351)
     replaces the PostToolUse `*` accumulator; only the sync domain-shift stays on PostToolUse."""
     hooks = json.loads(HOOKS_JSON.read_text())["hooks"]
-    assert [g.get("matcher") for g in hooks["PostToolUse"]] == ["Read|Glob|Grep"]
+    # TEMPORARY until WP-H replaces the `*` accumulator: expect ["*", "Read|Glob|Grep"] then.
+    assert [g.get("matcher") for g in hooks["PostToolUse"]] == ["*", "Read|Glob|Grep"]
     assert all("matcher" not in g for g in hooks["PostToolBatch"]), \
         "PostToolBatch has no matcher support (doc :311); omit the key"
 
@@ -149,3 +152,11 @@ def test_claude_plugin_validate_strict_passes():
     hook_warnings = [l for l in out.splitlines() if re.search(r"\bhooks\.[A-Z]", l)]
     assert not hook_warnings, "hook validator warnings:\n" + "\n".join(hook_warnings)
     assert r.returncode == 0, out[-3000:]
+
+
+def test_batch_mode_is_silent_rc0_noop():
+    """WP-G->WP-H gate: PostToolBatch row points at `--batch`; until WP-H it must not fail."""
+    ev = {"hook_event_name": "PostToolBatch", "session_id": "s", "tool_calls": []}
+    p = subprocess.run([str(PLUGIN / "scripts" / "ace_posttooluse_wrapper.sh"), "--batch"],
+                       input=json.dumps(ev), capture_output=True, text=True, timeout=30)
+    assert p.returncode == 0 and p.stdout == "" and p.stderr == "", (p.returncode, p.stderr)

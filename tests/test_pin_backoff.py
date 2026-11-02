@@ -43,6 +43,12 @@ with open(os.environ["ACE_FAKE_CLI_LOG"], "a") as f:
                         "client_id": os.environ.get("ACE_CLIENT_ID")}) + "\n")
 mode = os.environ.get("ACE_FAKE_PIN_MODE", "ok")
 if argv[:1] == ["search"] and "--pin-session" in argv:
+    if mode == "slowlock":
+        import time; time.sleep(2.5)
+        sys.stderr.write("SqliteError: database is locked\n")
+        sys.exit(1)
+    if mode == "hang":
+        import time; time.sleep(6)
     if mode == "locked":
         sys.stderr.write("SqliteError: database is locked\n    at SessionStorage.cleanupExpiredSessions\n")
         sys.exit(1)
@@ -206,3 +212,43 @@ def test_ups_injects_patterns_when_pin_store_is_locked(tmp_path):
     out = json.loads(proc.stdout)
     assert PATTERN["id"] in out["hookSpecificOutput"]["additionalContext"]
     assert any(r.get("pin_failed") is True for r in env.relevance_rows()), env.relevance_rows()
+
+
+def test_empty_stdout_retries_but_does_not_touch_backoff(fake, monkeypatch):
+    """Empty stdout without lock text (network/5xx/crash): re-run unpinned, but do NOT
+    suspend pinning globally for 30 min."""
+    monkeypatch.setenv("ACE_FAKE_PIN_MODE", "empty")
+    result, _ = fake.cli.run_search("q", session_id="tsid-7", hook_event_name="UserPromptSubmit")
+    assert len(_search(fake)) == 2 and result.get("similar_patterns")
+    assert not fake.pdd.pin_backoff_file().exists()
+
+
+def test_retry_skipped_when_under_two_seconds_remain(fake, monkeypatch):
+    """A2: lock failure after 2.5 s of a 3 s budget -> no floored retry; backoff still set."""
+    monkeypatch.setenv("ACE_FAKE_PIN_MODE", "slowlock")
+    fake.cli.run_search("q", session_id="tsid-8", timeout=3, hook_event_name="PostToolUse")
+    assert len(_search(fake)) == 1
+    assert fake.pdd.pin_backoff_file().exists()
+
+
+def test_pinned_timeout_touches_backoff(fake, monkeypatch):
+    monkeypatch.setenv("ACE_FAKE_PIN_MODE", "hang")
+    result, _ = fake.cli.run_search("q", session_id="tsid-9", timeout=1, hook_event_name="UserPromptSubmit")
+    assert result.get("error") == "timeout"
+    assert fake.pdd.pin_backoff_file().exists()
+
+
+def test_ups_disabled_writes_nothing_before_check(tmp_path):
+    """UPS disabled flag is checked before any relevance row / review state is written."""
+    env = HookEnv(tmp_path, project_id="prj_dis_ups")
+    (env.bin / "ace-cli").write_text(_FAKE % {"py": sys.executable, "resp": json.dumps(RESPONSE)})
+    import plugin_data_dir  # noqa
+    sd = env.session_dir("cc-dis-1")
+    sd.mkdir(parents=True, exist_ok=True)
+    (sd / "disabled.flag").write_text("1")
+    ev = {"session_id": "cc-dis-1", "prompt_id": "p", "cwd": str(env.proj),
+          "transcript_path": str(env.tmp / "t.jsonl"), "hook_event_name": "UserPromptSubmit",
+          "prompt": "ok"}  # too-short prompt would normally log a skipped row
+    proc = env.run("ace_before_task_wrapper.sh", ev)
+    assert proc.returncode == 0 and proc.stdout == ""
+    assert env.relevance_rows() == []

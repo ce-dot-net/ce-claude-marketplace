@@ -95,6 +95,13 @@ def _pin_backoff_active() -> bool:
         return False
 
 
+def _touch_backoff() -> None:
+    try:
+        _plugin_dir().pin_backoff_file().touch()
+    except Exception:
+        pass
+
+
 def _log_pin(session_id, hook_event_name, **fields) -> None:
     """Best-effort relevance row for a pin failure/skip (DESIGN §11 A1)."""
     try:
@@ -132,8 +139,8 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
     Failures are logged with the CALLER's hook_event_name.
     """
     t0 = time.monotonic()
+    pin = session_id
     try:
-        pin = session_id
         if pin and _pin_backoff_active():  # sessions.db lock is sticky (p2): don't even try
             pin = None
             _log_pin(session_id, hook_event_name, pin_skipped="backoff")
@@ -149,16 +156,16 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
         stdout = _text(result.stdout)
         # A1: a pinned search that dies on the sessions.db lock (or prints nothing) is
         # re-run ONCE without the pin; the pinned command itself is never re-run.
-        if pin and ('database is locked' in stderr.lower()
-                    or (not stdout.strip() and not _is_auth_failure(stderr, stdout))):
+        locked = 'database is locked' in stderr.lower()
+        if pin and (locked or (not stdout.strip() and not _is_auth_failure(stderr, stdout))):
             _log_pin(session_id, hook_event_name, pin_failed=True)
-            try:
-                _plugin_dir().pin_backoff_file().touch()
-            except Exception:
-                pass
-            result = spawn(base + tail, max(timeout - (time.monotonic() - t0), 2))
-            stderr = _text(result.stderr)
-            stdout = _text(result.stdout)
+            if locked:  # only the sticky lock justifies suspending pins globally (p2/p6)
+                _touch_backoff()
+            remaining = timeout - (time.monotonic() - t0)
+            if remaining >= 2:  # A2: never overrun the hook budget with a floored retry
+                result = spawn(base + tail, remaining)
+                stderr = _text(result.stderr)
+                stdout = _text(result.stdout)
         if result.returncode != 0:
             if _is_auth_failure(stderr, stdout):
                 return dict(_AUTH_MSG), _ms(t0)
@@ -176,6 +183,8 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
             return None, _ms(t0)
 
     except subprocess.TimeoutExpired:
+        if pin:  # a pinned spawn stuck on the lock: don't make every later call wait again
+            _touch_backoff()
         _log_cli_error("ace_cli_timeout", -1, '', '', query=query, project_id=project,
                        hook_event_name=hook_event_name)
         return {"error": "timeout", "message": "Search timed out. Check your connection."}, _ms(t0)

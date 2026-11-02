@@ -249,6 +249,8 @@ def _consume_stash(project, sid, prompt_id, agent_type) -> Optional[str]:
         f = plugin_data_dir.agent_prompt_file(project, sid, prompt_id, agent_type)
         data = json.loads(f.read_text())
         f.unlink()
+        if (data or {}).get('ambiguous'):
+            return None
         q = str((data or {}).get('prompt') or (data or {}).get('description') or '').strip()
         return q[:_QUERY_MAX_CHARS] or None
     except (OSError, ValueError, AttributeError):
