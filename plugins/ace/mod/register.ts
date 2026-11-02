@@ -7,12 +7,15 @@ import {
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
   detachedLearnArgv, parseAceReview, parseDiffStat, evalInjection, searchRow, searchSummary, searchErrorLine, sessionTitle,
-  subagentQuery, STATE_CAP, type StateUpdate, type ToolRec, type Cohort,
+  subagentQuery, isNoTaskCommand, STATE_CAP, type StateUpdate, type ToolRec, type Cohort,
 } from './core.ts'
 
 const SEARCH_MS = 25000, DOMAIN_MS = 17000 // §11 A2: blocking budget per search, retry included
 const PIN_SHARE = 0.6                      // of a search budget, for the pinned attempt
 const LEARN_LOCK_MS = 600_000              // ace_session_end.py: learn timeout 300 s + margin
+const MARKER_REFRESH_MS = 60_000           // is_mod_active's max age is 600 s; a turn can outlast it without any prompt
+const LAUNCHER_MS = 15_000                 // a loaded machine must not get a live learn's lock and trace removed
+const MAX_TOOL_RECS = 1000                 // ponytail: the trace keeps the last 50 + failures anyway; older steps are lost past this
 
 type Sess = { sessionId: string; cwd: string; project: string; org?: string; root: string; pdir: string; sdir: string;
   logs: string; minChars: number; extraPrefixes: string[]; clientId: string }
@@ -96,7 +99,9 @@ async function search($: any, s: Sess, query: string, pin: string | undefined, t
   const cliMissing = /ENOENT|not found/i.test(r.threw)
   const killed = !!r.threw && !cliMissing
   const locked = /database is locked/i.test(r.stderr)
-  if (usePin && (locked || killed)) await $.fs.write(backoffPath, '')   // only the sticky lock suspends pins globally (p2/p6)
+  const killedPin = !!usePin && killed
+  const pinMs = usePin ? await $.clock.now() - t0 : undefined   // data for PIN_SHARE (live: 11.9 s, p7: 27-37 s under load)
+  if (usePin && locked) await $.fs.write(backoffPath, '')   // only the sticky lock suspends pins globally (p2/p6)
   if (usePin && !cliMissing && (locked || killed || (!r.stdout.trim() && !isAuthFailure(r.stderr)))) {
     pinFailed = true
     const left = budgetMs - (await $.clock.now() - t0)
@@ -107,11 +112,14 @@ async function search($: any, s: Sess, query: string, pin: string | undefined, t
   else if (r.exitCode !== 0) error = isAuthFailure(r.stderr + r.stdout) ? 'not_authenticated' : /timed? ?out/i.test(r.stderr) ? 'timeout' : 'nonzero_exit'
   else { try { resp = sanitize(pyLoads(r.stdout)) } catch { error = 'json_parse_failed' } }
   if (resp && resp.error) { error = String(resp.error); resp = null }
-  return { resp, error, ms: await $.clock.now() - t0, pinFailed, pinSkipped, stderr: String(r.stderr).slice(0, 300) }
+  // A kill alone may be a slow server. Only a re-run that then answers in less time than the pin was given points
+  // at the pin. ponytail: server latency varies, so a false 30-min backoff is possible; a lock probe would need the sqlite path.
+  if (killedPin && !r.threw && r.exitCode === 0) await $.fs.write(backoffPath, '')
+  return { resp, error, ms: await $.clock.now() - t0, pinFailed, pinSkipped, pinMs, stderr: String(r.stderr).slice(0, 300) }
 }
 
-// Per-load state, created in register (a reload starts over). ponytail: a hot reload loses the tool records of a
-// running task (trajectory restarts; the F-080 state is on disk).
+// Per-load state, created in register (a reload starts over). What a learn needs is on disk: the F-080 state, the tool
+// records, a mid-turn prompt. Lost on a reload: the Stop effort, title, in-flight claims, pending late searches.
 type Load = {
   sess: Sess | null
   pendingMain: string | null | undefined        // set by prompt.submit, bound to the next main turn.start
@@ -119,8 +127,15 @@ type Load = {
   stopEffort: string | undefined                // classic.Stop's effort for the turn.complete learn
   domains: string[] | null
   turnAnchor: Map<string, string | null>        // main turnId -> tsid (null = machine turn)
-  tools: Map<string, ToolRec[]>                 // key: 'main' or agentId
+  tools: Map<string, ToolRec[]>                 // write-through cache of mod-tools-<key>.json; key: 'main' or agentId
   spawnPrompts: Map<string, string>             // workflow agentId -> the prompt agent.spawn saw
+  placeholders: Set<string>                     // spawn prompts proven to be a workflow's placeholder: no search for them
+  late: Map<string, string>                     // agentId -> query: a run whose prompt no hook can rewrite gets its patterns at its first tool call
+  agentTypes: Map<string, string>               // agents this load saw spawn (a turn.start of one without state is a wake)
+  earlyStart: Map<string, string>               // agentId -> turn.start text, heard before its agent.spawn settled
+  agentEffort: Map<string, string>              // classic.SubagentStop's effort for that agent's turn.complete
+  lastClaim: Map<string, string>                // key -> newest claimed domain: only that one writes domain-last
+  markerAt: number
   claims: Set<string>                           // ponytail: in-process; the marker silences the Python hook, so no second process races this one
   queues: Map<string, Promise<unknown>>         // per state file: parallel hooks read-merge-write in turn
 }
@@ -134,17 +149,54 @@ const stateFile = (s: Sess, key: string) => `${s.sdir}/patterns-used-${safe(key)
 async function disabled($: any, s: Sess) {
   return await $.fs.exists(`${s.sdir}/disabled.flag`) || await $.fs.exists(`${s.pdir}/disabled.flag`)
 }
-function touchMarker($: any, s: Sess) { return $.fs.write(`${s.sdir}/mod-active`, String(Date.now())) }
+function touchMarker($: any, L: Load, s: Sess, now: number) { L.markerAt = now; return $.fs.write(`${s.sdir}/mod-active`, String(now)) }
+// Between prompts: a long task must not wake the Python chain beside the mod. Never throws.
+async function refreshMarker($: any, L: Load) {
+  try {
+    const now = await $.clock.now()
+    if (now - L.markerAt < MARKER_REFRESH_MS) return
+    L.markerAt = now  // first: no project means no marker, and no settings read per tool call either
+    const s = await ensure($, L)
+    if (s) await touchMarker($, L, s, now)
+  } catch { /* the Python chain may wake; nothing is lost */ }
+}
 function readState($: any, s: Sess, key: string) { return readJson($, stateFile(s, key)) }
+function enqueue<T>(L: Load, path: string, fn: () => Promise<T>): Promise<T> {
+  const job = (L.queues.get(path) ?? Promise.resolve()).then(fn)
+  L.queues.set(path, job.catch(() => undefined))
+  return job
+}
 function updateState($: any, L: Load, s: Sess, key: string, u: StateUpdate, reset = false) {
   const path = stateFile(s, key)
-  const job = (L.queues.get(path) ?? Promise.resolve()).then(async () => {
+  return enqueue(L, path, async () => {
     const state = mergeState(reset ? undefined : await readJson($, path), u)
     await $.fs.write(path, pyDumps(state))
     return state
   })
-  L.queues.set(path, job.catch(() => undefined))
-  return job
+}
+
+const toolsFile = (s: Sess, key: string) => `${s.sdir}/mod-tools-${safe(key)}.json`
+const pendingFile = (s: Sess) => `${s.sdir}/mod-pending-main.json`
+const loadTools = async ($: any, L: Load, s: Sess, key: string): Promise<ToolRec[]> => {
+  const cached = L.tools.get(key)
+  if (cached) return cached
+  try { return JSON.parse(await $.fs.read(toolsFile(s, key)) as string) } catch { return [] }
+}
+function recordTool($: any, L: Load, s: Sess, key: string, rec: ToolRec) {
+  return enqueue(L, toolsFile(s, key), async () => {
+    const list = [...await loadTools($, L, s, key), rec].slice(-MAX_TOOL_RECS)
+    L.tools.set(key, list)
+    await $.fs.write(toolsFile(s, key), JSON.stringify(list))
+  })
+}
+function takeTools($: any, L: Load, s: Sess, key: string): Promise<ToolRec[]> {
+  return enqueue(L, toolsFile(s, key), () => loadTools($, L, s, key))
+}
+function clearTools($: any, L: Load, s: Sess, key: string) {
+  return enqueue(L, toolsFile(s, key), async () => {
+    L.tools.delete(key)
+    if (await $.fs.exists(toolsFile(s, key))) await rm($, toolsFile(s, key))
+  })
 }
 
 async function cohortEnv($: any) {
@@ -181,18 +233,20 @@ async function gitContext($: any, cwd: string) {
 }
 
 // Reap a finished task's state; main keeps rendered-main.txt for the SessionStart compact re-inject (patterns_used_state).
-async function reap($: any, s: Sess, key: string, state: any) {
+async function reap($: any, L: Load, s: Sess, key: string, state: any) {
   if (key === 'main' && state?.rendered_context) await $.fs.write(`${s.sdir}/rendered-main.txt`, state.rendered_context)
   await rm($, stateFile(s, key))
+  await clearTools($, L, s, key)
+  L.late.delete(key)
 }
 
 async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook: 'Stop' | 'SubagentStop', effortEvent: string | undefined) {
   const t0 = await $.clock.now()
   const agentId = key === 'main' ? undefined : key
-  const recs = L.tools.get(key) || []
-  L.tools.delete(key)
+  const recs = await takeTools($, L, s, key)
   const state = await readState($, s, key)
   if (!state) {
+    await clearTools($, L, s, key)
     if (hook === 'Stop') await relLog($, s, { timestamp: await nowIso($), event: 'learn_skipped', hook, session_id: s.sessionId, reason: 'no_task_state', source: 'mod' })
     return
   }
@@ -200,7 +254,7 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   const agentType: string = agentId ? state.agent_type ?? 'unknown' : 'main'
   const skip = !prompt || isTrivialTask(prompt, s.extraPrefixes) ? 'trivial_task' : !hasSubstantialWork(recs) ? 'no_substantial_work' : null
   if (skip) {
-    await reap($, s, key, state)
+    await reap($, L, s, key, state)
     await relLog($, s, { timestamp: await nowIso($), event: 'learn_skipped', hook, session_id: s.sessionId, reason: skip, tools: recs.length, agent_id: agentId ?? null, source: 'mod' })
     return
   }
@@ -225,22 +279,25 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   await $.fs.write(lock, '')
   const traceFile = `${s.root}/tmp/ace-trace-${uuid()}.json`
   await $.fs.write(traceFile, pyDumps(trace))
-  const row = async (sent: boolean) => pyDumps({ timestamp: await nowIso($), event: 'execution', hook: 'Stop', session_id: s.sessionId,
+  const row = async (sent: boolean) => ({ timestamp: await nowIso($), event: 'execution', hook, session_id: s.sessionId,
     project_id: s.project, agent_type: agentType, patterns_used_count: playbook.length, pattern_ids: playbook.slice(0, 20),
     tools_executed: recs.length, state_changing_tools: recs.filter(r => ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit'].some(x => r.tool.includes(x))).length,
     success, execution_time_seconds: Math.round((await $.clock.now() - t0) / 10) / 100, learning_sent: sent })
   const log = `${s.logs}/ace-relevance.jsonl`
   const python = (await readText($, `${s.root}/python_path`))?.trim()
   const argv = detachedLearnArgv({ learnArgv: learnArgv(traceFile, state.retrieval_id ?? undefined, applied, await $.env.get('ACE_VERBOSITY') || 'detailed'),
-    trace: traceFile, lock, log, rowOk: await row(true), rowFail: await row(false), errLog: `${s.root}/logs/ace-hook-errors.log`, python })
-  const spawned = await run($, argv, { env: aceEnv(s) })
-  if (!spawned || spawned.exitCode !== 0) await rm($, lock, traceFile)  // no child will clean up
+    trace: traceFile, lock, log, rowOk: pyDumps(await row(true)), rowFail: pyDumps(await row(false)), errLog: `${s.root}/logs/ace-hook-errors.log`, python })
+  const spawned = await run($, argv, { env: aceEnv(s), timeoutMs: LAUNCHER_MS })
+  if (!spawned || spawned.exitCode !== 0) {  // no child will clean up, or write the metrics row
+    await rm($, lock, traceFile)
+    await relLog($, s, await row(false))
+  }
 
   if (hook === 'Stop' && playbook.length) {
     await $.fs.write(`${s.logs}/ace-eval-request.json`, pyDumps({ patterns_injected: playbook.length, avg_relevance: 0, domains: 0,
       tools_executed: recs.length, success: true, timestamp: (await nowIso($)).replace(/\.\d+Z$/, 'Z') }))
   }
-  await reap($, s, key, state)
+  await reap($, L, s, key, state)
   await relLog($, s, { timestamp: await nowIso($), event: 'learn_dispatched', hook, session_id: s.sessionId, agent_id: agentId ?? null,
     agent_type: agentType, task_session_id: tsid ?? null, parent_task_id: state.parent_task_id ?? null, retrieval_id: state.retrieval_id ?? null,
     applied_log_ids: applied.length, patterns_used: playbook.length, tools_executed: recs.length, success, spawn_exit: spawned?.exitCode ?? null, source: 'mod' })
@@ -249,20 +306,35 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
 async function onPrompt($: any, L: Load, e: any): Promise<any> {
   const s = await ensure($, L)
   if (!s) return e
-  await touchMarker($, s)   // every prompt, machine ones too: this is what keeps the Python hooks quiet
-  if (e.command) { L.pendingMain = null; return e }  // slash commands: ACE stays out (as /ace-* skip)
   const t0 = await $.clock.now()
+  await touchMarker($, L, s, t0)   // every prompt, machine ones too: this is what keeps the Python hooks quiet
+  const text: string = e.command ? e.command.args : e.text
+  // Typed over, or delivered into, a running turn: that turn's next turn.start must not be bound to anything here.
+  const midTurn = e.turnId !== undefined
   const reason = e.origin && MACHINE_ORIGINS.has(e.origin.kind) ? 'machine_prompt'
-    : e.isMeta ? 'machine_prompt' : skipReason(e.text, s.minChars, s.extraPrefixes)
+    : e.isMeta ? 'machine_prompt' : e.command && isNoTaskCommand(e.command.name) ? 'ace_command'
+    : skipReason(text, s.minChars, s.extraPrefixes)
   if (reason) {
-    L.pendingMain = null
+    if (!midTurn) L.pendingMain = null
     if (reason !== 'ace_command') await relLog($, s, { timestamp: await nowIso($), event: 'search_skipped', hook: 'UserPromptSubmit', reason, session_id: s.sessionId, project_id: s.project, origin: e.origin?.kind ?? null, source: 'mod' })
     return e
   }
-  if (await disabled($, s)) { L.pendingMain = null; return e }
+  if (await disabled($, s)) { if (!midTurn) L.pendingMain = null; return e }
   const tsid = uuid()
-  L.pendingMain = tsid
-  L.tools.set('main', [])
+  // A running task keeps its anchor, tools and state. The new prompt waits on disk: if a turn starts with its text it
+  // is its own task (turn.start). If it was delivered into the running turn its work lands in that task's learn, its
+  // search goes uncredited (no way to tell the two apart here, and a false credit is worse than none).
+  const mainState = midTurn ? await readState($, s, 'main') : undefined
+  const running = !midTurn ? undefined : L.turnAnchor.has(e.turnId) ? L.turnAnchor.get(e.turnId) : mainState?.task_session_id
+  const defer = !!running && mainState?.task_session_id === running
+  const save = (u: StateUpdate) => defer
+    ? $.fs.write(pendingFile(s), JSON.stringify({ text, state: pyDumps(mergeState(undefined, u)) })) // ponytail: one slot; of two queued prompts the first is not learned
+    : updateState($, L, s, 'main', u, true)
+  if (!defer) {
+    L.pendingMain = tsid
+    await clearTools($, L, s, 'main')
+    if (await $.fs.exists(pendingFile(s))) await rm($, pendingFile(s))
+  }
 
   // previous Stop's self-eval request -> its own context entry (G9: never concatenated)
   const evalFile = `${s.logs}/ace-eval-request.json`
@@ -277,16 +349,16 @@ async function onPrompt($: any, L: Load, e: any): Promise<any> {
     return all.length ? { ...e, context: all } : e
   }
 
-  const query = expandAbbreviations(e.text)
+  const query = expandAbbreviations(text)
   const sr = await search($, s, query, tsid, undefined, SEARCH_MS)
   if (!sr.resp) {
-    await updateState($, L, s, 'main', { tsid, userPrompt: e.text, hook: 'UserPromptSubmit' }, true)
-    await relLog($, s, { timestamp: await nowIso($), event: 'error', hook: 'UserPromptSubmit', location: 'mod.search', error: sr.error ?? null, stderr_sample: sr.stderr, pin_failed: sr.pinFailed || undefined, session_id: s.sessionId, project_id: s.project, hook_ms: await $.clock.now() - t0, source: 'mod' })
+    await save({ tsid, userPrompt: e.text, hook: 'UserPromptSubmit' })
+    await relLog($, s, { timestamp: await nowIso($), event: 'error', hook: 'UserPromptSubmit', location: 'mod.search', error: sr.error ?? null, stderr_sample: sr.stderr, pin_failed: sr.pinFailed || undefined, pin_ms: sr.pinMs, session_id: s.sessionId, project_id: s.project, hook_ms: await $.clock.now() - t0, source: 'mod' })
     $.ui.log(searchErrorLine(sr.error))
     return withEval([])
   }
   const r = await renderArm($, sr.resp, 'ace-patterns', 'agent-type="main"', tsid)
-  await updateState($, L, s, 'main', { ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, tsid, userPrompt: e.text, rendered: r.rendered, hook: 'UserPromptSubmit' }, true)
+  await save({ ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, tsid, userPrompt: e.text, rendered: r.rendered, hook: 'UserPromptSubmit' })
   const ds = domainsSummary(sr.resp)
   if (Object.keys(ds).length) {
     L.domains = domainNames(ds)
@@ -295,12 +367,61 @@ async function onPrompt($: any, L: Load, e: any): Promise<any> {
   const returned = sr.resp.similar_patterns || []
   await relLog($, s, searchRow({ hook: 'UserPromptSubmit', sessionId: s.sessionId, userPrompt: e.text, query, returned, injected: r.patterns,
     projectId: s.project, orgId: s.org, agentType: 'main', cohort: r.cohort, hookMs: await $.clock.now() - t0, nowIso: await nowIso($),
-    extra: { search_ms: sr.ms, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, truncated_for_cap: r.truncated || undefined,
-      context_chars: r.context?.length ?? 0, task_session_id: tsid, source: 'mod' } }))
+    extra: { search_ms: sr.ms, pin_ms: sr.pinMs, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, truncated_for_cap: r.truncated || undefined,
+      context_chars: r.context?.length ?? 0, task_session_id: tsid, mid_turn: defer || undefined, source: 'mod' } }))
   const processed = renderPatternsDict(sr.resp).dict.similar_patterns
   $.ui.log(searchSummary(processed))
   L.pendingTitle = sessionTitle(processed, await readJson($, `${s.logs}/ace-review-result.json`))
   return withEval(r.context ? [r.context] : [])
+}
+
+const logSubagentError = async ($: any, s: Sess, sr: any) => relLog($, s, { timestamp: await nowIso($), event: 'error', hook: 'SubagentStart', location: 'mod.search', error: sr.error ?? null, stderr_sample: sr.stderr, pin_failed: sr.pinFailed || undefined, pin_ms: sr.pinMs, session_id: s.sessionId, source: 'mod' })
+
+async function subagentRender($: any, s: Sess, sr: any, query: string, agentType: string, tsid: string, t0: number, parent: string | undefined, extra: any) {
+  const attr = `agent-type="${String(agentType).replace(/"/g, '&quot;')}"`
+  const r = await renderArm($, sr.resp, 'ace-patterns-subagent', attr, tsid)
+  await relLog($, s, searchRow({ hook: 'SubagentStart', sessionId: s.sessionId, userPrompt: query, query, returned: sr.resp.similar_patterns || [], injected: r.patterns,
+    projectId: s.project, orgId: s.org, agentType, cohort: r.cohort, hookMs: await $.clock.now() - t0, nowIso: await nowIso($),
+    extra: { search_ms: sr.ms, pin_ms: sr.pinMs, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, truncated_for_cap: r.truncated || undefined, context_chars: r.context?.length ?? 0,
+      task_session_id: tsid, parent_task_id: parent ?? null, source: 'mod', ...extra } }))
+  return r
+}
+
+// A run whose prompt no hook can rewrite (a resume, a wake, a workflow placeholder): its own task, a fresh pin (§12),
+// and the search waits for its first tool call, the first place this run takes context. ace_subagent_start.py: an agent
+// resumed after stopping searches afresh.
+async function anchorRun($: any, L: Load, s: Sess, key: string, text: string, fallback: string | undefined, agentType: string | undefined, parent: string | undefined) {
+  const query = subagentQuery(text)
+  await updateState($, L, s, key, { tsid: uuid(), userPrompt: query || fallback, hook: 'SubagentStart', parentTaskId: parent, agentType }, true)
+  if (query && !skipReason(query, s.minChars, s.extraPrefixes)) L.late.set(key, query)
+}
+
+async function lateInject($: any, L: Load, s: Sess, key: string): Promise<string | null> {
+  const query = L.late.get(key)
+  if (query === undefined) return null
+  L.late.delete(key)
+  const st = await readState($, s, key)
+  if (!st || await disabled($, s)) return null
+  const t0 = await $.clock.now()
+  const tsid: string = st.task_session_id
+  const sr = await search($, s, query, tsid, undefined, DOMAIN_MS)
+  if (!sr.resp) { await logSubagentError($, s, sr); return null }
+  const r = await subagentRender($, s, sr, query, st.agent_type ?? 'unknown', tsid, t0, st.parent_task_id, { late: true })
+  await updateState($, L, s, key, { ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered })
+  return r.context
+}
+
+// Workflow placeholder (§13.1): the prompt agent.spawn searched for is not what the agent runs, so its patterns never
+// reached it: no credit, and a fresh pin so the search stays out of the learn's session. "" says nothing (docs: a run no hook sees).
+async function checkPlaceholder($: any, L: Load, s: Sess, agentId: string, prompt: string, text: string) {
+  const seen = subagentQuery(prompt).slice(0, 200)
+  if (!text || !seen || text.includes(seen)) return
+  const st = await readState($, s, agentId)
+  if (!st) return
+  L.placeholders.add(prompt)
+  await anchorRun($, L, s, agentId, text, undefined, st.agent_type, st.parent_task_id ?? undefined)
+  const tsid = (await readState($, s, agentId))?.task_session_id ?? null
+  await relLog($, s, { timestamp: await nowIso($), event: 'workflow_placeholder', hook: 'SubagentStart', session_id: s.sessionId, agent_id: agentId, task_session_id: tsid, source: 'mod' })
 }
 
 async function beforeSpawn($: any, L: Load, s: Sess, e: any) {
@@ -309,22 +430,17 @@ async function beforeSpawn($: any, L: Load, s: Sess, e: any) {
   const parent = await readState($, s, e.parentAgentId ?? 'main')
   const query = subagentQuery(e.prompt)
   const state: StateUpdate = { tsid, userPrompt: query, hook: 'SubagentStart', parentTaskId: parent?.task_session_id ?? undefined, agentType: e.subagentType }
-  const skip = skipReason(query, s.minChars, s.extraPrefixes)
+  const skip = L.placeholders.has(e.prompt) ? 'workflow_placeholder' : skipReason(query, s.minChars, s.extraPrefixes)
   if (skip) {
     await relLog($, s, { timestamp: await nowIso($), event: 'search_skipped', hook: 'SubagentStart', reason: skip, session_id: s.sessionId, project_id: s.project, source: 'mod' })
     return { out: e, state }
   }
   const sr = await search($, s, query, tsid, undefined, SEARCH_MS)
   if (!sr.resp) {
-    await relLog($, s, { timestamp: await nowIso($), event: 'error', hook: 'SubagentStart', location: 'mod.search', error: sr.error ?? null, stderr_sample: sr.stderr, pin_failed: sr.pinFailed || undefined, session_id: s.sessionId, source: 'mod' })
+    await logSubagentError($, s, sr)
     return { out: e, state }
   }
-  const attr = `agent-type="${String(e.subagentType).replace(/"/g, '&quot;')}"`
-  const r = await renderArm($, sr.resp, 'ace-patterns-subagent', attr, tsid)
-  await relLog($, s, searchRow({ hook: 'SubagentStart', sessionId: s.sessionId, userPrompt: query, query, returned: sr.resp.similar_patterns || [], injected: r.patterns,
-    projectId: s.project, orgId: s.org, agentType: e.subagentType, cohort: r.cohort, hookMs: await $.clock.now() - t0, nowIso: await nowIso($),
-    extra: { search_ms: sr.ms, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, truncated_for_cap: r.truncated || undefined, context_chars: r.context?.length ?? 0,
-      task_session_id: tsid, parent_task_id: state.parentTaskId ?? null, workflow: e.workflow?.runId, source: 'mod' } }))
+  const r = await subagentRender($, s, sr, query, e.subagentType, tsid, t0, state.parentTaskId, { workflow: e.workflow?.runId })
   return { out: r.context ? { ...e, prompt: `${e.prompt}\n\n${r.context}` } : e,
     state: { ...state, ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered } }
 }
@@ -344,8 +460,10 @@ async function domainShift($: any, L: Load, e: any, key: string): Promise<string
   const readLast = async () => ((await readText($, lastFile)) ?? '').trim().toLowerCase()
   if (await readLast() === matched) return null
   // Claim BEFORE searching: parallel Reads of a batch would all see the old domain.
-  if (L.claims.has(key)) return null
-  L.claims.add(key)
+  const claim = `${key}\0${matched}`
+  if (L.claims.has(claim)) return null
+  L.claims.add(claim)
+  L.lastClaim.set(key, matched)
   try {
     const last = await readLast()
     if (last === matched) return null
@@ -355,7 +473,8 @@ async function domainShift($: any, L: Load, e: any, key: string): Promise<string
     const state = await readState($, s, key)
     const tsid: string = state?.task_session_id ?? uuid()
     const sr = await search($, s, query, tsid, 8, DOMAIN_MS)
-    if (sr.resp) await $.fs.write(lastFile, matched)    // a failed search stays retryable
+    // A failed search stays retryable. Parallel domains: the newest claim writes, so the finishing order cannot flip it.
+    if (sr.resp && L.lastClaim.get(key) === matched) await $.fs.write(lastFile, matched)
     const rd = sr.resp && (sr.resp.similar_patterns || []).length ? renderDomainShift(sr.resp, matched) : null
     await relLog($, s, { timestamp: await nowIso($), event: 'domain_shift', hook: 'PostToolUse', session_id: s.sessionId, project_id: s.project,
       from_domain: last, to_domain: matched, file_path: file.slice(0, 200), patterns_found: rd?.shown ?? 0, search_succeeded: !!sr.resp,
@@ -364,19 +483,27 @@ async function domainShift($: any, L: Load, e: any, key: string): Promise<string
     // F-080: merge the injected ids + log ids; keep the task's FIRST retrieval_id.
     await updateState($, L, s, key, { ids: rd.ids, rlog: rd.rlog, tsid, retrievalId: state?.retrieval_id ? undefined : sr.resp.retrieval_id || undefined })
     return rd.context
-  } finally { L.claims.delete(key) }
+  } finally { L.claims.delete(claim) }
 }
 
 
+// Interrupted, refused, or ended by an API error (StopFailure in place of Stop): no outcome to credit (v7.1.3 orphan ruling).
+async function abstain($: any, L: Load, s: Sess, key: string, state: any, reason: string, hook: string) {
+  await reap($, L, s, key, state)
+  if (state) await relLog($, s, { timestamp: await nowIso($), event: 'learn_skipped', hook, session_id: s.sessionId, reason: `turn_${reason}`, agent_id: key === 'main' ? null : key, source: 'mod' })
+}
+
 export const register: Register = (on) => {
   const L: Load = { sess: null, pendingMain: undefined, pendingTitle: undefined, stopEffort: undefined, domains: null,
-    turnAnchor: new Map(), tools: new Map(), spawnPrompts: new Map(), claims: new Set(), queues: new Map() }
+    turnAnchor: new Map(), tools: new Map(), spawnPrompts: new Map(), placeholders: new Set(), late: new Map(), agentTypes: new Map(),
+    earlyStart: new Map(), agentEffort: new Map(), lastClaim: new Map(), markerAt: 0, claims: new Set(), queues: new Map() }
+  const effortOf = (e: any): unknown => e.effort && typeof e.effort === 'object' ? e.effort.level : e.effort
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
     try {
       L.sess = await resolveSession($, e.cwd)
-      if (L.sess) await touchMarker($, L.sess)
+      if (L.sess) await touchMarker($, L, L.sess, await $.clock.now())
     } catch { /* the Python chain takes over without a marker */ }
     return r
   })
@@ -397,32 +524,47 @@ export const register: Register = (on) => {
 
   // turn.complete carries no effort; Stop does (ace_after_task._resolve_effort_level).
   on('classic.Stop', async ($, e: any, next) => {
-    const raw = e.effort && typeof e.effort === 'object' ? e.effort.level : e.effort
+    await refreshMarker($, L)  // Stop is the Python hook that would reap the state, and it runs after this one
+    const raw = effortOf(e)
     if (typeof raw === 'string' && raw) L.stopEffort = raw
+    return next(e)
+  })
+  on('classic.SubagentStop', async ($, e: any, next) => {
+    await refreshMarker($, L)
+    const raw = effortOf(e)
+    if (typeof raw === 'string' && raw && e.agent_id) L.agentEffort.set(e.agent_id, raw)
     return next(e)
   })
 
   on('turn.start', async ($, e, next) => {
+    await refreshMarker($, L)
     try {
       if (e.agentId === undefined) {
         let anchor: string | null | undefined = L.pendingMain
-        if (anchor === undefined) { // no prompt.submit in this load (hot reload): the task is what is on disk
+        if (anchor === undefined) { // no prompt.submit bound: a prompt that waited for this turn, else what is on disk (hot reload)
           const s = await ensure($, L)
-          anchor = (s && (await readState($, s, 'main'))?.task_session_id) ?? null
+          const pend = s && await readJson($, pendingFile(s))
+          if (s && pend?.text && e.text.includes(String(pend.text).slice(0, 200))) {
+            await enqueue(L, stateFile(s, 'main'), () => $.fs.write(stateFile(s, 'main'), pend.state))
+            await rm($, pendingFile(s))
+            await clearTools($, L, s, 'main')
+            anchor = pyLoads(pend.state).task_session_id
+          } else anchor = (s && (await readState($, s, 'main'))?.task_session_id) ?? null
         }
         L.turnAnchor.set(e.turnId, anchor)
         L.pendingMain = undefined
-      } else if (L.spawnPrompts.has(e.agentId)) {
-        // Workflow placeholder (§13.1): the prompt agent.spawn searched for is not what the agent runs, so the
-        // patterns never reached it: no credit; the real text stays as the task.
-        const seen = L.spawnPrompts.get(e.agentId)!
-        L.spawnPrompts.delete(e.agentId)
+      } else {
         const s = await ensure($, L)
-        if (s && !e.text.includes(seen)) {
-          const st = await readState($, s, e.agentId)
-          if (st) {
-            await $.fs.write(stateFile(s, e.agentId), pyDumps({ ...st, pattern_ids: [], retrieval_id: null, retrieval_log_ids: {}, user_prompt: subagentQuery(e.text), rendered_context: '' }))
-            await relLog($, s, { timestamp: await nowIso($), event: 'workflow_placeholder', hook: 'SubagentStart', session_id: s.sessionId, agent_id: e.agentId, task_session_id: st.task_session_id ?? null, source: 'mod' })
+        const prompt = L.spawnPrompts.get(e.agentId)
+        if (s && prompt !== undefined) {
+          L.spawnPrompts.delete(e.agentId)
+          await checkPlaceholder($, L, s, e.agentId, prompt, e.text)
+        } else if (s && !(await readState($, s, e.agentId))) {
+          const type = L.agentTypes.get(e.agentId)
+          if (type === undefined) L.earlyStart.set(e.agentId, e.text)
+          else if (e.text && !(await disabled($, s))) {  // a teammate woken by a message: no agent.spawn, and its last run's state is reaped
+            const parent = await readState($, s, 'main')
+            await anchorRun($, L, s, e.agentId, e.text, undefined, type, parent?.task_session_id ?? undefined)
           }
         }
       }
@@ -431,41 +573,64 @@ export const register: Register = (on) => {
   })
 
   on('agent.spawn', async ($, e, next) => {
+    await refreshMarker($, L)
     let out: any = e, pending: any = null
     try {
       const s = await ensure($, L)
-      if (s && !e.fork && !e.resume && !(await disabled($, s))) {
-        pending = await beforeSpawn($, L, s, e)
-        out = pending.out
+      if (s && !e.fork && !(await disabled($, s))) {
+        if (e.resume) {  // a rewrite of a resume is not applied. Same run with state: same task (§12). Reaped: a new one.
+          const key = e.resume.agentId
+          L.agentTypes.set(key, e.subagentType)
+          if (!(await readState($, s, key))) {
+            const parent = await readState($, s, e.parentAgentId ?? 'main')
+            await anchorRun($, L, s, key, e.prompt, e.description, e.subagentType, parent?.task_session_id ?? undefined)
+          }
+        } else {
+          pending = await beforeSpawn($, L, s, e)
+          out = pending.out
+        }
       }
     } catch { pending = null; out = e }
     const res: any = await next(out)
     try {
       const s = L.sess
       if (pending && s && res.agentId && !res.deny) {
+        // The docs do not order this against the agent's first events: merge, so nothing it already did is lost.
         const key = res.agentId as string
-        L.tools.set(key, [])
-        if ((e as any).workflow) L.spawnPrompts.set(key, subagentQuery((e as any).prompt).slice(0, 200))
-        await updateState($, L, s, key, pending.state, true)
+        L.agentTypes.set(key, (e as any).subagentType)
+        await updateState($, L, s, key, pending.state)
+        const early = L.earlyStart.get(key)
+        L.earlyStart.delete(key)
+        if ((e as any).workflow) {
+          if (early === undefined) L.spawnPrompts.set(key, (e as any).prompt)
+          else await checkPlaceholder($, L, s, key, (e as any).prompt, early)
+        }
       }
     } catch { /* state failure: this subagent simply is not learned */ }
     return res
   })
 
   on('tool.call', async ($, e, next) => {
+    await refreshMarker($, L)
     const t0 = Date.now()
     const r: any = await next(e)
+    await refreshMarker($, L)  // the call itself can outlast the marker
     const key = (e as any).agentId ?? 'main'
+    let s: Sess | null = null
     try {
-      const list = L.tools.get(key) || []
-      list.push(toolRec(e.tool, e, r.result, !!r.isError, r.deny, t0, Date.now()))
-      L.tools.set(key, list)
+      s = await ensure($, L)
+      if (s) await recordTool($, L, s, key, toolRec(e.tool, e, r.result, !!r.isError, r.deny, t0, Date.now()))
     } catch { /* accumulation never breaks a tool call */ }
-    if (r.deny || r.isError || !['Read', 'Glob', 'Grep'].includes(e.tool)) return r
+    const contexts: string[] = []
     try {
-      const context = await domainShift($, L, e, key)
-      return context ? { ...r, context: [...(r.context ?? []), context] } : r
-    } catch { return r }
+      const late = s && !r.deny ? await lateInject($, L, s, key) : null
+      if (late) contexts.push(late)
+      if (!r.deny && !r.isError && ['Read', 'Glob', 'Grep'].includes(e.tool)) {
+        const shift = await domainShift($, L, e, key)
+        if (shift) contexts.push(shift)
+      }
+    } catch { /* injection never breaks a tool call */ }
+    return contexts.length ? { ...r, context: [...(r.context ?? []), ...contexts] } : r
   })
 
   on('turn.complete', async ($, e, next) => {
@@ -478,16 +643,19 @@ export const register: Register = (on) => {
       if (agentId === undefined) {
         const review = parseAceReview(e.answer)
         if (review) await $.fs.write(`${s.logs}/ace-review-result.json`, pyDumps(review))
-        const anchor = L.turnAnchor.get(e.turnId); L.turnAnchor.delete(e.turnId)
+        const state = await readState($, s, 'main')
+        // undefined = this load never heard the turn start (reload): the task on disk is that turn's. null = machine turn.
+        const anchor = L.turnAnchor.has(e.turnId) ? L.turnAnchor.get(e.turnId) : state?.task_session_id
+        L.turnAnchor.delete(e.turnId)
         const effort = L.stopEffort; L.stopEffort = undefined
-        if (!anchor || e.isAborted || (await readState($, s, 'main'))?.task_session_id !== anchor) { L.tools.delete('main'); return res }  // machine turn / interrupted (Stop does not run)
-        await learn($, L, s, 'main', e.answer, 'Stop', effort)
-      } else if (e.isAborted) { // an aborted agent has no outcome to credit (v7.1.3 orphan ruling): abstain
-        L.tools.delete(agentId)
-        const st = await readState($, s, agentId)
-        if (st) await reap($, s, agentId, st)
+        if (!anchor || (state && state.task_session_id !== anchor)) await clearTools($, L, s, 'main')
+        else if (e.reason !== 'answer' || e.isAborted) await abstain($, L, s, 'main', state, e.reason, 'Stop')
+        else await learn($, L, s, 'main', e.answer, 'Stop', effort)
       } else {
-        await learn($, L, s, agentId, e.answer, 'SubagentStop', undefined)
+        const effort = L.agentEffort.get(agentId)
+        L.agentEffort.delete(agentId); L.earlyStart.delete(agentId)
+        if (e.reason !== 'answer' || e.isAborted) await abstain($, L, s, agentId, await readState($, s, agentId), e.reason, 'SubagentStop')
+        else await learn($, L, s, agentId, e.answer, 'SubagentStop', effort)
       }
     } catch (err) {
       if (s) await relLog($, s, { timestamp: await nowIso($), event: 'error', hook: 'Stop', location: 'mod.turn.complete', error: String(err).slice(0, 300), source: 'mod' })
@@ -511,7 +679,8 @@ export const register: Register = (on) => {
         if (!busy) await rm($, s.sdir)
       }
     } catch { /* never block the exit */ }
-    L.tools.clear(); L.turnAnchor.clear(); L.spawnPrompts.clear(); L.domains = null; L.sess = null
+    L.tools.clear(); L.turnAnchor.clear(); L.spawnPrompts.clear(); L.late.clear(); L.agentTypes.clear(); L.earlyStart.clear()
+    L.agentEffort.clear(); L.domains = null; L.sess = null; L.markerAt = 0
     return next(e)
   })
 }

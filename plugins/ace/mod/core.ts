@@ -16,12 +16,24 @@ export function pyLoads(src: string): any {
     if (c === '{') {
       i++; const o: any = {}; ws()
       if (src[i] === '}') { i++; return o }
-      for (;;) { ws(); const k = str(); ws(); i++ /* : */; o[k] = val(); ws(); if (src[i++] === '}') return o }
+      for (;;) {
+        ws(); const k = str(); ws()
+        if (src[i++] !== ':') throw new SyntaxError('expected : at ' + i)
+        o[k] = val(); ws()
+        const d = src[i++]
+        if (d === '}') return o
+        if (d !== ',') throw new SyntaxError('expected , at ' + i)
+      }
     }
     if (c === '[') {
       i++; const a: any[] = []; ws()
       if (src[i] === ']') { i++; return a }
-      for (;;) { a.push(val()); ws(); if (src[i++] === ']') return a }
+      for (;;) {
+        a.push(val()); ws()
+        const d = src[i++]
+        if (d === ']') return a
+        if (d !== ',') throw new SyntaxError('expected , at ' + i)
+      }
     }
     if (c === '"') return str()
     if (src.startsWith('true', i)) { i += 4; return true }
@@ -33,8 +45,10 @@ export function pyLoads(src: string): any {
     return m[1] || m[2] ? new PyFloat(Number(m[0])) : Number(m[0]) // ponytail: ints > 2^53 lose precision; none in ACE payloads
   }
   const str = (): string => {
+    if (src[i] !== '"') throw new SyntaxError('expected string at ' + i)
     const start = i; i++
-    while (src[i] !== '"') i += src[i] === '\\' ? 2 : 1
+    while (i < src.length && src[i] !== '"') i += src[i] === '\\' ? 2 : 1
+    if (i >= src.length) throw new SyntaxError('unterminated string at ' + start)
     i++
     return JSON.parse(src.slice(start, i))
   }
@@ -189,6 +203,11 @@ export function skipReason(prompt: string, minChars = 12, extra: string[] = []):
   return null
 }
 
+// mod-only: slash commands that carry no task of their own (ACE's, and session built-ins whose arguments are not work).
+const NO_TASK_COMMANDS = new Set(['compact', 'clear', 'model', 'config', 'help', 'status', 'memory', 'resume', 'mcp', 'hooks',
+  'cost', 'context', 'login', 'logout', 'exit', 'quit', 'plugin', 'reload-plugins', 'effort', 'permissions', 'agents', 'rename'])
+export const isNoTaskCommand = (name: string) => /^ace([:-]|$)/i.test(name) || NO_TASK_COMMANDS.has(name)
+
 // mod-only: origins that are never a human task (PromptOrigin kinds), checked before the text.
 export const MACHINE_ORIGINS = new Set(['task-notification', 'scheduled-trigger', 'peer', 'peer-send-message',
   'observer', 'observer-activity', 'projects-relay', 'coordinator'])
@@ -220,12 +239,12 @@ export const domainNames = (domains: Record<string, unknown>) =>
 export const basenameQuery = (p: string) => (p.replace(/\/+$/, '').split('/').pop() || '').replace(/\.[^.]*$/, '')
 
 // ---------- ace_after_task ----------
-const TRIVIAL = [/<command-message>ace[:\-]/i, /ace:ace-/i, /\/ace-/i, /ace-status/i, /ace-patterns/i, /ace-search/i,
+const TRIVIAL = [/<command-message>ace[:\-]/i, /ace:ace-/i, /(?:^|\s)\/ace-[\w:-]*(?:\s|$)/i, /ace-status/i, /ace-patterns/i, /ace-search/i,
   /ace-learn/i, /ace-configure/i, /ace-bootstrap/i, /ace-clear/i, /ace-doctor/i, /ace-export/i, /ace-import/i, /ace-top/i,
   /^(what|how|why|where|when|can you|could you|would you)\s.*\?$/i, /^(list|show|display|print|view|see)\s/i,
   /^(check|status|version|help|info)\s*$/i, /git\s+(status|log|diff|branch|show)\s*$/i, /^ls\s/i, /^cat\s/i,
   /^head\s/i, /^tail\s/i, /^(hi|hello|hey|thanks|thank you|ok|okay|yes|no|sure)\s*$/i,
-  /caveat:.*messages below were generated/i, /^plugin\s*$/i, /\/plugin/i]
+  /caveat:.*messages below were generated/i, /^plugin\s*$/i, /(?:^|\s)\/plugin(?:\s|$)/i]
 // Python re.search without MULTILINE/DOTALL: '.' stops at newlines, '^'/'$' anchor the whole string.
 export const isTrivialTask = (t: string, extra: string[] = []) =>
   isMachinePrompt(t.toLowerCase(), extra) || TRIVIAL.some(r => r.test(t.toLowerCase()))
