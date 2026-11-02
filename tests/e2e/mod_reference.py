@@ -167,9 +167,9 @@ def render_bucket(session_id):
 
 def mod_render_cohort(session_id, env):
     """The mod's cohort (§13.1): render_cohort's salted bucket and ACE_AB_* knobs (same validation as
-    ace_pattern_render._read_ab_pcts) plus ACE_RENDER_FULL_PCT (default 0, invalid -> 0), clamped
+    ace_pattern_render._read_ab_pcts) plus ACE_RENDER_FULL_PCT (default 50, invalid -> 0), clamped
     to what control+compact leave. Arms in bucket order: control, compact, full, budget.
-    §31: default 0, invalid -> 0; no anchor -> 'budget'."""
+    §31: default 50 (8.0.0 user ruling), invalid -> 0; no anchor -> 'budget'."""
     try:
         ctrl, comp = int(env.get("ACE_AB_CONTROL_PCT", "0")), int(env.get("ACE_AB_COMPACT_PCT", "0"))
         if ctrl < 0 or comp < 0 or min(ctrl, 100) + min(comp, 100) > 100:
@@ -178,7 +178,7 @@ def mod_render_cohort(session_id, env):
     except (TypeError, ValueError):
         ctrl, comp = 0, 0
     try:
-        full = int(env.get("ACE_RENDER_FULL_PCT", "0"))
+        full = int(env.get("ACE_RENDER_FULL_PCT", "50"))
         if full < 0:
             raise ValueError
     except (TypeError, ValueError):

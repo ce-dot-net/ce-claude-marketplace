@@ -449,13 +449,13 @@ def _read_ab_pcts():
 def render_arm(session_id: Optional[str]) -> str:
     """The A/B arm of a conversation (DESIGN §31), shared with the mod's renderCohort (parity test).
 
-    Arms in bucket order: control, compact, full (ACE_RENDER_FULL_PCT, default 0), rest budget.
+    Arms in bucket order: control, compact, full (ACE_RENDER_FULL_PCT, default 50 = 50/50 split; set but invalid -> 0), rest budget.
     bucket = sha256("render:" + session_id)[:8 hex] % 100, where session_id is the STABLE Claude Code
     session id = conversation_id (subagents share it), never the per-task pin. No id -> 'budget'.
     """
     ctrl_pct, compact_pct = _read_ab_pcts()
     try:
-        full_pct = int(os.environ.get("ACE_RENDER_FULL_PCT", "0"))
+        full_pct = int(os.environ.get("ACE_RENDER_FULL_PCT", "50"))
     except (TypeError, ValueError):
         full_pct = 0
     if full_pct < 0:

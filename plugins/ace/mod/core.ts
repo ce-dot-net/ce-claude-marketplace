@@ -524,13 +524,13 @@ export function injectedContents(patterns: any[], ids: string[]): Record<string,
 export function appliedLogIds(used: string[], rlog: Record<string, number>): number[] {
   return used.filter(id => id in rlog).map(id => rlog[id])
 }
-// ace_pattern_render.render_arm (§31): arms in bucket order control, compact, full (ACE_RENDER_FULL_PCT, default 0,
+// ace_pattern_render.render_arm (§31): arms in bucket order control, compact, full (ACE_RENDER_FULL_PCT, default 50,
 // invalid -> 0), rest budget. No conversation id -> budget.
 export function renderCohort(sid: string | undefined, env: Record<string, string | undefined>): Cohort {
   let ctrl = pyInt(env.ACE_AB_CONTROL_PCT, 0), comp = pyInt(env.ACE_AB_COMPACT_PCT, 0)
   if (ctrl === null || comp === null || ctrl < 0 || comp < 0 || Math.min(ctrl, 100) + Math.min(comp, 100) > 100) { ctrl = 0; comp = 0 }
   ctrl = Math.min(ctrl, 100); comp = Math.min(comp, 100)
-  let full = pyInt(env.ACE_RENDER_FULL_PCT, 0)
+  let full = pyInt(env.ACE_RENDER_FULL_PCT, 50)
   if (full === null || full < 0) full = 0
   full = Math.min(full, 100 - ctrl - comp)
   if (!sid) return 'budget'
@@ -605,17 +605,13 @@ export function sessionTitle(patterns: any[], review?: any): string | undefined 
   return (short ? `ACE · ${n} · ${short}` : `ACE · ${n}`) + roi
 }
 
-// the UPS systemMessage text, shown through $.ui.log
+// the UPS notice, shown through $.ui.log: ONE line ($.ui.log renders a newline as a replacement glyph)
 export function searchSummary(patterns: any[]): string {
   const n = patterns.length
   if (!n) return 'ℹ️  [ACE] No patterns found for this query'
-  const lines = [`✅ [ACE] Found ${n} relevant bullets`]
-  for (const p of patterns.slice(0, 3)) {
-    const c = String(p.content ?? '')
-    lines.push(`   • [${p.domain ?? 'general'}] ${c.length > 80 ? c.slice(0, 77) + '...' : c}`)
-  }
-  if (n > 3) lines.push(`   ... and ${n - 3} more bullets`)
-  return lines.join('\n')
+  const domains = [...new Set(patterns.map(p => String(p.domain ?? 'general')))]
+  const shown = domains.slice(0, 3).join(', ') + (domains.length > 3 ? ` (+${domains.length - 3} more)` : '')
+  return `✅ [ACE] Found ${n} relevant bullets · ${shown}`
 }
 export function searchErrorLine(error: string | undefined): string {
   if (error === 'not_authenticated') return '⚠️ [ACE] Not authenticated. Run /ace:ace-login'

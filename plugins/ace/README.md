@@ -9,12 +9,12 @@
   Team/Enterprise or managed-settings seats Claude Code's built-in guard filters the mod's `classic.*` hooks: the mod
   still searches and injects, and the Python hooks take over tool accumulation, the Stop/SubagentStop learn and the
   session title.
-- **Render: `budget` by default.** Both chains inject the server-ranked top patterns verbatim up to 9,500 chars
+- **Render: a 50/50 split of `budget` and `full`.** Both chains inject the server-ranked top patterns verbatim up to 9,500 chars
   (Claude Code caps hook context at 10,000). The mod can also render `full` (all server patterns, cut by whole
-  patterns at 95,000 chars), but only for the share of conversations set by `ACE_RENDER_FULL_PCT` (default 0 =
-  off). `full` costs about 2.1-2.3x input tokens and 2.5x USD per task against budget; within one conversation the
-  mod re-injects only patterns not yet injected since the last compaction. 8.0.0 ships with full at 0 %; a split
-  comes with a later plugin release, after the ACE server has AOP-1333 and AOP-1334 on prod.
+  patterns at 95,000 chars), but only for the share of conversations set by `ACE_RENDER_FULL_PCT` (default 50 =
+  half of all conversations; 0 turns full off). `full` costs about 2.1-2.3x input tokens and 2.5x USD per task against budget; within one conversation the
+  mod re-injects only patterns not yet injected since the last compaction. 8.0.0 ships the 50/50 split (the ACE server
+  has AOP-1333 and AOP-1334 on prod); set `ACE_RENDER_FULL_PCT=0` to stay on budget only.
 - **What each learn trace carries:** `render_variant` (`budget` or `full`, omitted when unknown),
   `conversation_id` (the Claude Code session id; subagents share it), the per-task pin as `session_id`, and
   `applied_log_ids` only for patterns the final answer recognizably used (named by id or quoted with >= 40 chars).
@@ -119,7 +119,7 @@ After completing work, run `/ace-learn`:
 
 ### Render knobs (environment)
 
-- `ACE_RENDER_FULL_PCT` (default 0): share of conversations the mod renders `full`; see the cost note above.
+- `ACE_RENDER_FULL_PCT` (default 50, 0 = off): share of conversations the mod renders `full`; see the cost note above.
 - `ACE_ENGINE=cli`: never use the in-process engine.
 
 ### Server Connection
