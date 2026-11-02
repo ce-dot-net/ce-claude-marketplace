@@ -307,9 +307,14 @@ export function parseAceReview(msg: string): { quality_pct: number; time_saved: 
   return { quality_pct: Number(m[1]), time_saved: t ? t[0].replace(' saved', '') : '' }
 }
 
-// ace_before_task.check_eval_request_and_review text
+// ace_before_task.check_eval_request_and_review text. §24: the file is repo-controlled and reaches the model's
+// context, so every field is a number (finite int/float; anything else 0), never text.
 export function evalInjection(d: any): string {
-  const g = (k: string) => { const v = d?.[k]; return v instanceof PyFloat ? pyFloatRepr(v.v) : String(v ?? 0) }
+  const g = (k: string) => {
+    const v = d?.[k]
+    if (v instanceof PyFloat) return Number.isFinite(v.v) ? pyFloatRepr(v.v) : '0'
+    return typeof v === 'number' && Number.isFinite(v) ? String(v) : '0'
+  }
   return `<!-- ACE Self-Eval Request: Previous task used ${g('patterns_injected')} patterns ` +
     `(${g('avg_relevance')}% relevance, ${g('domains')} domains, ${g('tools_executed')} tools). ` +
     `As a human developer, how much time did these patterns save? ` +
@@ -739,3 +744,13 @@ subprocess.Popen([sys.executable,'-I','-c',${JSON.stringify(LEARN_CHILD)}]+sys.a
 export function detachedLearnArgv(j: { learnArgv: string[]; trace: string; lock: string; log: string; rowOk: string; rowFail: string; errLog?: string; python?: string }): string[] {
   return [j.python || 'python3', '-I', '-c', LEARN_LAUNCHER, j.trace, j.lock, j.log, j.rowOk, j.rowFail, j.errLog ?? '', ...j.learnArgv]
 }
+
+// §24: files holding prompts, tool records or traces: umask 077 (file 0600), the dir chmod 700, atomic create+rename.
+// $1 = target path, stdin = content.
+export const PRIVATE_WRITE_SH = 'umask 077; d=$(dirname "$1"); mkdir -p "$d" && chmod 700 "$d" && t="$d/.w$$.tmp" && cat > "$t" && mv -f "$t" "$1"'
+// O_APPEND through the shell: safe beside the Python hooks writing the same jsonl; size rotation as ace_relevance_logger.
+// §24: <cwd>/.claude/data/logs is repo-controlled: a symlinked component or target is refused (row dropped).
+// $1 = log file, $2 = cwd, stdin = rows.
+export const APPEND_SH = 'for p in "$2/.claude" "$2/.claude/data" "$(dirname "$1")" "$1"; do [ -L "$p" ] && exit 0; done; '
+  + 'mkdir -p "$(dirname "$1")" || exit 0; [ -L "$1" ] && exit 0; '
+  + '[ "$(wc -c <"$1" 2>/dev/null || echo 0)" -gt 52428800 ] && mv -f "$1" "$1.1"; cat >> "$1"'

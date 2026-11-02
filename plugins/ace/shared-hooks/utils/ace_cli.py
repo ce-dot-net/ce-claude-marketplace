@@ -358,9 +358,7 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
     t0 = time.monotonic()
     try:  # plugin-data tmp (S10), so a SIGKILLed learn leaves nothing in the system tmp
         import plugin_data_dir
-        _tmp = plugin_data_dir.data_root() / 'tmp'
-        _tmp.mkdir(parents=True, exist_ok=True)
-        _tmp = str(_tmp)
+        _tmp = str(plugin_data_dir.private_dir(plugin_data_dir.data_root() / 'tmp'))  # §24: traces hold prompts
     except Exception:
         _tmp = None
     fd, path = tempfile.mkstemp(prefix='ace-trace-', suffix='.json', dir=_tmp)

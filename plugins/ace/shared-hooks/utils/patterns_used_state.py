@@ -162,7 +162,7 @@ def _rescue_rendered_context(f):
     try:
         rc = json.loads(f.read_text()).get('rendered_context')
         if rc and isinstance(rc, str):
-            (f.parent / RENDERED_SIDECAR).write_text(rc[:RENDERED_CONTEXT_MAX])
+            plugin_data_dir.private_write(f.parent / RENDERED_SIDECAR, rc[:RENDERED_CONTEXT_MAX])
     except Exception:
         pass
 

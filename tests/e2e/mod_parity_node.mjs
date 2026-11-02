@@ -26,4 +26,5 @@ for (const f of job.fixtures) {
 for (const env of job.envs) out.cohorts.push(job.sids.map(s => M.renderCohort(s, env)))
 for (const [home, root, name] of job.roots) out.roots.push(M.dataRootFromPluginRoot(home, root, name))
 if (job.learnJob) out.learnArgv = M.detachedLearnArgv(job.learnJob)
+out.shell = { append: M.APPEND_SH, privateWrite: M.PRIVATE_WRITE_SH }
 process.stdout.write(JSON.stringify(out))

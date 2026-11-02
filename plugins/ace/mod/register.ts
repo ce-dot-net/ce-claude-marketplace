@@ -7,7 +7,7 @@ import {
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
   detachedLearnArgv, FALLBACK_ON_3, parseAceReview, parseDiffStat, evalInjection, searchRow, searchSummary, searchErrorLine, sessionTitle,
-  subagentQuery, isNoTaskCommand, STATE_CAP, traceVariant, appliedLogIds, type StateUpdate, type ToolRec, type Cohort,
+  subagentQuery, isNoTaskCommand, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, appliedLogIds, type StateUpdate, type ToolRec, type Cohort,
 } from './core.ts'
 
 const SEARCH_MS = 25000, DOMAIN_MS = 17000 // §11 A2: blocking budget per search, retry included
@@ -41,10 +41,21 @@ async function readText($: any, path: string): Promise<string | undefined> {
   try { return await $.fs.read(path) as string } catch { return undefined }
 }
 
-// O_APPEND through the shell: safe beside the Python hooks writing the same jsonl. Size rotation as ace_relevance_logger.
-const APPEND = 'mkdir -p "$(dirname "$1")"; [ "$(wc -c <"$1" 2>/dev/null || echo 0)" -gt 52428800 ] && mv -f "$1" "$1.1"; cat >> "$1"'
 const relLog = ($: any, s: Sess, obj: any) =>
-  run($, ['/bin/sh', '-c', APPEND, 'sh', `${s.logs}/ace-relevance.jsonl`], { stdin: pyDumps(obj) + '\n' })
+  run($, ['/bin/sh', '-c', APPEND_SH, 'sh', `${s.logs}/ace-relevance.jsonl`, s.cwd], { stdin: pyDumps(obj) + '\n' })
+// §24: prompts, tool records and traces are 0600 in 0700 dirs. Throws on failure, like $.fs.write.
+async function writePrivate($: any, path: string, text: string) {
+  const r = await $.process.run(['/bin/sh', '-c', PRIVATE_WRITE_SH, 'sh', path], { stdin: text, timeoutMs: 5000 })
+  if (!r || r.exitCode !== 0) throw new Error('private write failed: ' + path)
+}
+// §24: never write through a symlinked .claude, .claude/data, .claude/data/logs or target (repo-controlled).
+async function logsSafe($: any, s: Sess, name: string): Promise<boolean> {
+  for (const [dir, entry] of [[s.cwd, '.claude'], [`${s.cwd}/.claude`, 'data'], [`${s.cwd}/.claude/data`, 'logs'], [s.logs, name]]) {
+    const list: any[] = await $.fs.list(dir).catch(() => [])
+    if (list.some(f => f.name === entry && f.isLink)) return false
+  }
+  return true
+}
 
 // ace_context.get_context: the settings file wins; env only when the file is missing.
 async function resolveSession($: any, cwd: string): Promise<Sess | null> {
@@ -208,7 +219,7 @@ function updateState($: any, L: Load, s: Sess, key: string, u: StateUpdate, rese
   const path = stateFile(s, key)
   return enqueue(L, path, async () => {
     const state = mergeState(reset ? undefined : await readJson($, path), u)
-    await $.fs.write(path, pyDumps(state))
+    await writePrivate($, path, pyDumps(state))
     return state
   })
 }
@@ -224,7 +235,7 @@ function recordTool($: any, L: Load, s: Sess, key: string, rec: ToolRec) {
   return enqueue(L, toolsFile(s, key), async () => {
     const list = [...await loadTools($, L, s, key), rec].slice(-MAX_TOOL_RECS)
     L.tools.set(key, list)
-    await $.fs.write(toolsFile(s, key), JSON.stringify(list))
+    await writePrivate($, toolsFile(s, key), JSON.stringify(list))
   })
 }
 function takeTools($: any, L: Load, s: Sess, key: string): Promise<ToolRec[]> {
@@ -273,7 +284,7 @@ async function gitContext($: any, cwd: string) {
 
 // Reap a finished task's state; main keeps rendered-main.txt for the SessionStart compact re-inject (patterns_used_state).
 async function reap($: any, L: Load, s: Sess, key: string, state: any) {
-  if (key === 'main' && state?.rendered_context) await $.fs.write(`${s.sdir}/rendered-main.txt`, state.rendered_context)
+  if (key === 'main' && state?.rendered_context) await writePrivate($, `${s.sdir}/rendered-main.txt`, state.rendered_context)
   await rm($, stateFile(s, key))
   await clearTools($, L, s, key)
   L.late.delete(key)
@@ -318,7 +329,7 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   const lock = `${s.sdir}/learn-inflight-${safe(key)}.lock`
   await $.fs.write(lock, '')
   const traceFile = `${s.root}/tmp/ace-trace-${uuid()}.json`
-  await $.fs.write(traceFile, pyDumps(trace))
+  await writePrivate($, traceFile, pyDumps(trace))
   const row = async (sent: boolean) => ({ timestamp: await nowIso($), event: 'execution', hook, session_id: s.sessionId,
     project_id: s.project, agent_type: agentType, patterns_used_count: playbook.length, pattern_ids: playbook.slice(0, 20),
     tools_executed: recs.length, state_changing_tools: recs.filter(r => ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit'].some(x => r.tool.includes(x))).length,
@@ -339,7 +350,7 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
     await relLog($, s, await row(false))
   }
 
-  if (hook === 'Stop' && playbook.length) {
+  if (hook === 'Stop' && playbook.length && await logsSafe($, s, 'ace-eval-request.json')) {
     await $.fs.write(`${s.logs}/ace-eval-request.json`, pyDumps({ patterns_injected: playbook.length, avg_relevance: 0, domains: 0,
       tools_executed: recs.length, success: true, timestamp: (await nowIso($)).replace(/\.\d+Z$/, 'Z') }))
   }
@@ -374,7 +385,7 @@ async function onPrompt($: any, L: Load, e: any): Promise<any> {
   const running = !midTurn ? undefined : L.turnAnchor.has(e.turnId) ? L.turnAnchor.get(e.turnId) : mainState?.task_session_id
   const defer = !!running && mainState?.task_session_id === running
   const save = (u: StateUpdate) => defer
-    ? $.fs.write(pendingFile(s), JSON.stringify({ text, state: pyDumps(mergeState(undefined, u)) })) // ponytail: one slot; of two queued prompts the first is not learned
+    ? writePrivate($, pendingFile(s), JSON.stringify({ text, state: pyDumps(mergeState(undefined, u)) })) // ponytail: one slot; of two queued prompts the first is not learned
     : updateState($, L, s, 'main', u, true)
   if (!defer) {
     L.pendingMain = tsid
@@ -591,7 +602,7 @@ export const register: Register = (on) => {
           const s = await ensure($, L)
           const pend = s && await readJson($, pendingFile(s))
           if (s && pend?.text && e.text.includes(String(pend.text).slice(0, 200))) {
-            await enqueue(L, stateFile(s, 'main'), () => $.fs.write(stateFile(s, 'main'), pend.state))
+            await enqueue(L, stateFile(s, 'main'), () => writePrivate($, stateFile(s, 'main'), pend.state))
             await rm($, pendingFile(s))
             await clearTools($, L, s, 'main')
             anchor = pyLoads(pend.state).task_session_id
@@ -688,7 +699,7 @@ export const register: Register = (on) => {
       const agentId = (e as any).agentId as string | undefined
       if (agentId === undefined) {
         const review = parseAceReview(e.answer)
-        if (review) await $.fs.write(`${s.logs}/ace-review-result.json`, pyDumps(review))
+        if (review && await logsSafe($, s, 'ace-review-result.json')) await $.fs.write(`${s.logs}/ace-review-result.json`, pyDumps(review))
         const state = await readState($, s, 'main')
         // undefined = this load never heard the turn start (reload): the task on disk is that turn's. null = machine turn.
         const anchor = L.turnAnchor.has(e.turnId) ? L.turnAnchor.get(e.turnId) : state?.task_session_id

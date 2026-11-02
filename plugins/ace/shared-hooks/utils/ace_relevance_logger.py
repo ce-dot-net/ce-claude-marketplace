@@ -38,8 +38,7 @@ class ACERelevanceLogger:
 
     def __init__(self, log_dir: str = ".claude/data/logs"):
         self.log_dir = Path(log_dir)
-        self.log_dir.mkdir(parents=True, exist_ok=True)
-        self.log_path = self.log_dir / "ace-relevance.jsonl"
+        self.log_path = self.log_dir / "ace-relevance.jsonl"  # the dir is created on the first (checked) write
 
     def _rotate_if_needed(self) -> None:
         """Rotate log file if it exceeds MAX_FILE_SIZE."""
@@ -66,9 +65,14 @@ class ACERelevanceLogger:
     def _write_log(self, entry: Dict[str, Any]) -> None:
         """Write a log entry to the JSONL file with rotation."""
         try:
-            self.log_dir.mkdir(parents=True, exist_ok=True)  # relative dir: cwd may change after init
+            from plugin_data_dir import open_project_log, project_log_unsafe
+            if project_log_unsafe(self.log_path):  # §24: never write through a symlink out of the project
+                return
             self._rotate_if_needed()
-            with open(self.log_path, 'a') as f:
+            f = open_project_log(self.log_path)  # creates the dir (relative: cwd may change after init)
+            if f is None:
+                return
+            with f:
                 f.write(json.dumps(entry, default=str) + '\n')
         except Exception as e:
             # Silent fail - don't break hooks for logging
