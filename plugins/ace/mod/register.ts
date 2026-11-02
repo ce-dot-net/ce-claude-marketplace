@@ -213,6 +213,7 @@ type Load = {
   lastClaim: Map<string, string>                // key -> newest claimed domain: only that one writes domain-last
   markerAt: number
   reuseUsed: Set<string>                         // §32: `${entry}\0${agent}` already served to that agent
+  compacted: boolean                             // item A: a main compaction ran; prompt.compose re-adds the patterns
   stopDefer: string[] | null                    // classic.Stop: background task types while delegated work runs (§16 P2)
   deferred: string | undefined                  // tsid of the main task whose learn waits for its delegated work
   handback: Map<string, string>                 // agentId -> last SubagentHandback message (§16 P1)
@@ -640,7 +641,7 @@ export const register: Register = (on) => {
   const L: Load = { sess: null, pendingMain: undefined, pendingTitle: undefined, stopEffort: undefined, domains: null,
     turnAnchor: new Map(), tools: new Map(), spawnPrompts: new Map(), placeholders: new Set(), late: new Map(), agentTypes: new Map(),
     earlyStart: new Map(), agentEffort: new Map(), lastClaim: new Map(), markerAt: 0, claims: new Set(), queues: new Map(),
-    stopDefer: null, deferred: undefined, handback: new Map(), reuseUsed: new Set() }
+    stopDefer: null, deferred: undefined, handback: new Map(), reuseUsed: new Set(), compacted: false }
   const effortOf = (e: any): unknown => e.effort && typeof e.effort === 'object' ? e.effort.level : e.effort
 
   on('session.start', async ($, e, next) => {
@@ -652,7 +653,41 @@ export const register: Register = (on) => {
     return r
   })
 
+  // item A: patterns survive a main compaction natively. session.compact (not on guarded seats) sets the flag and the
+  // mod-compact marker (the Python SessionStart(compact) re-inject steps aside); prompt.compose then adds the task's
+  // re-inject copy as its own section until the next prompt injects fresh.
+  on('session.compact', async ($, e, next) => {
+    const r: any = await next(e)
+    try {
+      if (!e.agentId && e.trigger !== 'precompute' && r && !r.skip) {
+        const s = await ensure($, L)
+        if (s && !(await disabled($, s))) {
+          L.compacted = true
+          await $.fs.write(`${s.sdir}/mod-compact`, String(await $.clock.now()))
+          if (await $.fs.exists(`${s.sdir}/full-injected.json`)) await rm($, `${s.sdir}/full-injected.json`)  // §31 dedupe starts over
+        }
+      }
+    } catch { /* the Python SessionStart(compact) hook re-injects */ }
+    return r
+  })
+
+  on('prompt.compose', async ($, e, next) => {
+    const r: any = await next(e)
+    if (!L.compacted || !L.sess) return r
+    try {
+      const st = await readState($, L.sess, 'main')
+      const text = st?.rendered_context || await readText($, `${L.sess.sdir}/rendered-main.txt`)
+      // ponytail: subagent requests composed in this window get the section too; per-request agent scoping when compose says who asks
+      if (text) return { ...r, sections: [...(r?.sections ?? []).filter((x: any) => x.id !== 'ace:patterns'), { id: 'ace:patterns', text, scope: 'session' }] }
+    } catch { /* never break the prompt */ }
+    return r
+  })
+
   on('prompt.submit', async ($, e, next) => {
+    if (L.compacted) {
+      L.compacted = false
+      try { if (L.sess && await $.fs.exists(`${L.sess.sdir}/mod-compact`)) await rm($, `${L.sess.sdir}/mod-compact`) } catch { /* stale marker ages out */ }
+    }
     let out: any = e
     try { out = await onPrompt($, L, e) } catch (err) {
       if (L.sess) await relLog($, L.sess, { timestamp: await nowIso($), event: 'error', hook: 'UserPromptSubmit', location: 'mod.prompt.submit', error: String(err).slice(0, 300), source: 'mod' })

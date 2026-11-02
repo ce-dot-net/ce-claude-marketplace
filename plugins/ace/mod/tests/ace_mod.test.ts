@@ -113,6 +113,8 @@ function host(on: any, o: Opts = {}) {
     : ({ result: { type: 'text', file: { content: 'a\nb', filePath: e.file_path } } }))
   on('turn.start', (_$: any, e: any) => ({ turnId: e.turnId }))
   on('turn.complete', (_$: any, e: any) => ({ text: e.answer }))
+  on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'engine intro', scope: 'shared' }] }))
+  on('session.compact', () => ({ messages: [{ role: 'user', text: 'summary', toolUses: [] }] }))
   on('session.start', (_$: any, e: any) => ({ cwd: e.cwd }))
   on('session.end', (_$: any, e: any) => ({ sessionId: e.sessionId }))
   on('classic.UserPromptSubmit', () => ({}))
@@ -1063,6 +1065,36 @@ test('item 3: full arm re-inject copy = budget render of the FULL response, inde
   expect(h.state()!.rendered_context).toBe(G.budget_main_8)
   expect(G.budget_main_8.length <= 9500).toBe(true)
   expect(shownOf(G.budget_main_8)).toBe(8)
+})
+
+test('item A: after a main compaction prompt.compose carries the task patterns as section ace:patterns until the next prompt', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  const before: any = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: [], tools: [], outputStyle: null, traits: [] } as any)
+  expect((before.sections ?? []).some((x: any) => x.id === 'ace:patterns')).toBe(false)
+  await $.session.compact({ trigger: 'auto', messages: [{ role: 'user', text: 'hi', toolUses: [] }] } as any)
+  expect(h.files.has(`${SDIR}/mod-compact`)).toBe(true)  // the Python SessionStart(compact) re-inject steps aside
+  expect(h.files.has(`${SDIR}/full-injected.json`)).toBe(false)  // §31 dedupe starts over, as the Python hook does
+  const after: any = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: [], tools: [], outputStyle: null, traits: [] } as any)
+  const sec = after.sections.find((x: any) => x.id === 'ace:patterns')
+  expect(sec.scope).toBe('session')
+  expect(sec.text).toBe(G.budget_main_8)
+  await submit($, HUMAN + ' next')
+  const later: any = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: [], tools: [], outputStyle: null, traits: [] } as any)
+  expect((later.sections ?? []).some((x: any) => x.id === 'ace:patterns')).toBe(false)
+  expect(h.files.has(`${SDIR}/mod-compact`)).toBe(false)
+})
+
+test('item A: a finished task still survives compaction (rendered-main.txt); subagent and precompute compactions do nothing', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  await done($)
+  await $.session.compact({ trigger: 'precompute', messages: [{ role: 'user', text: 'hi', toolUses: [] }] } as any)
+  await $.session.compact({ trigger: 'auto', messages: [{ role: 'user', text: 'hi', toolUses: [] }], agentId: 'agent-1' } as any)
+  expect(h.files.has(`${SDIR}/mod-compact`)).toBe(false)
+  await $.session.compact({ trigger: 'manual', messages: [{ role: 'user', text: 'hi', toolUses: [] }] } as any)
+  const after: any = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: [], tools: [], outputStyle: null, traits: [] } as any)
+  expect(after.sections.find((x: any) => x.id === 'ace:patterns').text).toBe(G.budget_main_8)
 })
 
 test('§31 budget never dedupes (it re-ranks the top-N every prompt)', async ($, on) => {

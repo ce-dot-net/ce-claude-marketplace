@@ -222,6 +222,19 @@ def mod_owns_learn(project_id: Optional[str], session_id: Optional[str], max_age
         return False
 
 
+MOD_COMPACT_S = 300  # item A: mod-compact is written as the compaction starts; SessionStart(compact) follows its summary
+
+
+def mod_handled_compact(project_id: Optional[str], session_id: Optional[str], max_age: float = MOD_COMPACT_S) -> bool:
+    """True when the mod's session.compact hook handled this compaction (its prompt.compose re-adds the patterns):
+    the Python SessionStart(compact) re-inject steps aside. Guarded seats never run session.compact."""
+    try:
+        import time
+        return time.time() - (session_dir(project_id, session_id, create=False) / "mod-compact").stat().st_mtime < max_age
+    except OSError:
+        return False
+
+
 def learn_lock(project_id: Optional[str], session_id: Optional[str], agent: Optional[str]) -> Path:
     name = "learn-inflight-%s.lock" % _safe(agent or "main")
     return _file(session_dir(project_id, session_id, create=False) / name)
