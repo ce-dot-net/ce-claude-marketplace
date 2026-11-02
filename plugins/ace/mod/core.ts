@@ -701,7 +701,7 @@ export function buildTrace(a: {
   if (a.agentId) trace.agent_id = a.agentId
   if (a.parentTaskId) trace.parent_agent_id = a.parentTaskId // §16 P3: server field name (local state keeps parent_task_id)
   if (a.retrievalId) trace.retrieval_id = a.retrievalId
-  if (a.appliedLogIds.length) trace.applied_log_ids = a.appliedLogIds
+  trace.applied_log_ids = a.appliedLogIds // server contract: [] when nothing was used, never omitted
   trace.effort_level = a.effort
   trace.effort_weight = effortWeight(a.effort)
   if (a.git) trace.git = a.git

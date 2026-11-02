@@ -116,10 +116,10 @@ def test_applied_log_ids_only_the_used_ones_for_every_variant(box, variant):
     assert flag_value(learn["argv"], "--retrieval-id") == "ret-31"
 
 
-def test_nothing_used_sends_no_applied_ids(box):
+def test_nothing_used_sends_empty_applied_ids_in_the_trace(box):
     learn = _learn(box, box.stop_event("s31-b"), pattern_ids=[A, B], retrieval_id="ret-31",
                    retrieval_log_ids={A: 7, B: 8}, pattern_contents={A: CONTENT_A, B: CONTENT_B}, render_variant="budget")
-    assert "--applied-log-ids" not in learn["argv"] and not learn["trace"].get("applied_log_ids")
+    assert "--applied-log-ids" not in learn["argv"] and learn["trace"]["applied_log_ids"] == []
 
 
 def test_conversation_id_and_pin_on_the_main_trace(box):
