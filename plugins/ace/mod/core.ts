@@ -252,8 +252,10 @@ export const isTrivialTask = (t: string, extra: string[] = []) =>
 const STATE_CHANGING = ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit']
 // v8: a state-changing tool, or a research task of >= MIN_RESEARCH_CALLS calls of any kind (Read/Grep/WebFetch/Agent...)
 export const MIN_RESEARCH_CALLS = 3
+// fix 3: an orchestrating task (delegates with 1-2 own calls) counts too; exact names (TaskList is not a delegation)
+const DELEGATING = new Set(['Agent', 'Workflow', 'Task', 'Skill'])
 export const hasSubstantialWork = (tools: ToolRec[]) =>
-  tools.length >= MIN_RESEARCH_CALLS || tools.some(t => STATE_CHANGING.some(s => t.tool.includes(s)))
+  tools.length >= MIN_RESEARCH_CALLS || tools.some(t => DELEGATING.has(t.tool) || STATE_CHANGING.some(s => t.tool.includes(s)))
 
 // One trajectory step, summarized when the call settles (results can be huge; Python keeps them in sqlite).
 export type ToolRec = { tool: string; action: string; result: string; failed: boolean; start_ms: number; end_ms: number; commit?: string

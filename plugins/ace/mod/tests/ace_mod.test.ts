@@ -1616,6 +1616,8 @@ test('learn gate: a state-changing tool, or >= 3 tool calls of any kind (researc
   expect(hasSubstantialWork([r('Read'), r('Grep'), r('WebFetch')])).toBe(true)
   expect(hasSubstantialWork([r('Bash')])).toBe(true)
   expect(hasSubstantialWork([])).toBe(false)
+  for (const t of ['Agent', 'Workflow', 'Task', 'Skill']) expect(hasSubstantialWork([r(t)])).toBe(true)  // fix 3: orchestrating tasks
+  expect(hasSubstantialWork([r('TaskList'), r('Read')])).toBe(false)
 })
 
 test('trace label without a search: the conversation arm (server request); a stored label wins', async () => {

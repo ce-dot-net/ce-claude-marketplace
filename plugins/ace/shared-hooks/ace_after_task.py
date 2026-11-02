@@ -145,8 +145,10 @@ def has_substantial_work_from_accumulated(tools: list) -> bool:
         return True
     state_changing = ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit']
 
+    delegating = ('Agent', 'Workflow', 'Task', 'Skill')  # fix 3: orchestrating tasks; exact names (TaskList is not one)
+
     for tool_name, _, _, _, *_ in tools:
-        if any(t in tool_name for t in state_changing):
+        if tool_name in delegating or any(t in tool_name for t in state_changing):
             return True
 
     return False
