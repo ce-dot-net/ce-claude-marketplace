@@ -335,7 +335,9 @@ class TestDisplayTop3Integration:
         output = _run_main_with_response(mod, fake_response)
 
         user_message = output.get("systemMessage") or ""
-        assert "↑0.94" in user_message, (
+        # v8: the notice is ONE status line (what the model got), no per-bullet tokens any more
+        assert user_message.startswith("ACE · ") and "\n" not in user_message, user_message
+        assert "↑0.94" not in user_message, (
             f"Expected '↑0.94' (ucb path) in summary but got: {user_message!r}\n"
             "This means match_factors were stripped BEFORE the summary was built — "
             "_display_top3 is not being captured pre-strip, or the summary loop "

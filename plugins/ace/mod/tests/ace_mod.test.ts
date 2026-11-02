@@ -17,6 +17,7 @@ import S100 from './fixtures/search_100.ts'
 import S8 from './fixtures/search_8.ts'
 import SEDGE from './fixtures/search_edge.ts'
 import G from './fixtures/golden.ts'
+import { statusLine } from '../core.ts'
 import { pyLoads, PRIVATE_WRITE_SH } from '../core.ts'
 
 const HOME = '/home/u', CWD = '/proj', SID = 'sess-1', PRJ = 'prj_t'
@@ -48,7 +49,7 @@ function host(on: any, o: Opts = {}) {
   put(`${CWD}/.claude/settings.json`, JSON.stringify({ projectId: PRJ, orgId: 'org_t' }))
   for (const [k, v] of Object.entries(o.files ?? {})) put(k, v)
   if (!o.noClassic) put(`${SDIR}/mod-classic`, String(now))  // classic.* hooks fire (no managed-settings guard)
-  const runs: Run[] = [], logs: string[] = [], envAsked: string[] = []
+  const runs: Run[] = [], logs: string[] = [], statuses: (string | undefined)[] = [], envAsked: string[] = []
   // §31 default is ACE_RENDER_FULL_PCT=50 (50/50 split); this suite pins the full arm unless defaultArm (its own tests below)
   const env: Record<string, string> = { HOME, ...(o.defaultArm ? {} : { ACE_RENDER_FULL_PCT: '100' }), ...(o.env ?? {}) }
   let spawnN = 0
@@ -98,8 +99,8 @@ function host(on: any, o: Opts = {}) {
       for (const a of argv) for (const k of [...files.keys()]) if (k === a || k.startsWith(a + '/')) files.delete(k)
     return res(0, '')
   })
-  on('ui.log', (_$: any, e: any) => { logs.push(e.text); return { value: undefined } })
-  on('ui.status', () => ({ value: undefined }))
+  on('ui.log', (_$: any, e: any) => { if (e.to !== 'debug') logs.push(e.text); return { value: undefined } })
+  on('ui.status', (_$: any, e: any) => { statuses.push(e.text); return { value: undefined } })
   on('ui.toast', () => ({ value: undefined }))
   on('prompt.submit', (_$: any, e: any) => ({ text: e.text, context: e.context }))
   on('agent.spawn', async (_$: any, e: any) => {
@@ -131,7 +132,7 @@ function host(on: any, o: Opts = {}) {
   const learnArgv = (r: Run) => r.argv.slice(r.argv.indexOf('ace-cli'))
   const flag = (argv: string[], f: string) => { const i = argv.indexOf(f); return i < 0 ? undefined : argv[i + 1] }
   const trace = (r: Run) => JSON.parse(files.get(flag(learnArgv(r), '--transcript')!)!)
-  return { files, mtime, runs, logs, envAsked, searches, learns, rows, state, pin, learnArgv, flag, trace,
+  return { files, mtime, runs, logs, statuses, envAsked, searches, learns, rows, state, pin, learnArgv, flag, trace,
     advance: (ms: number) => { now += ms }, now: () => now, put }
 }
 
@@ -388,12 +389,12 @@ test('self-eval request → its OWN context entry (never concatenated), request 
 
 // ---------- UI parity: systemMessage / sessionTitle ----------
 
-test('systemMessage parity: a $.ui.log summary on success, an [ACE] error line on failure', async ($, on) => {
+test('notice: ONE transcript line after the prompt on success, an [ACE] error line on failure', async ($, on) => {
   let fail = false
   const h = host(on, { search: () => fail ? { exitCode: 1, stdout: '', stderr: 'boom' } : { stdout: S8 } })
   await submit($)
-  expect(h.logs.some(l => l.startsWith('✅ [ACE] Found 8 relevant bullets'))).toBe(true)
-  expect(h.logs.filter(l => l.startsWith('✅ [ACE]')).every(l => !l.includes('\n'))).toBe(true)  // $.ui.log is one line
+  expect(h.logs.some(l => /^ACE · 8 patterns · full/.test(l))).toBe(true)
+  expect(h.logs.every(l => !l.includes('\n'))).toBe(true)  // $.ui.log is one line
   fail = true
   await submit($, HUMAN + ' fail')
   expect(h.logs.some(l => /^(❌|⚠️|⏱️) \[ACE\]/.test(l))).toBe(true)
@@ -1398,4 +1399,11 @@ test('§31 a subagent credits ids named in its SubagentHandback report and in it
   const t = h.trace(h.learns()[0]!)
   expect(t.applied_log_ids).toEqual([a, b].filter(id => t.playbook_used.includes(id)).map(id => st8.retrieval_log_ids[id]))
   expect(t.applied_log_ids.length).toBe(2)
+})
+
+test('status line: what the model got, arm, top domains; one line', async () => {
+  expect(statusLine({ injected: 11, returned: 100, cohort: 'budget', domains: ['a-b', 'c', 'd', 'e'] })).toBe('ACE · 11 of 100 patterns · budget · a-b, c +2')
+  expect(statusLine({ injected: 8, returned: 8, cohort: 'full', domains: ['x'] })).toBe('ACE · 8 patterns · full · x')
+  expect(statusLine({ injected: 1, returned: 1, cohort: 'budget', domains: [] })).toBe('ACE · 1 pattern · budget')
+  expect(statusLine({ injected: 0, returned: 0, cohort: 'budget', domains: [] })).toBe('ACE · no patterns for this prompt')
 })

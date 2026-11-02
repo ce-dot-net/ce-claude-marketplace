@@ -330,6 +330,23 @@ def _format_bullet_token(pattern):
     return f"+{pattern.get('helpful', 0)}"
 
 
+
+def status_line(injected, returned, cohort, injected_patterns):
+    """The visible per-prompt notice, one line (parity with the mod's statusLine in mod/core.ts)."""
+    if not returned:
+        return "ACE · no patterns for this prompt"
+    arm = "full" if cohort == "full" else "budget"
+    noun = "pattern" if returned == 1 else "patterns"
+    what = f"{injected} {noun}" if injected == returned else f"{injected} of {returned} {noun}"
+    counts = {}
+    for p in injected_patterns:
+        d = p.get("domain")
+        if d:
+            counts[str(d)] = counts.get(str(d), 0) + 1
+    doms = [d for d, _ in sorted(counts.items(), key=lambda kv: -kv[1])]
+    d = ", ".join(doms[:2]) + (f" +{len(doms) - 2}" if len(doms) > 2 else "")
+    return f"ACE · {what} · {arm}" + (f" · {d}" if d else "")
+
 def main():
     try:
         # Read hook event from stdin
@@ -603,33 +620,12 @@ def main():
         domains_summary = patterns_response.get('domains_summary', {})
 
         if pattern_count > 0:
-            # Build summary with domain info
-            summary_lines = [f"✅ [ACE] Found {pattern_count} relevant bullets"]
-
-            # Show domain summary
-            abstract_domains = domains_summary.get('abstract', [])
-            if abstract_domains:
-                domains_str = ', '.join(abstract_domains[:3])
-                if len(abstract_domains) > 3:
-                    domains_str += f' (+{len(abstract_domains) - 3} more)'
-                summary_lines.append(f"   Domains: {domains_str}")
-
-            # Show top 3 bullets with domain tags (uses _display_top3 which retains
-            # match_factors so _format_bullet_token can fall back to ucb_score)
-            for bullet in _display_top3:
-                content = bullet.get('content', '')
-                if len(content) > 80:
-                    content = content[:77] + '...'
-                domain = bullet.get('domain', 'general')
-                token = _format_bullet_token(bullet)
-                summary_lines.append(f"   • [{domain}] {content} ({token})")
-
-            if pattern_count > 3:
-                summary_lines.append(f"   ... and {pattern_count - 3} more bullets")
-
-            user_message = "\n".join(summary_lines)
+            # One line, the same as the mod's status line: what the MODEL got, the arm, the top domains.
+            _ids = set(_pattern_ids or [])
+            user_message = status_line(len(_ids), pattern_count, _cohort,
+                                       [p for p in original_pattern_list if p.get('id') in _ids])
         else:
-            user_message = "ℹ️  [ACE] No patterns found for this query"
+            user_message = "ACE · no patterns for this prompt"
 
         # v5.4.13: Prepend auth warning if detected (still show patterns if found)
         if auth_warning and pattern_count > 0:

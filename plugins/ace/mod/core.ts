@@ -613,6 +613,22 @@ export function searchSummary(patterns: any[]): string {
   const shown = domains.slice(0, 3).join(', ') + (domains.length > 3 ? ` (+${domains.length - 3} more)` : '')
   return `✅ [ACE] Found ${n} relevant bullets · ${shown}`
 }
+// the per-prompt notice, ONE transcript line right after the prompt ($.ui.log draws a newline as a glyph): what the
+// MODEL got, not what the server found. Same text as the Python chain's systemMessage (status_line).
+export function statusLine(o: { injected: number, returned: number, cohort: string, domains: string[] }): string {
+  if (!o.returned) return 'ACE · no patterns for this prompt'
+  const arm = o.cohort === 'full' ? 'full' : 'budget'
+  const noun = o.returned === 1 ? 'pattern' : 'patterns'
+  const what = o.injected === o.returned ? `${o.injected} ${noun}` : `${o.injected} of ${o.returned} ${noun}`
+  const d = o.domains.slice(0, 2).join(', ') + (o.domains.length > 2 ? ` +${o.domains.length - 2}` : '')
+  return `ACE · ${what} · ${arm}` + (d ? ` · ${d}` : '')
+}
+// domains of the injected patterns, most frequent first
+export function topDomains(patterns: any[]): string[] {
+  const c = new Map<string, number>()
+  for (const p of patterns) if (p?.domain) c.set(String(p.domain), (c.get(String(p.domain)) ?? 0) + 1)
+  return [...c.entries()].sort((a, b) => b[1] - a[1]).map(([d]) => d)
+}
 export function searchErrorLine(error: string | undefined): string {
   if (error === 'not_authenticated') return '⚠️ [ACE] Not authenticated. Run /ace:ace-login'
   if (error === 'timeout') return '⏱️ [ACE] Search timed out. Check your connection.'
