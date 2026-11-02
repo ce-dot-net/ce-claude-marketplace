@@ -391,7 +391,7 @@ def _side_effects(w):
 def test_fresh_mod_marker_covered_hook_is_silent_noop(w, name):
     ev, prepare = _covered_case(w, name)
     prepare()
-    w.marker(age_s=30)
+    w.marker(age_s=5)  # a live mod rewrites it right before the hook (MOD_HANDOFF_S 15 s)
     before = _side_effects(w)
     for h, rc, so, se, _t in w.run(ev):
         assert rc == 0, se

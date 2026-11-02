@@ -250,7 +250,7 @@ def _artifacts(r):
 @pytest.mark.parametrize("name", COVERED)
 def test_fresh_mod_marker_silences_covered_python_hooks(name):
     import ace_e2e_harness as H
-    r = H.run_fixture(name, prepare=_marker(60))
+    r = H.run_fixture(name, prepare=_marker(5))
     try:
         assert r["cli_calls"] == [], "mod active: the Python hook must not spawn ace-cli"
         assert all(run["stdout"].strip() == "" for run in r["runs"]), "mod active: no output"
@@ -270,7 +270,7 @@ LEARN_DUTIES = ["PostToolBatch", "PostToolUseFailure_Bash", "Stop", "SubagentSto
 @pytest.mark.parametrize("name", INJECT_DUTIES)
 def test_guarded_seat_inject_duties_stay_with_the_mod(name):
     import ace_e2e_harness as H
-    r = H.run_fixture(name, prepare=_marker(60, classic=False))
+    r = H.run_fixture(name, prepare=_marker(5, classic=False))
     try:
         assert r["cli_calls"] == [], "the mod searches and injects (its prompt/agent/tool hooks are not filtered)"
         assert _artifacts(r) == []
@@ -282,7 +282,7 @@ def test_guarded_seat_inject_duties_stay_with_the_mod(name):
 @pytest.mark.parametrize("name", LEARN_DUTIES)
 def test_guarded_seat_learn_duties_move_to_python(name):
     import ace_e2e_harness as H
-    r = H.run_fixture(name, prepare=_marker(60, classic=False))
+    r = H.run_fixture(name, prepare=_marker(5, classic=False))
     try:
         assert _artifacts(r) != [], "%s: the Python hook must do the classic duty the guard took from the mod" % name
         assert all(run["stdout"].strip() == "" for run in r["runs"])
@@ -293,7 +293,7 @@ def test_guarded_seat_learn_duties_move_to_python(name):
 @pytest.mark.skipif(os.environ.get("ACE_E2E") != "1", reason="e2e target tests: set ACE_E2E=1")
 def test_guarded_seat_python_ups_sets_the_mod_title():
     import ace_e2e_harness as H
-    r = H.run_fixture("UserPromptSubmit_human", prepare=_marker(60, classic=False, title="ACE 5 patterns"))
+    r = H.run_fixture("UserPromptSubmit_human", prepare=_marker(5, classic=False, title="ACE 5 patterns"))
     try:
         assert r["cli_calls"] == []
         out = json.loads(r["runs"][0]["stdout"])
@@ -305,7 +305,7 @@ def test_guarded_seat_python_ups_sets_the_mod_title():
 @pytest.mark.skipif(os.environ.get("ACE_E2E") != "1", reason="e2e target tests: set ACE_E2E=1")
 def test_unguarded_seat_python_ups_leaves_the_title_to_the_mod():
     import ace_e2e_harness as H
-    r = H.run_fixture("UserPromptSubmit_human", prepare=_marker(60, title="ACE 5 patterns"))
+    r = H.run_fixture("UserPromptSubmit_human", prepare=_marker(5, title="ACE 5 patterns"))
     try:
         assert all(run["stdout"].strip() == "" for run in r["runs"])
     finally:

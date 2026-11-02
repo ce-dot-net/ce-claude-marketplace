@@ -13,7 +13,7 @@ import {
 const SEARCH_MS = 25000, DOMAIN_MS = 17000 // §11 A2: blocking budget per search, retry included
 const PIN_SHARE = 0.6                      // of a search budget, for the pinned attempt
 const LEARN_LOCK_MS = 600_000              // ace_session_end.py: learn timeout 300 s + margin
-const MARKER_REFRESH_MS = 60_000           // is_mod_active's max age is 600 s; a turn can outlast it without any prompt
+const MARKER_REFRESH_MS = 60_000           // between handoffs; plugin_data_dir.MOD_AFTER_TOOL_S is 120 s, MOD_HANDOFF_S 15 s
 const LAUNCHER_MS = 15_000                 // a loaded machine must not get a live learn's lock and trace removed
 const MAX_TOOL_RECS = 1000                 // ponytail: the trace keeps the last 50 + failures anyway; older steps are lost past this
 
@@ -247,10 +247,10 @@ async function classicFresh($: any, s: Sess): Promise<boolean> {
   } catch { return false }
 }
 // Between prompts: a long task must not wake the Python chain beside the mod. Never throws.
-async function refreshMarker($: any, L: Load) {
+async function refreshMarker($: any, L: Load, force = false) {
   try {
     const now = await $.clock.now()
-    if (now - L.markerAt < MARKER_REFRESH_MS) return
+    if (!force && now - L.markerAt < MARKER_REFRESH_MS) return
     L.markerAt = now  // first: no project means no marker, and no settings read per tool call either
     const s = await ensure($, L)
     if (s) await touchMarker($, L, s, now)
@@ -652,6 +652,7 @@ export const register: Register = (on) => {
     try { out = await onPrompt($, L, e) } catch (err) {
       if (L.sess) await relLog($, L.sess, { timestamp: await nowIso($), event: 'error', hook: 'UserPromptSubmit', location: 'mod.prompt.submit', error: String(err).slice(0, 300), source: 'mod' })
     }
+    await refreshMarker($, L, true)  // handoff: the Python UPS runs inside next(); a crashed mod never writes this (MOD_HANDOFF_S)
     return next(out)
   })
 
@@ -664,7 +665,7 @@ export const register: Register = (on) => {
 
   // turn.complete carries no effort; Stop does (ace_after_task._resolve_effort_level).
   on('classic.Stop', async ($, e: any, next) => {
-    await refreshMarker($, L)  // Stop is the Python hook that would reap the state, and it runs after this one
+    await refreshMarker($, L, true)  // handoff to the Python hook of this event  // Stop is the Python hook that would reap the state, and it runs after this one
     await touchClassic($, L)
     const raw = effortOf(e)
     if (typeof raw === 'string' && raw) L.stopEffort = raw
@@ -672,7 +673,7 @@ export const register: Register = (on) => {
     return next(e)
   })
   on('classic.SubagentStop', async ($, e: any, next) => {
-    await refreshMarker($, L)
+    await refreshMarker($, L, true)  // handoff to the Python hook of this event
     await touchClassic($, L)
     const raw = effortOf(e)
     if (typeof raw === 'string' && raw && e.agent_id) L.agentEffort.set(e.agent_id, raw)
@@ -716,7 +717,7 @@ export const register: Register = (on) => {
   })
 
   on('agent.spawn', async ($, e, next) => {
-    await refreshMarker($, L)
+    await refreshMarker($, L, true)  // handoff to the Python hook of this event
     let out: any = e, pending: any = null
     try {
       const s = await ensure($, L)
@@ -762,7 +763,7 @@ export const register: Register = (on) => {
   })
 
   on('tool.call', async ($, e, next) => {
-    await refreshMarker($, L)
+    await refreshMarker($, L, true)  // handoff to the Python hook of this event
     const t0 = Date.now()
     const r: any = await next(e)
     await refreshMarker($, L)  // the call itself can outlast the marker

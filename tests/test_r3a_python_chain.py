@@ -228,12 +228,28 @@ def test_is_mod_active_fresh_stale_absent(tmp_path, monkeypatch):
     p.parent.mkdir(parents=True)
     p.write_text("")
     assert pdd.is_mod_active("prj_m", "sid_m") is True
-    old = time.time() - 11 * 60
+    old = time.time() - 3 * 60
     os.utime(str(p), (old, old))
-    assert pdd.is_mod_active("prj_m", "sid_m") is False, "marker older than 10 min is stale"
-    young = time.time() - 9 * 60
+    assert pdd.is_mod_active("prj_m", "sid_m") is False, "after-tool window: older than 120 s is stale"
+    young = time.time() - 90
     os.utime(str(p), (young, young))
     assert pdd.is_mod_active("prj_m", "sid_m") is True
+    assert pdd.is_mod_active("prj_m", "sid_m", pdd.MOD_HANDOFF_S) is False, "handoff window: the mod wrote right before"
+
+
+def test_a_crashed_mod_releases_the_python_chain_within_seconds(tmp_path, monkeypatch):
+    """Claude Code unloads all user mods after 3 worker crashes. The marker of the dead mod must not keep the
+    Python chain quiet for 10 minutes: a live mod rewrites it right before every handoff hook, so 30 s = dead."""
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
+    import plugin_data_dir as pdd
+    sdir = tmp_path / "ace-pd" / "projects" / "prj_m" / "sessions" / "sid_m"
+    sdir.mkdir(parents=True)
+    for n in ("mod-active", "mod-classic"):
+        (sdir / n).write_text("")
+        t = time.time() - 30
+        os.utime(str(sdir / n), (t, t))
+    assert pdd.is_mod_active("prj_m", "sid_m", pdd.MOD_HANDOFF_S) is False   # UPS / SubagentStart / Agent stash search
+    assert pdd.mod_owns_learn("prj_m", "sid_m", pdd.MOD_HANDOFF_S) is False  # Stop / SubagentStop learn
 
 
 def test_is_mod_active_sanitizes_ids(tmp_path, monkeypatch):

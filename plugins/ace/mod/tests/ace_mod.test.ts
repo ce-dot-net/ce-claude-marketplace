@@ -1243,22 +1243,24 @@ test('cut-off ace-cli stdout: search fails cleanly, the task stays anchored', as
 
 // ---------- the marker outlives long turns ----------
 
-test('mod-active is refreshed (throttled to 60 s) by tool.call, agent.spawn, turn.start and the Stop events', async ($, on) => {
+test('mod-active: tool.call, agent.spawn and the Stop events write it at once (handoff); turn.start is throttled to 60 s', async ($, on) => {
   const h = host(on)
   const M = `${SDIR}/mod-active`
   await $.session.start({ cwd: CWD, surface: null, isInteractive: false } as any)
-  const step = async (act: () => Promise<unknown>) => {
+  const handoff = async (act: () => Promise<unknown>) => {
     const before = h.mtime.get(M)!
     h.advance(10_000); await act()
-    expect(h.mtime.get(M)).toBe(before)  // inside the throttle window
-    h.advance(3 * MIN); await act()
-    expect(h.mtime.get(M)! > before).toBe(true)
+    expect(h.mtime.get(M)! > before).toBe(true)  // the Python hook of this event runs right after: never stale
   }
-  await step(() => $.tool.call({ tool: 'Bash', command: 'ls' } as any))
-  await step(() => $.turn.start({ text: '', turnId: 'c1' } as any))
-  await step(() => spawn($, 'fork please', { fork: true }))
-  await step(() => ($ as any).classic.Stop({ session_id: SID }))
-  await step(() => ($ as any).classic.SubagentStop({ session_id: SID, agent_id: 'a' }))
+  await handoff(() => $.tool.call({ tool: 'Bash', command: 'ls' } as any))
+  await handoff(() => spawn($, 'fork please', { fork: true }))
+  await handoff(() => ($ as any).classic.Stop({ session_id: SID }))
+  await handoff(() => ($ as any).classic.SubagentStop({ session_id: SID, agent_id: 'a' }))
+  const before = h.mtime.get(M)!
+  h.advance(10_000); await $.turn.start({ text: '', turnId: 'c1' } as any)
+  expect(h.mtime.get(M)).toBe(before)  // inside the throttle window
+  h.advance(3 * MIN); await $.turn.start({ text: '', turnId: 'c2' } as any)
+  expect(h.mtime.get(M)! > before).toBe(true)
 })
 
 // ---------- prompts into a running turn ----------
@@ -1421,4 +1423,12 @@ test('trace label without a search: the conversation arm (server request); a sto
   expect(traceVariant('budget', 'conv-1', { ACE_RENDER_FULL_PCT: '100' })).toBe('budget')
   expect(traceVariant(undefined, undefined, {})).toBe(undefined)
   expect(traceVariant(undefined, 'conv-1', { ACE_AB_CONTROL_PCT: '100', ACE_RENDER_FULL_PCT: '0' })).toBe(undefined)
+})
+
+test('handoff: the mod rewrites mod-active right before the Python UPS runs (after its own search)', async ($, on) => {
+  let hh: any
+  const h = host(on, { search: () => { hh.advance(20_000); return { stdout: S8 } } })
+  hh = h
+  await submit($)
+  expect(Number(h.files.get(`${SDIR}/mod-active`))).toBe(h.now())  // written after the 20 s search, not only before it
 })
