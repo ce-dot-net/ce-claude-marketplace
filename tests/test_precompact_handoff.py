@@ -19,6 +19,7 @@ CC doc facts: SessionStart input `source == "compact"` (cc_hooks_reference.md:12
 output `hookSpecificOutput.additionalContext` (:1295-1312).
 """
 import json
+import os
 import uuid
 
 import pytest
@@ -177,3 +178,23 @@ def test_compact_restore_line_singular_and_without_count(env):
 def test_compact_nothing_reinjected_no_notice(env):
     proc = _run(env, _event(env))
     assert proc.stdout.strip() == ""
+
+
+def test_mod_handled_compaction_python_steps_aside(env):
+    """Item A: the mod (session.compact -> prompt.compose section) wrote mod-compact: no second re-inject, no notice."""
+    env.write_state(SID, None, rendered_context=RENDERED)
+    (env.session_dir(SID) / "mod-compact").write_text("1")
+    proc = _run(env, _event(env))
+    assert proc.returncode == 0 and proc.stdout.strip() == ""
+
+
+def test_stale_mod_compact_marker_python_reinjects(env):
+    """A guarded seat never runs session.compact; an old marker (crashed mod) does not silence the re-inject."""
+    import time
+    env.write_state(SID, None, rendered_context=RENDERED)
+    m = env.session_dir(SID) / "mod-compact"
+    m.write_text("1")
+    old = time.time() - 3600
+    os.utime(m, (old, old))
+    out = json.loads(_run(env, _event(env)).stdout)
+    assert out["hookSpecificOutput"]["additionalContext"] == RENDERED

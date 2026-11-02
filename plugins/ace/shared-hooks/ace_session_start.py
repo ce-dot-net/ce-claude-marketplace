@@ -44,8 +44,8 @@ def main() -> None:
         if not ctx:
             return
         sid = plugin_data_dir.resolve_session_id(event)
-        if plugin_data_dir.is_disabled(ctx['project'], sid):
-            return
+        if plugin_data_dir.is_disabled(ctx['project'], sid) or plugin_data_dir.mod_handled_compact(ctx['project'], sid):
+            return  # disabled, or the mod re-adds the patterns itself (prompt.compose section ace:patterns)
         try:  # §31: the mod's per-conversation full dedupe starts over after a compaction
             (plugin_data_dir.session_dir(ctx['project'], sid, create=False) / 'full-injected.json').unlink()
         except OSError:
