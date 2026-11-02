@@ -1514,6 +1514,15 @@ def test_subagent_start_logs_search_with_hook_subagent_start(tmp_path):
     assert row.get("hook_ms") is not None, row
 
 
+def test_subagent_start_search_row_carries_task_session_id(tmp_path):
+    """fix 5b: the search row names the agent's task pin (the mod writes it too)."""
+    env = _v8_env(tmp_path)
+    env.run(_V8_SHIM, _v8_event(env, _v8_spawn_transcript(env)))
+    row = [r for r in env.relevance_rows() if r.get("event") == "search" and r.get("hook") == "SubagentStart"][-1]
+    state = env.read_state(_V8_SID, "agent-a1b2c3")
+    assert row.get("task_session_id") and row["task_session_id"] == state["task_session_id"], row
+
+
 def test_subagent_start_state_records_user_prompt_and_hook_event_name(tmp_path):
     """C1: SubagentStart is a state writer — the agent's state carries the derived
     `user_prompt` (so SubagentStop never re-reads transcripts, critic T7) and
