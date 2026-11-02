@@ -474,8 +474,8 @@ def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = 
 
 def skip_learning(reason, event=None, agent_id=None, session_id=None, working_dir=None):
     """
-    Skip learning. Prints NOTHING: Stop/SubagentStop are async hooks and CC delivers an
-    async hook's systemMessage to Claude, not the user (cc_hooks_reference.md:4093).
+    Skip learning. Prints NOTHING: Stop/SubagentStop are sync hooks that only dispatch a
+    detached learn; stdout would reach Claude, not the user.
     Also clears this agent's accumulator rows so a skipped turn (machine prompt, trivial,
     read-only) does not leak its tool rows into the next task's trajectory.
 
@@ -527,10 +527,20 @@ _SYSREM = regex_module.compile(r'<system-reminder>.*?</system-reminder>', regex_
 
 
 def get_user_prompt_from_transcript(transcript_path: str) -> str:
+    return _user_prompt_from_transcript(transcript_path, False)
+
+
+def get_first_user_prompt_from_transcript(transcript_path: str) -> str:
+    return _user_prompt_from_transcript(transcript_path, True)
+
+
+def _user_prompt_from_transcript(transcript_path: str, first: bool = False) -> str:
     """
     Fallback task description: the last real user prompt in the LAST 2 MB of the
     transcript (bounded reverse read, never a full parse). The primary source is
     the `user_prompt` UPS stores in the session state (contract C1).
+    first=True (SubagentStop): the FIRST real user text from the head of the transcript, so
+    follow-up turns (SendMessage/resume) never replace the original task.
     """
     try:
         transcript_file = Path(transcript_path).expanduser()
@@ -539,15 +549,17 @@ def get_user_prompt_from_transcript(transcript_path: str) -> str:
 
         with open(transcript_file, 'rb') as f:
             size = f.seek(0, os.SEEK_END)
-            start = max(0, size - TRANSCRIPT_TAIL_BYTES)
+            start = 0 if first else max(0, size - TRANSCRIPT_TAIL_BYTES)
             f.seek(start)
-            lines = f.read().decode('utf-8', 'replace').splitlines()
+            lines = f.read(TRANSCRIPT_TAIL_BYTES).decode('utf-8', 'replace').splitlines()
         if start:
             lines = lines[1:]  # first line is cut mid-record
+        if first:
+            lines = lines[:-1] if size > TRANSCRIPT_TAIL_BYTES else lines  # last line may be cut
 
         # Find LAST user message (task start) - search backwards
         # Skip tool_result messages - they have role=user but are not user prompts
-        for line in reversed(lines):
+        for line in (lines if first else reversed(lines)):
             try:
                 entry = json.loads(line)
             except json.JSONDecodeError:
@@ -692,9 +704,10 @@ def learn_child(path):
 
 def main():
     """
-    ACE After Task Hook (Stop / SubagentStop) — runs learning IN the hook process
-    (the hook is registered `async`; no `&`; the learn trace goes through a temp file that
-    run_learn removes before returning; nothing under ~/.claude/logs).
+    ACE After Task Hook (Stop / SubagentStop) — dispatches learning to a detached child
+    (the hook is SYNC, timeout 15 - do not restore `async`: async hooks are killed at `claude -p`
+    teardown, doc :4084-4087; the learn trace goes through a temp file the child removes;
+    nothing under ~/.claude/logs).
 
     1. Early exits (stop_hook_active, SubagentStop with empty agent_type, disabled flag)
     2. Task = state `user_prompt` (C1), else bounded transcript tail; trivial/machine prompts skip
@@ -736,10 +749,6 @@ def main():
         if hook_event_name == 'SubagentStop' and not event.get('agent_type') and event.get('agent_id'):
             sys.exit(0)
 
-        # Self-eval answer in the last message -> review file for the statusline
-        if hook_event_name == 'Stop':
-            parse_ace_review(last_assistant_message)
-
         # Get project context
         context = get_context()
         if not context:
@@ -747,6 +756,10 @@ def main():
             sys.exit(0)
         if plugin_data_dir.is_disabled(context['project'], session_id) or plugin_data_dir.is_mod_active(context['project'], session_id):
             sys.exit(0)  # session flag (CLI unusable) or project flag (P-26)
+
+        # Self-eval answer in the last message -> review file for the statusline (after the gates)
+        if hook_event_name == 'Stop':
+            parse_ace_review(last_assistant_message)
 
         # Handle SubagentStop: use agent's transcript. transcript_path is the MAIN session's
         # (cc_hooks_reference.md:2591); a degenerate event without agent_transcript_path must
@@ -798,12 +811,20 @@ def main():
 
         # STEP 1: task description — state `user_prompt` (C1), else bounded transcript tail
         # SubagentStop: SubagentStart's stored query first (§13.2); transcript is only the fallback.
-        user_prompt = ''
-        if not user_prompt and not no_agent_state:
-            user_prompt = (load_state(session_id, agent_id, hook_event_name).get('user_prompt') or '').strip()
+        stored, src = '', ''
+        if not no_agent_state:
+            st = load_state(session_id, agent_id, hook_event_name)
+            stored, src = (st.get('user_prompt') or '').strip(), st.get('query_source')
+        own = ''
+        if hook_event_name == 'SubagentStop' and transcript_path and src not in ('stash', 'own_transcript'):
+            # stored query may be a guessed sibling prompt (parent_scan / unknown): own transcript wins
+            own = get_first_user_prompt_from_transcript(transcript_path)
+            if own == "No user prompt found":
+                own = ''
+        user_prompt = own or stored
         if not user_prompt:
-            user_prompt = get_user_prompt_from_transcript(transcript_path) if transcript_path \
-                else "No user prompt found"
+            user_prompt = get_user_prompt_from_transcript(transcript_path) \
+                if transcript_path else "No user prompt found"
 
         # STEP 2: QUALITY GATE - trivial / machine-generated prompts (before any db work)
         if is_trivial_task(user_prompt):
@@ -948,7 +969,7 @@ def main():
                               reason="fully anchorless: no session_id/retrieval_id/prompt")
                 except Exception:
                     pass  # non-fatal telemetry
-                sys.exit(0)  # async hook: print nothing (doc :4093)
+                sys.exit(0)  # sync hook: print nothing
 
         # agent_id-contract proof: record which agent_id the READ side used and how
         # many IDs it recovered. Diffing this against the wrapper's write-side
@@ -1041,9 +1062,9 @@ def main():
         except Exception:
             pass  # never fail the learn pipeline on truncation issues
 
-        # STEP 8: hand the learn to a detached child (see dispatch_learn) - async Stop hooks are
-        # killed at `claude -p` teardown (cc_hooks_reference.md:4086), so the 120 s learn must not
-        # run inside this process. Async hooks print NOTHING (doc :4093: stdout reaches Claude).
+        # STEP 8: hand the learn to a detached child (see dispatch_learn) - the 120 s learn must not run
+        # inside this process (Stop is sync, timeout 15; async hooks die at `claude -p` teardown,
+        # cc_hooks_reference.md:4086). Print NOTHING (stdout reaches Claude).
         try:
             state_changing_tools = ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit']
             job = {

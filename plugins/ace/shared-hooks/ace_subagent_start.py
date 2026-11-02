@@ -50,6 +50,7 @@ Output JSON shape (CC SubagentStart additionalContext):
 import glob
 import json
 import os
+import re
 import sys
 import time
 import uuid
@@ -198,6 +199,9 @@ def _extract_query_from_transcript(transcript_path: str, agent_type: str) -> Opt
     return None
 
 
+_SYSREM = re.compile(r'<system-reminder>.*?</system-reminder>', re.S)
+
+
 def _query_from_own_transcript(transcript_path: str, session_id: str, agent_id: str) -> Optional[str]:
     """First user message of this agent's own transcript, if it exists yet.
 
@@ -231,12 +235,13 @@ def _query_from_own_transcript(transcript_path: str, session_id: str, agent_id: 
                                    if isinstance(b, dict) and b.get('type') == 'text')
             if not isinstance(content, str):
                 continue
+            content = _SYSREM.sub('', content)
             if _WORKFLOW_MARKER in content:
                 content = content.split(_WORKFLOW_MARKER, 1)[1]
             content = content.strip()
             if content:
                 return content[:_QUERY_MAX_CHARS]
-            return None
+            continue  # empty after stripping (reminder-only entry): try the next user entry
     return None
 
 
@@ -317,10 +322,16 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
 
         # SubagentStart input has no prompt field (cc_hooks_reference.md:2553-2566):
         # own transcript first (Workflow agents), else bounded parent-transcript tail scan.
-        query = (_consume_stash(project, plugin_data_dir.resolve_session_id(event), event.get('prompt_id'),
-                                agent_type)
-                 or _query_from_own_transcript(transcript_path, session_id, agent_id)
-                 or _extract_query_from_transcript(transcript_path, agent_type))
+        # query_source: only stash/own_transcript are exact; parent_scan can be a sibling's prompt.
+        query, query_source = None, None
+        for src, fn in (('stash', lambda: _consume_stash(project, plugin_data_dir.resolve_session_id(event),
+                                                          event.get('prompt_id'), agent_type)),
+                        ('own_transcript', lambda: _query_from_own_transcript(transcript_path, session_id, agent_id)),
+                        ('parent_scan', lambda: _extract_query_from_transcript(transcript_path, agent_type))):
+            query = fn()
+            if query:
+                query_source = src
+                break
 
         # Persist the per-task anchor IMMEDIATELY (before search / early-exits) so
         # SubagentStop's load_task_session_id finds it even if the search returns 0
@@ -330,7 +341,8 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         try:
             append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id,
                                  user_prompt=query, hook_event_name='SubagentStart',
-                                 project_id=project, parent_task_id=parent_task_id)
+                                 project_id=project, parent_task_id=parent_task_id,
+                                 query_source=query_source)
         except Exception as e:
             log_error('SubagentStart', 'ace_subagent_start.anchor', session_id, project, e)
 

@@ -29,7 +29,7 @@ def test_subagent_stop_prefers_stored_query_over_transcript(box):
     agent = "aaa111"
     box.seed_tools(sid, WORK, agent_id=agent)
     # §13.2 (r3a) flipped the r2 order: SubagentStart's stored query wins, transcript is the fallback
-    box.write_state(sid, agent=agent, user_prompt="Audit the CSS theme tokens for dark mode")
+    box.write_state(sid, agent=agent, user_prompt="Audit the CSS theme tokens for dark mode", query_source="stash")
     p = box.run_after_task(box.subagent_event(sid, agent), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
     assert p.stdout == ""
     task = box.cli_calls("learn")[0]["trace"]["task"]
