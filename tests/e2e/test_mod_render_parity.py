@@ -138,7 +138,7 @@ def test_render_cohort_salted_bucket_and_knobs(node_out, monkeypatch):
             for k in ("ACE_AB_CONTROL_PCT", "ACE_AB_COMPACT_PCT"):
                 monkeypatch.setenv(k, env.get(k, "0"))
             assert got[1:] == [render_cohort(s) for s in SIDS[1:]]
-    assert set(node_out["cohorts"][0]) == {"budget"}  # §31 default: budget, full share 0
+    assert set(node_out["cohorts"][0]) <= {"budget", "full"}  # §31 default (8.0.0): 50/50 budget/full, no control/compact
 
 
 def test_render_arm_python_ts_parity(node_out, monkeypatch):

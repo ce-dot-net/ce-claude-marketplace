@@ -2,7 +2,7 @@
 """DESIGN §31 (FINAL client contract), Python chain.
 
 - Assignment: default budget; full only via split, bucket = sha256('render:' + conversation_id) % 100 <
-  ACE_RENDER_FULL_PCT (default 0); no conversation id -> budget. Python never renders full.
+  ACE_RENDER_FULL_PCT (default 50, 8.0.0 user ruling); no conversation id -> budget. Python never renders full.
 - Trace: render_variant 'budget'|'full' (strip + lowercase), OMITTED when unknown; conversation_id = CC session_id
   (<= 512), subagents inherit; session_id (pin) unchanged; playbook_used = all injected ids.
 - applied_log_ids = only ACTUALLY USED ids for every variant: the id or a >= 40-char verbatim content fragment
@@ -29,8 +29,9 @@ def clean_env(monkeypatch):
 
 # ── assignment ──────────────────────────────────────────────────────────────────────────
 
-def test_default_is_budget_full_share_0(clean_env):
-    assert {render_arm("conv-%d" % i) for i in range(300)} == {"budget"}
+def test_default_is_a_50_50_split(clean_env):
+    arms = [render_arm("conv-%d" % i) for i in range(300)]
+    assert set(arms) == {"budget", "full"} and 120 <= arms.count("full") <= 180
     assert render_arm(None) == "budget" and render_arm("") == "budget"
 
 

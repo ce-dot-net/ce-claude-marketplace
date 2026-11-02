@@ -49,7 +49,7 @@ function host(on: any, o: Opts = {}) {
   for (const [k, v] of Object.entries(o.files ?? {})) put(k, v)
   if (!o.noClassic) put(`${SDIR}/mod-classic`, String(now))  // classic.* hooks fire (no managed-settings guard)
   const runs: Run[] = [], logs: string[] = [], envAsked: string[] = []
-  // §31 default is ACE_RENDER_FULL_PCT=0 (budget); this suite pins the full arm unless defaultArm (its own tests below)
+  // §31 default is ACE_RENDER_FULL_PCT=50 (50/50 split); this suite pins the full arm unless defaultArm (its own tests below)
   const env: Record<string, string> = { HOME, ...(o.defaultArm ? {} : { ACE_RENDER_FULL_PCT: '100' }), ...(o.env ?? {}) }
   let spawnN = 0
   const res = (exitCode: number, stdout: string, stderr = '') =>
@@ -393,6 +393,7 @@ test('systemMessage parity: a $.ui.log summary on success, an [ACE] error line o
   const h = host(on, { search: () => fail ? { exitCode: 1, stdout: '', stderr: 'boom' } : { stdout: S8 } })
   await submit($)
   expect(h.logs.some(l => l.startsWith('✅ [ACE] Found 8 relevant bullets'))).toBe(true)
+  expect(h.logs.filter(l => l.startsWith('✅ [ACE]')).every(l => !l.includes('\n'))).toBe(true)  // $.ui.log is one line
   fail = true
   await submit($, HUMAN + ' fail')
   expect(h.logs.some(l => /^(❌|⚠️|⏱️) \[ACE\]/.test(l))).toBe(true)
@@ -931,7 +932,7 @@ test('engine present: the detached learn runs engine/learn.js and falls back to 
 
 // ---------- §31 final client contract (render_variant, conversation_id, used-only applied ids, dedupe) ----------
 
-test('§31 default env: budget (ACE_RENDER_FULL_PCT=0), labelled budget, <= 9,500 chars', async ($, on) => {
+test('§31 default env (50/50): sess-1 lands in the budget half (bucket 66), labelled budget, <= 9,500 chars', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S100 }), defaultArm: true })
   const r: any = await submit($)
   expect(h.state()!.render_variant).toBe('budget')
