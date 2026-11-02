@@ -149,6 +149,17 @@ def render_domain_shift(resp, domain):
         pats = pats[:-1]
 
 
+def render_budget(resp, tag, attrs):
+    """The budget render (<= 9,500 chars) of the whole response: the full arm's compaction re-inject copy.
+    render_patterns' header and pattern count, per-pattern keys SORTED (the mod's byte form)."""
+    import re
+    from ace_pattern_render import render_patterns
+    ctx = render_patterns(resp, tag=tag, attrs=attrs)[0]
+    n = int(re.match(r'<[^>]*shown="(\d+)"', ctx).group(1))
+    d = render_patterns_dict(resp)[0]
+    return "%s\n%s\n</%s>" % (ctx.split("\n", 1)[0], _body(d, list(d["similar_patterns"])[:n]), tag)
+
+
 def eval_injection(req):
     """ace_before_task.check_eval_request_and_review text for one request dict."""
     stats = (("%s%% relevance, " % req["avg_relevance"]) if req.get("avg_relevance") else "") + \
@@ -198,7 +209,7 @@ def expected_main_state(search_text, prompt=HUMAN_PROMPT, tsid=TSID_PLACEHOLDER)
     import patterns_used_state as pus
     resp = load_response(search_text)
     _ctx, ids, rlog, _n, _t = render_full(resp, "ace-patterns", 'agent-type="main"')
-    rendered = render_full(resp, "ace-patterns", 'agent-type="main"', cap=STATE_RENDER_CAP)[0]
+    rendered = render_budget(resp, "ace-patterns", 'agent-type="main"')  # item 3: re-inject copy = budget render
     with tempfile.TemporaryDirectory() as d:
         pus.append_patterns_used("s", None, ids, state_dir=d, retrieval_id=resp.get("retrieval_id"),
                                  retrieval_log_ids=rlog, task_session_id=tsid, user_prompt=prompt,
@@ -226,6 +237,7 @@ def generated_files():
         "full_sub_8": render_full(r8, "ace-patterns-subagent", 'agent-type="general-purpose"')[0],
         "domain_shift_8": render_domain_shift(r8, "ace-cli"),
         "state_main_8": expected_main_state(s8),
+        "budget_main_8": render_budget(r8, "ace-patterns", 'agent-type="main"'),
         "eval_injection": eval_injection({"patterns_injected": 100, "avg_relevance": 0, "domains": 0,
                                           "tools_executed": 2, "success": True}),
         "eval_injection_stats": eval_injection({"patterns_injected": 8, "avg_relevance": 61, "domains": 3,
