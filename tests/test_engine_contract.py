@@ -24,7 +24,8 @@ import pytest
 import engine_harness as E
 
 pytestmark = pytest.mark.skipif(E.node_bin() is None, reason="node not installed")
-needs_real = pytest.mark.skipif(E.real_core_dir() is None, reason="real ace-cli/@ace-sdk/core not installed")
+def needs_real(f):  # out of the default gate (conftest): real core subprocesses are load-sensitive
+    return pytest.mark.real_engine(pytest.mark.skipif(E.real_core_dir() is None, reason="real ace-cli/@ace-sdk/core not installed")(f))
 
 
 def _search_js(bin_dir, payload, **env):
