@@ -104,6 +104,10 @@ def pytest_configure(config):
         "ACE_FAKE_CLI_LOG": str(root / "fake-ace-cli.log"),
         "PATH": str(fake_bin) + os.pathsep + os.environ.get("PATH", ""),
     })
+    from plugin_copy import REPO_PLUGIN, hermetic_root
+    if (REPO_PLUGIN / "node_modules").exists() and "CLAUDE_PLUGIN_ROOT" not in os.environ:
+        # session-wide too: modules that resolve their root at import time (ace_engine) must not see the real install
+        os.environ["CLAUDE_PLUGIN_ROOT"] = str(hermetic_root())
     _state.update(root=root, fake_bin=fake_bin)
 
 
