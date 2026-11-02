@@ -509,6 +509,71 @@ test('agent.spawn resume with live state / fork: no new search, no second pin', 
   expect(h.state('agent-1')!.task_session_id).toBe(pinned)
 })
 
+test('§16 P7 fork: own uuid4 pin + state (parent_task_id), no search / inject, search_skipped; it learns with its own pin', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await submit($)
+  const main = h.state()!.task_session_id
+  const r: any = await spawn($, 'fork this context and fix the parser module now', { fork: true, subagentType: 'fork' })
+  expect(h.searches().length).toBe(1)
+  expect(r.seenPrompt).toBe('fork this context and fix the parser module now')
+  const st = h.state('agent-1')!
+  expect(UUID4.test(st.task_session_id)).toBe(true)
+  expect(st.task_session_id).not.toBe(main)
+  expect(st.parent_task_id).toBe(main)
+  expect(h.rows().some((x: any) => x.event === 'search_skipped' && x.reason === 'fork_inherits_context')).toBe(true)
+  await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+  await done($, 'fork done', 'agent-1')
+  expect(h.trace(h.learns()[0]!).session_id).toBe(st.task_session_id)
+})
+
+test('§16 P7 ACE_SUBAGENT_INJECT_FORKS=1 restores the fork search', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_SUBAGENT_INJECT_FORKS: '1' } })
+  await spawn($, 'fork this context and fix the parser module now', { fork: true, subagentType: 'fork' })
+  expect(h.searches().length).toBe(1)
+})
+
+test('§16 P1 subagent summary = the LAST SubagentHandback message (cap 4000), else the closing answer', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await spawn($, 'review the domain shift python port for parity bugs')
+  await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+  await $.tool.call({ tool: 'SubagentHandback', message: 'first draft', agentId: 'agent-1' } as any)
+  await $.tool.call({ tool: 'SubagentHandback', message: '## Findings\n' + 'x'.repeat(6000), agentId: 'agent-1' } as any)
+  await done($, 'Now qdrant_search.', 'agent-1')
+  const sum = h.trace(h.learns()[0]!).result.summary
+  expect(sum.startsWith('## Findings')).toBe(true)
+  expect(sum.length).toBe(4000)
+})
+
+test('§16 P2 main Stop with a running subagent/workflow defers the learn; the task-notification turn then learns it', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  const tsid = h.state()!.task_session_id
+  await ($ as any).classic.Stop({ session_id: SID, background_tasks: [{ type: 'monitor', status: 'running' }, { type: 'subagent', status: 'running' }] })
+  await done($, 'waiting for the agent')
+  expect(h.learns().length).toBe(0)
+  expect(h.state()!.task_session_id).toBe(tsid)
+  expect(h.rows().some((x: any) => x.event === 'learn_deferred')).toBe(true)
+  await submit($, '<task-notification>agent finished</task-notification>', 'task-notification')
+  await $.turn.start({ text: '<task-notification>agent finished</task-notification>', turnId: 't2' } as any)
+  await $.tool.call({ tool: 'Bash', command: 'git diff' } as any)
+  await ($ as any).classic.Stop({ session_id: SID, background_tasks: [{ type: 'monitor', status: 'running' }] })
+  await $.turn.complete({ answer: 'all merged', durationMs: 5, isAborted: false, turnId: 't2', reason: 'answer' } as any)
+  expect(h.learns().length).toBe(1)
+  const t = h.trace(h.learns()[0]!)
+  expect(t.task).toBe('User request: ' + HUMAN)
+  expect(t.session_id).toBe(tsid)
+  expect(t.result.summary).toBe('all merged')
+  expect(t.trajectory.length).toBe(3)
+})
+
+test('§16 P2 a monitor/shell alone never defers', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  await ($ as any).classic.Stop({ session_id: SID, background_tasks: [{ type: 'monitor', status: 'running' }, { type: 'shell', status: 'running' }] })
+  await done($)
+  expect(h.learns().length).toBe(1)
+})
+
 test('an agent resumed after its learn: fresh pin, resume prompt searched at the first tool call, learned again', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }) })
   await spawn($, 'review the domain shift python port for parity bugs')
@@ -562,7 +627,7 @@ test('a woken teammate (turn.start only, its state reaped): the message is the n
 
 // ---------- tool.call Read: domain shift ----------
 
-test('domain shift: Read in a known domain → one --top-k 8 search pinned to the task, context attached, once per domain', async ($, on) => {
+test('domain shift: Read in a known domain → one --top-k 8 search, NO pin (§16 P8), context attached, once per domain', async ($, on) => {
   const h = host(on)
   await submit($)
   const main = h.pin(h.searches()[0]!)!
@@ -571,7 +636,8 @@ test('domain shift: Read in a known domain → one --top-k 8 search pinned to th
   const ds = h.searches().filter(s => s.argv.includes('--top-k'))
   expect(ds.length).toBe(1)
   expect(h.flag(ds[0]!.argv, '--top-k')).toBe('8')
-  expect(h.pin(ds[0]!)).toBe(main)
+  expect(h.pin(ds[0]!)).toBeUndefined()  // §16 P8: the server never credits domain-shift rows; the sqlite pin is the lock source
+  expect(h.state()!.task_session_id).toBe(main)
   expect(ds[0]!.stdin).toBe('notes')
   expect(ds[0]!.timeoutMs! <= 17000).toBe(true)
   expect(r1.context[r1.context.length - 1]).toBe(G.domain_shift_8)
@@ -604,7 +670,7 @@ test('domain-shift claim is per agent+domain: a Read of domain B while A is in f
   expect(h.files.get(`${SDIR}/domain-last-main.txt`)!.trim()).toBe('system-validation-and-testing')
 })
 
-test('domain shift inside a subagent pins the SUBAGENT id and merges into its own state', async ($, on) => {
+test('domain shift inside a subagent: no pin (§16 P8), merges into the SUBAGENT state, its id kept', async ($, on) => {
   const h = host(on)
   await submit($)
   await spawn($, 'review the domain shift python port for parity bugs')
@@ -612,7 +678,7 @@ test('domain shift inside a subagent pins the SUBAGENT id and merges into its ow
   await $.tool.call({ tool: 'Read', file_path: '/proj/ace-cli/notes.md', agentId: 'agent-1' } as any)
   const ds = h.searches().filter(s => s.argv.includes('--top-k'))
   expect(ds.length).toBe(1)
-  expect(h.pin(ds[0]!)).toBe(sub)
+  expect(h.pin(ds[0]!)).toBeUndefined()
   expect(h.files.get(`${SDIR}/domain-last-agent-1.txt`)!.trim()).toBe('ace-cli')
   expect(h.state('agent-1')!.task_session_id).toBe(sub)
 })
