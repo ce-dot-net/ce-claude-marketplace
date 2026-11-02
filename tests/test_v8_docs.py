@@ -235,3 +235,14 @@ def test_ci_runs_e2e_job():
     """Regression (already at 997c0de): CI runs the ACE_E2E=1 hook e2e suite."""
     text = _read(CI)
     assert "ACE_E2E" in text and "tests/e2e" in text
+
+
+def test_readme_discloses_the_v8_render_contract_and_drops_the_stale_flow():
+    """final review: public README states the mod/Python chains, the budget default, the full split and its cost,
+    the trace labels and the X-ACE-Client values; the removed keyword flow is gone."""
+    text = _read(README)
+    for must in ("ACE_RENDER_FULL_PCT", "budget", "2.1-2.3x", "conversation_id", "applied_log_ids", "render_variant",
+                 "X-ACE-Client", "claude-code-plugin/", "mod", "AOP-1333", "untested"):
+        assert must in text, must
+    for stale in ("Found 3 relevant patterns", "Bash(ace-cli *)", "~/.ace-logs", "Hook detects keywords", "v5.1.17"):
+        assert stale not in text, stale

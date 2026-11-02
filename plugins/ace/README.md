@@ -2,15 +2,27 @@
 
 **Agentic Context Engineering** - Self-improving Claude Code plugin using automatic pattern learning.
 
-## 🎯 What's New in v5.1.17
+## What's new in v8.0.0
 
-**Critical Bug Fixes - User-Reported Issues**
-
-- ✅ **ace-configure** - Added global config verification (7 bugs fixed: env pollution, directory creation, validation errors, project count check, jq dependency)
-- ✅ **ace-status** - Fixed "empty 0 playbooks" bug, now works with global config, better error messages
-- ✅ **SessionStart Hook** - Fixed bash eval parse errors, removed interactive prompts blocking sessions
-- ✅ **Stop Hook** - Fixed organization configuration errors, added pre-checks for CLI and config
-- ✅ **ace-install-cli** - Fixed complex bash eval errors, simplified all multi-line commands
+- **Two chains, one state.** On Claude Code >= 2.1.287 an in-process mod (`mod/register.ts`) searches, injects and
+  learns; the Python command hooks are the fallback and step aside per duty while the mod's markers are fresh. On
+  Team/Enterprise or managed-settings seats Claude Code's built-in guard filters the mod's `classic.*` hooks: the mod
+  still searches and injects, and the Python hooks take over tool accumulation, the Stop/SubagentStop learn and the
+  session title.
+- **Render: `budget` by default.** Both chains inject the server-ranked top patterns verbatim up to 9,500 chars
+  (Claude Code caps hook context at 10,000). The mod can also render `full` (all server patterns, cut by whole
+  patterns at 95,000 chars), but only for the share of conversations set by `ACE_RENDER_FULL_PCT` (default 0 =
+  off). `full` costs about 2.1-2.3x input tokens and 2.5x USD per task against budget; within one conversation the
+  mod re-injects only patterns not yet injected since the last compaction. 8.0.0 ships with full at 0 %; a split
+  comes with a later plugin release, after the ACE server has AOP-1333 and AOP-1334 on prod.
+- **What each learn trace carries:** `render_variant` (`budget` or `full`, omitted when unknown),
+  `conversation_id` (the Claude Code session id; subagents share it), the per-task pin as `session_id`, and
+  `applied_log_ids` only for patterns the final answer recognizably used (named by id or quoted with >= 40 chars).
+  `playbook_used` lists everything injected.
+- **CLI pin.** Claude Code installs the `@ace-sdk/cli` version pinned in `package.json` into the plugin directory. A
+  global `ace-cli` at or above the pin is used only as a fallback and `/ace:ace-doctor` marks it untested. Requests
+  sent through `ace-cli` say `X-ACE-Client: cli`; requests through the in-process engine (`@ace-sdk/core`) say
+  `X-ACE-Client: claude-code-plugin/<version>`.
 
 ## 🚀 Quick Start
 
@@ -47,29 +59,11 @@ Analyzes your codebase to create initial patterns.
 
 ### 5. Start Coding!
 
-Hooks automatically:
-- **Search** patterns when you start tasks (`implement`, `build`, `fix`, etc.)
-- **Remind** you to capture learning after work completion
+Every real prompt (not machine prompts, slash commands of ACE itself or very short prompts) is searched with a fresh
+per-task pin, and the patterns are injected as hidden context. When the task ends, a detached learn sends the trace
+(tools used, outcome, the patterns shown and the ones the answer used) to the ACE server.
 
 ## 🎯 Features
-
-### Automatic Workflow
-
-**Before Implementation:**
-- Hook detects keywords: `implement`, `build`, `create`, `fix`, `debug`, `refactor`, etc.
-- Calls `ace-cli search --stdin --pin-session` with your prompt
-- Pins patterns to session (24-hour TTL, survives context compaction)
-- Injects relevant patterns as hidden context
-- Shows summary: `🔍 [ACE] Found 3 relevant patterns`
-
-**During Work:**
-- Patterns persist in session storage (`~/.ace-cache/sessions.db`)
-- Fast recall (~10ms) when context compacts
-
-**After Completion:**
-- Hook auto-captures learning with rich context (task description, files modified, outcomes)
-- Shows: `✅ [ACE] Learned from: [task description]...`
-- Patterns saved with specific, valuable context (no generic messages)
 
 ### Slash Commands
 
@@ -98,76 +92,15 @@ Patterns accumulate **helpful/harmful scores** based on usage feedback.
 
 ## 🏗️ Architecture
 
-### Simple & Direct
-
 ```
-User types: "implement JWT auth"
-    ↓
-Hook (UserPromptSubmit) detects "implement"
-    ↓
-Bash Wrapper (ace_before_task_wrapper.sh)
-    ↓
-Python Shared Hook (ace_before_task.py)
-    ↓
-Subprocess: ace-cli search --stdin
-    ↓
-ACE Server
-    ↓
-Returns: 3 relevant patterns
-    ↓
-Claude sees hidden context + visible summary
-    ↓
-Implements using learned patterns!
+prompt -> mod prompt.submit (or ace_before_task.py) -> engine / ace-cli search --pin-session <task pin>
+       -> <ace-patterns> context (budget, or full in the split)
+task end -> mod turn.complete (or ace_after_task.py) -> detached ace-cli/engine learn --no-stream
+       (render_variant, conversation_id, applied_log_ids of the used patterns)
 ```
 
-### File Structure
-
-```
-plugins/ace/
-├── scripts/
-│   └── ace_*_wrapper.sh               # thin shims -> shared-hooks/*.py
-├── hooks/
-│   └── hooks.json                     # hook topology (see ARCHITECTURE.md)
-├── commands/
-│   ├── ace-search.md                  # CLI wrappers
-│   ├── ace-patterns.md
-│   ├── ace-status.md
-│   ├── ace-learn.md
-│   ├── ace-bootstrap.md
-│   ├── ace-configure.md
-│   └── ace-clear.md
-└── CLAUDE.md                          # Plugin documentation
-
-shared-hooks/ (marketplace root)
-├── ace_before_task.py                 # Search hook
-├── ace_after_task.py                  # Learn reminder hook
-└── utils/
-    ├── ace_cli.py                     # CLI subprocess wrapper
-    └── ace_context.py                 # Context resolution
-```
-
-## 📖 How It Works
-
-### Pattern Retrieval (Automatic)
-
-When you start a task with implementation keywords, the hook:
-1. Reads your prompt from stdin
-2. Calls `ace-cli search --stdin` with full prompt text
-3. Receives JSON with relevant patterns
-4. Injects patterns as `<ace-patterns>` block for Claude
-5. Shows you a summary of what was found
-
-**Example:**
-```
-You: "implement JWT authentication"
-    ↓
-🔍 [ACE] Found 3 relevant patterns:
-• Refresh token rotation prevents theft (+8 helpful)
-• HttpOnly cookies for refresh tokens (+6 helpful)
-• Rate limiting for auth endpoints (+5 helpful)
-    ↓
-Claude uses these patterns to implement!
-```
+State lives under the plugin data dir (`~/.claude/plugins/data/ace-*`), project logs under `.claude/data/logs/`.
+Details: `docs/technical/ARCHITECTURE.md`.
 
 ### Pattern Learning (Manual)
 
@@ -180,22 +113,10 @@ After completing work, run `/ace-learn`:
 
 ## 🔧 Configuration
 
-### Recommended Settings (Claude Code 2.1.0+)
+### Render knobs (environment)
 
-Add to your `~/.claude/settings.json` to auto-approve ACE CLI operations:
-
-```json
-{
-  "permissions": {
-    "allow": [
-      "Bash(ace-cli *)",
-      "Bash(uv run *)"
-    ]
-  }
-}
-```
-
-This eliminates permission prompts for ACE operations, providing a smoother workflow.
+- `ACE_RENDER_FULL_PCT` (default 0): share of conversations the mod renders `full`; see the cost note above.
+- `ACE_ENGINE=cli`: never use the in-process engine.
 
 ### Server Connection
 
@@ -304,63 +225,7 @@ echo '{"hook_event_name":"Stop"}' | \
 
 ### Debugging
 
-Set debug mode:
-```bash
-export DEBUG=ace:*
-/ace-search test query
-```
-
-Check logs:
-```bash
-tail -f ~/.ace-logs/hooks.log
-```
-
-## 📚 Examples
-
-### Example 1: Authentication Implementation
-
-```
-You: "Implement JWT authentication with refresh tokens"
-
-Hook fires:
-🔍 [ACE] Found 3 relevant patterns:
-• Refresh token rotation prevents theft (+8)
-• HttpOnly cookies for refresh tokens (+6)
-• Rate limiting for auth endpoints (+5)
-
-Claude implements using these patterns...
-
-After completion:
-📚 [ACE] Run /ace-learn to capture patterns
-
-You: /ace-learn
-Task: Implemented JWT auth with refresh rotation
-Success: yes
-Key steps: Added HttpOnly cookies, rate limiting, token expiry
-Lessons: Rotation prevents token theft, always use HttpOnly
-✅ Patterns saved!
-```
-
-### Example 2: Debugging
-
-```
-You: "Debug async test failures"
-
-Hook fires:
-🔍 [ACE] Found 2 relevant patterns:
-• Intermittent async failures mean missing await (+7)
-• Check cleanup functions for async operations (+5)
-
-Claude checks for missing await...
-Found it! Fixed the bug.
-
-You: /ace-learn
-Task: Fixed intermittent async test failures
-Success: yes
-Key steps: Found missing await in cleanup function
-Lessons: Always check async cleanup, use await on all promises
-✅ Patterns saved!
-```
+Run `/ace:ace-doctor`. Hook rows go to `.claude/data/logs/ace-relevance.jsonl` in the project.
 
 ## 🤝 Contributing
 
@@ -379,8 +244,7 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Version**: v5.4.7 (CLI Migration + Blocking Detection)
-**Status**: Active Development
+**Version**: v8.0.0
 **Maintainer**: CE.NET Team
-**Requires**: Claude Code >= 2.1.311, ace-cli = the exact pin in package.json (installed with the plugin). Windows not supported (WSL2 works).
-**Architecture**: Hooks + CLI (no MCP)
+**Requires**: Claude Code >= 2.1.311, ace-cli pinned in package.json (installed with the plugin; a global ace-cli >= the pin is an untested fallback). Windows not supported (WSL2 works).
+**Architecture**: mod + Python hooks + CLI/engine (no MCP)

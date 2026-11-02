@@ -14,7 +14,7 @@ reads. It is not the interpreter.
 | TypeScript / Node | Only real structural win: in-process `@ace-sdk/core` import (0.23-0.53 s CPU vs 1.97 s for the ace-cli spawn). That win does not need rewriting the hooks: 8.0.0 takes it through a small Node engine the Python hooks spawn (see below). |
 | Go | Rejected: new toolchain and per-platform binaries for no measured gain over a single Python exec. |
 | Rust | Rejected: same as Go, higher maintenance cost. |
-| Claude Code mods (in-process JS hooks) | Added in 8.0.0 alongside the Python hooks (see below): needs Claude Code >= 2.1.287 and is skipped where the Team/Enterprise guard is seated, where the Python chain runs instead. |
+| Claude Code mods (in-process JS hooks) | Added in 8.0.0 alongside the Python hooks (see below): needs Claude Code >= 2.1.287. Where the Team/Enterprise or managed-settings guard is seated the mod still runs but its `classic.*` hooks are filtered; the Python chain then takes over those duties (per-duty markers, see below). |
 
 ## Decision
 Keep Python; reduce process count (thin bash shims that `exec` Python) and I/O. Search and learn run through
@@ -64,10 +64,11 @@ the engine adds nothing to it, because it reads the core the CLI installed.
 
 ## Mods (in 8.0.0)
 Floor 2.1.287 (the v8 floor 2.1.311 already clears it). Mod hooks replace the matching command hooks while the mod is active:
-- `prompt.submit` replaces `UserPromptSubmit` and renders the server-curated set inline (41,579 chars proven; cap 100K vs 10K).
+- `prompt.submit` replaces `UserPromptSubmit` and can render the server-curated set inline: 41,579 chars measured in one context entry. The docs give no limit for mod `context`; the client keeps its own 95,000-char guard (not a documented Claude Code limit). The default render stays budget (§31); full is reached only through `ACE_RENDER_FULL_PCT`.
 - `agent.spawn` replaces `SubagentStart` (94 ms settle): `e.prompt` is first-class.
 - `tool.call` (tool=Read) replaces domain-shift.
 - PermissionDenied, SessionStart(compact) and SessionEnd stay command hooks.
+- Per-duty coexistence: `mod-active` (prompt/tool/agent events) silences the Python search/inject hooks; `mod-classic` (written by the mod's `classic.*` hooks) silences the Python accumulator and Stop/SubagentStop. The built-in `sec-default@builtin` guard filters a user mod's `classic.*` hooks (it does not skip the mod), so on those seats only `mod-active` is fresh and the Python chain learns, defers and sets the title.
 
 Round 2 of 8.0.0 already ships `prompt_id` as the task anchor (PreToolUse `Agent` prompt stash, PostToolBatch accumulator).
 
