@@ -18,7 +18,7 @@ import S8 from './fixtures/search_8.ts'
 import SEDGE from './fixtures/search_edge.ts'
 import G from './fixtures/golden.ts'
 import USED_CASES from './fixtures/used_cases.ts'
-import { statusLine, hasSubstantialWork, traceVariant } from '../core.ts'
+import { statusLine, hasSubstantialWork, traceVariant, toolRec } from '../core.ts'
 import { pyLoads, PRIVATE_WRITE_SH, evalStats, evalInjection, learnLine, reviewLine, usedPatternIds, toolHaystack } from '../core.ts'
 
 const HOME = '/home/u', CWD = '/proj', SID = 'sess-1', PRJ = 'prj_t'
@@ -1633,4 +1633,15 @@ test('handoff: the mod rewrites mod-active right before the Python UPS runs (aft
   hh = h
   await submit($)
   expect(Number(h.files.get(`${SDIR}/mod-active`))).toBe(h.now())  // written after the 20 s search, not only before it
+})
+
+test('fix 5a: a Bash call with a non-zero exit code is a failed step (trace success false), an interpreted exit is not', async () => {
+  const rec = (res: any, isError = false) => toolRec('Bash', { command: 'curl -s http://x' }, res, isError, undefined, 0, 1)
+  expect(rec({ stdout: '', stderr: '', interrupted: false, exitCode: 6 }).failed).toBe(true)
+  expect(rec({ stdout: '', stderr: '', interrupted: false, exitCode: 6 }).result).toBe('Exit code 6')
+  expect(rec({ stdout: '', stderr: '', exit_code: 6 }).failed).toBe(true)
+  expect(rec('Exit code 6').failed).toBe(true)
+  expect(rec({ stdout: '', stderr: '', exitCode: 1, returnCodeInterpretation: 'No matches found' }).failed).toBe(false)
+  expect(rec({ stdout: 'ok', stderr: '', exitCode: 0 }).failed).toBe(false)
+  expect(rec({ stdout: 'ok', stderr: '' }).failed).toBe(false)
 })

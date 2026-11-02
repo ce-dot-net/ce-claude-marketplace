@@ -289,14 +289,23 @@ export function summarizeResult(tool: string, res: any, isError = false, denied?
   if (res.stderr) return `Stderr: ${String(res.stderr).slice(0, 100)}`
   if (tool === 'Edit' || tool === 'Write') return 'Success'
   if (tool === 'Read') { const c = res.file?.content ?? res.content ?? ''; return `Read ${c ? c.split('\n').length : 0} lines` }
+  if (tool === 'Bash' && exitCodeOf(res)) return `Exit code ${exitCodeOf(res)}`
   if (tool === 'Bash') { const first = String(res.stdout || '').split('\n')[0]; return res.stdout ? (cut(first, 60) || 'Success') : 'Success' }
   if (tool === 'Grep' || tool === 'Glob') { const f = res.filenames ?? res.files; return Array.isArray(f) ? `Found ${f.length} files` : cut(JSON.stringify(res), 100) }
   if (tool === 'Task' || tool === 'Agent') return 'Task completed'
   return cut(JSON.stringify(res), 100)
 }
 
+// fix 5a: a non-zero exit code (structured, or the "Exit code N" text) unless the tool interpreted it (grep 1 = no matches)
+function exitCodeOf(res: any): number {
+  if (typeof res === 'string') { const m = /^Exit code (\d+)/.exec(res); return m ? Number(m[1]) : 0 }
+  if (!res || typeof res !== 'object' || Array.isArray(res) || res.returnCodeInterpretation) return 0
+  const c = Number(res.exitCode ?? res.exit_code ?? 0)
+  return Number.isFinite(c) ? c : 0
+}
+
 export function toolRec(tool: string, input: any, res: any, isError: boolean, denied: string | undefined, t0: number, t1: number): ToolRec {
-  const failed = isError || !!denied || !!(res && typeof res === 'object' && !Array.isArray(res) && (res.error || res.stderr))
+  const failed = isError || !!denied || !!(res && typeof res === 'object' && !Array.isArray(res) && (res.error || res.stderr)) || (tool === 'Bash' && exitCodeOf(res) !== 0)
   const rec: ToolRec = { tool, action: summarizeAction(tool, input), result: summarizeResult(tool, res, isError, denied), failed, start_ms: t0, end_ms: t1 }
   const hay = cpSlice(toolHaystack([input]), 2000)
   if (hay) rec.hay = hay
