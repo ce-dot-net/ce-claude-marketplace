@@ -39,7 +39,7 @@ type SearchAnswer = { exitCode?: number; stdout?: string; stderr?: string; advan
 type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; env?: Record<string, string>; files?: Record<string, string>
   engine?: (stdin?: string) => SearchAnswer; links?: string[]; noClassic?: boolean; defaultArm?: boolean
   learnExit?: number; early?: (agentId: string) => Promise<unknown>; beforeWrite?: (path: string) => Promise<unknown>
-  selfEval?: boolean; model?: (req: any) => any }
+  selfEval?: boolean; model?: (req: any) => any; compact?: (files: Map<string, string>) => any }
 type Run = { argv: string[]; stdin?: string; env?: Record<string, string>; timeoutMs?: number; files: Set<string> }
 
 // In-memory engine: fs (with mtimes on the mocked clock), env, clock, session, process. Every argv is recorded.
@@ -118,7 +118,7 @@ function host(on: any, o: Opts = {}) {
   on('turn.start', (_$: any, e: any) => ({ turnId: e.turnId }))
   on('turn.complete', (_$: any, e: any) => ({ text: e.answer }))
   on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'engine intro', scope: 'shared' }] }))
-  on('session.compact', () => ({ messages: [{ role: 'user', text: 'summary', toolUses: [] }] }))
+  on('session.compact', () => o.compact ? o.compact(files) : ({ messages: [{ role: 'user', text: 'summary', toolUses: [] }] }))
   on('model.complete', (_$: any, e: any) => { modelCalls.push(e); return { value: o.model ? o.model(e) : { isAnswered: false, reason: 'api-error', status: 500, error: 'x' } } })
   on('session.start', (_$: any, e: any) => ({ cwd: e.cwd }))
   on('session.end', (_$: any, e: any) => ({ sessionId: e.sessionId }))
@@ -1146,6 +1146,29 @@ test('item A: after a main compaction prompt.compose carries the task patterns a
   const later: any = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: [], tools: [], outputStyle: null, traits: [] } as any)
   expect((later.sections ?? []).some((x: any) => x.id === 'ace:patterns')).toBe(false)
   expect(h.files.has(`${SDIR}/mod-compact`)).toBe(false)
+})
+
+test('fix 1: mod-compact exists BEFORE next() (the Python SessionStart(compact) inside it stays silent); a skipped or failed compaction removes it', async ($, on) => {
+  const MARK = `${SDIR}/mod-compact`, seen: boolean[] = []
+  let answer: any = { messages: [{ role: 'user', text: 'summary', toolUses: [] }] }
+  const h = host(on, { search: () => ({ stdout: S8 }), compact: files => { seen.push(files.has(MARK)); if (answer === 'throw') throw new Error('compact failed'); return answer } })
+  await mainTask($, h)
+  const msg = { trigger: 'auto', messages: [{ role: 'user', text: 'hi', toolUses: [] }] }
+  await $.session.compact(msg as any)
+  expect(seen).toEqual([true])
+  expect(h.files.has(MARK)).toBe(true)
+  await submit($, HUMAN + ' next')
+  answer = { skip: 'nothing to compact' }
+  await $.session.compact(msg as any)
+  expect(seen[1]).toBe(true)
+  expect(h.files.has(MARK)).toBe(false)  // no compaction happened: a later real one must not be silenced
+  answer = 'throw'
+  let threw = false
+  try { await $.session.compact(msg as any) } catch { threw = true }
+  expect(threw).toBe(true)
+  expect(h.files.has(MARK)).toBe(false)
+  const after: any = await $.prompt.compose({ model: 'm', promptModel: 'm', surfaces: [], tools: [], outputStyle: null, traits: [] } as any)
+  expect((after.sections ?? []).some((x: any) => x.id === 'ace:patterns')).toBe(false)
 })
 
 test('item A: a finished task still survives compaction (rendered-main.txt); subagent and precompute compactions do nothing', async ($, on) => {
