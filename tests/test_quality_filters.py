@@ -97,6 +97,13 @@ def test_has_substantial_work_accepts_mcp_prefix():
     assert has_substantial_work_from_accumulated(tools) is True
 
 
+def test_has_substantial_work_accepts_an_orchestrating_task():
+    """fix 3: a main task that delegates (Agent / Workflow / Task / Skill) with 1-2 own calls is substantial."""
+    for name in ("Agent", "Workflow", "Task", "Skill"):
+        assert has_substantial_work_from_accumulated([_tool(name)]) is True, name
+    assert has_substantial_work_from_accumulated([_tool("TaskList"), _tool("Read")]) is False
+
+
 def test_has_substantial_work_empty_list():
     assert has_substantial_work_from_accumulated([]) is False
 
