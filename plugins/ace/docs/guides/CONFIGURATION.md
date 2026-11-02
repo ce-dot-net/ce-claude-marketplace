@@ -151,7 +151,9 @@ The ace-cli uses this priority order:
    - `ACE_API_TOKEN`
    - `ACE_ORG_ID`
    - `ACE_PROJECT_ID`
-   - `ACE_ASYNC_LEARNING` - Set to `0` to disable async learning (default: `1`)
+   - `ACE_MIN_PROMPT_CHARS` - prompts shorter than this skip the pattern search (hook-side)
+   - `ACE_PIN_BACKOFF_MIN` - minutes to back off pinning a task session after a pin failure (pin-backoff)
+   - Learning is always async (detached); there is no switch for it.
 
 2. **Global config** (`~/.config/ace/config.json`)
    - `serverUrl`
@@ -362,26 +364,26 @@ Using a self-hosted ACE server?
 
 ### Timeout Settings
 
-Hooks have built-in timeouts. To adjust:
-
-Edit `plugins/ace/hooks/hooks.json`:
+`timeout` values in `hooks.json` are **seconds** (not milliseconds). To adjust, edit `plugins/ace/hooks/hooks.json`:
 
 ```json
 {
   "UserPromptSubmit": [{
     "hooks": [{
-      "timeout": 15000  // 15 seconds (default)
+      "timeout": 30
     }]
   }]
 }
 ```
 
-**Recommended timeouts:**
+**Defaults (seconds):**
 
-- SessionStart: 30000ms (CLI check)
-- UserPromptSubmit: 15000ms (pattern retrieval)
-- PostToolUse: 10000ms (learning detection)
-- Stop: 30000ms (session learning)
+- SessionStart: 30
+- UserPromptSubmit: 30 (pattern retrieval)
+- PostToolUse domain shift: 20
+- SubagentStart: 30
+- PreToolUse (Agent prompt stash): 5
+- Stop / SubagentStop: async, detached learning
 
 ---
 

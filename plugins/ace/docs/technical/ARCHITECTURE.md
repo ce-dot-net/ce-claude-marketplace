@@ -28,21 +28,33 @@ All plugin state lives under `$CLAUDE_PLUGIN_DATA` (default `~/.claude/plugins/d
 
 `.claude/data/logs/ace-relevance.jsonl` stays in the project (read by insights, graph, doctor, statusline).
 
+### Task anchor, subagent prompts, learning
+
+- **prompt_id** (hook input) is the task anchor: it seeds `task_session_id` and the `--pin-session` value; a uuid is the
+  fallback for headless/old CC. Subagents spawned by a prompt carry the same `prompt_id`.
+- **agent-prompts**: the PreToolUse `Agent` hook writes `<root>/projects/<prj>/sessions/<sid>/agent-prompts/<prompt_id>-<subagent_type>.json`
+  (bounded 8 KB); SubagentStart reads it for its search query and only falls back to a transcript scan if absent.
+- **Learning is detached**: Stop/SubagentStop hand the learn call to a detached process (survives `claude -p` teardown);
+  `ACE_LEARN_INLINE=1` runs it inline for tests. All async hooks print nothing.
+- **pin-backoff**: a failed session pin is dropped and not retried for `ACE_PIN_BACKOFF_MIN` minutes.
+
 ### Hook topology
 
 | Event | Mode | Script |
 |---|---|---|
 | SessionStart (startup/clear, async update check, compact) | sync/async | `ace_install_cli.sh`, `ace_sessionstart_compact.sh` |
 | UserPromptSubmit | sync | `ace_before_task_wrapper.sh` (one `ace-cli search`) |
-| PostToolUse | async accumulator + sync domain shift (Read/Glob/Grep) | `ace_posttooluse_wrapper.sh`, `ace_posttooluse_domain_inject.sh` |
-| PostToolUseFailure (Bash) | async | `ace_posttoolusefailure_wrapper.sh` |
+| PostToolBatch | async accumulator, one event per parallel tool batch | `ace_posttooluse_wrapper.sh --batch` |
+| PostToolUse (Read/Glob/Grep) | sync domain shift | `ace_posttooluse_domain_inject.sh` |
+| PostToolUseFailure (`*`) | async, deduped with PostToolBatch by `tool_use_id` | `ace_posttoolusefailure_wrapper.sh` |
+| PreToolUse (matcher `Agent` only) | sync, 5 s | stashes the subagent prompt in `agent-prompts/` |
 | SubagentStart | sync | `ace_subagent_start_wrapper.sh` |
 | Stop / SubagentStop | async | `ace_stop_wrapper.sh`, `ace_subagent_stop_wrapper.sh` |
 | PermissionDenied | async | `ace_permission_denied_wrapper.sh` |
 | SessionEnd | sync | `ace_sessionend_wrapper.sh` |
 
-Every script is a thin shim that execs the Python hook (no jq, no cat). Removed in v8: the PreToolUse,
-PreCompact and PermissionRequest hooks. Patterns survive compaction because UserPromptSubmit saves the
+Every script is a thin shim that execs the Python hook (no jq, no cat). Removed in v8: the domain-shift
+pre-tool hook and the pre-compaction and permission-request hooks. Patterns survive compaction because UserPromptSubmit saves the
 rendered context in the session state and the SessionStart `compact` hook re-injects it.
 See `ADR-001-language.md` for why the implementation stays Python.
 

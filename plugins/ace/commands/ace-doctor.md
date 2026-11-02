@@ -2,7 +2,7 @@
 disable-model-invocation: true
 model: claude-haiku-4-5
 description: Comprehensive ACE installation and health diagnostic
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(curl:*), Bash(ls:*), Bash(test:*), Bash(claude:*), Bash(cat:*), Bash(tail:*), Bash(sort:*), Read
+allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(curl:*), Bash(ls:*), Bash(test:*), Bash(claude:*), Bash(cat:*), Bash(tail:*), Bash(sort:*), Bash(python3:*), Read
 ---
 
 # ACE Doctor - Installation & Health Diagnostic
@@ -320,13 +320,14 @@ test -f "$PLUGIN_ROOT/scripts/ace_subagent_stop_wrapper.sh" && echo "subagent_st
 test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "hooks.json: EXISTS"
 ```
 
-**Expected Hooks** (v8: 9 events, 12 hook entries incl. async --update-check):
+**Expected Hooks** (v8 round 2: PostToolBatch + PreToolUse(Agent) included incl. async --update-check):
 1. `SessionStart` → `ace_install_cli.sh` (startup|clear; plus async `--update-check`)
 2. `SessionStart` (compact) → `ace_sessionstart_compact.sh`
 3. `UserPromptSubmit` → `ace_before_task_wrapper.sh`
-4. `PostToolUse` (async) → `ace_posttooluse_wrapper.sh --log`
+4. `PostToolBatch` (async, one event per parallel tool batch) → accumulator script (`ace_posttooluse_wrapper.sh --batch`)
+   - `PreToolUse` (matcher `Agent` only, sync) → prompt stash into `agent-prompts/` for SubagentStart (the only PreToolUse hook in v8)
 5. `PostToolUse` (Read|Glob|Grep) → `ace_posttooluse_domain_inject.sh`
-6. `PostToolUseFailure` (Bash, async) → `ace_posttoolusefailure_wrapper.sh`
+6. `PostToolUseFailure` (matcher `*`, async) → `ace_posttoolusefailure_wrapper.sh`
 7. `SubagentStart` → `ace_subagent_start_wrapper.sh`
 8. `Stop` (async) → `ace_stop_wrapper.sh`
 9. `SubagentStop` (async) → `ace_subagent_stop_wrapper.sh`
@@ -464,6 +465,57 @@ Recommended Actions:
 2. Update plugin from marketplace (if available)
 3. Restart Claude Code
 ```
+
+---
+
+### Check 8b: Local Session Cache Health (sessions.db)
+
+`~/.ace-cache/sessions.db` is a 24 h-TTL local cache of `ace-cli`. When it grows large, concurrent `ace-cli`
+processes hit `database is locked` and hooks time out. Run:
+
+```bash
+python3 - <<'PY'
+# ace-doctor: sessions-db-health
+import os, json, time
+from datetime import datetime, timezone
+
+MB = 1024 * 1024
+warned = False
+db = os.path.expanduser("~/.ace-cache/sessions.db")
+if os.path.exists(db) and os.path.getsize(db) > 100 * MB:
+    warned = True
+    print("WARN: %s is %d MB (over 100 MB)" % (db, os.path.getsize(db) // MB))
+log = os.path.join(os.getcwd(), ".claude", "data", "logs", "ace-relevance.jsonl")
+cutoff = time.time() - 24 * 3600
+locked = 0
+try:
+    with open(log, encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            if "database is locked" not in line:
+                continue
+            try:
+                ts = json.loads(line).get("timestamp", "")
+                t = datetime.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+            except Exception:
+                continue
+            if t >= cutoff:
+                locked += 1
+except OSError:
+    pass
+if locked:
+    warned = True
+    print("WARN: %d 'database is locked' error(s) in ace-relevance.jsonl in the last 24 h" % locked)
+if warned:
+    print("Fix: stop running ace-cli processes (pkill -f ace-cli), then delete ~/.ace-cache/sessions.db,")
+    print("     sessions.db-wal and sessions.db-shm (a 24 h-TTL cache, safe to drop) - or run")
+    print("     /ace:ace-cleanup --legacy --yes --sessions-db")
+else:
+    print("PASS: sessions.db healthy, no recent 'database is locked' errors")
+PY
+```
+
+- PASS: no WARN lines.
+- WARN: sessions.db over 100 MB, or a `database is locked` row within the last 24 h. Show the remediation above.
 
 ---
 
