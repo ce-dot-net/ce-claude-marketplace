@@ -25,7 +25,7 @@ def test_changelog_has_8_0_0_entry():
     text = _read(CHANGELOG)
     m = re.search(r"^## \[8\.0\.0\][^\n]*\n(.*?)(?=^## \[)", text, re.S | re.M)
     assert m, "CHANGELOG.md has no `## [8.0.0]` section"
-    assert "2.1.300" in m.group(1)
+    assert "2.1.311" in m.group(1)
 
 
 @pytest.mark.parametrize("ver", ["7.1.%d" % n for n in range(7, 15)])
@@ -79,9 +79,9 @@ def test_architecture_does_not_describe_removed_hooks():
 
 
 def test_readme_states_v8_floor():
-    """DESIGN §1: README Requires text is CC >= 2.1.300 (was 'ace-cli >= v3.4.1')."""
+    """§16 P6: README Requires text is CC >= 2.1.311 (was 'ace-cli >= v3.4.1')."""
     text = _read(README)
-    assert "2.1.300" in text
+    assert "2.1.311" in text and "2.1.300" not in text
     assert "ace-cli >= v3.4.1" not in text
 
 

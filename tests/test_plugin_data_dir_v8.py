@@ -16,14 +16,14 @@ sys.path.insert(0, str(REPO / "plugins" / "ace" / "shared-hooks" / "utils"))
 
 @pytest.fixture
 def pdd(monkeypatch, tmp_path):
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     monkeypatch.delenv("CLAUDE_CODE_SESSION_ID", raising=False)
     import plugin_data_dir
     return importlib.reload(plugin_data_dir)
 
 
 def test_root_from_env(pdd, tmp_path):
-    assert pdd.data_root() == tmp_path / "pd"
+    assert pdd.data_root() == tmp_path / "ace-pd"
 
 
 REAL_DIR = "ace-ce-dot-net-marketplace"  # CC's data dir name for this plugin (p3, DESIGN §10 P-19)
@@ -71,7 +71,7 @@ def test_all_helpers_return_paths(pdd):
 
 
 def test_layout(pdd, tmp_path):
-    r = tmp_path / "pd"
+    r = tmp_path / "ace-pd"
     assert pdd.python_path_file() == r / "python_path"
     assert pdd.cli_version_file() == r / "cli_version.json"
     assert pdd.errors_log() == r / "logs" / "ace-hook-errors.log"
@@ -114,7 +114,7 @@ def test_nothing_under_tmp_or_claude_logs(pdd):
 @pytest.mark.parametrize("bad", ["../escape", "a/b", ""])
 def test_ids_cannot_escape_root(pdd, tmp_path, bad):
     """Path components from hook JSON are untrusted: they must not escape root."""
-    root = (tmp_path / "pd").resolve()
+    root = (tmp_path / "ace-pd").resolve()
     p = pdd.session_dir("prj_1", bad, create=False).resolve()
     assert root in p.parents
     assert p.parent.name == "sessions"
@@ -168,13 +168,13 @@ def test_no_v65_scheme_consumers_left():
 def test_pin_backoff_file_at_root(pdd, tmp_path):
     """DESIGN §11 A1: <root>/pin-backoff marks a recent sessions.db lock."""
     p = pdd.pin_backoff_file()
-    assert p == tmp_path / "pd" / "pin-backoff"
+    assert p == tmp_path / "ace-pd" / "pin-backoff"
     assert p.parent.is_dir()
 
 
 def test_agent_prompt_stash_paths(pdd, tmp_path):
     """DESIGN §9 G1: <session>/agent-prompts/<prompt_id>-<subagent_type>.json."""
-    sd = tmp_path / "pd" / "projects" / "prj_1" / "sessions" / "s1"
+    sd = tmp_path / "ace-pd" / "projects" / "prj_1" / "sessions" / "s1"
     assert pdd.agent_prompts_dir("prj_1", "s1") == sd / "agent-prompts"
     f = pdd.agent_prompt_file("prj_1", "s1", "550e8400-e29b", "Explore")
     assert f == sd / "agent-prompts" / "550e8400-e29b-Explore.json"
@@ -185,14 +185,14 @@ def test_agent_prompt_file_sanitizes_plugin_scoped_type(pdd, tmp_path):
     """Plugin agent types are 'plugin:name' (cc_hooks_reference.md:2551); untrusted ids
     never leave the agent-prompts dir. Writer and reader map the same input identically."""
     f = pdd.agent_prompt_file("prj_1", "s1", "../p", "my-plugin:reviewer")
-    root = (tmp_path / "pd" / "projects" / "prj_1" / "sessions" / "s1" / "agent-prompts").resolve()
+    root = (tmp_path / "ace-pd" / "projects" / "prj_1" / "sessions" / "s1" / "agent-prompts").resolve()
     assert f.resolve().parent == root
     assert f == pdd.agent_prompt_file("prj_1", "s1", "../p", "my-plugin:reviewer")
 
 
 def test_project_disabled_flag_path(pdd, tmp_path):
     """DESIGN §10 P-26: <project>/disabled.flag disables ACE for every session of the project."""
-    assert pdd.project_disabled_flag("prj_1") == tmp_path / "pd" / "projects" / "prj_1" / "disabled.flag"
+    assert pdd.project_disabled_flag("prj_1") == tmp_path / "ace-pd" / "projects" / "prj_1" / "disabled.flag"
 
 
 def test_is_disabled_checks_session_and_project_flags(pdd):

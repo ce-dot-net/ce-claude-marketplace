@@ -77,7 +77,7 @@ class Box:
     def __init__(self, tmp_path):
         self.root = tmp_path
         self.home = tmp_path / "home"
-        self.pd = tmp_path / "plugin-data"
+        self.pd = tmp_path / "ace-plugin-data"
         self.xdg = tmp_path / "xdg"
         self.project = tmp_path / "project"
         self.elsewhere = tmp_path / "elsewhere"
@@ -653,7 +653,7 @@ def test_record_tool_c4_api(tmp_path, monkeypatch):
     (project / ".claude").mkdir(parents=True)
     (project / ".claude" / "settings.json").write_text(
         json.dumps({"orgId": ORG_ID, "projectId": PROJECT_ID}))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     monkeypatch.chdir(project)
     sid = "sess-c4"
     assert acc.record_tool(sid, None, "Edit", json.dumps({"file_path": "a/b.py"}),
@@ -662,7 +662,7 @@ def test_record_tool_c4_api(tmp_path, monkeypatch):
                            tool_input_summary=json.dumps({"command": "npm test"}),
                            tool_response_summary="", success=False,
                            error_first_line="Exit code 1")
-    assert (tmp_path / "pd" / "projects" / PROJECT_ID / "sessions" / sid / "tools.db").exists()
+    assert (tmp_path / "ace-pd" / "projects" / PROJECT_ID / "sessions" / sid / "tools.db").exists()
     trajectory, tools = at.build_trajectory_from_accumulated_tools(sid, str(project))
     assert [s["tool"] for s in trajectory] == ["Edit", "Bash"]
     assert trajectory[0]["action"] == "Edited b.py"

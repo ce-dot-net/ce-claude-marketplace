@@ -18,20 +18,20 @@ import patterns_used_state as pus  # noqa: E402
 
 
 def test_anchors_to_claude_plugin_data(monkeypatch, tmp_path):
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     p = pus.state_file_path("sess", None, project_id="prj")
-    assert p == tmp_path / "projects" / "prj" / "sessions" / "sess" / "patterns-used-main.json"
+    assert p == tmp_path / "ace-pd" / "projects" / "prj" / "sessions" / "sess" / "patterns-used-main.json"
 
 
 def test_claude_project_dir_no_longer_used(monkeypatch, tmp_path):
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path / "proj"))
     p = pus.state_file_path("sess", None, project_id="prj")
     assert str(tmp_path / "proj") not in str(p)
 
 
 def test_explicit_state_dir_overrides_env(monkeypatch, tmp_path):
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", "/somewhere/else")
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", "/somewhere/ace-else")
     p = pus.state_file_path("sess", None, state_dir=str(tmp_path))
     assert p == tmp_path / "patterns-used-main.json"
 
@@ -44,12 +44,12 @@ def test_writer_reader_consistent_across_cwd_change(monkeypatch, tmp_path):
     (root / ".claude" / "settings.json").write_text(json.dumps({"orgId": "o", "projectId": "prj_x"}))
     sub = root / "sub"
     sub.mkdir()
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(root))
     monkeypatch.delenv("ACE_PROJECT_ID", raising=False)
     monkeypatch.chdir(root)
     pus.append_patterns_used("s", None, ["ctx-1234567890-abcd"])
-    assert (tmp_path / "pd" / "projects" / "prj_x" / "sessions" / "s" / "patterns-used-main.json").exists()
+    assert (tmp_path / "ace-pd" / "projects" / "prj_x" / "sessions" / "s" / "patterns-used-main.json").exists()
     monkeypatch.chdir(sub)  # no settings here
     got = pus.load_playbook_used("s", None, "Stop")
     assert got == ["ctx-1234567890-abcd"]
@@ -57,7 +57,7 @@ def test_writer_reader_consistent_across_cwd_change(monkeypatch, tmp_path):
 
 def test_concurrent_appends_keep_retrieval_log_ids(monkeypatch, tmp_path):
     import threading
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     pus.append_patterns_used("s", None, [], retrieval_id="r1", retrieval_log_ids={"ctx-1234567890-aaaa": 1},
                              task_session_id="t1", project_id="p")
     ids = ["ctx-%010d-abcd" % i for i in range(20)]

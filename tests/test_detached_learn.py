@@ -94,7 +94,7 @@ def test_dispatch_spawns_detached_child_with_job_in_session_dir(box, monkeypatch
     for k in ("stdin", "stdout", "stderr"):
         assert kw.get(k) == subprocess.DEVNULL, k
     job_file = argv[-1]
-    assert str(box.session_dir("s-disp")) in job_file and not job_file.startswith("/tmp")
+    assert job_file.startswith(str(box.session_dir("s-disp")) + os.sep)
     assert json.loads(open(job_file).read())["trace"] == {"task": "x"}
     assert lock_existed, "lock must exist before the child is spawned"
 

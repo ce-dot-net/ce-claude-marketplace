@@ -23,7 +23,7 @@ RESP = {"similar_patterns": [{"id": "ctx-1234567890-abcd"}], "count": 1}
 
 @pytest.fixture
 def sc(monkeypatch, tmp_path):
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     import plugin_data_dir
     import ace_search_cache
     importlib.reload(plugin_data_dir)
@@ -31,7 +31,7 @@ def sc(monkeypatch, tmp_path):
 
 
 def _cache_dir(tmp_path):
-    return tmp_path / "pd" / "cache" / "search"
+    return tmp_path / "ace-pd" / "cache" / "search"
 
 
 def test_constants(sc):
@@ -126,6 +126,6 @@ def test_lru_cap_evicts_oldest_by_mtime(sc, monkeypatch, tmp_path):
 
 
 def test_never_raises_on_unwritable_dir(sc, monkeypatch, tmp_path):
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", "/dev/null/nope")
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", "/dev/null/ace-nope")
     sc.put("prj_1", "main", "fix bug", RESP)  # must not raise
     assert sc.get("prj_1", "main", "fix bug") is None

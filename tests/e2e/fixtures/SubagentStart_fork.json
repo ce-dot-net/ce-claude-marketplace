@@ -1,0 +1,9 @@
+{
+  "session_id": "__SESSION__",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "__CWD__",
+  "hook_event_name": "SubagentStart",
+  "prompt_id": "9cfaf5e5-1111-4222-8333-944455556666",
+  "agent_id": "__AGENT__",
+  "agent_type": "fork"
+}

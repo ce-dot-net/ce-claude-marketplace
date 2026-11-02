@@ -3,8 +3,7 @@
 
 Sync path (matcher startup|clear): `command -v ace-cli`, cache python path + cli
 version under CLAUDE_PLUGIN_DATA, NO whoami, NO network. Async path
-(`--update-check`, matcher startup): daily npm check, skipped when
-CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC is set, `sort -V` compare.
+(`--update-check`, matcher startup): orphan sweep + sqlite rebuild; the daily npm check is gone (§23).
 Critic T22 (2.4-2.8 s CPU of --version+whoami+npm per startup, bogus
 "Update available v4.2.2 -> v4.1.2"), T17/T21 (/tmp flags), DESIGN §8 (CLAUDE_ENV_FILE
 must export the SAME ACE_CLIENT_ID as _ace_env.sh). The first response waits for sync
@@ -93,26 +92,23 @@ def test_sync_startup_does_no_network(tmp_path):
     assert env.npm_calls() == [], "sync SessionStart must not call npm: %s" % env.npm_calls()
 
 
-def test_missing_cli_sets_disabled_flag_in_plugin_data(tmp_path):
-    """DESIGN §4: disabled.flag lives at <data>/projects/<pid>/sessions/<sid>/, not
-    /tmp/ace-disabled-<sid>.flag (critic T17/T21)."""
+def test_missing_cli_writes_no_disabled_flag(tmp_path):
+    """DESIGN §23: never write disabled.flag for a missing CLI; ACE activates once one appears."""
     env = Env(tmp_path, with_cli=False)
     sid = "s-nocli-%d" % os.getpid()
-    r = _start(env, sid=sid)
-    out = parse_stdout(r.stdout)
-    assert out and "ace-cli" in out.get("systemMessage", "")
-    assert env.disabled_flag(sid).is_file(), "disabled.flag not written under plugin data"
+    out = parse_stdout(_start(env, sid=sid).stdout)
+    assert out and "/ace:ace-install-cli" in out.get("systemMessage", "")
+    assert not env.disabled_flag(sid).exists()
     assert not Path("/tmp/ace-disabled-%s.flag" % sid).exists(), "must not write /tmp flag"
 
 
-def test_outdated_cli_sets_disabled_flag_in_plugin_data(tmp_path):
-    """MIN_VERSION 4.1.2 (DESIGN §1 floor) still enforced; flag goes to §4 path."""
+def test_outdated_cli_writes_no_disabled_flag(tmp_path):
+    """DESIGN §23: a global below the package.json pin is resolution step 3 (none), not a disable."""
     env = Env(tmp_path, cli_version="4.0.0")
     sid = "s-old-%d" % os.getpid()
-    r = _start(env, sid=sid)
-    out = parse_stdout(r.stdout)
-    assert out and "4.0.0" in out.get("systemMessage", "")
-    assert env.disabled_flag(sid).is_file()
+    out = parse_stdout(_start(env, sid=sid).stdout)
+    assert out and "/ace:ace-install-cli" in out.get("systemMessage", "")
+    assert not env.disabled_flag(sid).exists()
     assert not Path("/tmp/ace-disabled-%s.flag" % sid).exists()
 
 
@@ -153,41 +149,12 @@ def test_env_file_exports_same_client_id_as_ace_env(tmp_path):
     assert re.fullmatch(r"""export ACE_CLIENT_ID=(["']?)%s\1""" % re.escape(want), lines[-1]), lines
 
 
-def test_update_check_calls_npm_at_most_once_per_day(tmp_path):
-    """DESIGN §3 async row `--update-check`: daily npm check cached under plugin data
-    (not /tmp/ace-update-check-<date>.txt) -> two runs, one `npm show`."""
-    env = Env(tmp_path)
-    _start(env, sid="u1", args=("--update-check",))
-    _start(env, sid="u2", args=("--update-check",))
-    shows = [c for c in env.npm_calls() if c.split()[:1] in (["show"], ["view"])]
-    assert len(shows) == 1, "expected exactly one npm show, got %s" % env.npm_calls()
-
-
-def test_update_check_skipped_when_nonessential_traffic_disabled(tmp_path):
-    """DESIGN §3: skip the npm check when CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC is set."""
-    env = Env(tmp_path)
-    r = _start(env, args=("--update-check",), CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1,
-               FAKE_NPM_LATEST="9.9.9")
-    assert env.npm_calls() == []
-    assert "Update available" not in r.stdout
-
-
-def test_update_check_reports_newer_version(tmp_path):
-    """Async update check still tells the user about a newer @ace-sdk/cli."""
+def test_async_row_never_checks_npm_for_a_new_cli(tmp_path):
+    """DESIGN §23: the plugin update check is removed: a plugin version runs the CLI it was tested with."""
     env = Env(tmp_path, cli_version="4.2.2")
-    r = _start(env, args=("--update-check",), FAKE_NPM_LATEST="4.3.0")
-    assert r.stdout.strip() == "", "async update-check must print nothing (doc :4093)"
-    out = parse_stdout(_start(env, sid="u-sync").stdout)  # sync startup reads the cache, no network
-    assert out and "4.3.0" in out.get("systemMessage", ""), out
-
-
-def test_update_check_no_bogus_update_when_installed_is_newer(tmp_path):
-    """Critic T22: `!=` compare printed "Update available v4.2.2 -> v4.1.2". Use a
-    version-aware compare: installed newer than npm latest -> no message."""
-    env = Env(tmp_path, cli_version="4.2.2")
-    r = _start(env, args=("--update-check",), FAKE_NPM_LATEST="4.1.2")
-    assert len([c for c in env.npm_calls() if c.startswith(("show", "view"))]) == 1
-    assert "Update available" not in r.stdout
+    r = _start(env, args=("--update-check",), FAKE_NPM_LATEST="9.9.9")
+    assert r.stdout.strip() == "", "async row prints nothing (doc :4093)"
+    assert [c for c in env.npm_calls() if c.split()[:1] in (["show"], ["view"], ["install"])] == []
     assert "Update available" not in _start(env, sid="u-sync").stdout
 
 

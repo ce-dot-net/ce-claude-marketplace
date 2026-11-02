@@ -75,7 +75,7 @@ def project(tmp_path, monkeypatch):
     (proj / ".claude" / "settings.json").write_text(
         json.dumps({"orgId": ORG, "projectId": PROJECT}))
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     for var in ("ACE_PROJECT_ID", "ACE_ORG_ID", "ACE_MIN_PROMPT_CHARS",
                 "ACE_AB_CONTROL_PCT", "ACE_AB_COMPACT_PCT", "CLAUDE_CODE_SESSION_ID"):
         monkeypatch.delenv(var, raising=False)

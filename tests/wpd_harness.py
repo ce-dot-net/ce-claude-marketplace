@@ -55,7 +55,7 @@ class HookEnv:
         self.tmp = Path(tmp_path)
         self.project_id = project_id
         self.home = self.tmp / "home"
-        self.pd = self.tmp / "pd"
+        self.pd = self.tmp / "ace-pd"
         self.proj = self.tmp / "proj"
         self.elsewhere = self.tmp / "elsewhere"
         self.bin = self.tmp / "bin"

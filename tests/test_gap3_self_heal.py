@@ -26,14 +26,14 @@ def test_corrupt_state_file_is_logged_and_deleted(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     # v8 (DESIGN §4): state lives under $CLAUDE_PLUGIN_DATA; the relevance log
     # stays in the project's .claude/data/logs.
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "pd"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     monkeypatch.delenv("ACE_PROJECT_ID", raising=False)
     log_dir = tmp_path / ".claude" / "data" / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
     session_id = "sess-corrupt"
     agent_suffix = "main"
-    state_file = (tmp_path / "pd" / "projects" / "default" / "sessions" / session_id
+    state_file = (tmp_path / "ace-pd" / "projects" / "default" / "sessions" / session_id
                   / f"patterns-used-{agent_suffix}.json")
     state_file.parent.mkdir(parents=True, exist_ok=True)
     state_file.write_text("{ not valid json")

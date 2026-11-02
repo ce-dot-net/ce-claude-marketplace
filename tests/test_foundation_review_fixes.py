@@ -50,7 +50,7 @@ def test_fallback_root_from_plugin_root(monkeypatch, tmp_path):
 
 
 def test_extra_helpers(monkeypatch, tmp_path):
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     assert pdd.domain_last_file("p", "s", "a").name == "domain-last-a.txt"
     assert pdd.tools_db("p", "s").name == "tools.db"
     assert pdd.patterns_used_file("p", "s", None).name == "patterns-used-main.json"

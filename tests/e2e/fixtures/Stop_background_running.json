@@ -1,0 +1,14 @@
+{
+  "session_id": "__SESSION__",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "__CWD__",
+  "permission_mode": "default",
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "prompt_id": "9cfaf5e5-1111-4222-8333-944455556666",
+  "last_assistant_message": "The workflow is running in the background; I will report when it finishes.",
+  "background_tasks": [
+    {"id": "w0nda8a8l", "type": "workflow", "status": "running", "description": "two agents", "name": "fanout"}
+  ],
+  "session_crons": []
+}

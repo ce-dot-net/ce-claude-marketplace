@@ -144,7 +144,7 @@ def _subagent_stop_event(tmp_path, agent_id=EVENT_AGENT_ID,
 def _run_main(tmp_path, monkeypatch, event, write_state_under=None):
     """Wire up mocks and run main(), returning all subagent_stop_keymap records."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
     monkeypatch.chdir(tmp_path)
 
@@ -451,7 +451,7 @@ class TestSubagentStopGracefulDegradation:
     def test_missing_transcript_file_does_not_raise(self, tmp_path, monkeypatch):
         """agent_transcript_path pointing to nonexistent file → no raise."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
         monkeypatch.chdir(tmp_path)
         event = {
@@ -477,7 +477,7 @@ class TestMainStopNoKeymap:
     def test_main_stop_emits_no_keymap_record(self, tmp_path, monkeypatch):
         """Stop (main) must not emit subagent_stop_keymap."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
-        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
         monkeypatch.chdir(tmp_path)
         event = {
