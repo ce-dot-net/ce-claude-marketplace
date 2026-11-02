@@ -15,6 +15,7 @@ import json
 import os
 import sys
 import tempfile
+import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -36,6 +37,13 @@ import plugin_data_dir  # noqa: E402
 USER_PROMPT_MAX = 4000
 RENDERED_CONTEXT_MAX = 10000
 RENDERED_SIDECAR = 'rendered-main.txt'
+
+
+def task_session_id_for(event):
+    """G2: the hook input prompt_id is the task anchor (identical on UPS -> subagent hooks
+    -> Stop); headless / old CC without one -> fresh uuid4."""
+    pid = event.get('prompt_id') if isinstance(event, dict) else None
+    return pid if isinstance(pid, str) and pid else str(uuid.uuid4())
 
 
 def _project_id(project_id=None):

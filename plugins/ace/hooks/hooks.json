@@ -8,7 +8,7 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_install_cli.sh",
             "args": [],
-            "timeout": 20
+            "timeout": 30
           }
         ]
       },
@@ -46,25 +46,25 @@
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_before_task_wrapper.sh",
             "args": [],
             "timeout": 30,
-            "statusMessage": "ACE: searching patterns…"
+            "statusMessage": "ACE: searching patterns\u2026"
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_pretooluse_agent_stash.sh",
+            "args": [],
+            "timeout": 5
           }
         ]
       }
     ],
     "PostToolUse": [
-      {
-        "matcher": "*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_posttooluse_wrapper.sh",
-            "args": [
-              "--log"
-            ],
-            "async": true
-          }
-        ]
-      },
       {
         "matcher": "Read|Glob|Grep",
         "hooks": [
@@ -72,15 +72,29 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_posttooluse_domain_inject.sh",
             "args": [],
-            "timeout": 15,
-            "statusMessage": "ACE: domain shift…"
+            "timeout": 20,
+            "statusMessage": "ACE: domain shift\u2026"
+          }
+        ]
+      }
+    ],
+    "PostToolBatch": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_posttooluse_wrapper.sh",
+            "args": [
+              "--batch"
+            ],
+            "async": true
           }
         ]
       }
     ],
     "PostToolUseFailure": [
       {
-        "matcher": "Bash",
+        "matcher": "*",
         "hooks": [
           {
             "type": "command",
@@ -99,8 +113,8 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_subagent_start_wrapper.sh",
             "args": [],
-            "timeout": 20,
-            "statusMessage": "ACE: loading patterns for subagent…"
+            "timeout": 30,
+            "statusMessage": "ACE: loading patterns for subagent\u2026"
           }
         ]
       }

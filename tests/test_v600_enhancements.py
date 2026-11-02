@@ -35,9 +35,9 @@ class TestAsyncPostToolUse:
         (the stdout `{"async": true}` echo was never an output field, critic V3);
         until then its timeout must stay <= 30 s."""
         data = json.loads(_read(HOOKS_JSON))
-        handlers = [h for grp in data['hooks']['PostToolUse'] for h in grp['hooks']
+        handlers = [h for grp in data['hooks']['PostToolBatch'] for h in grp['hooks']
                     if 'ace_posttooluse_wrapper.sh' in json.dumps(h)]
-        assert handlers, "accumulator handler missing from PostToolUse"
+        assert handlers, "accumulator handler missing from PostToolBatch (DESIGN §9 G4)"
         # v8 (DESIGN §3): the accumulator is async, which carries no timeout (hooks doc :414)
         assert handlers[0].get('async') is True and handlers[0].get('timeout', 0) <= 30
 
