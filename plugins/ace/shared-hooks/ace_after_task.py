@@ -287,10 +287,6 @@ def parse_agent_transcript(path: str) -> list:
     Raises:
         Exceptions are propagated to caller so it can fall back.
     """
-    tool_uses = {}   # tool_use_id -> (tool_name, tool_input_json)
-    tool_results = {}  # tool_use_id -> tool_response_json
-    order = []  # preserve encounter order by tool_use_id
-
     transcript_file = Path(path).expanduser()
     with open(transcript_file, 'rb') as fb:
         size = fb.seek(0, os.SEEK_END)
@@ -299,6 +295,23 @@ def parse_agent_transcript(path: str) -> list:
         raw_lines = fb.read().decode('utf-8', 'replace').splitlines()
     if start:
         raw_lines = raw_lines[1:]  # first line is cut mid-record
+
+    # Derive agent_id from filename: agent-{uuid}.jsonl
+    agent_id = None
+    try:
+        stem = Path(path).stem
+        if stem.startswith('agent-'):
+            agent_id = stem[len('agent-'):] or None
+    except Exception:
+        agent_id = None
+    return _tools_from_transcript_lines(raw_lines, agent_id)
+
+
+def _tools_from_transcript_lines(raw_lines, agent_id):
+    """8-tuples of the tool_use blocks in transcript lines (with their tool_result, if any)."""
+    tool_uses = {}   # tool_use_id -> (tool_name, tool_input_json)
+    tool_results = {}  # tool_use_id -> tool_response_json
+    order = []  # preserve encounter order by tool_use_id
     if raw_lines:
         for line in raw_lines:
             if not line.strip():
@@ -358,15 +371,6 @@ def parse_agent_transcript(path: str) -> list:
                     if tu_id:
                         tool_results[tu_id] = tresp_json
 
-    # Derive agent_id from filename: agent-{uuid}.jsonl
-    agent_id = None
-    try:
-        stem = Path(path).stem
-        if stem.startswith('agent-'):
-            agent_id = stem[len('agent-'):] or None
-    except Exception:
-        agent_id = None
-
     results = []
     for tu_id in order:
         tname, tinput_json = tool_uses[tu_id]
@@ -375,6 +379,47 @@ def parse_agent_transcript(path: str) -> list:
         # so start_ms/end_ms/duration_ms are None (build_trajectory skips None).
         results.append((tname, tinput_json, tresp_json, tu_id, agent_id, None, None, None))
     return results
+
+
+def _late_main_tools(transcript_path, have_ids):
+    """Item 8: PostToolBatch is async (no ordering guarantee vs Stop), so the last batch may not be in the
+    db yet. The main agent's tool calls after the LAST user text in the transcript tail (2 MB), minus the
+    ids the db already has. Never raises."""
+    try:
+        with open(Path(transcript_path).expanduser(), 'rb') as f:
+            size = f.seek(0, os.SEEK_END)
+            start = max(0, size - TRANSCRIPT_TAIL_BYTES)
+            f.seek(start)
+            lines = f.read().decode('utf-8', 'replace').splitlines()
+        if start:
+            lines = lines[1:]
+        cut = None
+        for i in range(len(lines) - 1, -1, -1):
+            try:
+                e = json.loads(lines[i])
+            except ValueError:
+                continue
+            m = e.get('message') if isinstance(e, dict) else None
+            if not isinstance(m, dict) or m.get('role') != 'user' or e.get('isSidechain'):
+                continue
+            c = m.get('content')
+            if isinstance(c, str) or (isinstance(c, list) and not any(
+                    isinstance(b, dict) and b.get('type') == 'tool_result' for b in c)):
+                cut = i
+                break
+        if cut is None:
+            return []
+        keep = []
+        for line in lines[cut + 1:]:
+            try:
+                if json.loads(line).get('isSidechain'):
+                    continue
+            except (ValueError, AttributeError):
+                continue
+            keep.append(line)
+        return [t for t in _tools_from_transcript_lines(keep, None) if t[3] not in have_ids]
+    except Exception:
+        return []
 
 
 def _agent_id_from_transcript_path(path):
@@ -401,7 +446,7 @@ def _agent_id_from_transcript_path(path):
 
 
 def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = None, agent_transcript_path: str = None,
-                                            scope_agent_id=None) -> tuple:
+                                            scope_agent_id=None, main_transcript_path: str = None) -> tuple:
     """
     Build REAL trajectory from PostToolUse accumulated data or per-agent transcript.
 
@@ -442,6 +487,8 @@ def build_trajectory_from_accumulated_tools(session_id: str, working_dir: str = 
 
     if tools is None:
         tools = get_session_tools(session_id, working_dir, agent_id=scope_agent_id)
+        if main_transcript_path:
+            tools = list(tools) + _late_main_tools(main_transcript_path, {t[3] for t in tools if t[3]})
     trajectory = []
 
     for i, (tool_name, tool_input_json, tool_response_json, tool_use_id, agent_id, start_ms, end_ms, duration_ms) in enumerate(tools, 1):
@@ -897,7 +944,8 @@ def main():
         agent_transcript_path = event.get('agent_transcript_path') or None
         trajectory, tools = build_trajectory_from_accumulated_tools(
             session_id, working_dir, agent_transcript_path=agent_transcript_path,
-            scope_agent_id=agent_id if hook_event_name == 'SubagentStop' else None
+            scope_agent_id=agent_id if hook_event_name == 'SubagentStop' else None,
+            main_transcript_path=transcript_path if hook_event_name == 'Stop' else None,
         )
 
         # STEP 4: QUALITY GATE - Check for substantial work
