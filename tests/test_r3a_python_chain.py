@@ -48,6 +48,20 @@ def test_run_learn_passes_no_stream(fake_cli_calls):
     assert learns[0][learns[0].index("--timeout") + 1] == "300000"
 
 
+def test_run_learn_skips_instead_of_writing_the_trace_to_system_tmp(fake_cli_calls, monkeypatch):
+    """final review: no private plugin-data tmp -> no learn; the trace (it holds the prompt) never hits /tmp."""
+    import ace_cli
+    import plugin_data_dir
+    import tempfile as _tf
+    monkeypatch.setattr(plugin_data_dir, "private_dir", lambda p: (_ for _ in ()).throw(OSError("ro")))
+    made = []
+    real = _tf.mkstemp
+    monkeypatch.setattr(_tf, "mkstemp", lambda *a, **k: made.append(k) or real(*a, **k))
+    out, _ms = ace_cli.run_learn({"task": "secret prompt", "trajectory": []}, org="o", project="p")
+    assert out is None and made == []
+    assert [c for c in fake_cli_calls() if c["argv"][:1] == ["learn"]] == []
+
+
 def test_ensure_authenticated_is_deleted():
     """§13.2: delete dead `ensure_authenticated` (no hook or command calls it)."""
     import ace_cli

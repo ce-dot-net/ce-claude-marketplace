@@ -359,8 +359,9 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
     try:  # plugin-data tmp (S10), so a SIGKILLed learn leaves nothing in the system tmp
         import plugin_data_dir
         _tmp = str(plugin_data_dir.private_dir(plugin_data_dir.data_root() / 'tmp'))  # §24: traces hold prompts
-    except Exception:
-        _tmp = None
+    except Exception as e:  # never the system tmp: the trace holds the prompt (hard rule, §24)
+        _log_engine("lib", "learn skipped: no private tmp dir: %s" % str(e)[:200], hook_event_name, ok=False, ms=_ms(t0))
+        return None, _ms(t0)
     fd, path = tempfile.mkstemp(prefix='ace-trace-', suffix='.json', dir=_tmp)
     try:
         with os.fdopen(fd, 'w') as f:

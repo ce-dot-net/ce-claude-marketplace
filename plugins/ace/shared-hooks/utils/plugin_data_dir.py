@@ -94,7 +94,7 @@ def open_project_log(path, append: bool = True):
     if project_log_unsafe(path):  # re-check after mkdir: nothing may have been swapped in
         return None
     flags = os.O_WRONLY | os.O_CREAT | (os.O_APPEND if append else os.O_TRUNC) | getattr(os, "O_NOFOLLOW", 0)
-    return os.fdopen(os.open(str(path), flags, 0o600)  # rows carry prompts, "a" if append else "w")
+    return os.fdopen(os.open(str(path), flags, 0o600), "a" if append else "w")  # 0600: rows carry prompts
 
 
 def data_root() -> Path:

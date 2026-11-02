@@ -40,13 +40,17 @@ class ACERelevanceLogger:
         self.log_dir = Path(log_dir)
         self.log_path = self.log_dir / "ace-relevance.jsonl"  # the dir is created on the first (checked) write
 
-    def _rotate_if_needed(self) -> None:
-        """Rotate log file if it exceeds MAX_FILE_SIZE."""
+    def _rotate_if_needed(self) -> bool:
+        """Rotate log file if it exceeds MAX_FILE_SIZE. False = do not write (a planted chain entry, as mod APPEND_SH)."""
         try:
             if not self.log_path.exists():
-                return
+                return True
             if self.log_path.stat().st_size < self.MAX_FILE_SIZE:
-                return
+                return True
+            for i in range(1, self.MAX_BACKUP_FILES + 1):  # §31 §24 addendum: a symlink/dir in the chain drops the row
+                b = self.log_dir / f"ace-relevance.{i}.jsonl"
+                if b.is_symlink() or b.is_dir():
+                    return False
 
             # Rotate existing backups (3 -> delete, 2 -> 3, 1 -> 2)
             for i in range(self.MAX_BACKUP_FILES, 0, -1):
@@ -61,6 +65,7 @@ class ACERelevanceLogger:
             self.log_path.rename(self.log_dir / "ace-relevance.1.jsonl")
         except Exception:
             pass  # Silent fail
+        return True
 
     def _write_log(self, entry: Dict[str, Any]) -> None:
         """Write a log entry to the JSONL file with rotation."""
@@ -68,7 +73,8 @@ class ACERelevanceLogger:
             from plugin_data_dir import open_project_log, project_log_unsafe
             if project_log_unsafe(self.log_path):  # §24: never write through a symlink out of the project
                 return
-            self._rotate_if_needed()
+            if not self._rotate_if_needed():
+                return
             f = open_project_log(self.log_path)  # creates the dir (relative: cwd may change after init)
             if f is None:
                 return
