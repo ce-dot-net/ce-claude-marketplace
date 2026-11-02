@@ -93,6 +93,21 @@ def _log_skipped(event, reason, context):
         pass
 
 
+def _title_for_guarded_mod(project, event):
+    """The mod searched, but a managed-settings guard filters its classic.UserPromptSubmit (no mod-classic marker):
+    set the title it computed (mod-title). Never over a custom /rename title, never while disabled."""
+    sid = event.get('session_id') or ''
+    if (event.get('session_title') or plugin_data_dir.is_disabled(project, sid) or not plugin_data_dir.is_mod_active(project, sid)
+            or plugin_data_dir.mod_owns_learn(project, sid)):
+        return
+    try:
+        title = (plugin_data_dir.session_dir(project, sid, create=False) / 'mod-title').read_text().strip()
+    except OSError:
+        return
+    if title:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "sessionTitle": title[:200]}}))
+
+
 def build_session_title(pattern_list, pattern_count, agent_type, review_file=None):
     """Build CC sessionTitle from pattern state + optional ROI suffix.
 
@@ -337,6 +352,7 @@ def main():
         except Exception:
             _ctx = None
         if _ctx and (plugin_data_dir.is_disabled(_ctx['project'], event.get('session_id') or '') or plugin_data_dir.is_mod_active(_ctx['project'], event.get('session_id') or '')):
+            _title_for_guarded_mod(_ctx['project'], event)
             sys.exit(0)
 
         _reason = _skip_reason(user_prompt)

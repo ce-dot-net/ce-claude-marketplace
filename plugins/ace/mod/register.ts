@@ -461,6 +461,8 @@ async function onPrompt($: any, L: Load, e: any): Promise<any> {
   const processed = renderPatternsDict(sr.resp).dict.similar_patterns
   $.ui.log(searchSummary(processed))
   L.pendingTitle = sessionTitle(processed, await readJson($, `${s.logs}/ace-review-result.json`))
+  // a managed-settings guard filters classic.UserPromptSubmit: the Python UPS sets this title then (per-duty markers)
+  if (L.pendingTitle) await $.fs.write(`${s.sdir}/mod-title`, L.pendingTitle)
   return withEval(r.context ? [r.context] : [])
 }
 

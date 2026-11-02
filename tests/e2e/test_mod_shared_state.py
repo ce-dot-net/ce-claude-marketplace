@@ -207,20 +207,27 @@ COVERED = ["UserPromptSubmit_human", "SubagentStart", "PostToolUse_Read", "PostT
            "PostToolUseFailure_Bash", "Stop", "SubagentStop"]
 
 
-def _marker(age_s):
+def _marker(age_s, classic=True, title=None):
+    """mod-active (the mod runs) and, unless classic=False, mod-classic (its classic.* hooks run: no managed guard)."""
     def prepare(data, project_id, session_id):
-        m = data / "projects" / project_id / "sessions" / session_id / "mod-active"
-        m.parent.mkdir(parents=True, exist_ok=True)
-        m.write_text("")
-        t = time.time() - age_s
-        os.utime(str(m), (t, t))
+        sdir = data / "projects" / project_id / "sessions" / session_id
+        sdir.mkdir(parents=True, exist_ok=True)
+        for name in ("mod-active", "mod-classic") if classic else ("mod-active",):
+            (sdir / name).write_text("")
+            t = time.time() - age_s
+            os.utime(str(sdir / name), (t, t))
+        if title is not None:
+            (sdir / "mod-title").write_text(title)
     return prepare
+
+
+MARKERS = ("mod-active", "mod-classic", "mod-title", "python_path")
 
 
 def _artifacts(r):
     """State/log files a hook wrote (the marker and the harness's own python_path excluded)."""
     sb = r["sandbox"]
-    found = [p for p in (sb / "plugin-data").rglob("*") if p.is_file() and p.name not in ("mod-active", "python_path")]
+    found = [p for p in (sb / "ace-plugin-data").rglob("*") if p.is_file() and p.name not in MARKERS]
     found += [p for p in (sb / "proj" / ".claude" / "data").rglob("*") if p.is_file()] \
         if (sb / "proj" / ".claude" / "data").exists() else []
     return sorted(str(p.relative_to(sb)) for p in found)
@@ -235,6 +242,59 @@ def test_fresh_mod_marker_silences_covered_python_hooks(name):
         assert r["cli_calls"] == [], "mod active: the Python hook must not spawn ace-cli"
         assert all(run["stdout"].strip() == "" for run in r["runs"]), "mod active: no output"
         assert _artifacts(r) == [], "mod active: the Python hook must not write state or log rows"
+    finally:
+        shutil.rmtree(str(r["sandbox"]), ignore_errors=True)
+
+
+# Team/Enterprise or managed settings: the built-in guard filters the mod's classic.* hooks but the mod runs.
+# mod-active stays fresh (prompt/tool/agent events), mod-classic never appears: the Python chain takes over the
+# classic duties (tool accumulation + Stop/SubagentStop learn with deferral and effort, session title), per duty.
+INJECT_DUTIES = ["UserPromptSubmit_human", "SubagentStart", "PostToolUse_Read"]
+LEARN_DUTIES = ["PostToolBatch", "PostToolUseFailure_Bash", "Stop", "SubagentStop"]
+
+
+@pytest.mark.skipif(os.environ.get("ACE_E2E") != "1", reason="e2e target tests: set ACE_E2E=1")
+@pytest.mark.parametrize("name", INJECT_DUTIES)
+def test_guarded_seat_inject_duties_stay_with_the_mod(name):
+    import ace_e2e_harness as H
+    r = H.run_fixture(name, prepare=_marker(60, classic=False))
+    try:
+        assert r["cli_calls"] == [], "the mod searches and injects (its prompt/agent/tool hooks are not filtered)"
+        assert _artifacts(r) == []
+    finally:
+        shutil.rmtree(str(r["sandbox"]), ignore_errors=True)
+
+
+@pytest.mark.skipif(os.environ.get("ACE_E2E") != "1", reason="e2e target tests: set ACE_E2E=1")
+@pytest.mark.parametrize("name", LEARN_DUTIES)
+def test_guarded_seat_learn_duties_move_to_python(name):
+    import ace_e2e_harness as H
+    r = H.run_fixture(name, prepare=_marker(60, classic=False))
+    try:
+        assert _artifacts(r) != [], "%s: the Python hook must do the classic duty the guard took from the mod" % name
+        assert all(run["stdout"].strip() == "" for run in r["runs"])
+    finally:
+        shutil.rmtree(str(r["sandbox"]), ignore_errors=True)
+
+
+@pytest.mark.skipif(os.environ.get("ACE_E2E") != "1", reason="e2e target tests: set ACE_E2E=1")
+def test_guarded_seat_python_ups_sets_the_mod_title():
+    import ace_e2e_harness as H
+    r = H.run_fixture("UserPromptSubmit_human", prepare=_marker(60, classic=False, title="ACE 5 patterns"))
+    try:
+        assert r["cli_calls"] == []
+        out = json.loads(r["runs"][0]["stdout"])
+        assert out["hookSpecificOutput"] == {"hookEventName": "UserPromptSubmit", "sessionTitle": "ACE 5 patterns"}
+    finally:
+        shutil.rmtree(str(r["sandbox"]), ignore_errors=True)
+
+
+@pytest.mark.skipif(os.environ.get("ACE_E2E") != "1", reason="e2e target tests: set ACE_E2E=1")
+def test_unguarded_seat_python_ups_leaves_the_title_to_the_mod():
+    import ace_e2e_harness as H
+    r = H.run_fixture("UserPromptSubmit_human", prepare=_marker(60, title="ACE 5 patterns"))
+    try:
+        assert all(run["stdout"].strip() == "" for run in r["runs"])
     finally:
         shutil.rmtree(str(r["sandbox"]), ignore_errors=True)
 

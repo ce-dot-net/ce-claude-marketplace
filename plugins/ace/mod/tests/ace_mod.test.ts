@@ -1229,3 +1229,11 @@ test('classic.* hooks filtered: turn.complete does not learn; the first classic.
   await done($)
   expect(h.learns().length).toBe(1)
 })
+
+test('prompt.submit leaves its title in mod-title (the Python UPS sets it where the guard filters classic.*)', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), noClassic: true })
+  await submit($)
+  expect(/^ACE( low| ready)? · /.test(h.files.get(`${SDIR}/mod-title`) ?? '')).toBe(true)
+  await submit($, HUMAN, 'composer')
+  expect(h.files.has(`${SDIR}/mod-title`)).toBe(true)
+})
