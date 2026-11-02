@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""WP-A RED: hooks.json reaches the DESIGN §3 v8 topology.
+"""WP-A/WP-G: hooks.json reaches the DESIGN §3 v8 topology (round 2: §9 G1/G4/G8, §10 S8, §11 A2).
 
 Doc facts (scratchpad docs/cc_hooks_reference.md): `timeout` is seconds and is NOT
 enforced on `async: true` hooks (:414); `statusMessage` = spinner text (:415);
@@ -22,18 +22,22 @@ PLUGIN = REPO / "plugins" / "ace"
 HOOKS_JSON = PLUGIN / "hooks" / "hooks.json"
 ROOT_PREFIX = "${CLAUDE_PLUGIN_ROOT}/scripts/"
 
-# DESIGN §3 table: (event, matcher, script, args, async, timeout, statusMessage)
+# DESIGN §3 table as amended by §9 G1/G4/G8, §10 S8 and §11 A2 (round 2):
+# (event, matcher, script, args, async, timeout, statusMessage)
 EXPECTED = {
-    ("SessionStart", "startup|clear", "ace_install_cli.sh", (), False, 20, None),
+    ("SessionStart", "startup|clear", "ace_install_cli.sh", (), False, 30, None),
     ("SessionStart", "startup", "ace_install_cli.sh", ("--update-check",), True, None, None),
     ("SessionStart", "compact", "ace_sessionstart_compact.sh", (), False, 10, None),
     ("UserPromptSubmit", "", "ace_before_task_wrapper.sh", (), False, 30,
      "ACE: searching patterns…"),
+    ("PreToolUse", "Agent", "ace_pretooluse_agent_stash.sh", (), False, 5, None),
+    # TEMPORARY until WP-H: the per-tool accumulator row stays; PostToolBatch --batch is a no-op
     ("PostToolUse", "*", "ace_posttooluse_wrapper.sh", ("--log",), True, None, None),
-    ("PostToolUse", "Read|Glob|Grep", "ace_posttooluse_domain_inject.sh", (), False, 15,
+    ("PostToolBatch", "", "ace_posttooluse_wrapper.sh", ("--batch",), True, None, None),
+    ("PostToolUse", "Read|Glob|Grep", "ace_posttooluse_domain_inject.sh", (), False, 20,
      "ACE: domain shift…"),
-    ("PostToolUseFailure", "Bash", "ace_posttoolusefailure_wrapper.sh", (), True, None, None),
-    ("SubagentStart", "", "ace_subagent_start_wrapper.sh", (), False, 20,
+    ("PostToolUseFailure", "*", "ace_posttoolusefailure_wrapper.sh", (), True, None, None),
+    ("SubagentStart", "", "ace_subagent_start_wrapper.sh", (), False, 30,
      "ACE: loading patterns for subagent…"),
     ("Stop", "", "ace_stop_wrapper.sh", (), True, None, None),
     ("SubagentStop", "", "ace_subagent_stop_wrapper.sh", (), True, None, None),
@@ -67,11 +71,28 @@ def test_hooks_json_rows_match_design_table():
 
 
 def test_removed_events_absent():
-    """DESIGN §3 REMOVED: PreToolUse (T10 double domain-shift), PreCompact (never block
-    compaction), PermissionRequest (no-op)."""
+    """DESIGN §3 REMOVED: PreCompact (never block compaction), PermissionRequest (no-op).
+    PreToolUse came back in round 2 for the Agent stash only (§9 G1)."""
     hooks = json.loads(HOOKS_JSON.read_text())["hooks"]
-    for gone in ("PreToolUse", "PreCompact", "PermissionRequest"):
+    for gone in ("PreCompact", "PermissionRequest"):
         assert gone not in hooks, "%s must be removed from hooks.json (DESIGN §3)" % gone
+
+
+def test_pretooluse_only_agent_never_task():
+    """§9 G1 / p4.a: `Task` is a live alias of `Agent` -> declaring both double-fires."""
+    hooks = json.loads(HOOKS_JSON.read_text())["hooks"]
+    matchers = [g.get("matcher") for g in hooks.get("PreToolUse", [])]
+    assert matchers == ["Agent"], matchers
+
+
+def test_no_per_tool_posttooluse_accumulator():
+    """§9 G4: PostToolBatch (one event per batch, no matcher support, doc :311/:2351)
+    replaces the PostToolUse `*` accumulator; only the sync domain-shift stays on PostToolUse."""
+    hooks = json.loads(HOOKS_JSON.read_text())["hooks"]
+    # TEMPORARY until WP-H replaces the `*` accumulator: expect ["*", "Read|Glob|Grep"] then.
+    assert [g.get("matcher") for g in hooks["PostToolUse"]] == ["*", "Read|Glob|Grep"]
+    assert all("matcher" not in g for g in hooks["PostToolBatch"]), \
+        "PostToolBatch has no matcher support (doc :311); omit the key"
 
 
 def test_every_hook_uses_exec_form():
@@ -131,3 +152,11 @@ def test_claude_plugin_validate_strict_passes():
     hook_warnings = [l for l in out.splitlines() if re.search(r"\bhooks\.[A-Z]", l)]
     assert not hook_warnings, "hook validator warnings:\n" + "\n".join(hook_warnings)
     assert r.returncode == 0, out[-3000:]
+
+
+def test_batch_mode_is_silent_rc0_noop():
+    """WP-G->WP-H gate: PostToolBatch row points at `--batch`; until WP-H it must not fail."""
+    ev = {"hook_event_name": "PostToolBatch", "session_id": "s", "tool_calls": []}
+    p = subprocess.run([str(PLUGIN / "scripts" / "ace_posttooluse_wrapper.sh"), "--batch"],
+                       input=json.dumps(ev), capture_output=True, text=True, timeout=30)
+    assert p.returncode == 0 and p.stdout == "" and p.stderr == "", (p.returncode, p.stderr)

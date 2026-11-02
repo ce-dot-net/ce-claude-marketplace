@@ -14,7 +14,6 @@ import os
 import re
 import sys
 import time
-import uuid
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent / 'utils'))
@@ -25,7 +24,7 @@ from ace_cli import run_search                            # noqa: E402
 from ace_context import get_context                       # noqa: E402
 from ace_relevance_logger import log_domain_shift, log_error  # noqa: E402
 from patterns_used_state import (append_patterns_used, load_task_session_id,  # noqa: E402
-                                 strip_and_gate)
+                                 strip_and_gate, task_session_id_for)
 
 _TOOLS = ('Read', 'Glob', 'Grep')
 _CAP = 10000
@@ -88,7 +87,7 @@ def main() -> None:
         project, org = ctx['project'], ctx['org']
         t0 = time.monotonic()
         sid = plugin_data_dir.resolve_session_id(event)
-        if plugin_data_dir.disabled_flag(project, sid).exists():
+        if plugin_data_dir.is_disabled(project, sid):
             return
         try:
             domains = json.loads(plugin_data_dir.domains_file(project).read_text())
@@ -114,10 +113,13 @@ def main() -> None:
         if not query:
             return  # no usable query
 
-        tsid = (load_task_session_id(sid, agent_id or None, 'SubagentStop' if agent_id else 'Stop',
-                                     project_id=project) or str(uuid.uuid4()))
+        # G2: the event prompt_id is the anchor (a stale state tsid must not win); without one,
+        # reuse the state tsid, else mint a uuid4.
+        tsid = (event.get('prompt_id') or
+                load_task_session_id(sid, agent_id or None, 'SubagentStop' if agent_id else 'Stop',
+                                     project_id=project) or task_session_id_for(None))
         result, _ms = run_search(query, org=org, project=project, session_id=tsid, top_k=8,
-                                 timeout=10, hook_event_name='PostToolUse')
+                                 timeout=17, hook_event_name='PostToolUse')
         ok = isinstance(result, dict) and not result.get('error')
         if ok:  # a failed/timed-out search must stay retryable (domain not marked visited)
             try:
