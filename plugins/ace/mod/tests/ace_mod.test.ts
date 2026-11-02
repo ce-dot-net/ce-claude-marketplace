@@ -17,8 +17,9 @@ import S100 from './fixtures/search_100.ts'
 import S8 from './fixtures/search_8.ts'
 import SEDGE from './fixtures/search_edge.ts'
 import G from './fixtures/golden.ts'
+import USED_CASES from './fixtures/used_cases.ts'
 import { statusLine, hasSubstantialWork, traceVariant } from '../core.ts'
-import { pyLoads, PRIVATE_WRITE_SH, evalStats, evalInjection, learnLine } from '../core.ts'
+import { pyLoads, PRIVATE_WRITE_SH, evalStats, evalInjection, learnLine, usedPatternIds, toolHaystack } from '../core.ts'
 
 const HOME = '/home/u', CWD = '/proj', SID = 'sess-1', PRJ = 'prj_t'
 const PROOT = decodeURIComponent(new URL('../..', import.meta.url).pathname).replace(/\/$/, '')  // $.plugin.root
@@ -995,23 +996,28 @@ test('§31 default env (50/50): sess-1 lands in the budget half (bucket 66), lab
   expect(r.context[0].length <= 9500).toBe(true)
 })
 
-test('§31 applied_log_ids = only the used ids (id or a >= 40-char verbatim fragment), for full too', async ($, on) => {
+test('item H2: used = id in the answer, or >= 2 distinctive tokens in THIS task\'s tool inputs (shared fixture, Python parity)', async () => {
+  for (const c of USED_CASES as any[]) expect([c.name, usedPatternIds(c.ids, c.contents, c.message, toolHaystack(c.tool_inputs))]).toEqual([c.name, c.expected])
+})
+
+test('item H2: applied_log_ids = the evidenced ids (tool tokens or id literal), for full too; the answer text alone is no evidence', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }) })
   const st8 = JSON.parse(G.state_main_8)
   const [a, b] = Object.keys(st8.retrieval_log_ids)
-  const unique = 'Refuse a planted symlink in the rotation chain before moving the relevance log anywhere.'
-  await mainTask($, h)
+  const unique = 'Run `npm ci --ignore-scripts` after touching plugin-local/cli.js so the binding builds.'
+  await mainTask($, h, [{ tool: 'Edit', file_path: '/proj/x.py', old_string: 'a', new_string: 'b' }, { tool: 'Bash', command: 'npm ci --ignore-scripts' }])
   const path = `${SDIR}/patterns-used-main.json`, st = JSON.parse(h.files.get(path)!)  // the fixture contents share a filler
   st.pattern_contents[b] = unique
   h.put(path, JSON.stringify(st))
-  const frag = unique.slice(10, 55)
-  await done($, `Following ${a}; and per the playbook:\n${frag} was applied.`)
+  await done($, `Following ${a}; and ${unique.slice(10, 55)} was applied.`)
   const L = h.learns()[0]!, t = h.trace(L)
   expect(t.render_variant).toBe('full')
   expect(t.applied_log_ids).toEqual([st8.retrieval_log_ids[a], st8.retrieval_log_ids[b]])
   expect(h.flag(h.learnArgv(L), '--applied-log-ids')).toBe(`${st8.retrieval_log_ids[a]},${st8.retrieval_log_ids[b]}`)
   expect(t.playbook_used).toEqual(st8.pattern_ids)
   expect(t.retrieval_id).toBe(st8.retrieval_id)
+  expect(JSON.stringify(t).includes('npm ci --ignore-scripts')).toBe(true)  // the action summary, as before
+  expect(t.trajectory.every((x: any) => x.hay === undefined)).toBe(true)
 })
 
 test('§31 a 39-char fragment or an unrelated answer credits nothing', async ($, on) => {

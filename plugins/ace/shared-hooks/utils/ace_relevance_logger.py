@@ -274,7 +274,9 @@ class ACERelevanceLogger:
         execution_time_seconds: float,
         learning_sent: bool,
         project_id: Optional[str] = None,
-        agent_type: Optional[str] = None
+        agent_type: Optional[str] = None,
+        used_ids_count: Optional[int] = None,
+        used_source: Optional[str] = None,
     ) -> None:
         """
         Log task execution metrics for correlation with pattern usage.
@@ -296,6 +298,9 @@ class ACERelevanceLogger:
             'execution_time_seconds': round(execution_time_seconds, 2),
             'learning_sent': learning_sent
         }
+        if used_ids_count is not None:  # item H: how many injected ids the task evidenced, and by what
+            entry['used_ids_count'] = used_ids_count
+            entry['used_source'] = used_source or 'none'
 
         self._write_log(entry)
 

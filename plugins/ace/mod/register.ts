@@ -380,7 +380,8 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   const playbook: string[] = state.pattern_ids ?? []
   const rlog: Record<string, number> = state.retrieval_log_ids ?? {}
   const variant = traceVariant(state.render_variant, s.sessionId, await cohortEnv($))  // §31: stored label, else the conversation arm
-  const applied = appliedLogIds(usedPatternIds(playbook, state.pattern_contents ?? {}, usedText), rlog)  // §31: used only
+  const used = usedPatternIds(playbook, state.pattern_contents ?? {}, usedText, recs.map(r => r.hay).filter(Boolean).join('\n'))
+  const applied = appliedLogIds(used, rlog)  // §31 / item H2: used only (this agent's own tools and report)
   const tsid: string | undefined = state.task_session_id ?? undefined
   const effort = effortEvent || await $.env.get('CLAUDE_EFFORT') || 'normal'
   let git: any
@@ -401,7 +402,8 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   const row = async (sent: boolean) => ({ timestamp: await nowIso($), event: 'execution', hook, session_id: s.sessionId,
     project_id: s.project, agent_type: agentType, patterns_used_count: playbook.length, pattern_ids: playbook.slice(0, 20),
     tools_executed: recs.length, state_changing_tools: recs.filter(r => ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit'].some(x => r.tool.includes(x))).length,
-    success, execution_time_seconds: Math.round((await $.clock.now() - t0) / 10) / 100, learning_sent: sent })
+    success, execution_time_seconds: Math.round((await $.clock.now() - t0) / 10) / 100, learning_sent: sent,
+    used_ids_count: used.length, used_source: used.length ? 'tokens' : 'none' })
   const log = `${s.logs}/ace-relevance.jsonl`
   const python = (await readText($, `${s.root}/python_path`))?.trim()
   const verbosity = await $.env.get('ACE_VERBOSITY') || 'detailed'

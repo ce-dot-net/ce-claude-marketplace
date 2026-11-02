@@ -256,7 +256,8 @@ export const hasSubstantialWork = (tools: ToolRec[]) =>
   tools.length >= MIN_RESEARCH_CALLS || tools.some(t => STATE_CHANGING.some(s => t.tool.includes(s)))
 
 // One trajectory step, summarized when the call settles (results can be huge; Python keeps them in sqlite).
-export type ToolRec = { tool: string; action: string; result: string; failed: boolean; start_ms: number; end_ms: number; commit?: string }
+export type ToolRec = { tool: string; action: string; result: string; failed: boolean; start_ms: number; end_ms: number; commit?: string
+  hay?: string }  // hay: the call's toolHaystack (item H2 used check), never sent in the trace
 const base = (p: any) => String(p ?? 'unknown file').replace(/\/+$/, '').split('/').pop()
 const cut = (s: string, n: number) => s.length > n ? s.slice(0, n) + '...' : s
 
@@ -295,6 +296,8 @@ export function summarizeResult(tool: string, res: any, isError = false, denied?
 export function toolRec(tool: string, input: any, res: any, isError: boolean, denied: string | undefined, t0: number, t1: number): ToolRec {
   const failed = isError || !!denied || !!(res && typeof res === 'object' && !Array.isArray(res) && (res.error || res.stderr))
   const rec: ToolRec = { tool, action: summarizeAction(tool, input), result: summarizeResult(tool, res, isError, denied), failed, start_ms: t0, end_ms: t1 }
+  const hay = cpSlice(toolHaystack([input]), 2000)
+  if (hay) rec.hay = hay
   if (tool === 'Bash' && String(input?.command ?? '').includes('git commit')) { // git_utils.detect_commits_in_session
     const m = /\[[\w\-/]+\s+([a-f0-9]{7,40})\]/.exec(String(res?.stdout ?? ''))
     if (m) rec.commit = m[1]
@@ -523,23 +526,60 @@ export const normalizeVariant = (v: unknown): 'budget' | 'full' | undefined => {
 export const traceVariant = (stored: unknown, conversationId?: string, env: Record<string, string | undefined> = {}): string | undefined =>
   normalizeVariant(stored) ?? (conversationId ? normalizeVariant(renderCohort(conversationId, env)) : undefined)
 
-// §31 "actually used" (patterns_used_state.used_pattern_ids): the id, or a >= 40-char verbatim fragment of the
-// whitespace-normalized content, in the whitespace-normalized final message / handback report. Injected order.
-export const CONTENT_CAP = 600, USED_FRAGMENT = 40, USED_MESSAGE_CAP = 50000
+// §31 / item H2 "actually used" (patterns_used_state.used_pattern_ids): evidence in what the task DID. Its id in the
+// final message / report or the tool inputs, or >= 2 of its distinctive tokens in the tool-call inputs; a token in
+// more than 30% of the injected patterns (and more than one) is too generic. Injected order.
+export const CONTENT_CAP = 600, USED_MESSAGE_CAP = 50000
 const normWs = (t: unknown) => String(t ?? '').split(/\s+/).filter(Boolean).join(' ')
-export function usedPatternIds(ids: string[], contents: Record<string, string>, message: string | undefined): string[] {
+const TOOL_INPUT_KEYS = ['command', 'file_path', 'path', 'pattern', 'glob', 'notebook_path', 'url']
+const TOKEN_STOP = new Set(['and/or', 'e.g.', 'i.e.', 'etc.', 'n/a', 'w/o', 'http://', 'https://', 'true/false', 'yes/no'])
+const STRIP = new Set(Array.from("`'\"()[]{}<>,;:!?*"))
+// tool_haystack: lowercased tool-call inputs (Bash commands, paths, Grep/Glob patterns, Edit targets), never edit bodies
+export function toolHaystack(inputs: any[]): string {
+  const parts: string[] = []
+  for (const ti of inputs ?? []) if (ti && typeof ti === 'object') for (const k of TOOL_INPUT_KEYS) if (typeof ti[k] === 'string' && ti[k]) parts.push(ti[k])
+  return parts.join('\n').toLowerCase()
+}
+const qualifies = (w: string) => {
+  if (cps(w).length < 4 || TOKEN_STOP.has(w)) return false
+  if (w.includes('/') || w.includes('_') || w.includes('::') || /[a-z][A-Z]/.test(w)) return true
+  if (/^--?[A-Za-z][A-Za-z0-9_-]*$/.test(w)) return true
+  return /[A-Za-z0-9_]\.[A-Za-z0-9_]/.test(w)
+}
+export function distinctiveTokens(content: unknown): Set<string> {
+  const text = cpSlice(String(content ?? ''), CONTENT_CAP), toks = new Set<string>()
+  for (const m of text.matchAll(/`([^`\n]+)`/g)) {
+    const span = normWs(m[1])
+    if (cps(span).length >= 4) toks.add(span.toLowerCase())
+    const w = span.split(' ')
+    if (w.length >= 2 && cps(w[0] + ' ' + w[1]).length >= 4) toks.add((w[0] + ' ' + w[1]).toLowerCase())
+  }
+  for (const raw of text.split(/\s+/).filter(Boolean)) {
+    let a = Array.from(raw), i = 0, j = a.length
+    while (i < j && STRIP.has(a[i])) i++
+    while (j > i && STRIP.has(a[j - 1])) j--
+    let w = a.slice(i, j).join('')
+    while (w.endsWith('.')) w = w.slice(0, -1)
+    if (qualifies(w)) toks.add(w.toLowerCase())
+  }
+  for (const t of [...toks]) if (TOKEN_STOP.has(t)) toks.delete(t)
+  return toks
+}
+export function usedPatternIds(ids: string[], contents: Record<string, string>, message: string | undefined, haystack = ''): string[] {
   const msg = cpSlice(normWs(message), USED_MESSAGE_CAP)
-  if (!msg) return []
-  const m = cps(msg), n = USED_FRAGMENT, windows = new Set<string>()
-  for (let i = 0; i + n <= m.length; i++) windows.add(m.slice(i, i + n).join(''))
-  return ids.filter(id => {
-    if (id && msg.includes(id)) return true
-    const c = cps(cpSlice(normWs(contents?.[id]), CONTENT_CAP))
-    for (let i = 0; i + n <= c.length; i++) if (windows.has(c.slice(i, i + n).join(''))) return true
-    return false
+  const list = (ids ?? []).filter(id => typeof id === 'string' && id)
+  const toks = new Map(list.map(id => [id, distinctiveTokens(contents?.[id])] as const))
+  const df = new Map<string, number>()
+  for (const ts of toks.values()) for (const t of ts) df.set(t, (df.get(t) ?? 0) + 1)
+  const generic = new Set([...df].filter(([, n]) => n > 1 && n > 0.3 * list.length).map(([t]) => t))
+  return list.filter(id => {
+    if (msg.includes(id) || haystack.includes(id.toLowerCase())) return true
+    if (!haystack) return false
+    let hits = 0
+    for (const t of toks.get(id)!) if (!generic.has(t) && haystack.includes(t)) hits++
+    return hits >= 2
   })
 }
-// injected_contents: {id: content[:CONTENT_CAP]} of the injected patterns (state key pattern_contents)
 export function injectedContents(patterns: any[], ids: string[]): Record<string, string> {
   const byId = new Map<string, unknown>(), out: Record<string, string> = {}
   for (const p of patterns ?? []) if (p && !byId.has(p.id)) byId.set(p.id, p.content)

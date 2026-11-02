@@ -1065,12 +1065,20 @@ def main():
                                                     mod=plugin_data_dir.is_mod_active(context['project'], session_id))
         except Exception:
             _render_variant = None
-        # §31: applied_log_ids = only the injected patterns ACTUALLY USED (id or a >= 40-char verbatim content
-        # fragment in the final message / handback report), for every variant. Order follows playbook_used.
+        # §31 / item H2: applied_log_ids = only the injected patterns ACTUALLY USED, for every variant: its id in the
+        # final message / handback report, or >= 2 of its distinctive tokens in THIS agent's tool-call inputs.
+        # Order follows playbook_used.
         _handback_full = handback_summary(agent_transcript_path, cap=USED_MESSAGE_CAP) if hook_event_name == 'SubagentStop' and agent_transcript_path else None
         try:
-            from patterns_used_state import used_pattern_ids
-            _used = used_pattern_ids(playbook_used, _contents, "\n".join(x for x in (_handback_full, last_assistant_message) if x))
+            from patterns_used_state import tool_haystack, used_pattern_ids
+            _inputs = []
+            for _t in tools:
+                try:
+                    _inputs.append(json.loads(_t[1]) if _t[1] else {})
+                except ValueError:
+                    pass
+            _used = used_pattern_ids(playbook_used, _contents, "\n".join(x for x in (_handback_full, last_assistant_message) if x),
+                                     tool_haystack(_inputs))
         except Exception:
             _used = []  # false positives are worse than misses
         applied_log_ids = [retrieval_log_map[pid] for pid in _used if pid in retrieval_log_map]
@@ -1220,6 +1228,7 @@ def main():
                     "success": not has_errors,
                     "execution_time_seconds": time.time() - execution_start_time,
                     "project_id": context.get('project'), "agent_type": agent_type,
+                    "used_ids_count": len(_used), "used_source": "tokens" if _used else "none",
                 },
             }
         except Exception as e:
