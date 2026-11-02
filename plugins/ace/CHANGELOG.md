@@ -38,6 +38,12 @@ Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topol
 - Forks (`agent_type` `fork`) inherit the parent's injected block: they get their own session state but no second search or injection (`ACE_SUBAGENT_INJECT_FORKS=1` restores the search). Workflow agents resolve their query from their own transcript, then the parent task's prompt, then the parent-transcript scan (`query_source` is logged).
 - Domain-shift searches pass no `--pin-session` (the server never credits those rows). `CLAUDE_PLUGIN_DATA` is only accepted when its directory name starts with `ace` (other plugins export theirs into the shared env file). Small fixes: `token_expired` is an auth failure, the PermissionDenied transcript tail reads 256 KB and skips `api-request` lines, the startup row shows a status message, `date -d` is gone from the statusline (portability lint test).
 
+- Round 3b, mod: on Claude Code mods (>= 2.1.287) an in-process mod (`mod/register.ts`) handles prompt.submit, agent.spawn, tool.call and turn.complete; the Python hooks step aside while its `mod-active` marker is younger than 10 min, and run as before where the Team/Enterprise guard skips mods. The mod renders ALL server patterns (cut by whole patterns to 95,000 chars, `truncated_for_cap`), which costs about 2.1-2.3x input tokens and 2.5x USD per task against the top-11 budget render. It mirrors the Python chain: fresh pin per subagent, forks without a second search, Stop deferral, SubagentHandback summary, no domain-shift pin, same state files.
+- Round 3c, engine: search and learn run in-process on the installed `@ace-sdk/core` (`engine/*.js`, plugin-local core first) when its version/export gate passes, else through ace-cli unchanged (`ACE_ENGINE=cli` forces it). Learn falls back only when the engine sent nothing. Both chains use the same engine and CLI resolution.
+- Render A/B contract: arms control, compact, full (`ACE_RENDER_FULL_PCT`, default 100), rest budget, bucketed on the Claude Code session id (one arm per conversation; subagents inherit it). The pin and the trace `session_id` stay per task. Every trace carries `render_variant` = what was actually rendered (the Python chain renders the full arm as `budget`). Under `full`, `applied_log_ids` is empty and `--applied-log-ids` is not sent (otherwise every shown pattern would be credited); `retrieval_id` and `playbook_used` are unchanged.
+- Security: the self-eval request fields are numbers only; writes under `<cwd>/.claude/data/logs` refuse symlinked directories or targets; files holding prompts and traces are 0600 in 0700 directories.
+- Info for server/SDK teams: requests through the engine carry `X-ACE-Client: claude-code-plugin/<version>`; render_cohort bucket values differ from 7.1.x (CC session id instead of the task id).
+
 ### Accepted losses
 - Successful tool calls carry no `duration_ms` (PostToolBatch has none; only `PostToolUseFailure` rows do).
 - Exec-form hooks run the `.sh` shims directly: macOS/Linux/WSL2 only. Windows is not supported (a regression against the shell form; real support later).
@@ -47,6 +53,7 @@ Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topol
 - Bash-error troubleshooting injection is replaced by accumulator-only PostToolUseFailure learning.
 - A new human prompt that arrives before the `<task-notification>` of a deferred Stop resets the main state: that deferred task is not learned.
 - Trace timestamps are now UTC.
+- Under the `full` render no pattern is credited WARM through `applied_log_ids` until a real "actually used" signal exists.
 - Legacy `~/.ace/config.json` apiToken warnings are gone.
 - `/rewind` undo is not reflected in accumulator rows.
 - Deny-rule denials are not learned (PermissionDenied fires only in auto mode; they appear only in PostToolBatch tool_response).
