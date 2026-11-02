@@ -118,9 +118,8 @@ jobs:
     permissions:
       contents: write
       pull-requests: write
-    env:
-      GH_TOKEN: ${{ github.token }}
     steps:
+      # default persist-credentials: the branch push needs the checkout credential; the gh token lives in the gh step only
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
         with:
@@ -141,7 +140,7 @@ jobs:
           for V in "$LATEST" "$PIN"; do
             echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::not a plain version: $V"; exit 1; }
           done
-          if git apply --numstat "$PATCH/bump.patch" | awk '{print $3}' | grep -Evx 'plugins/ace/package\.json|plugins/ace/package-lock\.json|plugins/ace/\.claude-plugin/[A-Za-z.]+\.json|\.claude-plugin/marketplace\.json'; then
+          if git apply --numstat "$PATCH/bump.patch" | awk '{print $3}' | grep -Evx 'plugins/ace/package\.json|plugins/ace/package-lock\.json|plugins/ace/\.claude-plugin/plugin\.json|plugins/ace/\.claude-plugin/plugin\.template\.json|\.claude-plugin/marketplace\.json'; then
             echo "::error::patch touches a file outside the allow-list"; exit 1
           fi
           BRANCH="ace-cli-watch/$LATEST"
@@ -156,12 +155,13 @@ jobs:
             git apply "$PATCH/bump.patch"
             # JSON-level allow-list: only the pinned version and @ace-sdk registry tarballs may change
             python3 .github/scripts/verify_bump.py "$PIN" "$LATEST"
-            git add plugins/ace/package.json plugins/ace/package-lock.json plugins/ace/.claude-plugin .claude-plugin/marketplace.json
+            git add -- plugins/ace/package.json plugins/ace/package-lock.json plugins/ace/.claude-plugin/plugin.json plugins/ace/.claude-plugin/plugin.template.json .claude-plugin/marketplace.json
             git commit -m "chore(ace): bump pinned ace-cli $PIN -> $LATEST"
             git push origin "$BRANCH"
           fi
       - name: Open the pull request
         env:
+          GH_TOKEN: ${{ github.token }}  # only the gh step sees the token (§27)
           OUTCOME: ${{ needs.test.outputs.outcome }}
         run: |
           LOGS="$RUNNER_TEMP/logs"

@@ -188,3 +188,27 @@ def test_untracked_new_file_reaches_verify(tmp_path, monkeypatch):
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     assert m.main(["v", "4.2.2", "4.3.0"]) == 1
+
+
+# ── final review: token scope, exact add, tests.yml pins ─────────────────────────────────
+
+def test_pr_job_token_only_in_the_gh_step():
+    _, _, pr = _jobs()
+    steps = _steps(pr)
+    with_token = [s for s in steps if "GH_TOKEN" in s]
+    assert len(with_token) == 1 and "gh pr create" in with_token[0], "GH_TOKEN must be scoped to the gh step"
+    assert "\n    env:\n      GH_TOKEN" not in pr
+
+
+def test_pr_job_adds_only_the_exact_manifest_paths():
+    _, _, pr = _jobs()
+    adds = re.findall(r"git add (.*)", pr)
+    assert adds, "the pr job must git add the bumped files"
+    paths = adds[0].replace("--", "").split()
+    assert set(paths) == {"plugins/ace/package.json", "plugins/ace/package-lock.json", ".claude-plugin/marketplace.json",
+                          "plugins/ace/.claude-plugin/plugin.json", "plugins/ace/.claude-plugin/plugin.template.json"}
+
+
+def test_tests_workflow_actions_are_pinned_by_sha():
+    uses = re.findall(r"uses:\s*(\S+)", (REPO / ".github" / "workflows" / "tests.yml").read_text())
+    assert uses and all(re.search(r"@[0-9a-f]{40}$", u) for u in uses), uses
