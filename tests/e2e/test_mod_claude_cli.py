@@ -11,7 +11,7 @@ import mod_reference as R
 CLAUDE = shutil.which("claude")
 pytestmark = pytest.mark.skipif(not CLAUDE, reason="claude binary not installed")
 MOD_HOOKS = ["session.start", "prompt.submit", "agent.spawn", "tool.call", "turn.start", "turn.complete",
-             "session.end", "classic.UserPromptSubmit", "classic.Stop"]
+             "session.end", "classic.UserPromptSubmit", "classic.Stop", "classic.SubagentStop"]
 
 
 def _run(*args):

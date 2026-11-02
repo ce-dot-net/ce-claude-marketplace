@@ -17,6 +17,7 @@ import S100 from './fixtures/search_100.ts'
 import S8 from './fixtures/search_8.ts'
 import SEDGE from './fixtures/search_edge.ts'
 import G from './fixtures/golden.ts'
+import { pyLoads } from '../core.ts'
 
 const HOME = '/home/u', CWD = '/proj', SID = 'sess-1', PRJ = 'prj_t'
 const ROOT = `${HOME}/.claude/plugins/data/ace-inline`
@@ -29,7 +30,8 @@ const LOCKED = { exitCode: 1, stdout: '', stderr: 'SqliteError: database is lock
 const MIN = 60_000
 
 type SearchAnswer = { exitCode?: number; stdout?: string; stderr?: string; advanceMs?: number; killed?: boolean }
-type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; env?: Record<string, string>; files?: Record<string, string> }
+type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; env?: Record<string, string>; files?: Record<string, string>
+  learnExit?: number; early?: (agentId: string) => Promise<unknown> }
 type Run = { argv: string[]; stdin?: string; env?: Record<string, string>; timeoutMs?: number; files: Set<string> }
 
 // In-memory engine: fs (with mtimes on the mocked clock), env, clock, session, process. Every argv is recorded.
@@ -74,6 +76,7 @@ function host(on: any, o: Opts = {}) {
       return res(a.exitCode ?? 0, a.stdout ?? '', a.stderr ?? '')
     }
     if (argv[0] === 'git' || argv[0].endsWith('/git')) return res(0, git(argv))
+    if (o.learnExit !== undefined && argv.includes('ace-cli') && argv.includes('learn')) return res(o.learnExit, '')
     if (argv.some(a => /(^|[\s;&|(])rm($|\s)/.test(a) || a === 'rm'))
       for (const a of argv) for (const k of [...files.keys()]) if (k === a || k.startsWith(a + '/')) files.delete(k)
     return res(0, '')
@@ -82,7 +85,11 @@ function host(on: any, o: Opts = {}) {
   on('ui.status', () => ({ value: undefined }))
   on('ui.toast', () => ({ value: undefined }))
   on('prompt.submit', (_$: any, e: any) => ({ text: e.text, context: e.context }))
-  on('agent.spawn', (_$: any, e: any) => ({ model: 'claude-haiku-4-5', agentId: e.resume?.agentId ?? `agent-${++spawnN}`, seenPrompt: e.prompt }))
+  on('agent.spawn', async (_$: any, e: any) => {
+    const agentId = e.resume?.agentId ?? `agent-${++spawnN}`
+    if (o.early) await o.early(agentId)
+    return { model: 'claude-haiku-4-5', agentId, seenPrompt: e.prompt }
+  })
   on('tool.call', (_$: any, e: any) => e.tool === 'Bash' ? ({ result: { stdout: e.command === 'big' ? 'y'.repeat(30000) : 'ok', stderr: '', interrupted: false } })
     : e.tool === 'Edit' || e.tool === 'Write' ? ({ result: { filePath: e.file_path } })
     : ({ result: { type: 'text', file: { content: 'a\nb', filePath: e.file_path } } }))
@@ -315,6 +322,15 @@ test('a pinned search stuck on the lock is killed at its share of the budget; th
   expect(h.rows().find((x: any) => x.event === 'search')!.pin_failed).toBe(true)
 })
 
+test('a pinned search killed by a slow server (the unpinned re-run dies too) does NOT suspend pins; pinned latency is logged', async ($, on) => {
+  const h = host(on, { search: () => ({ killed: true, advanceMs: 15_000 }) })
+  await submit($)
+  expect(h.files.has(`${ROOT}/pin-backoff`)).toBe(false)
+  const h2 = h.rows().find((x: any) => x.event === 'error')!
+  expect(h2.pin_failed).toBe(true)
+  expect(h2.pin_ms).toBe(15_000)
+})
+
 test('render_cohort ACE_AB_CONTROL_PCT=100 → control: search + state, NO injection', async ($, on) => {
   const h = host(on, { env: { ACE_AB_CONTROL_PCT: '100' } })
   const r: any = await submit($)
@@ -409,21 +425,66 @@ test('agent.spawn from a Workflow: real prompt searched and rewritten, workflow 
   expect(h.rows().find((x: any) => x.event === 'search' && x.hook === 'SubagentStart')!.workflow).toBe('wf_abc')
 })
 
-test('Workflow placeholder prompt: the first turn.start text differs → uninjected ids dropped, real task kept, logged', async ($, on) => {
+const PLACEHOLDER = 'workflow agent prompt placeholder text'
+const REAL = 'the real workflow task: port ace_domain_shift matcher to TypeScript'
+
+test('Workflow placeholder: the first turn.start text differs -> fresh pin, no uninjected credit, the real text searched at the first tool call', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }) })
-  await spawn($, 'workflow agent prompt placeholder text', { workflow: { runId: 'wf_x', agentIndex: 2 } })
+  await spawn($, PLACEHOLDER, { workflow: { runId: 'wf_x', agentIndex: 2 } })
   const pinned = h.state('agent-1')!.task_session_id
-  const real = 'the real workflow task: port ace_domain_shift matcher to TypeScript'
-  await $.turn.start({ text: real, turnId: 'w1', agentId: 'agent-1' } as any)
+  await $.turn.start({ text: REAL, turnId: 'w1', agentId: 'agent-1' } as any)
   const st = h.state('agent-1')!
   expect(st.pattern_ids).toEqual([])
   expect(st.retrieval_log_ids).toEqual({})
-  expect(st.user_prompt).toBe(real)
-  expect(st.task_session_id).toBe(pinned)
+  expect(st.retrieval_id).toBe(null)
+  expect(st.user_prompt).toBe(REAL)
+  expect(UUID4.test(st.task_session_id)).toBe(true)
+  expect(st.task_session_id).not.toBe(pinned)
   expect(h.rows().some((x: any) => x.event === 'workflow_placeholder' && x.agent_id === 'agent-1')).toBe(true)
+  const r: any = await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'agent-1' } as any)
+  expect(h.searches().length).toBe(2)
+  const late = h.searches()[1]!
+  expect(late.stdin).toBe(REAL)
+  expect(h.pin(late)).toBe(st.task_session_id)
+  expect(r.context[0].startsWith('<ace-patterns-subagent shown="8" of="8"')).toBe(true)
+  expect(h.state('agent-1')!.pattern_ids.length > 0).toBe(true)
+  expect(h.state('agent-1')!.task_session_id).toBe(st.task_session_id)
+  await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'agent-1' } as any)
+  expect(h.searches().length).toBe(2)  // once
 })
 
-test('agent.spawn resume / fork: no new search, no second pin', async ($, on) => {
+test('Workflow placeholder: a text seen as a placeholder burns no second search at agent.spawn', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await spawn($, PLACEHOLDER, { workflow: { runId: 'wf_x', agentIndex: 1 } })
+  await $.turn.start({ text: REAL, turnId: 'w1', agentId: 'agent-1' } as any)
+  await spawn($, PLACEHOLDER, { workflow: { runId: 'wf_x', agentIndex: 2 } })
+  expect(h.searches().length).toBe(1)
+  expect(h.state('agent-2')!.task_session_id).toBeDefined()
+})
+
+test('Workflow: an empty first turn.start text (the docs allow it) keeps the credit', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await spawn($, 'implement the TS renderer and make the parity harness pass', { workflow: { runId: 'wf_x', agentIndex: 1 } })
+  const before = h.state('agent-1')!
+  await $.turn.start({ text: '', turnId: 'w1', agentId: 'agent-1' } as any)
+  expect(h.state('agent-1')!.pattern_ids).toEqual(before.pattern_ids)
+  expect(h.state('agent-1')!.task_session_id).toBe(before.task_session_id)
+})
+
+test('an agent that starts before next(e) settles keeps its records and merges; a placeholder is still detected', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), early: async (id) => {
+    await $.turn.start({ text: REAL, turnId: 'w1', agentId: id } as any)
+    await $.tool.call({ tool: 'Edit', file_path: '/proj/x.py', old_string: 'a', new_string: 'b', agentId: id } as any)
+  } })
+  await spawn($, PLACEHOLDER, { workflow: { runId: 'wf_x', agentIndex: 1 } })
+  expect(h.state('agent-1')!.user_prompt).toBe(REAL)
+  expect(h.state('agent-1')!.pattern_ids).toEqual([])
+  expect(h.rows().some((x: any) => x.event === 'workflow_placeholder')).toBe(true)
+  await done($, 'ok', 'agent-1')
+  expect(h.trace(h.learns()[0]!).trajectory.map((t: any) => t.tool)).toEqual(['Edit'])
+})
+
+test('agent.spawn resume with live state / fork: no new search, no second pin', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }) })
   await spawn($, 'review the domain shift python port for parity bugs')
   const pinned = h.state('agent-1')!.task_session_id
@@ -431,6 +492,57 @@ test('agent.spawn resume / fork: no new search, no second pin', async ($, on) =>
   await spawn($, 'fork this context please now', { fork: true, subagentType: 'fork' })
   expect(h.searches().length).toBe(1)
   expect(h.state('agent-1')!.task_session_id).toBe(pinned)
+})
+
+test('an agent resumed after its learn: fresh pin, resume prompt searched at the first tool call, learned again', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await spawn($, 'review the domain shift python port for parity bugs')
+  const first = h.state('agent-1')!.task_session_id
+  await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+  await done($, 'first', 'agent-1')
+  expect(h.learns().length).toBe(1)
+  const resume = 'now also cover the workflow spawn path please'
+  const r0: any = await spawn($, resume, { resume: { agentId: 'agent-1' } })
+  expect(r0.seenPrompt).toBe(resume)  // a rewrite of a resume is not applied: the patterns go out at the first tool call
+  const st = h.state('agent-1')!
+  expect(UUID4.test(st.task_session_id)).toBe(true)
+  expect(st.task_session_id).not.toBe(first)
+  expect(st.user_prompt).toBe(resume)
+  expect(st.agent_type).toBe('general-purpose')
+  const r: any = await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'agent-1' } as any)
+  expect(h.searches().length).toBe(2)
+  expect(h.searches()[1]!.stdin).toBe(resume)
+  expect(r.context[0].includes('ace-patterns-subagent')).toBe(true)
+  await done($, 'second', 'agent-1')
+  expect(h.learns().length).toBe(2)
+  const t = h.trace(h.learns()[1]!)
+  expect(t.session_id).toBe(st.task_session_id)
+  expect(t.trajectory.map((x: any) => x.tool)).toEqual(['Bash'])
+  expect(t.playbook_used.length > 0).toBe(true)
+})
+
+test('a resume with an empty prompt: no search but still anchored', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await spawn($, '', { resume: { agentId: 'agent-7' }, description: 'continue the port work' })
+  expect(UUID4.test(h.state('agent-7')!.task_session_id)).toBe(true)
+  await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'agent-7' } as any)
+  expect(h.searches().length).toBe(0)
+  await done($, 'ok', 'agent-7')
+  expect(h.learns().length).toBe(1)
+})
+
+test('a woken teammate (turn.start only, its state reaped): the message is the new task', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await spawn($, 'review the domain shift python port for parity bugs', { isTeammate: true, name: 'scout' })
+  await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+  await done($, 'first', 'agent-1')
+  const wake = 'scout, please look at the learn trace builder next'
+  await $.turn.start({ text: wake, turnId: 'tb', agentId: 'agent-1' } as any)
+  expect(h.state('agent-1')!.user_prompt).toBe(wake)
+  await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'agent-1' } as any)
+  expect(h.searches().length).toBe(2)
+  await done($, 'second', 'agent-1')
+  expect(h.learns().length).toBe(2)
 })
 
 // ---------- tool.call Read: domain shift ----------
@@ -464,6 +576,17 @@ test('domain-shift claim: two parallel Reads in the same new domain → exactly 
     $.tool.call({ tool: 'Read', file_path: '/proj/ace-cli/b.md' } as any),
   ])
   expect(h.searches().filter(s => s.argv.includes('--top-k')).length).toBe(1)
+})
+
+test('domain-shift claim is per agent+domain: a Read of domain B while A is in flight still searches; last-domain is the newest claim', async ($, on) => {
+  const h = host(on)
+  await submit($)
+  await Promise.all([
+    $.tool.call({ tool: 'Read', file_path: '/proj/ace-cli/a.md' } as any),
+    $.tool.call({ tool: 'Read', file_path: '/proj/system-validation/b.md' } as any),
+  ])
+  expect(h.searches().filter(s => s.argv.includes('--top-k')).length).toBe(2)
+  expect(h.files.get(`${SDIR}/domain-last-main.txt`)!.trim()).toBe('system-validation-and-testing')
 })
 
 test('domain shift inside a subagent pins the SUBAGENT id and merges into its own state', async ($, on) => {
@@ -560,6 +683,26 @@ test('learn launcher carries the execution metrics rows for both outcomes (learn
   }
 })
 
+test('learn launcher: gets a 15 s spawn limit; the execution row names the real hook; a failed spawn logs learning_sent false and cleans up', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), learnExit: 1 })
+  await mainTask($, h)
+  await done($)
+  const L = h.learns()[0]!
+  expect(L.timeoutMs! >= 15_000).toBe(true)
+  const row = h.rows().find((x: any) => x.event === 'execution')!
+  expect(row.learning_sent).toBe(false)
+  expect(row.hook).toBe('Stop')
+  expect(h.files.has(`${SDIR}/learn-inflight-main.lock`)).toBe(false)
+})
+
+test('a subagent execution row says SubagentStop', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), learnExit: 1 })
+  await spawn($, 'review the domain shift python port for parity bugs')
+  await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+  await done($, 'x', 'agent-1')
+  expect(h.rows().find((x: any) => x.event === 'execution')!.hook).toBe('SubagentStop')
+})
+
 test('turn.complete main: eval request written, state reaped, rendered-main.txt kept for the compact re-inject', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }) })
   await mainTask($, h)
@@ -570,7 +713,7 @@ test('turn.complete main: eval request written, state reaped, rendered-main.txt 
   expect(h.files.get(`${SDIR}/rendered-main.txt`)).toBe(rendered)
 })
 
-test('turn.complete subagent: learn with the SUBAGENT pin, parent_task_id, own lock, default effort', async ($, on) => {
+test('turn.complete subagent: learn with the SUBAGENT pin, parent_task_id, own lock, effort from classic.SubagentStop', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }) })
   await submit($)
   const main = h.pin(h.searches()[0]!)
@@ -578,6 +721,7 @@ test('turn.complete subagent: learn with the SUBAGENT pin, parent_task_id, own l
   const sub = h.state('agent-1')!.task_session_id
   await $.turn.start({ text: 'x', turnId: 'ta', agentId: 'agent-1' } as any)
   await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+  await ($ as any).classic.SubagentStop({ session_id: SID, agent_id: 'agent-1', effort: { level: 'high' } })
   await done($, 'sub done', 'agent-1')
   const L = h.learns()[0]!
   const t = h.trace(L)
@@ -586,8 +730,8 @@ test('turn.complete subagent: learn with the SUBAGENT pin, parent_task_id, own l
   expect(t.agent_id).toBe('agent-1')
   expect(t.agent_type).toBe('general-purpose')
   expect(t.result.success).toBe(true)
-  expect(t.effort_level).toBe('normal')
-  expect(t.effort_weight).toBe(1)
+  expect(t.effort_level).toBe('high')
+  expect(t.effort_weight).toBe(1.5)
   expect(L.files.has(`${SDIR}/learn-inflight-agent-1.lock`)).toBe(true)
 })
 
@@ -596,6 +740,28 @@ test('an aborted subagent never learns (no outcome to credit): state reaped', as
   await spawn($, 'review the domain shift python port for parity bugs')
   await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
   await $.turn.complete({ answer: 'x', durationMs: 1, isAborted: true, turnId: 'ta', reason: 'aborted', agentId: 'agent-1' } as any)
+  expect(h.learns().length).toBe(0)
+  expect(h.state('agent-1')).toBeUndefined()
+})
+
+for (const reason of ['error', 'refusal', 'aborted']) {
+  test(`a main turn ended by ${reason} never learns: state reaped, the render kept, logged`, async ($, on) => {
+    const h = host(on, { search: () => ({ stdout: S8 }) })
+    await mainTask($, h)
+    const rendered = h.state()!.rendered_context
+    await $.turn.complete({ answer: '', durationMs: 1, isAborted: reason === 'aborted', turnId: 't1', reason } as any)
+    expect(h.learns().length).toBe(0)
+    expect(h.state()).toBeUndefined()
+    expect(h.files.get(`${SDIR}/rendered-main.txt`)).toBe(rendered)
+    expect(h.rows().some((x: any) => x.event === 'learn_skipped' && x.reason === `turn_${reason}`)).toBe(true)
+  })
+}
+
+test('a subagent turn ended by an API error never learns', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await spawn($, 'review the domain shift python port for parity bugs')
+  await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+  await $.turn.complete({ answer: '', durationMs: 1, isAborted: false, turnId: 'ta', reason: 'error', agentId: 'agent-1' } as any)
   expect(h.learns().length).toBe(0)
   expect(h.state('agent-1')).toBeUndefined()
 })
@@ -625,6 +791,177 @@ test('task state is read from disk: a learn after a module reload uses the persi
   const a = h.learnArgv(h.learns()[0]!)
   expect(h.flag(a, '--retrieval-id')).toBe(JSON.parse(seeded).retrieval_id)
   expect(h.trace(h.learns()[0]!).session_id).toBe(TSID)
+})
+
+// A REAL reload: every test registers the module anew, so module memory dies between these two tests.
+let afterReload: Record<string, string> = {}
+test('reload between tool.call and turn.complete, part 1: everything needed is on disk', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  await spawn($, 'review the domain shift python port for parity bugs')
+  await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+  afterReload = Object.fromEntries(h.files)
+})
+
+test('reload between tool.call and turn.complete, part 2: main and subagent still learn their full trajectory', async ($, on) => {
+  const h = host(on, { files: afterReload })
+  await $.tool.call({ tool: 'Bash', command: 'second half', agentId: 'agent-1' } as any)
+  await done($, 'sub', 'agent-1')
+  await done($, 'main')  // turn t1 was never heard in this load
+  expect(h.learns().length).toBe(2)
+  const [sub, main] = h.learns().map(l => h.trace(l))
+  expect(sub!.trajectory.map((t: any) => t.tool)).toEqual(['Write', 'Bash'])
+  expect(main!.trajectory.map((t: any) => t.tool)).toEqual(['Edit', 'Bash'])
+  expect(main!.playbook_used).toEqual(JSON.parse(G.state_main_8).pattern_ids)
+})
+
+test('tool records are removed with the task', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  expect([...h.files.keys()].some(k => k.includes('mod-tools-main'))).toBe(true)
+  await done($)
+  expect([...h.files.keys()].some(k => k.includes('mod-tools-main'))).toBe(false)
+})
+
+// ---------- malformed input never wedges the hooks worker ----------
+
+const MALFORMED = ['{"a":1,}', '{"a', '[{"x":"tru', '{"a":1 "b":2}', '[1 2]', '{"a" 1}', '{a:1}', '{"a":"b\\', '[', '{', '"', '{"a":', '[1,', '[1,]']
+test('pyLoads rejects malformed JSON, and never spins', () => {
+  for (const bad of MALFORMED) {
+    let threw = false
+    try { pyLoads(bad) } catch { threw = true }
+    expect([bad, threw]).toEqual([bad, true])
+  }
+  expect(pyLoads('{"a": [1, {"b": "c\\"d"}], "e": null}').a[1].b).toBe('c"d')
+})
+
+test('a project settings file with a trailing comma: ACE stays out, as Python get_context returns None', async ($, on) => {
+  const h = host(on, { files: { [`${CWD}/.claude/settings.json`]: '{"projectId": "prj_t",}' } })
+  await $.session.start({ cwd: CWD, surface: null, isInteractive: false } as any)
+  await submit($)
+  expect(h.searches().length).toBe(0)
+})
+
+test('cut-off ace-cli stdout: search fails cleanly, the task stays anchored', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: '{"similar_patterns": [{"id": "abc' }) })
+  const r: any = await submit($)
+  expect(r.context === undefined || r.context.length === 0).toBe(true)
+  expect(h.rows().find((x: any) => x.event === 'error')!.error).toBe('json_parse_failed')
+  expect(h.state()!.task_session_id).toBeDefined()
+})
+
+// ---------- the marker outlives long turns ----------
+
+test('mod-active is refreshed (throttled to 60 s) by tool.call, agent.spawn, turn.start and the Stop events', async ($, on) => {
+  const h = host(on)
+  const M = `${SDIR}/mod-active`
+  await $.session.start({ cwd: CWD, surface: null, isInteractive: false } as any)
+  const step = async (act: () => Promise<unknown>) => {
+    const before = h.mtime.get(M)!
+    h.advance(10_000); await act()
+    expect(h.mtime.get(M)).toBe(before)  // inside the throttle window
+    h.advance(3 * MIN); await act()
+    expect(h.mtime.get(M)! > before).toBe(true)
+  }
+  await step(() => $.tool.call({ tool: 'Bash', command: 'ls' } as any))
+  await step(() => $.turn.start({ text: '', turnId: 'c1' } as any))
+  await step(() => spawn($, 'fork please', { fork: true }))
+  await step(() => ($ as any).classic.Stop({ session_id: SID }))
+  await step(() => ($ as any).classic.SubagentStop({ session_id: SID, agent_id: 'a' }))
+})
+
+// ---------- prompts into a running turn ----------
+
+const SECOND = 'and also make the second change to the trace builder please'
+
+test('a prompt typed mid-turn leaves the running task alone: it still learns with its anchor and all its tools', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  const before = h.state()!
+  const r: any = await $.prompt.submit({ text: SECOND, wait: false, origin: { kind: 'composer' }, turnId: 't1' } as any)
+  expect(r.context.length).toBe(1)  // the new prompt still gets its patterns
+  expect(h.state()).toEqual(before)
+  await $.tool.call({ tool: 'Bash', command: 'after the prompt' } as any)
+  await done($)
+  expect(h.learns().length).toBe(1)
+  const t = h.trace(h.learns()[0]!)
+  expect(t.task).toBe('User request: ' + HUMAN)
+  expect(t.session_id).toBe(before.task_session_id)
+  expect(t.trajectory.length).toBe(3)
+})
+
+test('a mid-turn prompt that then runs as its own turn becomes its own task, with its own pin and credit', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  await $.prompt.submit({ text: SECOND, wait: true, origin: { kind: 'composer' }, turnId: 't1' } as any)
+  const pin2 = h.pin(h.searches()[1]!)!
+  await done($)
+  await $.turn.start({ text: SECOND, turnId: 't2' } as any)
+  expect(h.state()!.task_session_id).toBe(pin2)
+  await $.tool.call({ tool: 'Edit', file_path: '/proj/z.py', old_string: 'a', new_string: 'b' } as any)
+  await $.turn.complete({ answer: 'two', durationMs: 1, isAborted: false, turnId: 't2', reason: 'answer' } as any)
+  expect(h.learns().length).toBe(2)
+  const t = h.trace(h.learns()[1]!)
+  expect(t.session_id).toBe(pin2)
+  expect(t.task).toBe('User request: ' + SECOND)
+  expect(t.trajectory.map((x: any) => x.tool)).toEqual(['Edit'])
+})
+
+test('a machine prompt delivered into a running turn does not disturb the human prompt waiting for its turn', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await submit($)
+  await $.prompt.submit({ text: '<task-notification>done</task-notification>', wait: false, origin: { kind: 'task-notification' }, turnId: 't0' } as any)
+  await $.turn.start({ text: HUMAN, turnId: 't1' } as any)
+  await $.tool.call({ tool: 'Edit', file_path: '/proj/x.py', old_string: 'a', new_string: 'b' } as any)
+  await done($)
+  expect(h.learns().length).toBe(1)
+})
+
+// ---------- slash commands ----------
+
+const cmd = ($: any, name: string, args: string) =>
+  $.prompt.submit({ text: `/${name} ${args}`.trim(), wait: false, origin: { kind: 'composer' }, command: { name, args } } as any)
+
+test('a slash command with arguments gets search, context and learn; the arguments are the query', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  const args = 'build the login page with oauth support'
+  const r: any = await cmd($, 'feature-dev', args)
+  expect(h.searches().length).toBe(1)
+  expect(h.searches()[0]!.stdin).toBe(args)
+  expect(r.context[0]).toBe(G.full_main_8)
+  await $.turn.start({ text: 'skill body', turnId: 't1' } as any)
+  await $.tool.call({ tool: 'Edit', file_path: '/proj/x.py', old_string: 'a', new_string: 'b' } as any)
+  await done($)
+  expect(h.learns().length).toBe(1)
+  expect(h.trace(h.learns()[0]!).task).toBe(`User request: /feature-dev ${args}`)
+})
+
+test('ACE commands, commands without arguments and session built-ins stay out', async ($, on) => {
+  const h = host(on)
+  await cmd($, 'ace:ace-learn', 'capture what we learned about the render')
+  await cmd($, 'ace-status', 'for this project and that one')
+  await cmd($, 'feature-dev', '')
+  await cmd($, 'compact', 'focus on the mod work and the open review')
+  await cmd($, 'model', 'claude-sonnet-with-a-long-argument')
+  expect(h.searches().length).toBe(0)
+})
+
+// ---------- trivial-task filter ----------
+
+test('a task that names a path under plugins/ or /ace- is real work; the commands themselves stay trivial', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  const work = async (text: string, turnId: string) => {
+    await submit($, text)
+    await $.turn.start({ text, turnId } as any)
+    await $.tool.call({ tool: 'Edit', file_path: '/proj/x.py', old_string: 'a', new_string: 'b' } as any)
+    await $.turn.complete({ answer: 'x', durationMs: 1, isAborted: false, turnId, reason: 'answer' } as any)
+  }
+  await work('fix the marker in plugins/ace/mod/register.ts', 'a')
+  await work('rename the folder /opt/ace-tools/bin in the docs', 'b')
+  expect(h.learns().length).toBe(2)
+  await work('run /ace-status for this project', 'c')
+  await work('please run /plugin install now', 'd')
+  expect(h.learns().length).toBe(2)
 })
 
 // ---------- session.end ----------
