@@ -53,7 +53,7 @@ for m in mod-active mod-classic; do test -f "$S/$m" && python3 -c 'import os,sys
 **Report**:
 - PASS: Claude Code >= 2.1.311, python_path present, ace-hook-errors.log empty or absent
 - WARN: Claude Code older than 2.1.311, or python_path missing (start a new session), or errors in ace-hook-errors.log
-- INFO: chain = mod (mod-active younger than 600 s), Python (absent or older), or mod + Python learn (mod-active fresh, mod-classic absent or older: the managed-settings guard filters the mod's classic hooks)
+- INFO: chain = mod (mod-active younger than 15 s for UserPromptSubmit/Agent stash/SubagentStart/Stop/SubagentStop, 120 s for the hooks after a tool: domain shift, tool accumulation; `plugin_data_dir.MOD_HANDOFF_S` / `MOD_AFTER_TOOL_S`), Python (absent or older), or mod + Python learn (mod-active fresh, mod-classic absent or older: the managed-settings guard filters the mod's classic hooks)
 
 ---
 
@@ -360,14 +360,14 @@ test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "hooks.json: EXISTS"
 **Expected Hooks** (v8 round 2: PostToolBatch + PreToolUse(Agent) included incl. the async row: orphan sweep + one-time sqlite rebuild):
 1. `SessionStart` → `ace_install_cli.sh` (startup|clear|resume; plus the async row, flag `--update-check`)
 2. `SessionStart` (compact) → `ace_sessionstart_compact.sh`
-3. `UserPromptSubmit` → `ace_before_task_wrapper.sh`
+3. `UserPromptSubmit` (sync) → `ace_before_task_wrapper.sh`
 4. `PostToolBatch` (async, one event per parallel tool batch) → accumulator script (`ace_posttooluse_wrapper.sh --batch`)
 4b. `PreToolUse` (matcher `Agent` only, sync) → `ace_pretooluse_agent_stash.sh`: prompt stash into `agent-prompts/` for SubagentStart (the only PreToolUse hook in v8)
 5. `PostToolUse` (Read|Glob|Grep) → `ace_posttooluse_domain_inject.sh`
-6. `PostToolUseFailure` (matcher `*`, async) → `ace_posttoolusefailure_wrapper.sh`
+6. `PostToolUseFailure` (async, matcher `*`) → `ace_posttoolusefailure_wrapper.sh`
 7. `SubagentStart` → `ace_subagent_start_wrapper.sh`
-8. `Stop` (async) → `ace_stop_wrapper.sh`
-9. `SubagentStop` (async) → `ace_subagent_stop_wrapper.sh`
+8. `Stop` (sync, timeout 15; only dispatches a detached learn) → `ace_stop_wrapper.sh`
+9. `SubagentStop` (sync, timeout 15; only dispatches a detached learn) → `ace_subagent_stop_wrapper.sh`
 10. `PermissionDenied` (async) → `ace_permission_denied_wrapper.sh`
 11. `SessionEnd` → `ace_sessionend_wrapper.sh`
 
