@@ -320,12 +320,16 @@ def main():
         if _cwd and os.path.isdir(_cwd):
             os.chdir(_cwd)
 
+        # P-26: session OR project disabled.flag stops everything BEFORE any state/log is written.
+        try:
+            _ctx = get_context()
+        except Exception:
+            _ctx = None
+        if _ctx and plugin_data_dir.is_disabled(_ctx['project'], event.get('session_id') or ''):
+            sys.exit(0)
+
         _reason = _skip_reason(user_prompt)
         if _reason == 'machine_prompt' or _reason == 'prompt_too_short':
-            try:
-                _ctx = get_context()
-            except Exception:
-                _ctx = None
             _log_skipped(event, _reason, _ctx)
             sys.exit(0)
 
@@ -341,7 +345,7 @@ def main():
             sys.exit(0)
 
         # Get project context from .claude/settings.json
-        context = get_context()
+        context = _ctx or get_context()
         if not context:
             print(json.dumps({"systemMessage": "⚠️ [ACE] No project context found - skipping search"}))
             sys.exit(0)

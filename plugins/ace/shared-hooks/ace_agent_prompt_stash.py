@@ -40,8 +40,10 @@ def main() -> None:
         # ponytail: shrink the prompt by halves until the JSON fits 8 KB (multi-byte safe).
         while len(json.dumps(data).encode('utf-8')) > _MAX and data["prompt"]:
             data["prompt"] = data["prompt"][:len(data["prompt"]) * 3 // 4 - 1]
-        plugin_data_dir.agent_prompt_file(ctx['project'], sid, event['prompt_id'], stype).write_text(
-            json.dumps(data))
+        f = plugin_data_dir.agent_prompt_file(ctx['project'], sid, event['prompt_id'], stype)
+        if f.exists():  # sibling agents of one type in one prompt: key is ambiguous -> reader falls back
+            data = {"ambiguous": True, "subagent_type": stype}
+        f.write_text(json.dumps(data))
     except Exception as e:
         try:
             from ace_relevance_logger import log_error

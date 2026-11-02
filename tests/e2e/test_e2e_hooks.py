@@ -41,8 +41,9 @@ EXPECTED_ROUTES = {
     "SessionStart_compact": [("ace_sessionstart_compact.sh", False)],
     "UserPromptSubmit_human": [("ace_before_task_wrapper.sh", False)],
     "UserPromptSubmit_task_notification": [("ace_before_task_wrapper.sh", False)],
-    "PostToolUse_Write": [],  # accumulator moved to PostToolBatch (round 2, DESIGN §9 G4)
-    "PostToolUse_Read": [("ace_posttooluse_domain_inject.sh", False)],
+    # TEMPORARY until WP-H moves the accumulator to PostToolBatch (DESIGN §9 G4): `*` row stays
+    "PostToolUse_Write": [("ace_posttooluse_wrapper.sh", True)],
+    "PostToolUse_Read": [("ace_posttooluse_domain_inject.sh", False), ("ace_posttooluse_wrapper.sh", True)],
     "PostToolUseFailure_Bash": [("ace_posttoolusefailure_wrapper.sh", True)],
     "SubagentStart": [("ace_subagent_start_wrapper.sh", False)],
     "SubagentStop": [("ace_subagent_stop_wrapper.sh", True)],

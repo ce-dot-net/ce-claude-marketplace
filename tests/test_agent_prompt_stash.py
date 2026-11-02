@@ -175,3 +175,12 @@ def test_subagent_start_falls_back_to_transcript_without_stash(env):
     """Regression guard: no stash -> bounded 2 MB transcript scan, as before."""
     _start(env)
     assert _queries(env) == [TRANSCRIPT_PROMPT]
+
+
+def test_two_same_type_siblings_fall_back_to_transcript(env):
+    """Parallel agents of one type in one prompt share a key: never answer with the
+    wrong sibling's prompt -> mark ambiguous, reader falls back to the transcript scan."""
+    _pre(env, prompt="first sibling prompt")
+    _pre(env, prompt="second sibling prompt")
+    _start(env)
+    assert _queries(env) == [TRANSCRIPT_PROMPT]
