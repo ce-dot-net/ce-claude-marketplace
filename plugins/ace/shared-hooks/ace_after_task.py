@@ -76,7 +76,7 @@ def is_trivial_task(task_description: str) -> bool:
         # ACE commands - CRITICAL: These were being learned as garbage!
         r'<command-message>ace[:\-]',
         r'ace:ace-',
-        r'/ace-',
+        r'(?:^|\s)/ace-[\w:-]*(?:\s|$)',  # the command, not a path such as /opt/ace-tools
         r'ace-status',
         r'ace-patterns',
         r'ace-search',
@@ -109,7 +109,7 @@ def is_trivial_task(task_description: str) -> bool:
         # System messages
         r'caveat:.*messages below were generated',
         r'^plugin\s*$',
-        r'/plugin',
+        r'(?:^|\s)/plugin(?:\s|$)',  # the command, not a path such as plugins/ace/...
     ]
 
     task_lower = task_description.lower()
