@@ -66,6 +66,7 @@ class ACERelevanceLogger:
     def _write_log(self, entry: Dict[str, Any]) -> None:
         """Write a log entry to the JSONL file with rotation."""
         try:
+            self.log_dir.mkdir(parents=True, exist_ok=True)  # relative dir: cwd may change after init
             self._rotate_if_needed()
             with open(self.log_path, 'a') as f:
                 f.write(json.dumps(entry, default=str) + '\n')
@@ -334,6 +335,11 @@ def get_relevance_logger() -> ACERelevanceLogger:
     if _logger is None:
         _logger = ACERelevanceLogger()
     return _logger
+
+
+def log_event(event, **fields) -> None:
+    """Generic row (keymap / degenerate skip / playbook_load): rotation + UTC timestamp via _write_log."""
+    get_relevance_logger()._write_log({"timestamp": _utc_now(), "event": event, **fields})
 
 
 def log_search_skipped(hook, reason, session_id=None, project_id=None) -> None:
