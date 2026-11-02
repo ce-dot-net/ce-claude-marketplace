@@ -20,6 +20,8 @@ from pathlib import Path
 
 import pytest
 
+from plugin_copy import hermetic_root
+
 REPO = Path(__file__).resolve().parent.parent
 PLUGIN = REPO / "plugins" / "ace"
 SCRIPTS = PLUGIN / "scripts"
@@ -100,7 +102,7 @@ class Box:
         env.update(
             HOME=str(self.home),
             CLAUDE_PLUGIN_DATA=str(self.pd),
-            CLAUDE_PLUGIN_ROOT=str(PLUGIN),
+            CLAUDE_PLUGIN_ROOT=str(hermetic_root()),
             XDG_CONFIG_HOME=str(self.xdg),
             PATH=os.pathsep.join([str(self.bin), os.path.dirname(sys.executable),
                                   os.environ.get("PATH", "")]),

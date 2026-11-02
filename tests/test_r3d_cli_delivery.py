@@ -72,8 +72,9 @@ def test_pin_is_at_least_the_flag_complete_floor():
 
 
 def test_node_modules_is_git_ignored():
-    p = subprocess.run(["git", "check-ignore", "plugins/ace/node_modules/x"], cwd=str(REPO), capture_output=True)
-    assert p.returncode == 0
+    # read the file, not `git check-ignore`: that exits 128 in a `git archive` export (no .git) - the §18 Linux gate
+    lines = [l.strip() for l in (REPO / ".gitignore").read_text().splitlines()]
+    assert any(l.rstrip("/") in ("node_modules", "**/node_modules", "plugins/ace/node_modules") for l in lines)
 
 
 @pytest.mark.parametrize("rel", ["ace-cli-version.json", "shared-hooks/ace_cli_update.py"])
@@ -280,20 +281,36 @@ def test_rebuild_runs_in_plugin_root_and_prints_nothing(tmp_path):
     assert all(c["argv"][:1] == ["rebuild"] for c in b.npm_calls())
 
 
-def test_rebuild_verifies_the_binary_with_node_require(tmp_path):
+def test_rebuild_verifies_the_binary_by_constructing_a_database(tmp_path):
+    """better-sqlite3 loads the addon lazily: `require` exits 0 with no binary (measured). The -e code must
+    construct a Database; fake node cannot tell, so assert the code itself."""
     b = Box3d(tmp_path, local=True)
     b.session_start_async()
-    assert any("better-sqlite3" in " ".join(c["argv"]) for c in b.node_evals()), b.node_evals()
+    codes = [c["argv"][1] for c in b.node_evals()]
+    assert codes and all("new (require('better-sqlite3'))(':memory:')" in c for c in codes), codes
 
 
-def test_rebuild_marker_means_once_per_version(tmp_path):
+def test_binary_that_loads_is_not_rebuilt_again(tmp_path):
     b = Box3d(tmp_path, local=True)
     b.session_start_async(sid="a")
     b.session_start_async(sid="b")
     assert len(_rebuilds(b)) == 1
+    assert len(b.node_evals()) == 3, "probe, verify after the rebuild, probe again: one cheap node spawn per startup"
 
 
-def test_no_marker_when_require_fails(tmp_path):
+def test_binary_is_probed_on_every_startup_not_trusted_from_a_marker(tmp_path):
+    """Node switch (nvm/volta/brew) or a reinstall at the same plugin version: the old marker said 'done'."""
+    b = Box3d(tmp_path, local=True)
+    b.session_start_async(sid="a")
+    b.session_start_async(sid="b", FAKE_NODE_REQUIRE_RC=1)  # new Node ABI: the binary no longer loads
+    assert len(_rebuilds(b)) == 2
+    (b.tmp / "sqlite-built").unlink()  # reinstall wiped the build dir
+    b.session_start_async(sid="c")
+    assert len(_rebuilds(b)) == 3
+    assert not list(b.data.glob("sqlite-rebuilt*")), "no version marker any more"
+
+
+def test_no_rebuild_forever_marker_when_require_fails(tmp_path):
     b = Box3d(tmp_path, local=True)
     b.session_start_async(sid="a", FAKE_NODE_REQUIRE_RC=1)
     b.session_start_async(sid="b", FAKE_NODE_REQUIRE_RC=1)
@@ -308,15 +325,24 @@ def test_no_marker_when_rebuild_fails(tmp_path):
     assert len(_rebuilds(b)) == 2
 
 
-def test_rebuild_reruns_for_a_new_plugin_version(tmp_path):
+def test_rebuild_overrides_ignore_scripts_from_env_or_npmrc(tmp_path):
+    """`npm_config_ignore_scripts=true` makes `npm rebuild` exit 0 and build nothing (measured)."""
     b = Box3d(tmp_path, local=True)
-    b.session_start_async(sid="a")
-    mf = b.root / ".claude-plugin" / "plugin.json"
-    d = json.loads(mf.read_text())
-    d["version"] = "99.0.0"
-    mf.write_text(json.dumps(d))
-    b.session_start_async(sid="b")
-    assert len(_rebuilds(b)) == 2
+    b.session_start_async(npm_config_ignore_scripts="true")
+    (rb,) = _rebuilds(b)
+    assert rb["ignore_scripts"] == "false"
+
+
+def test_successful_rebuild_clears_the_pin_backoff(tmp_path):
+    """The first prompt can race the async rebuild and start the 30 min pin backoff; the rebuild ends it."""
+    b = Box3d(tmp_path, local=True)
+    bo = b.data / "pin-backoff"
+    bo.write_text("")
+    b.session_start_async(sid="a", FAKE_NODE_REQUIRE_RC=1)
+    assert bo.exists(), "a rebuild that still does not load keeps the backoff"
+    (b.tmp / "sqlite-built").unlink()
+    b.session_start_async(sid="b", FAKE_NODE_REQUIRE_RC=None)
+    assert not bo.exists()
 
 
 def test_rebuild_skipped_under_disable_nonessential_traffic(tmp_path):
@@ -430,3 +456,22 @@ def test_command_allows_the_wrapper(path):
     """`Bash(ace-cli:*)` does not match a path: without this every run prompts in default mode."""
     head = path.read_text().split("---", 2)[1]
     assert "scripts/ace-cli" in head, path.name
+
+
+# ── the plugin root is where the code lives, not what the shared env file says ─────────────────
+
+def test_foreign_plugin_root_does_not_hide_the_local_cli_or_the_floor(tmp_path):
+    """§16 P5: other plugins export THEIR CLAUDE_PLUGIN_ROOT into the shared env file."""
+    b = Box3d(tmp_path, local=True, global_version="4.2.2")
+    foreign = tmp_path / "other-plugin"
+    foreign.mkdir()
+    assert b.resolve(CLAUDE_PLUGIN_ROOT=foreign)[1] == "plugin-local"
+    assert b.py("import ace_cli; print(json.dumps(ace_cli._pin()))", CLAUDE_PLUGIN_ROOT=foreign) == b.pin
+    p = subprocess.run([BASH, str(b.root / "scripts" / "ace-cli"), "--version"], capture_output=True, text=True,
+                       cwd=str(b.proj), env=b.env(CLAUDE_PLUGIN_ROOT=foreign), timeout=30)
+    assert p.returncode == 0 and [c["source"] for c in b.cli_calls()] == ["plugin-local"], p.stderr
+
+
+def test_no_plugin_root_env_still_finds_the_local_cli(tmp_path):
+    b = Box3d(tmp_path, local=True)
+    assert b.resolve(CLAUDE_PLUGIN_ROOT=None)[1] == "plugin-local"

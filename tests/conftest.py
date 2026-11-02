@@ -124,6 +124,10 @@ def _hermetic_test(request, monkeypatch, tmp_path):
     # leak between tests (a cache hit would skip the spawn a later test counts).
     # Kept under the per-run ace-tests-* root so the sandbox guard still holds.
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", tempfile.mkdtemp(prefix="ace-pd-", dir=str(_state["root"] / "ace-plugin-data")))
+    from plugin_copy import REPO_PLUGIN, hermetic_root
+    if (REPO_PLUGIN / "node_modules").exists() and "CLAUDE_PLUGIN_ROOT" not in os.environ:
+        # in-process tests: the hooks' own location must not find a developer's real node_modules
+        monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(hermetic_root()))
     if request.node.get_closest_marker("real_ace_cli"):
         fake = str(_state["fake_bin"])
         monkeypatch.setenv(

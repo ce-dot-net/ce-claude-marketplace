@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""ACE SessionStart (v8, DESIGN §3/§23): slim presence check. Sync row (startup|clear): no whoami, no
+"""ACE SessionStart (v8, DESIGN §3/§23): slim presence check. Sync row (startup|clear|resume): no whoami, no
 network, no npm. The CLI is the one pinned in package.json and installed by Claude Code itself
 (plugin-local); a global ace-cli >= the pin is the fallback; neither = one message naming
 /ace:ace-install-cli (never disabled.flag). The async row (flag kept: `--update-check`) runs the
-orphan sweep and the once-per-plugin-version `npm rebuild better-sqlite3`.
+orphan sweep and the `npm rebuild better-sqlite3` when the binary does not load.
 
 Caches under CLAUDE_PLUGIN_DATA: python_path (read by every shim) and cli_version.json
 {path, mtime, version} of a GLOBAL ace-cli so `--version` (~1.2 s CPU) runs only when it changes.
@@ -96,31 +96,39 @@ def sweep_orphans(current_sid):
         pass
 
 
+# better-sqlite3 loads its native addon lazily (in the constructor), so `require` alone proves nothing.
+# First line out = the Node ABI, so the check also names a binary built for another Node.
+_SQLITE_PROBE = "console.log(process.versions.modules);new (require('better-sqlite3'))(':memory:').close()"
+
+
+def _sqlite_loads(root):
+    try:
+        return subprocess.run(["node", "-e", _SQLITE_PROBE], cwd=root, capture_output=True, timeout=30).returncode == 0
+    except Exception:
+        return False
+
+
 def rebuild_sqlite():
-    """Async, once per plugin version: CC installs deps with --ignore-scripts, so better-sqlite3 has no binary
-    and ace-cli runs RAM-only (no pins, empty graph cache) until it is rebuilt (0.5 s, prebuilt). The marker is
-    written only after node can load the binary. Best-effort, silent."""
+    """Async, every startup: CC installs deps with --ignore-scripts, so better-sqlite3 has no binary and
+    ace-cli runs RAM-only (no pins, empty graph cache) until it is rebuilt (0.5 s, prebuilt). The only
+    state is the binary itself: if it loads (new Database) in the CURRENT node, nothing to do; otherwise
+    rebuild (scripts forced on, user .npmrc/env may say ignore-scripts) and verify the same way. That also
+    covers a Node switch (nvm/volta) and a reinstall at the same plugin version. Best-effort, silent."""
     root = os.environ.get("CLAUDE_PLUGIN_ROOT")
     if os.environ.get("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC") or not root or not (Path(root) / "node_modules" / "better-sqlite3").is_dir():
         return
-    from plugin_data_dir import data_root
     try:
-        ver = json.loads((Path(root) / ".claude-plugin" / "plugin.json").read_text()).get("version") or "0"
-    except Exception:
-        ver = "0"
-    marker = data_root() / "sqlite-rebuilt"
-    try:
-        if marker.read_text().strip() == ver:
+        if _sqlite_loads(root):
             return
-    except OSError:
-        pass
-    try:
-        if subprocess.run(["npm", "rebuild", "better-sqlite3"], cwd=root, capture_output=True, timeout=120).returncode:
+        env = dict(os.environ, npm_config_ignore_scripts="false")
+        if subprocess.run(["npm", "rebuild", "better-sqlite3"], cwd=root, capture_output=True, timeout=120, env=env).returncode:
             return
-        if subprocess.run(["node", "-e", "require('better-sqlite3')"], cwd=root, capture_output=True, timeout=30).returncode:
-            return
-        marker.parent.mkdir(parents=True, exist_ok=True)
-        _atomic_write(marker, ver)
+        if _sqlite_loads(root):  # the early pin failure's backoff (first prompt raced this rebuild) is stale now
+            from plugin_data_dir import pin_backoff_file
+            try:
+                pin_backoff_file().unlink()
+            except OSError:
+                pass
     except Exception:
         pass
 

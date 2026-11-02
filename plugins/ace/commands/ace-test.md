@@ -187,7 +187,7 @@ echo "  - Capture learning: /ace:ace-learn"
    Error: Request timeout
    → Network issues or server overloaded
    → Action: Retry with exponential backoff
-   → Fallback: Confirm auth status with: ace-cli whoami --json
+   → Fallback: Confirm auth status with: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json
    ```
 
 3. **Authentication Failed**
@@ -366,13 +366,13 @@ Status: ❌ NOT FOUND
 The ACE plugin is not responding as expected. Possible causes:
 1. Plugin not installed — check: ls ~/.claude/plugins/cache/ce-dot-net-marketplace/ace/
 2. ace-cli 4.x not installed — install: /ace:ace-install-cli
-3. Not authenticated — run: ace-cli login (device-code auth)
+3. Not authenticated — run: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli login (device-code auth)
 4. ACE_PROJECT_ID not configured — run: /ace:ace-configure
 
 Troubleshooting Steps:
 1. Check plugin installation: ls ~/.claude/plugins/cache/ce-dot-net-marketplace/ace/
-2. Verify CLI: ace-cli --version  (must be 4.x+)
-3. Verify auth: ace-cli whoami --json
+2. Verify CLI: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version  (must be 4.x+)
+3. Verify auth: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json
 4. Run full diagnostics: /ace:ace-doctor
 ```
 

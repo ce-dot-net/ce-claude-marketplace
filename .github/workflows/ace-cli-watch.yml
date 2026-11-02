@@ -1,9 +1,16 @@
 name: ace-cli-watch
 
 # Plugin and ace-cli go hand in hand (DESIGN section 23): every plugin version runs the exact CLI it was tested with.
-# This job notices a newer @ace-sdk/cli, bumps the pin in a branch, regenerates the lock, runs the suite and the
+# This workflow notices a newer @ace-sdk/cli, bumps the pin on a branch, regenerates the lock, runs the suite and the
 # contract test, and opens ONE pull request. A human reads the result, merges and releases. Nothing is merged here.
-# The default token is enough; pull requests it opens do not trigger other workflows, so the tests run in this job.
+#
+# Two jobs, so freshly published npm code never runs next to a write token:
+#   test = contents: read, no persisted credentials. Bumps, installs, runs the tests, uploads a patch + results.
+#   pr   = the only job with write permissions. Applies the patch and opens the PR. Executes no package code.
+#
+# ONE-TIME REPO SETTING (owner): Settings > Actions > General > Workflow permissions > "Allow GitHub Actions to
+# create and approve pull requests". Without it `gh pr create` is refused; the job then fails with an error that says
+# so, and the pushed branch ace-cli-watch/<version> is ready for a human to open the PR from.
 
 on:
   schedule:
@@ -11,16 +18,23 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
 
 jobs:
-  watch:
+  test:
     runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      newer: ${{ steps.ver.outputs.newer }}
+      latest: ${{ steps.ver.outputs.latest }}
+      pin: ${{ steps.ver.outputs.pin }}
+      existing: ${{ steps.open.outputs.existing }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
@@ -32,7 +46,7 @@ jobs:
         run: |
           LATEST=$(npm view @ace-sdk/cli version)
           PIN=$(node -p "require('./plugins/ace/package.json').dependencies['@ace-sdk/cli']")
-          NEWER=$(node -e "const a=process.argv[1].split('.').map(Number),b=process.argv[2].split('.').map(Number);console.log(a[0]-b[0]||a[1]-b[1]||a[2]-b[2]>0?'yes':'no')" "$LATEST" "$PIN")
+          NEWER=$(python3 .github/scripts/ace_cli_newer.py "$LATEST" "$PIN")
           echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
           echo "pin=$PIN" >> "$GITHUB_OUTPUT"
           echo "newer=$NEWER" >> "$GITHUB_OUTPUT"
@@ -40,15 +54,16 @@ jobs:
       - name: One PR per version
         id: open
         if: steps.ver.outputs.newer == 'yes'
+        env:
+          GH_TOKEN: ${{ github.token }}  # read-only here, and only this step sees it (no package code runs in it)
         run: |
           N=$(gh pr list --head "ace-cli-watch/${{ steps.ver.outputs.latest }}" --state all --json number --jq length)
           echo "existing=$N" >> "$GITHUB_OUTPUT"
       - name: Bump the pin, the manifests and the lock
         if: steps.ver.outputs.newer == 'yes' && steps.open.outputs.existing == '0'
         run: |
-          git checkout -b "ace-cli-watch/${{ steps.ver.outputs.latest }}"
           python3 - <<'PY'
-          import json, re
+          import json
           old, new = "${{ steps.ver.outputs.pin }}", "${{ steps.ver.outputs.latest }}"
           p = "plugins/ace/package.json"
           d = json.load(open(p))
@@ -58,42 +73,100 @@ jobs:
               t = open(m).read()
               open(m, "w").write(t.replace("ace-cli >= " + old, "ace-cli >= " + new))
           PY
-          cd plugins/ace
-          npm install --package-lock-only --ignore-scripts
+          (cd plugins/ace && npm install --package-lock-only --ignore-scripts)
+          # the patch is cut NOW: nothing the tests below do can end up in the pull request
+          mkdir -p "$RUNNER_TEMP/out"
+          git diff -- plugins/ace/package.json plugins/ace/package-lock.json plugins/ace/.claude-plugin .claude-plugin/marketplace.json > "$RUNNER_TEMP/out/bump.patch"
       - name: Suite and contract test against the new pin
         id: tests
         if: steps.ver.outputs.newer == 'yes' && steps.open.outputs.existing == '0'
         continue-on-error: true
+        shell: bash  # = bash -eo pipefail: a failing pytest must fail the step through `| tee`
         run: |
           python -m pip install --upgrade pip pytest
           RC=0
-          # hermetic suite first: with plugins/ace/node_modules present the hooks under test would resolve the real CLI
-          python -m pytest tests -q -p no:cacheprovider --deselect tests/test_cli_contract.py 2>&1 | tee "$RUNNER_TEMP/suite.txt" || RC=1
+          # hermetic suite first: the harnesses are hermetic anyway, but this keeps the order cheap and obvious
+          python -m pytest tests -q -p no:cacheprovider --deselect tests/test_cli_contract.py 2>&1 | tee "$RUNNER_TEMP/out/suite.txt" || RC=1
           (cd plugins/ace && npm ci --ignore-scripts && npm rebuild better-sqlite3) || RC=1
-          python -m pytest tests/test_cli_contract.py -q -p no:cacheprovider 2>&1 | tee "$RUNNER_TEMP/contract.txt" || RC=1
+          python -m pytest tests/test_cli_contract.py -q -p no:cacheprovider 2>&1 | tee "$RUNNER_TEMP/out/contract.txt" || RC=1
           exit $RC
-      - name: Open the pull request
+      - name: Record the outcome
         if: steps.ver.outputs.newer == 'yes' && steps.open.outputs.existing == '0'
         run: |
+          echo "${{ steps.tests.outcome }}" > "$RUNNER_TEMP/out/outcome.txt"
+          echo "${{ steps.ver.outputs.latest }}" > "$RUNNER_TEMP/out/latest.txt"
+          echo "${{ steps.ver.outputs.pin }}" > "$RUNNER_TEMP/out/pin.txt"
+      - uses: actions/upload-artifact@v4
+        if: steps.ver.outputs.newer == 'yes' && steps.open.outputs.existing == '0'
+        with:
+          name: ace-cli-bump
+          path: ${{ runner.temp }}/out
+          if-no-files-found: error
+
+  pr:
+    needs: test
+    if: needs.test.outputs.newer == 'yes' && needs.test.outputs.existing == '0'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ace-cli-bump
+          path: ${{ runner.temp }}/out
+      - name: Apply the patch (no package code is run in this job)
+        id: apply
+        run: |
+          OUT="$RUNNER_TEMP/out"
+          LATEST=$(cat "$OUT/latest.txt"); PIN=$(cat "$OUT/pin.txt")
+          # the artifact is data from another job: only plain versions and an allow-listed patch go any further
+          for V in "$LATEST" "$PIN"; do
+            echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::not a plain version: $V"; exit 1; }
+          done
+          if git apply --numstat "$OUT/bump.patch" | awk '{print $3}' | grep -Evx 'plugins/ace/package\.json|plugins/ace/package-lock\.json|plugins/ace/\.claude-plugin/[A-Za-z.]+\.json|\.claude-plugin/marketplace\.json'; then
+            echo "::error::patch touches a file outside the allow-list"; exit 1
+          fi
+          BRANCH="ace-cli-watch/$LATEST"
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"; echo "pin=$PIN" >> "$GITHUB_OUTPUT"; echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add plugins/ace/package.json plugins/ace/package-lock.json plugins/ace/.claude-plugin .claude-plugin/marketplace.json
-          git commit -m "chore(ace): bump pinned ace-cli ${{ steps.ver.outputs.pin }} -> ${{ steps.ver.outputs.latest }}"
-          git push origin HEAD
-          OUTCOME="${{ steps.tests.outcome }}"
+          if git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
+            # an earlier run pushed the branch but could not open the PR (setting off): reuse it, never re-push
+            echo "branch $BRANCH already exists on origin; opening the PR from it"
+          else
+            git checkout -b "$BRANCH"
+            git apply "$OUT/bump.patch"
+            git add plugins/ace/package.json plugins/ace/package-lock.json plugins/ace/.claude-plugin .claude-plugin/marketplace.json
+            git commit -m "chore(ace): bump pinned ace-cli $PIN -> $LATEST"
+            git push origin "$BRANCH"
+          fi
+      - name: Open the pull request
+        run: |
+          OUT="$RUNNER_TEMP/out"
+          OUTCOME=$(cat "$OUT/outcome.txt")
           FLAGS=""
           [ "$OUTCOME" = "success" ] || FLAGS="--draft"
           {
-            echo "npm has @ace-sdk/cli ${{ steps.ver.outputs.latest }}; the plugin pins ${{ steps.ver.outputs.pin }}."
+            echo "npm has @ace-sdk/cli ${{ steps.apply.outputs.latest }}; the plugin pins ${{ steps.apply.outputs.pin }}."
             echo
             echo "Tests against the new pin: **$OUTCOME**."
             echo
+            echo "Contract test:"
             echo '```'
-            tail -n 25 $RUNNER_TEMP/contract.txt
+            tail -n 25 "$OUT/contract.txt" 2>/dev/null || echo "(not run)"
+            echo '```'
+            echo "Suite:"
+            echo '```'
+            tail -n 25 "$OUT/suite.txt" 2>/dev/null || echo "(not run)"
             echo '```'
             echo
             echo "A failing contract test names the exact flag or field to adapt in the plugin. This PR does not bump the plugin version:"
             echo "the release-manager does that (a pin bump is a plugin version bump), then releases."
-          } > $RUNNER_TEMP/body.md
-          gh pr create $FLAGS --base "${{ github.event.repository.default_branch }}" \
-            --title "ace-cli ${{ steps.ver.outputs.latest }}: bump the pin" --body-file $RUNNER_TEMP/body.md
+          } > "$RUNNER_TEMP/body.md"
+          gh pr create $FLAGS --base "${{ github.event.repository.default_branch }}" --head "${{ steps.apply.outputs.branch }}" \
+            --title "ace-cli ${{ steps.apply.outputs.latest }}: bump the pin" --body-file "$RUNNER_TEMP/body.md" \
+            || { echo "::error::gh pr create was refused. Enable Settings > Actions > General > 'Allow GitHub Actions to create and approve pull requests'. The branch ${{ steps.apply.outputs.branch }} is pushed; open the PR from it by hand."; exit 1; }

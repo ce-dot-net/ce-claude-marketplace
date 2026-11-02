@@ -60,7 +60,10 @@ TOOL_EVENTS = {"PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionReq
 
 
 def plugin_root():
-    return Path(os.environ.get("ACE_PLUGIN_ROOT_UNDER_TEST") or (REPO / "plugins" / "ace")).resolve()
+    if os.environ.get("ACE_PLUGIN_ROOT_UNDER_TEST"):
+        return Path(os.environ["ACE_PLUGIN_ROOT_UNDER_TEST"]).resolve()
+    from plugin_copy import hermetic_root  # tests/ is on sys.path via conftest
+    return hermetic_root().resolve()
 
 
 def fixture_names():

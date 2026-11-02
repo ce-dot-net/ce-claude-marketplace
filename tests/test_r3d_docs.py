@@ -87,7 +87,7 @@ def test_doctor_reports(needle):
 
 def test_doctor_guards_foreign_plugin_data():
     """P5: other plugins export their CLAUDE_PLUGIN_DATA into every Bash-tool subprocess."""
-    assert re.search(r'case\s+"\$DATA"\s+in\s+\*/ace\*\)', DOCTOR.read_text())
+    assert re.search(r'case\s+"\$\{DATA##\*/\}"\s+in\s+ace\*\)', DOCTOR.read_text())
 
 
 @pytest.mark.parametrize("path", [DOCTOR, CLEANUP], ids=lambda p: p.name)
@@ -233,6 +233,68 @@ def test_watch_opens_one_pr_never_merges():
 
 def test_watch_uses_no_other_secret():
     assert set(re.findall(r"secrets\.(\w+)", _watch())) <= {"GITHUB_TOKEN"}
+
+
+def _jobs():
+    t = _watch()
+    head, rest = t.split("\n  test:\n", 1)
+    test_job, pr_job = rest.split("\n  pr:\n", 1)
+    return head, test_job, pr_job
+
+
+def test_watch_failing_tests_are_not_reported_as_success():
+    """`a | tee f || RC=1` only sees tee's status under bash -e (GitHub's default shell): needs pipefail."""
+    _h, test_job, _pr = _jobs()
+    step = test_job.split("name: Suite and contract test", 1)[1].split("- name:", 1)[0]
+    assert re.search(r"^\s+shell: bash\b", step, re.M) or "set -o pipefail" in step
+    assert "continue-on-error: true" in step and "RC=1" in step
+
+
+def test_watch_pr_body_shows_suite_and_contract_tails():
+    _h, _t, pr_job = _jobs()
+    assert "contract.txt" in pr_job and "suite.txt" in pr_job
+
+
+def test_watch_package_code_never_runs_next_to_a_write_token():
+    head, test_job, pr_job = _jobs()
+    assert re.search(r"^permissions:\s*\n\s+contents: read\s*$", head, re.M), "workflow default is read-only"
+    assert "contents: write" not in head + test_job and "pull-requests: write" not in head + test_job
+    assert "persist-credentials: false" in test_job
+    assert "GH_TOKEN" not in test_job.split("- name: One PR per version", 1)[0], "no token before the one read step"
+    suite = test_job.split("name: Suite and contract test", 1)[1]
+    assert "GH_TOKEN" not in suite
+    assert "contents: write" in pr_job and "pull-requests: write" in pr_job
+    for cmd in ("npm ci", "npm install", "npm rebuild", "npx ", "node -", "pytest", "python3 -", "python -m"):
+        assert cmd not in pr_job, "the write job executes no package or repo test code: " + cmd
+    assert "git diff" in test_job and "bump.patch" in test_job
+    assert "git apply" in pr_job
+
+
+def test_watch_survives_a_branch_without_a_pr_and_names_the_repo_setting():
+    _h, _t, pr_job = _jobs()
+    assert "git ls-remote" in pr_job and "--head" in pr_job
+    assert "Allow GitHub Actions to create and approve pull requests" in _watch()
+
+
+def _newer():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("ace_cli_newer", REPO / ".github" / "scripts" / "ace_cli_newer.py")
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m.newer
+
+
+@pytest.mark.parametrize("latest,pin,want", [
+    ("4.2.3", "4.2.2", True), ("4.3.0", "4.2.2", True), ("5.0.0", "4.2.2", True), ("4.10.0", "4.9.0", True),
+    ("4.2.2", "4.2.2", False), ("4.1.9", "4.2.2", False), ("3.9.9", "4.2.2", False),
+    ("4.2.1", "4.2.2", False), ("4.3.0-beta.1", "4.2.2", False), ("", "4.2.2", False), ("latest", "4.2.2", False),
+])
+def test_watch_version_compare(latest, pin, want):
+    assert _newer()(latest, pin) is want
+
+
+def test_watch_uses_the_compare_script():
+    assert "ace_cli_newer.py" in _watch()
 
 
 # ── §23 (a)/(c), §18 CI ─────────────────────────────────────────────────────────────────

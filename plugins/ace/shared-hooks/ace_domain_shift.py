@@ -155,8 +155,10 @@ def _search_and_inject(event, ctx, project, org, sid, agent_id, last_file, last,
         tsid = (load_task_session_id(sid, agent_id, 'SubagentStop', project_id=project)
                 or task_session_id_for(None))
     else:
-        tsid = event.get('prompt_id') or load_task_session_id(sid, None, 'Stop', project_id=project) \
-            or task_session_id_for(None)
+        # the stored anchor first (UPS always writes it): after a deferred Stop the notification turn has a NEW
+        # prompt_id that must not replace the human prompt_id the task was pinned/credited under (§16 P2).
+        tsid = load_task_session_id(sid, None, 'Stop', project_id=project) \
+            or event.get('prompt_id') or task_session_id_for(None)
     result, _ms = run_search(query, org=org, project=project, top_k=8,  # P8: no pin (server never credits these rows)
                              timeout=17, hook_event_name='PostToolUse')
     ok = isinstance(result, dict) and not result.get('error')

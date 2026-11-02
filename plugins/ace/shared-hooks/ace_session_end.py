@@ -19,6 +19,13 @@ def main():
         return 0
     sid, pid = resolve_ids(ev)
     d = session_dir(pid, sid, create=False)
+    if os.path.exists(os.path.join(str(d), "learn-deferred")):  # the deferred Stop's notification never came
+        try:
+            from ace_relevance_logger import log_event
+            log_event("learn_deferred_lost", reason="session_end", session_id=sid)
+            os.unlink(os.path.join(str(d), "learn-deferred"))
+        except Exception:
+            pass
     # Async Stop/SubagentStop may still be learning: keep the dir while a fresh learn lock exists.
     import glob
     import time

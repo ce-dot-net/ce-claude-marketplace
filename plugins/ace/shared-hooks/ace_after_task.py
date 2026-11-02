@@ -726,7 +726,7 @@ def handback_summary(path, cap=4000):
                     if isinstance(m, str) and m.strip():
                         found = m
         return found[:cap] if found else None
-    except OSError:
+    except Exception:  # a summary must never cost the learn
         return None
 
 
@@ -838,9 +838,15 @@ def main():
                 types[str(t)] = types.get(str(t), 0) + 1
             try:
                 log_event("learn_deferred", session_id=session_id, types=types)
+                plugin_data_dir.session_dir(context['project'], session_id).joinpath('learn-deferred').touch()
             except Exception:
                 pass
             sys.exit(0)
+        if hook_event_name == 'Stop':
+            try:
+                plugin_data_dir.session_dir(context['project'], session_id, create=False).joinpath('learn-deferred').unlink()
+            except OSError:
+                pass
         # S9: hold the learn lock BEFORE reading any session state so a SessionEnd in between keeps
         # the dir (released in `finally` on every skip path; the learn job owns it once dispatched).
         try:

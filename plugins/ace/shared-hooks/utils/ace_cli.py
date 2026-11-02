@@ -24,11 +24,24 @@ _NOT_FOUND = "ace-cli not found. Run /ace:ace-install-cli"
 _NOTIFIER = re.compile(r'Update available: v|Run: npm install -g @ace-sdk')
 
 
+# better-sqlite3 without a usable binary: never built, or built for another Node (ABI text)
+_SQLITE_UNUSABLE = re.compile(r'bindings file|different Node\.js version|NODE_MODULE_VERSION', re.I)
+
+
+def _plugin_root() -> Path:
+    """Where THIS code lives, never the environment: other plugins export their CLAUDE_PLUGIN_ROOT into the
+    shared env file (§16 P5), and a foreign root would hide the plugin-local CLI and the version floor.
+    The env root is honoured only when it is an ACE plugin root too (a copy, a symlinked checkout)."""
+    env = os.environ.get('CLAUDE_PLUGIN_ROOT')
+    if env and (Path(env) / 'shared-hooks' / 'utils' / 'ace_cli.py').is_file():
+        return Path(env)
+    return Path(__file__).resolve().parents[2]
+
+
 def _pin():
     """The exact ace-cli version this plugin version was tested with (package.json, DESIGN §23)."""
-    root = os.environ.get('CLAUDE_PLUGIN_ROOT') or str(Path(__file__).resolve().parents[2])
     try:
-        v = json.loads((Path(root) / 'package.json').read_text())['dependencies']['@ace-sdk/cli']
+        v = json.loads((_plugin_root() / 'package.json').read_text())['dependencies']['@ace-sdk/cli']
         return v if re.fullmatch(r'\d+\.\d+\.\d+', v) else None
     except Exception:
         return None
@@ -57,10 +70,10 @@ def global_cli():
 
 def _resolve():
     """(argv prefix, source): plugin-local [node, cli.js] -> global [ace-cli] (>= pin) -> (None, None).
-    The ONE place that locates ace-cli. No spawn. Plugin-local needs CLAUDE_PLUGIN_ROOT (hooks always have it)."""
-    root, node = os.environ.get('CLAUDE_PLUGIN_ROOT'), shutil.which('node')
-    if root and node:
-        js = Path(root) / 'node_modules' / '@ace-sdk' / 'cli' / 'dist' / 'cli.js'
+    The ONE place that locates ace-cli. No spawn. Plugin-local is found next to this file."""
+    node = shutil.which('node')
+    if node:
+        js = _plugin_root() / 'node_modules' / '@ace-sdk' / 'cli' / 'dist' / 'cli.js'
         if js.is_file():
             return [node, str(js)], 'plugin-local'
     g = global_cli()
@@ -229,7 +242,7 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
         locked = 'database is locked' in stderr.lower()
         if pin and (locked or (not stdout.strip() and not _is_auth_failure(stderr, stdout))):
             _log_pin(session_id, hook_event_name, pin_failed=True)
-            if locked or 'bindings file' in stderr.lower():  # sticky lock, or `--ignore-scripts` without the
+            if locked or _SQLITE_UNUSABLE.search(stderr):  # sticky lock, or `--ignore-scripts` without the
                 _touch_backoff()  # better-sqlite3 binary (until the SessionStart rebuild): don't pay 2 spawns per prompt
             remaining = timeout - (time.monotonic() - t0)
             if remaining >= 2:  # A2: never overrun the hook budget with a floored retry

@@ -89,7 +89,7 @@ When user runs `/ace-tune` without arguments, use AskUserQuestion tool for inter
 
 ```python
 # Step 1: Show current config first
-ace-cli tune show
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune show
 
 # Step 2: Ask what they want to change
 AskUserQuestion({
@@ -135,7 +135,7 @@ AskUserQuestion({
 })
 
 # Step 4: Apply with CLI
-ace-cli tune --constitution-threshold 0.45
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --constitution-threshold 0.45
 ```
 
 ### 3. Non-Interactive Mode (Direct)

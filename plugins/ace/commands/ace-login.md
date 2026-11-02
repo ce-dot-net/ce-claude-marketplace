@@ -107,7 +107,7 @@ Organizations: 3 available
 Session: Expires in 10 hours
 
 To switch accounts, logout first:
-  ace-cli logout
+  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli logout
 ```
 Exit here (no need to re-login).
 

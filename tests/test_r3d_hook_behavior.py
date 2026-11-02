@@ -372,6 +372,19 @@ def test_missing_sqlite_binary_suspends_pins_like_the_lock(cli):
     assert run.call_count == 1 and "--pin-session" not in run.call_args[0][0]
 
 
+@pytest.mark.parametrize("err", [
+    b"Error: The module '/x/better_sqlite3.node' was compiled against a different Node.js version using NODE_MODULE_VERSION 127.",
+    b"Could not locate the bindings file."])
+def test_node_abi_mismatch_suspends_pins_like_a_missing_binary(cli, err):
+    bad = _res(1, err=err)
+    good = _res(0, out=json.dumps(RESPONSE).encode())
+    with patch("subprocess.run", side_effect=[bad, good]):
+        cli.run_search("q", session_id="pin-1")
+    with patch("subprocess.run", return_value=good) as run:
+        cli.run_search("q", session_id="pin-2")
+    assert run.call_count == 1 and "--pin-session" not in run.call_args[0][0]
+
+
 def _denied_then_api_requests(tmp_path, n, size):
     """2.1.300+ transcripts record each API request's system prompt/tools after the denied result."""
     p = tmp_path / "t.jsonl"
@@ -449,3 +462,13 @@ def test_subagent_search_row_logs_query_source(env):
     _sstart(env, "workflow-subagent", agent_id="agent-wf5")
     rows = [r for r in env.relevance_rows() if r.get("hook") == "SubagentStart"]
     assert rows and rows[-1].get("query_source"), rows
+
+
+@pytest.mark.parametrize("bad_input", ["oops", ["x"], 7])
+def test_handback_summary_never_costs_the_learn(box, tmp_path, bad_input):
+    """A malformed handback block must give None (the fallback summary), never an exception in the Stop flow."""
+    import ace_after_task as at
+    p = tmp_path / "agent.jsonl"
+    p.write_text(json.dumps({"message": {"content": [
+        {"type": "tool_use", "name": "SubagentHandback", "input": bad_input}]}}) + "\n")
+    assert at.handback_summary(str(p)) is None

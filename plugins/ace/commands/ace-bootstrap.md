@@ -45,7 +45,7 @@ Command: generates dynamic report for user
 
 ## Usage
 
-Use `ace-cli bootstrap` to initialize your playbook from the codebase.
+Use `${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap` to initialize your playbook from the codebase.
 
 **Basic usage**:
 ```bash

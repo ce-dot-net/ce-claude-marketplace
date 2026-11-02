@@ -265,7 +265,7 @@ Claude: [Shows AskUserQuestion UI]
   User types in Other: "Root cause was missing await on database.close() causing connection pool exhaustion. Intermittent failures in async code often indicate missing await statements. Always check async cleanup functions."
 
 Claude runs:
-  ace-cli --json --org "org_xxx" --project "prj_xxx" learn \
+  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --json --org "org_xxx" --project "prj_xxx" learn \
     --task "Debugged intermittent test failures in async database operations" \
     --success \
     --output "Root cause was missing await on database.close() causing connection pool exhaustion. Intermittent failures in async code often indicate missing await statements. Always check async cleanup functions."

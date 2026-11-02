@@ -21,8 +21,10 @@ def test_ace_and_session_env_is_stripped():
     """ACE_ORG_ID/ACE_PROJECT_ID (exported by CC from .claude/settings.json) must not leak in."""
     leaked = [k for k in os.environ if k.startswith("ACE_") and k not in
               ("ACE_FAKE_CLI_LOG", "ACE_E2E", "ACE_PLUGIN_ROOT_UNDER_TEST", "ACE_LEARN_INLINE")]
-    leaked += [k for k in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_PROJECT_DIR", "CLAUDE_PLUGIN_ROOT") if k in os.environ]
+    leaked += [k for k in ("CLAUDE_CODE_SESSION_ID", "CLAUDE_PROJECT_DIR") if k in os.environ]
     assert leaked == []
+    from plugin_copy import hermetic_root  # only the copy conftest sets when node_modules exists, never CC's own root
+    assert os.environ.get("CLAUDE_PLUGIN_ROOT") in (None, str(hermetic_root()))
 
 
 def test_cwd_is_not_the_checkout():
