@@ -6,7 +6,7 @@ import {
   pyLoads, pyDumps, sanitize, renderFull, renderBudget, renderCompact, renderDomainShift, renderCohort, renderPatternsDict,
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
-  detachedLearnArgv, FALLBACK_ON_3, reuseKey, reuseEnabled, REUSE_TTL_MS, parseAceReview, parseDiffStat, evalStats, learnLine, selfEvalPrompt, parseUsedIds, searchRow, searchSummary, searchErrorLine, statusLine, topDomains, sessionTitle,
+  detachedLearnArgv, FALLBACK_ON_3, reuseKey, reuseEnabled, REUSE_TTL_MS, parseAceReview, parseDiffStat, evalStats, learnLine, reviewLine, selfEvalPrompt, parseUsedIds, searchRow, searchSummary, searchErrorLine, statusLine, topDomains, sessionTitle,
   subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, appliedLogIds, usedPatternIds, injectedContents, type StateUpdate, type ToolRec, type Cohort,
 } from './core.ts'
 
@@ -449,6 +449,8 @@ async function selfEval($: any, s: Sess, task: string, answer: string, ids: stri
   if (!r?.isAnswered || typeof r.text !== 'string') return null
   const review = parseAceReview(r.text)
   if (review && await logsSafe($, s, 'ace-review-result.json')) await $.fs.write(`${s.logs}/ace-review-result.json`, pyDumps(review))
+  const line = reviewLine(review)
+  if (line) $.ui.log(line)
   return parseUsedIds(r.text, ids)
 }
 
