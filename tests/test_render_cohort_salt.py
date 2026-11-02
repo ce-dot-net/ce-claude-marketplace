@@ -298,23 +298,15 @@ class TestRenderVariantAceAfterTaskSource:
 
 
 class TestRenderVariantTraceDirectUnit:
-    """trace_render_variant(stored, cc_session_id): the stored (actually rendered) variant wins; else what the
-    Python chain renders for the conversation. Never None (§28). Hook-level coverage: test_render_variant_v8.py."""
+    """§31 trace_render_variant(stored): the stored (actually rendered) variant, normalized to budget|full;
+    anything else (incl. none) is unknown -> None, the key is omitted. Hook level: test_s31_contract.py."""
 
-    def test_stored_variant_wins(self, monkeypatch):
+    def test_stored_server_labels_pass(self):
         from ace_pattern_render import trace_render_variant
-        for v in ("control", "compact", "full", "budget"):
-            assert trace_render_variant(v, "any") == v
+        assert [trace_render_variant(v, "any") for v in ("full", "budget")] == ["full", "budget"]
 
-    def test_no_stored_variant_falls_back_to_the_python_render(self, monkeypatch):
+    def test_everything_else_is_unknown(self, monkeypatch):
         monkeypatch.setenv("ACE_AB_CONTROL_PCT", "20")
-        monkeypatch.setenv("ACE_AB_COMPACT_PCT", "20")
-        from ace_pattern_render import render_cohort, trace_render_variant
-        for _ in range(20):
-            sid = str(uuid.uuid4())
-            assert trace_render_variant(None, sid) == render_cohort(sid)
-            assert trace_render_variant("bogus", sid) == render_cohort(sid)
-
-    def test_never_none(self, monkeypatch):
         from ace_pattern_render import trace_render_variant
-        assert trace_render_variant(None, None) == "budget"
+        for v in (None, "bogus", "control", "compact"):
+            assert trace_render_variant(v, "sid") is None

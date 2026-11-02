@@ -178,12 +178,47 @@ def load_rendered_context(session_id, project_id=None, state_dir=None):
         return None
 
 
+CONTENT_CAP = 600   # per injected pattern, for the "actually used" check (§31)
+USED_FRAGMENT = 40  # a verbatim content fragment this long in the final message counts as used
+USED_MESSAGE_CAP = 50000
+
+
+def _norm_ws(text):
+    return " ".join(str(text or "").split())
+
+
+def used_pattern_ids(ids, contents, message):
+    """§31: the injected ids ACTUALLY USED in the final message / handback report, in injected order.
+
+    Used = its id, or a >= 40-char verbatim fragment of its (whitespace-normalized) content, appears in the
+    (whitespace-normalized) message. False positives are worse than misses: nothing else counts.
+    ponytail: content beyond CONTENT_CAP and messages beyond USED_MESSAGE_CAP are not searched.
+    """
+    msg = _norm_ws(message)[:USED_MESSAGE_CAP]
+    if not msg:
+        return []
+    n = USED_FRAGMENT
+    windows = {msg[i:i + n] for i in range(len(msg) - n + 1)}
+    out = []
+    for pid in ids or []:
+        c = _norm_ws((contents or {}).get(pid))[:CONTENT_CAP]
+        if (isinstance(pid, str) and pid and pid in msg) or any(c[i:i + n] in windows for i in range(len(c) - n + 1)):
+            out.append(pid)
+    return out
+
+
+def injected_contents(patterns, ids):
+    """{id: content[:CONTENT_CAP]} for the injected ids (state key pattern_contents)."""
+    by_id = {p.get("id"): p.get("content") for p in patterns or [] if isinstance(p, dict)}
+    return {pid: str(by_id[pid])[:CONTENT_CAP] for pid in ids or [] if by_id.get(pid)}  # injected order (mod parity)
+
+
 def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
                          retrieval_id=None, retrieval_log_ids=None,
                          task_session_id=None, project_id=None,
                          user_prompt=None, rendered_context=None,
                          hook_event_name=None, reset=False, parent_task_id=None, query_source=None,
-                         render_variant=None):
+                         render_variant=None, pattern_contents=None):
     """Append+dedupe valid pattern IDs to the per-agent file; return the full list.
 
     F-080: optional params retrieval_id (str|None) and retrieval_log_ids (dict|None).
@@ -205,7 +240,7 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
     has_retrieval = retrieval_id is not None or bool(retrieval_log_ids)
     has_task_session = task_session_id is not None
     has_extra = bool(user_prompt or rendered_context or hook_event_name or parent_task_id or query_source
-                     or render_variant)
+                     or render_variant or pattern_contents)
     if not ids and not has_retrieval and not has_task_session and not has_extra:
         return []
     sf = state_file_path(session_id, agent_id, state_dir, project_id)
@@ -247,6 +282,13 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
             val = val if val is not None else prior.get(key)
             if val is not None and (val or key == 'rendered_context'):
                 state[key] = val[:cap] if cap else val
+        # §31: contents of the injected patterns, for the "actually used" check at learn (new wins per id)
+        pc = dict(prior.get('pattern_contents') or {}) if isinstance(prior.get('pattern_contents'), dict) else {}
+        for pid, text in (pattern_contents or {}).items():
+            if isinstance(pid, str) and is_valid_pattern_id(pid) and isinstance(text, str) and text:
+                pc[pid] = text[:CONTENT_CAP]
+        if pc:
+            state['pattern_contents'] = pc
         _atomic_write(sf, json.dumps(state))
     return existing_ids
 

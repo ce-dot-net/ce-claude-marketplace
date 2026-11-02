@@ -110,6 +110,17 @@ def test_sessionstart_compact_reinjects_the_mod_sidecar_after_its_learn(data_roo
     assert _run_compact(data_root, tmp_path) == rc
 
 
+def test_sessionstart_compact_resets_the_full_dedupe(data_root, tmp_path):
+    """§31 dedupe under full: the mod injects only ids not yet injected since the last compaction; the compact
+    hook (Python-only, runs beside the mod) drops the per-conversation record so the next prompt injects all."""
+    sdir = data_root / "projects" / PRJ / "sessions" / SID
+    sdir.mkdir(parents=True)
+    (sdir / "full-injected.json").write_text('["ctx-1111111111-aaaa"]')
+    (sdir / "rendered-main.txt").write_text("<ace-patterns>x</ace-patterns>")
+    _run_compact(data_root, tmp_path)
+    assert not (sdir / "full-injected.json").exists()
+
+
 # ---------- registration ----------
 
 def test_mod_is_registered_in_plugin_json_beside_the_classic_hooks():

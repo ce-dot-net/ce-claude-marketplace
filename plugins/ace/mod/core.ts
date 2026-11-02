@@ -437,7 +437,7 @@ export function renderDomainShift(resp: any, domain: string) {
     if (context.length <= DOMAIN_CAP || n === 0) break
     n--
   }
-  return { context, ...credit(pats.slice(0, n), rlog), shown: n }
+  return { context, ...credit(pats.slice(0, n), rlog), shown: n, patterns: pats.slice(0, n) }
 }
 
 // ---------- render_cohort (salt "render:", same bucket as ace_pattern_render) ----------
@@ -489,30 +489,51 @@ const pyInt = (v: string | undefined, dflt: number): number | null => {
   return /^\s*[+-]?\d+\s*$/.test(v) ? parseInt(v, 10) : null
 }
 export type Cohort = 'control' | 'compact' | 'full' | 'budget'
-const COHORTS = new Set(['control', 'compact', 'full', 'budget'])
-// §28: the variant stored at render time wins; a state without one (written before the label existed) gets the arm.
-export const traceVariant = (stored: unknown, sessionId: string | undefined, env: Record<string, string | undefined>): string =>
-  typeof stored === 'string' && COHORTS.has(stored) ? stored : renderCohort(sessionId, env)
-// Nothing was rendered (search failed / skipped): label what the Python chain labels, never 'full' (§28 names what was rendered).
-export const unrenderedVariant = (sid: string | undefined, env: Record<string, string | undefined>): string => {
-  const c = renderCohort(sid, env)
-  return c === 'full' ? 'budget' : c
+// §31: the trace label is 'budget' | 'full' (stripped, lowercase); anything else is unknown -> undefined (OMIT).
+export const normalizeVariant = (v: unknown): 'budget' | 'full' | undefined => {
+  const t = typeof v === 'string' ? v.trim().toLowerCase() : ''
+  return t === 'budget' || t === 'full' ? t : undefined
 }
-// §29 RELEASE BLOCKER: under `full` (~100 shown) the injected set is no "applied" signal; the server ruling is an
-// empty list. budget/compact/control keep injected ids ∩ retrieval_log_ids.
-export function appliedLogIds(playbook: string[], rlog: Record<string, number>, variant: string): number[] {
-  return variant === 'full' ? [] : playbook.filter(id => id in rlog).map(id => rlog[id])
+// §31: the variant stored at render time, normalized; never recomputed, never defaulted (a missing label = unknown).
+export const traceVariant = (stored: unknown): string | undefined => normalizeVariant(stored)
+
+// §31 "actually used" (patterns_used_state.used_pattern_ids): the id, or a >= 40-char verbatim fragment of the
+// whitespace-normalized content, in the whitespace-normalized final message / handback report. Injected order.
+export const CONTENT_CAP = 600, USED_FRAGMENT = 40, USED_MESSAGE_CAP = 50000
+const normWs = (t: unknown) => String(t ?? '').split(/\s+/).filter(Boolean).join(' ')
+export function usedPatternIds(ids: string[], contents: Record<string, string>, message: string | undefined): string[] {
+  const msg = cpSlice(normWs(message), USED_MESSAGE_CAP)
+  if (!msg) return []
+  const m = cps(msg), n = USED_FRAGMENT, windows = new Set<string>()
+  for (let i = 0; i + n <= m.length; i++) windows.add(m.slice(i, i + n).join(''))
+  return ids.filter(id => {
+    if (id && msg.includes(id)) return true
+    const c = cps(cpSlice(normWs(contents?.[id]), CONTENT_CAP))
+    for (let i = 0; i + n <= c.length; i++) if (windows.has(c.slice(i, i + n).join(''))) return true
+    return false
+  })
 }
-// ace_pattern_render._read_ab_pcts + ACE_RENDER_FULL_PCT (default 100). Arms in bucket order:
-// control, compact, full, budget. No anchor -> full (never experiment without one).
+// injected_contents: {id: content[:CONTENT_CAP]} of the injected patterns (state key pattern_contents)
+export function injectedContents(patterns: any[], ids: string[]): Record<string, string> {
+  const byId = new Map<string, unknown>(), out: Record<string, string> = {}
+  for (const p of patterns ?? []) if (p && !byId.has(p.id)) byId.set(p.id, p.content)
+  for (const id of ids) { const c = byId.get(id); if (c) out[id] = cpSlice(String(c), CONTENT_CAP) }  // injected order (Python parity)
+  return out
+}
+// §31: applied_log_ids = the USED ids that have a retrieval log id, for every variant.
+export function appliedLogIds(used: string[], rlog: Record<string, number>): number[] {
+  return used.filter(id => id in rlog).map(id => rlog[id])
+}
+// ace_pattern_render.render_arm (§31): arms in bucket order control, compact, full (ACE_RENDER_FULL_PCT, default 0,
+// invalid -> 0), rest budget. No conversation id -> budget.
 export function renderCohort(sid: string | undefined, env: Record<string, string | undefined>): Cohort {
   let ctrl = pyInt(env.ACE_AB_CONTROL_PCT, 0), comp = pyInt(env.ACE_AB_COMPACT_PCT, 0)
   if (ctrl === null || comp === null || ctrl < 0 || comp < 0 || Math.min(ctrl, 100) + Math.min(comp, 100) > 100) { ctrl = 0; comp = 0 }
   ctrl = Math.min(ctrl, 100); comp = Math.min(comp, 100)
-  let full = pyInt(env.ACE_RENDER_FULL_PCT, 100)
-  if (full === null || full < 0) full = 100
+  let full = pyInt(env.ACE_RENDER_FULL_PCT, 0)
+  if (full === null || full < 0) full = 0
   full = Math.min(full, 100 - ctrl - comp)
-  if (!sid) return 'full'
+  if (!sid) return 'budget'
   const b = parseInt(sha256Hex('render:' + sid).slice(0, 8), 16) % 100
   return b < ctrl ? 'control' : b < ctrl + comp ? 'compact' : b < ctrl + comp + full ? 'full' : 'budget'
 }
@@ -532,7 +553,8 @@ export function dataRootFromPluginRoot(home: string, root: string, name: string,
 
 // ---------- patterns_used_state.append_patterns_used: same merge, same key order, same bytes ----------
 export type StateUpdate = { ids?: string[]; retrievalId?: string | null; rlog?: Record<string, number>; tsid?: string | null
-  userPrompt?: string; rendered?: string; hook?: string; parentTaskId?: string; agentType?: string; renderVariant?: string }
+  userPrompt?: string; rendered?: string; hook?: string; parentTaskId?: string; agentType?: string; renderVariant?: string
+  contents?: Record<string, string> }
 export function mergeState(prior: any, u: StateUpdate): any {
   const p = prior && typeof prior === 'object' && !Array.isArray(prior) ? prior : {}
   const ids: string[] = Array.isArray(p.pattern_ids) ? [...p.pattern_ids] : Array.isArray(prior) ? [...prior] : []
@@ -553,6 +575,9 @@ export function mergeState(prior: any, u: StateUpdate): any {
   if (pt) state.parent_task_id = pt
   const rv = u.renderVariant ?? p.render_variant // §28: the variant ACTUALLY rendered, read back at learn
   if (rv) state.render_variant = rv
+  const pc: Record<string, string> = { ...(p.pattern_contents && typeof p.pattern_contents === 'object' ? p.pattern_contents : {}) }
+  for (const [id, t] of Object.entries(u.contents ?? {})) if (isValidPatternId(id) && typeof t === 'string' && t) pc[id] = cpSlice(t, CONTENT_CAP)
+  if (Object.keys(pc).length) state.pattern_contents = pc  // §31 (Python writes it after its optional keys too)
   const at = u.agentType ?? p.agent_type // mod-only: its turn.complete carries no agent type; Python ignores the key
   if (at) state.agent_type = at
   return state
@@ -656,7 +681,8 @@ export function truncateTrace(trace: any): any {
 
 export function buildTrace(a: {
   userPrompt: string; tools: ToolRec[]; answer: string; playbookUsed: string[]; agentType: string; tsid?: string; agentId?: string
-  parentTaskId?: string; retrievalId?: string; appliedLogIds: number[]; nowIso: string; renderVariant: string; effort: string; git?: any
+  parentTaskId?: string; retrievalId?: string; appliedLogIds: number[]; nowIso: string; renderVariant?: string; effort: string; git?: any
+  conversationId?: string
   summaryCap?: number  // 2000 for the closing answer, 4000 for a SubagentHandback report (ace_after_task.handback_summary)
 }) {
   const success = !a.tools.some(t => t.failed)
@@ -670,7 +696,8 @@ export function buildTrace(a: {
     agent_type: a.agentType,
   }
   if (a.tsid) trace.session_id = a.tsid
-  trace.render_variant = a.renderVariant // §28: on EVERY trace, pin or not
+  if (a.renderVariant) trace.render_variant = a.renderVariant // §31: only when known
+  if (a.conversationId) trace.conversation_id = a.conversationId.slice(0, 512) // §31: the stable CC session id
   if (a.agentId) trace.agent_id = a.agentId
   if (a.parentTaskId) trace.parent_agent_id = a.parentTaskId // §16 P3: server field name (local state keeps parent_task_id)
   if (a.retrievalId) trace.retrieval_id = a.retrievalId

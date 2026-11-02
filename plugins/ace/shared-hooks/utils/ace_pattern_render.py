@@ -447,22 +447,22 @@ def _read_ab_pcts():
 
 
 def render_arm(session_id: Optional[str]) -> str:
-    """The A/B arm of a conversation (DESIGN §28), shared with the mod's renderCohort (parity test).
+    """The A/B arm of a conversation (DESIGN §31), shared with the mod's renderCohort (parity test).
 
-    Arms in bucket order: control, compact, full (ACE_RENDER_FULL_PCT, default 100), rest budget.
+    Arms in bucket order: control, compact, full (ACE_RENDER_FULL_PCT, default 0), rest budget.
     bucket = sha256("render:" + session_id)[:8 hex] % 100, where session_id is the STABLE Claude Code
-    session id (subagents of the conversation share it), never the per-task pin. No id -> 'full'.
+    session id = conversation_id (subagents share it), never the per-task pin. No id -> 'budget'.
     """
     ctrl_pct, compact_pct = _read_ab_pcts()
     try:
-        full_pct = int(os.environ.get("ACE_RENDER_FULL_PCT", "100"))
+        full_pct = int(os.environ.get("ACE_RENDER_FULL_PCT", "0"))
     except (TypeError, ValueError):
-        full_pct = 100
+        full_pct = 0
     if full_pct < 0:
-        full_pct = 100
+        full_pct = 0
     full_pct = min(full_pct, 100 - ctrl_pct - compact_pct)
     if not session_id:
-        return "full"
+        return "budget"
     bucket = int(hashlib.sha256(("render:" + session_id).encode()).hexdigest()[:8], 16) % 100
     if bucket < ctrl_pct:
         return "control"
@@ -476,8 +476,8 @@ def render_arm(session_id: Optional[str]) -> str:
 def render_cohort(session_id: Optional[str]) -> str:
     """What the PYTHON chain renders for this conversation: 'control' | 'compact' | 'budget'.
 
-    The Python chain has no full renderer, so the full arm renders budget-verbatim and is labelled
-    'budget' (render_variant names what was actually rendered, §28). Default env -> 'budget'.
+    The Python chain has no full renderer (10K cap), so the full arm renders budget-verbatim and is labelled
+    'budget' (render_variant names what was actually rendered). Default env -> 'budget'.
     """
     arm = render_arm(session_id)
     return "budget" if arm == "full" else arm
@@ -486,10 +486,16 @@ def render_cohort(session_id: Optional[str]) -> str:
 RENDER_VARIANTS = ("control", "compact", "full", "budget")
 
 
-def trace_render_variant(stored: Optional[str], session_id: Optional[str]) -> str:
-    """render_variant for a trace (§28): the variant stored at render time (the mod may have stored 'full'),
-    else what this chain renders for the conversation. Never None: a missing label is 'unknown' server-side."""
-    return stored if stored in RENDER_VARIANTS else render_cohort(session_id)
+def normalize_render_variant(value) -> Optional[str]:
+    """§31: the trace label is 'budget' or 'full' (stripped, lowercase); anything else is unknown -> None (omit)."""
+    v = value.strip().lower() if isinstance(value, str) else None
+    return v if v in ("budget", "full") else None
+
+
+def trace_render_variant(stored: Optional[str], session_id: Optional[str] = None) -> Optional[str]:
+    """render_variant for a trace (§31): the variant stored at render time, normalized; unknown -> None (OMIT,
+    never default to budget). session_id is unused (kept for callers)."""
+    return normalize_render_variant(stored)
 
 
 def render_compact_all(

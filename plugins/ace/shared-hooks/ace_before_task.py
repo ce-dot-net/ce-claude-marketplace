@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 from validation import is_valid_pattern_id
-from patterns_used_state import append_patterns_used, task_session_id_for
+from patterns_used_state import append_patterns_used, injected_contents, task_session_id_for
 from ace_pattern_render import render_patterns, render_cohort, render_compact_all
 
 
@@ -568,7 +568,8 @@ def main():
                                  task_session_id=task_session_id,
                                  user_prompt=user_prompt,
                                  rendered_context=_rendered_for_state if _rendered_for_state is not None else '',
-                                 hook_event_name='UserPromptSubmit', render_variant=_cohort)
+                                 hook_event_name='UserPromptSubmit', render_variant=_cohort,
+                                 pattern_contents=injected_contents(original_pattern_list, _pattern_ids))
         except Exception as e:
             from ace_relevance_logger import log_error
             log_error('UserPromptSubmit', 'ace_before_task.state_write', session_id, context['project'], e)

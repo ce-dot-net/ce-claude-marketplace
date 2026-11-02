@@ -164,8 +164,15 @@ def _variant(tmp_path, monkeypatch, marker):
     return m._render_variant("pd-rv")
 
 
-def test_render_variant_full_when_mod_active(tmp_path, monkeypatch):
-    assert _variant(tmp_path, monkeypatch, True) == "full"
+def test_render_variant_follows_the_mod_arm_when_mod_active(tmp_path, monkeypatch):
+    assert _variant(tmp_path, monkeypatch, True) == "budget"  # §31 default: full share 0
+
+
+def test_render_variant_full_when_mod_active_in_the_full_split(tmp_path, monkeypatch):
+    m = _mod()
+    monkeypatch.setattr("plugin_data_dir.is_mod_active", lambda *a, **k: True)
+    monkeypatch.setenv("ACE_RENDER_FULL_PCT", "100")
+    assert m._render_variant("pd-rv") == "full"
 
 
 def test_render_variant_budget_without_mod(tmp_path, monkeypatch):

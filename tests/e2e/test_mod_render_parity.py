@@ -14,7 +14,9 @@ from pathlib import Path
 import pytest
 
 import mod_reference as R
-from ace_pattern_render import render_arm, render_cohort, render_compact_all, render_patterns, render_patterns_dict
+from ace_pattern_render import (normalize_render_variant, render_arm, render_cohort, render_compact_all, render_patterns,
+                                render_patterns_dict)
+from patterns_used_state import used_pattern_ids
 
 NODE = shutil.which("node")
 pytestmark = pytest.mark.skipif(not NODE, reason="node not installed")
@@ -27,13 +29,25 @@ ENVS = [{}, {"ACE_AB_CONTROL_PCT": "50"}, {"ACE_AB_CONTROL_PCT": "20", "ACE_AB_C
         {"ACE_AB_CONTROL_PCT": "20", "ACE_AB_COMPACT_PCT": "30", "ACE_RENDER_FULL_PCT": "0"},
         {"ACE_RENDER_FULL_PCT": "40"}, {"ACE_RENDER_FULL_PCT": "bad"}, {"ACE_AB_CONTROL_PCT": "70", "ACE_AB_COMPACT_PCT": "40"},
         {"ACE_AB_CONTROL_PCT": "-1"}, {"ACE_AB_COMPACT_PCT": "100"}]
+_C = "Refuse a planted symlink in the rotation chain before moving the relevance log — naïve café ☃ résumé."
+USED = [  # §31 "actually used": [ids, contents, message]
+    [["ctx-1111111111-aaaa", "p2"], {"ctx-1111111111-aaaa": _C}, "we did: " + _C[20:70]],
+    [["ctx-1111111111-aaaa"], {"ctx-1111111111-aaaa": _C}, "we did: " + _C[20:59]],
+    [["ctx-1111111111-aaaa"], {"ctx-1111111111-aaaa": _C}, _C[30:80].replace(" ", "\n\t  ")],
+    [["a-1", "b-2", "c-3"], {}, "used c-3 and a-1"],
+    [["a-1"], {"a-1": _C}, ""],
+    [["a-1"], {"a-1": "x" * 700}, "y" + "x" * 45],
+    [["a-1"], {"a-1": "x" * 599 + "Z" * 50}, "x" * 39 + "Z"],
+]
+VARIANTS = ["full", " Budget\n", "FULL", "control", "compact", "", "fullish"]
 ROOTS = [["/h", "/h/.claude/plugins/cache/ce-dot-net-marketplace/ace/8.0.0", "ace"],
          ["/h", "/repo/plugins/ace", "ace"]]
 
 
 @pytest.fixture(scope="module")
 def node_out():
-    job = {"fixtures": FIXTURES, "sids": SIDS, "envs": ENVS, "roots": ROOTS, "learnJob": None}
+    job = {"fixtures": FIXTURES, "sids": SIDS, "envs": ENVS, "roots": ROOTS, "learnJob": None, "used": USED,
+           "variants": VARIANTS}
     p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", str(HERE / "mod_parity_node.mjs")],
                        input=json.dumps(job), capture_output=True, text=True, timeout=120)
     assert p.returncode == 0, "mod renderer did not run (plugins/ace/mod/core.ts):\n" + p.stderr[-2000:]
@@ -113,7 +127,7 @@ def test_render_cohort_salted_bucket_and_knobs(node_out, monkeypatch):
             for k in ("ACE_AB_CONTROL_PCT", "ACE_AB_COMPACT_PCT"):
                 monkeypatch.setenv(k, env.get(k, "0"))
             assert got[1:] == [render_cohort(s) for s in SIDS[1:]]
-    assert set(node_out["cohorts"][0]) == {"full"}  # default: everyone gets the full render
+    assert set(node_out["cohorts"][0]) == {"budget"}  # §31 default: budget, full share 0
 
 
 def test_render_arm_python_ts_parity(node_out, monkeypatch):
@@ -126,6 +140,16 @@ def test_render_arm_python_ts_parity(node_out, monkeypatch):
                 monkeypatch.setenv(k, env[k])
         assert got == [render_arm(s or None) for s in SIDS], env
         assert [render_cohort(s or None) for s in SIDS] == ["budget" if a == "full" else a for a in got], env
+
+
+def test_used_pattern_ids_python_ts_parity(node_out):
+    assert node_out["used"] == [used_pattern_ids(*v) for v in USED]
+    assert node_out["used"][:4] == [["ctx-1111111111-aaaa"], [], ["ctx-1111111111-aaaa"], ["a-1", "c-3"]]
+
+
+def test_normalize_variant_python_ts_parity(node_out):
+    assert node_out["normalized"] == [normalize_render_variant(v) for v in VARIANTS] == \
+        ["full", "budget", "full", None, None, None, None]
 
 
 def test_data_root_derives_from_plugin_root(node_out):

@@ -35,7 +35,7 @@ const MIN = 60_000
 
 type SearchAnswer = { exitCode?: number; stdout?: string; stderr?: string; advanceMs?: number; killed?: boolean }
 type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; env?: Record<string, string>; files?: Record<string, string>
-  engine?: (stdin?: string) => SearchAnswer; links?: string[]; noClassic?: boolean
+  engine?: (stdin?: string) => SearchAnswer; links?: string[]; noClassic?: boolean; defaultArm?: boolean
   learnExit?: number; early?: (agentId: string) => Promise<unknown> }
 type Run = { argv: string[]; stdin?: string; env?: Record<string, string>; timeoutMs?: number; files: Set<string> }
 
@@ -49,7 +49,8 @@ function host(on: any, o: Opts = {}) {
   for (const [k, v] of Object.entries(o.files ?? {})) put(k, v)
   if (!o.noClassic) put(`${SDIR}/mod-classic`, String(now))  // classic.* hooks fire (no managed-settings guard)
   const runs: Run[] = [], logs: string[] = [], envAsked: string[] = []
-  const env: Record<string, string> = { HOME, ...(o.env ?? {}) }
+  // §31 default is ACE_RENDER_FULL_PCT=0 (budget); this suite pins the full arm unless defaultArm (its own tests below)
+  const env: Record<string, string> = { HOME, ...(o.defaultArm ? {} : { ACE_RENDER_FULL_PCT: '100' }), ...(o.env ?? {}) }
   let spawnN = 0
   const res = (exitCode: number, stdout: string, stderr = '') =>
     ({ value: { exitCode, stdout, stderr, isStdoutTruncated: false, isStderrTruncated: false } })
@@ -211,6 +212,7 @@ test('prompt.submit renders ALL 100 patterns, and the edge-case fixture byte-exa
   expect(r.context[0].startsWith('<ace-patterns shown="100" of="100" agent-type="main">\n{')).toBe(true)
   expect(bodyOf(r.context[0]).similar_patterns.length).toBe(100)
   out = SEDGE
+  h.files.delete(`${SDIR}/full-injected.json`)  // a new conversation for the dedupe (§31): the edge render byte-exactly
   const r2: any = await submit($, HUMAN + ' edge')
   expect(r2.context[0]).toBe(G.full_main_edge)
   expect(h.searches().length).toBe(2)
@@ -695,9 +697,10 @@ const done = ($: any, answer = 'done', agentId?: string) =>
   $.turn.complete({ answer, durationMs: 5, isAborted: false, turnId: agentId ? 'ta' : 't1', reason: 'answer', ...(agentId ? { agentId } : {}) } as any)
 
 test('turn.complete main: detached learn (--no-stream, F-080 flags, --timeout 300000), lock taken before the spawn', async ($, on) => {
-  const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_RENDER_FULL_PCT: '0' } })  // budget arm: F-080 applied ids (§29)
+  const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_RENDER_FULL_PCT: '0' } })
+  const st8 = JSON.parse(G.state_main_8), used = Object.keys(st8.retrieval_log_ids)[1]
   await mainTask($, h)
-  await done($)
+  await done($, 'followed ' + used)  // §31: only the USED pattern is applied
   expect(h.learns().length).toBe(1)
   const L = h.learns()[0]!, a = h.learnArgv(L)
   expect(a.slice(0, 3)).toEqual(['ace-cli', 'learn', '--transcript'])
@@ -705,9 +708,8 @@ test('turn.complete main: detached learn (--no-stream, F-080 flags, --timeout 30
   expect(h.flag(a, '--timeout')).toBe('300000')
   expect(h.flag(a, '--verbosity')).toBe('detailed')
   expect(a.includes('--pin-session')).toBe(false)
-  const st8 = JSON.parse(G.state_main_8)
   expect(h.flag(a, '--retrieval-id')).toBe(st8.retrieval_id)
-  expect(h.flag(a, '--applied-log-ids')).toBe(st8.pattern_ids.filter((id: string) => id in st8.retrieval_log_ids).map((id: string) => st8.retrieval_log_ids[id]).join(','))
+  expect(h.flag(a, '--applied-log-ids')).toBe(String(st8.retrieval_log_ids[used]))
   expect(h.flag(a, '--transcript')!.startsWith(`${ROOT}/tmp/`)).toBe(true)
   expect(L.files.has(`${SDIR}/learn-inflight-main.lock`)).toBe(true)
   expect(L.argv[0] === 'ace-cli').toBe(false)  // never the bare learn: always through the detaching launcher
@@ -731,8 +733,9 @@ test('trace parity with ace_after_task.py: fields, effort from classic.Stop, git
   expect(t.agent_type).toBe('main')
   expect(t.session_id).toBe(tsid)
   expect(t.render_variant).toBe('full')
+  expect(t.conversation_id).toBe(SID)  // §31: the stable CC session id
   expect(t.retrieval_id).toBe(JSON.parse(S8).retrieval_id)
-  expect(t.applied_log_ids).toBeUndefined()  // §29: full -> no applied ids
+  expect(t.applied_log_ids).toBeUndefined()  // §31: 'all done' uses no pattern
   expect(t.effort_level).toBe('high')
   expect(t.effort_weight).toBe(1.5)
   expect(t.git.commit_hash).toBe('abc123')
@@ -834,33 +837,94 @@ test('engine present: the detached learn runs engine/learn.js and falls back to 
   expect(a.slice(sep + 1, sep + 3)).toEqual(['ace-cli', 'learn'])
 })
 
-// ---------- §28 render_variant contract / §29 applied_log_ids under full ----------
+// ---------- §31 final client contract (render_variant, conversation_id, used-only applied ids, dedupe) ----------
 
-test('§29 full (default): no --applied-log-ids, trace without applied ids; retrieval_id + playbook_used unchanged', async ($, on) => {
-  const h = host(on, { search: () => ({ stdout: S8 }) })
-  await mainTask($, h)
-  expect(h.state()!.render_variant).toBe('full')
-  await done($)
-  const L = h.learns()[0]!, a = h.learnArgv(L), t = h.trace(L)
-  expect(a.includes('--applied-log-ids')).toBe(false)
-  expect(t.applied_log_ids).toBeUndefined()
-  const st8 = JSON.parse(G.state_main_8)
-  expect(h.flag(a, '--retrieval-id')).toBe(st8.retrieval_id)
-  expect(t.retrieval_id).toBe(st8.retrieval_id)
-  expect(t.playbook_used).toEqual(st8.pattern_ids)
-  expect(t.render_variant).toBe('full')
+test('§31 default env: budget (ACE_RENDER_FULL_PCT=0), labelled budget, <= 9,500 chars', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S100 }), defaultArm: true })
+  const r: any = await submit($)
+  expect(h.state()!.render_variant).toBe('budget')
+  expect(r.context[0].length <= 9500).toBe(true)
 })
 
-test('§29 compact keeps the applied ids; the variant is read back from state, never recomputed at learn', async ($, on) => {
+test('§31 applied_log_ids = only the used ids (id or a >= 40-char verbatim fragment), for full too', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  const st8 = JSON.parse(G.state_main_8)
+  const [a, b] = Object.keys(st8.retrieval_log_ids)
+  const unique = 'Refuse a planted symlink in the rotation chain before moving the relevance log anywhere.'
+  await mainTask($, h)
+  const path = `${SDIR}/patterns-used-main.json`, st = JSON.parse(h.files.get(path)!)  // the fixture contents share a filler
+  st.pattern_contents[b] = unique
+  h.put(path, JSON.stringify(st))
+  const frag = unique.slice(10, 55)
+  await done($, `Following ${a}; and per the playbook:\n${frag} was applied.`)
+  const L = h.learns()[0]!, t = h.trace(L)
+  expect(t.render_variant).toBe('full')
+  expect(t.applied_log_ids).toEqual([st8.retrieval_log_ids[a], st8.retrieval_log_ids[b]])
+  expect(h.flag(h.learnArgv(L), '--applied-log-ids')).toBe(`${st8.retrieval_log_ids[a]},${st8.retrieval_log_ids[b]}`)
+  expect(t.playbook_used).toEqual(st8.pattern_ids)
+  expect(t.retrieval_id).toBe(st8.retrieval_id)
+})
+
+test('§31 a 39-char fragment or an unrelated answer credits nothing', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  const st8 = JSON.parse(G.state_main_8)
+  await mainTask($, h)
+  await done($, 'x ' + st8.pattern_contents[Object.keys(st8.retrieval_log_ids)[0]].slice(-39) + ' y')
+  const L = h.learns()[0]!
+  expect(h.learnArgv(L).includes('--applied-log-ids')).toBe(false)
+  expect(h.trace(L).applied_log_ids).toBeUndefined()
+})
+
+test('§31 compact/control are no server label: render_variant omitted, never recomputed or defaulted', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }) })
   await mainTask($, h)
   const path = `${SDIR}/patterns-used-main.json`
-  h.put(path, h.files.get(path)!.replace('"render_variant": "full"', '"render_variant": "compact"'))
+  h.put(path, h.files.get(path)!.replace('"render_variant": "full"', '"render_variant": " COMPACT "'))
   await done($)
-  const L = h.learns()[0]!, t = h.trace(L)
-  expect(t.render_variant).toBe('compact')
-  const st8 = JSON.parse(G.state_main_8)
-  expect(h.flag(h.learnArgv(L), '--applied-log-ids')).toBe(st8.pattern_ids.filter((id: string) => id in st8.retrieval_log_ids).map((id: string) => st8.retrieval_log_ids[id]).join(','))
+  expect('render_variant' in h.trace(h.learns()[0]!)).toBe(false)
+})
+
+test('§31 nothing rendered (search failed): no label in state or trace', async ($, on) => {
+  const h = host(on, { search: () => ({ exitCode: 1, stderr: 'boom' }) })
+  await mainTask($, h)
+  expect(h.state()!.render_variant).toBeUndefined()
+  await done($)
+  const t = h.trace(h.learns()[0]!)
+  expect('render_variant' in t).toBe(false)
+  expect(t.conversation_id).toBe(SID)
+})
+
+test('§31 dedupe under full: later prompts inject only new ids; a compaction (record removed) injects all again', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  const r1: any = await submit($)
+  expect(shownOf(r1.context[0])).toBe(8)
+  const r2: any = await submit($, HUMAN + ' again')
+  expect(shownOf(r2.context[0])).toBe(2)  // only the two the fixture gives no valid id (never tracked, never credited)
+  expect(h.state()!.pattern_ids).toEqual([])
+  expect(h.state()!.render_variant).toBe('full')
+  h.files.delete(`${SDIR}/full-injected.json`)  // what the SessionStart compact hook does
+  const r3: any = await submit($, HUMAN + ' after compact')
+  expect(shownOf(r3.context[0])).toBe(8)
+})
+
+test('§31 budget never dedupes (it re-ranks the top-N every prompt)', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), defaultArm: true })
+  await submit($)
+  const r2: any = await submit($, HUMAN + ' again')
+  expect(shownOf(r2.context[0])).toBe(8)
+  expect(h.files.has(`${SDIR}/full-injected.json`)).toBe(false)
+})
+
+test('§31 a subagent trace carries the conversation id (inherited), its own pin', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await submit($)
+  await spawn($, 'review the domain shift python port for parity bugs')
+  await $.turn.start({ text: 'review the domain shift python port for parity bugs', turnId: 'ta', agentId: 'agent-1' } as any)
+  await $.tool.call({ tool: 'Edit', file_path: '/proj/y.py', old_string: 'a', new_string: 'b', agentId: 'agent-1' } as any)
+  await done($, 'ok', 'agent-1')
+  const t = h.trace(h.learns()[0]!)
+  expect(t.conversation_id).toBe(SID)
+  expect(t.session_id).toBe(h.pin(h.searches()[1]!))
 })
 
 test('§28 the arm buckets on the CC session id (bucket 66 here), CONTROL=70: every task gets control', async ($, on) => {
@@ -1208,13 +1272,6 @@ test('session.end removes the session dir unless a learn lock younger than 10 mi
   h.advance(11 * MIN)
   await $.session.end({ reason: 'other', sessionId: SID, resume: {} } as any)
   expect([...h.files.keys()].some(k => k.startsWith(SDIR + '/'))).toBe(false)
-})
-
-import { unrenderedVariant } from '../core.ts'
-test('unrenderedVariant: default env never labels an unrendered trace full (Python parity: budget)', () => {
-  expect(unrenderedVariant('sess-1', {})).toBe('budget')
-  expect(unrenderedVariant(undefined, {})).toBe('budget')
-  expect(unrenderedVariant('sess-1', { ACE_AB_CONTROL_PCT: '100' })).toBe('control')
 })
 
 // Team/Enterprise or managed-settings seats: the built-in guard filters the mod's classic.* hooks. The mod then must not
