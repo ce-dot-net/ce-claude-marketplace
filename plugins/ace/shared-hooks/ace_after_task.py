@@ -785,8 +785,8 @@ def main():
         if not context:
             skip_learning("No project context found", event)
             sys.exit(0)
-        if plugin_data_dir.is_disabled(context['project'], session_id) or plugin_data_dir.is_mod_active(context['project'], session_id):
-            sys.exit(0)  # session flag (CLI unusable) or project flag (P-26)
+        if plugin_data_dir.is_disabled(context['project'], session_id) or plugin_data_dir.mod_owns_learn(context['project'], session_id):
+            sys.exit(0)  # session flag (CLI unusable), project flag (P-26), or the mod learns (its classic.* hooks run)
 
         # Self-eval answer in the last message -> review file for the statusline (after the gates)
         if hook_event_name == 'Stop':
@@ -1161,7 +1161,6 @@ def main():
     except Exception as e:
         # Log error but don't block
         log_hook_exception(hook_name, e)
-        print(f"[ERROR] ACE after-task hook failed: {e}", file=sys.stderr)
         sys.exit(0)
     finally:
         if lock_taken and not handed_off:

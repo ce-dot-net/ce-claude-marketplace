@@ -91,6 +91,7 @@ class H(BaseHTTPRequestHandler):
         self._send(404, {"message": "nope"})
 
 
+ThreadingHTTPServer.request_queue_size = 128  # default 5 overflows when a loaded host connects in bursts
 srv = ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), H)
 if len(sys.argv) > 3:
     with open(sys.argv[3] + ".tmp", "w") as f:  # atomic: the reader never sees a half-written port

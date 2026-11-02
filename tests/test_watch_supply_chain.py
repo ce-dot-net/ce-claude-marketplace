@@ -156,3 +156,35 @@ def test_a_file_outside_the_allow_list_fails():
     new = _files(*_good())
     new["plugins/ace/hooks/hooks.json"] = "{}"
     assert _verify()(_files(), new, "4.2.2", "4.3.0")
+
+
+def test_nested_ace_sdk_key_fails():
+    pkg, lock, man = _good()
+    lock["packages"]["node_modules/@ace-sdk/cli/node_modules/evil"] = {
+        "version": "1.0.0", "resolved": "https://registry.npmjs.org/evil/-/evil-1.0.0.tgz", "integrity": "sha512-x"}
+    assert _verify()(_files(), _files(pkg, lock, man), "4.2.2", "4.3.0")
+
+
+def test_aliased_registry_tarball_fails():
+    pkg, lock, man = _good()
+    lock["packages"]["node_modules/@ace-sdk/cli"].update(
+        name="evil", resolved="https://registry.npmjs.org/evil/-/evil-6.6.6.tgz")
+    assert _verify()(_files(), _files(pkg, lock, man), "4.2.2", "4.3.0")
+
+
+def test_untracked_new_file_reaches_verify(tmp_path, monkeypatch):
+    """main() must see a file the patch CREATES (git diff --name-only HEAD omits untracked files)."""
+    import subprocess
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    for c in (["config", "user.email", "t@x"], ["config", "user.name", "t"]):
+        subprocess.run(["git", "-C", str(tmp_path)] + c, check=True)
+    (tmp_path / "a").write_text("1")
+    subprocess.run(["git", "-C", str(tmp_path), "add", "a"], check=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "-qm", "i"], check=True)
+    (tmp_path / "plugins" / "ace" / ".claude-plugin").mkdir(parents=True)
+    (tmp_path / "plugins" / "ace" / ".claude-plugin" / "x.json").write_text("{}")
+    monkeypatch.chdir(tmp_path)
+    spec = importlib.util.spec_from_file_location("verify_bump_main", VERIFY)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    assert m.main(["v", "4.2.2", "4.3.0"]) == 1

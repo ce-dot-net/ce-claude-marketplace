@@ -7,7 +7,7 @@ import {
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
   detachedLearnArgv, FALLBACK_ON_3, parseAceReview, parseDiffStat, evalInjection, searchRow, searchSummary, searchErrorLine, sessionTitle,
-  subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, appliedLogIds, type StateUpdate, type ToolRec, type Cohort,
+  subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, unrenderedVariant, appliedLogIds, type StateUpdate, type ToolRec, type Cohort,
 } from './core.ts'
 
 const SEARCH_MS = 25000, DOMAIN_MS = 17000 // §11 A2: blocking budget per search, retry included
@@ -202,6 +202,22 @@ async function disabled($: any, s: Sess) {
   return await $.fs.exists(`${s.sdir}/disabled.flag`) || await $.fs.exists(`${s.pdir}/disabled.flag`)
 }
 function touchMarker($: any, L: Load, s: Sess, now: number) { L.markerAt = now; return $.fs.write(`${s.sdir}/mod-active`, String(now)) }
+// classic.* hooks of a user mod do not run on seats where the built-in managed-settings guard (sec-default@builtin)
+// is loaded (Team/Enterprise, managed settings): the mod still runs. Each classic.* event touches mod-classic; the
+// Python Stop/SubagentStop step aside only while it is fresh (plugin_data_dir.mod_owns_learn), and the mod's turn.complete
+// learns only then, so exactly one chain learns and the Python Stop keeps the background_tasks deferral + effort.
+async function touchClassic($: any, L: Load) {
+  try {
+    const s = await ensure($, L)
+    if (s) await $.fs.write(`${s.sdir}/mod-classic`, String(await $.clock.now()))
+  } catch { /* the Python Stop then learns itself */ }
+}
+async function classicFresh($: any, s: Sess): Promise<boolean> {
+  try {
+    const st = await $.fs.stat(`${s.sdir}/mod-classic`)
+    return (await $.clock.now()) - st.mtimeMs < 600_000
+  } catch { return false }
+}
 // Between prompts: a long task must not wake the Python chain beside the mod. Never throws.
 async function refreshMarker($: any, L: Load) {
   try {
@@ -425,7 +441,7 @@ async function onPrompt($: any, L: Load, e: any): Promise<any> {
   const query = expandAbbreviations(text)
   const sr = await search($, s, query, tsid, undefined, SEARCH_MS)
   if (!sr.resp) {
-    await save({ tsid, userPrompt: e.text, hook: 'UserPromptSubmit' })
+    await save({ tsid, userPrompt: e.text, hook: 'UserPromptSubmit', renderVariant: unrenderedVariant(s.sessionId, await cohortEnv($)) })
     await relLog($, s, { timestamp: await nowIso($), event: 'error', hook: 'UserPromptSubmit', location: 'mod.search', error: sr.error ?? null, stderr_sample: sr.stderr, pin_failed: sr.pinFailed || undefined, pin_ms: sr.pinMs, session_id: s.sessionId, project_id: s.project, hook_ms: await $.clock.now() - t0, source: 'mod' })
     $.ui.log(searchErrorLine(sr.error))
     return withEval([])
@@ -502,7 +518,7 @@ async function beforeSpawn($: any, L: Load, s: Sess, e: any) {
   const tsid = uuid()     // §12: every subagent is its own ACE session; the parent's id is correlation only
   const parent = await readState($, s, e.parentAgentId ?? 'main')
   const query = subagentQuery(e.prompt)
-  const state: StateUpdate = { tsid, userPrompt: query, hook: 'SubagentStart', parentTaskId: parent?.task_session_id ?? undefined, agentType: e.subagentType }
+  const state: StateUpdate = { tsid, userPrompt: query, hook: 'SubagentStart', parentTaskId: parent?.task_session_id ?? undefined, agentType: e.subagentType, renderVariant: unrenderedVariant(s.sessionId, await cohortEnv($)) }
   const skip = L.placeholders.has(e.prompt) ? 'workflow_placeholder' : skipReason(query, s.minChars, s.extraPrefixes)
   if (skip) {
     await relLog($, s, { timestamp: await nowIso($), event: 'search_skipped', hook: 'SubagentStart', reason: skip, session_id: s.sessionId, project_id: s.project, source: 'mod' })
@@ -592,6 +608,7 @@ export const register: Register = (on) => {
 
   // Never clobber a custom /rename or --name title.
   on('classic.UserPromptSubmit', async ($, e: any, next) => {
+    await touchClassic($, L)
     const r = await next(e)
     return L.pendingTitle && !e.session_title ? { ...r, sessionTitle: L.pendingTitle } : r
   })
@@ -599,6 +616,7 @@ export const register: Register = (on) => {
   // turn.complete carries no effort; Stop does (ace_after_task._resolve_effort_level).
   on('classic.Stop', async ($, e: any, next) => {
     await refreshMarker($, L)  // Stop is the Python hook that would reap the state, and it runs after this one
+    await touchClassic($, L)
     const raw = effortOf(e)
     if (typeof raw === 'string' && raw) L.stopEffort = raw
     L.stopDefer = delegatedRunning(e.background_tasks) ? (e.background_tasks as any[]).map(b => String(b?.type)) : null
@@ -606,6 +624,7 @@ export const register: Register = (on) => {
   })
   on('classic.SubagentStop', async ($, e: any, next) => {
     await refreshMarker($, L)
+    await touchClassic($, L)
     const raw = effortOf(e)
     if (typeof raw === 'string' && raw && e.agent_id) L.agentEffort.set(e.agent_id, raw)
     return next(e)
@@ -657,7 +676,8 @@ export const register: Register = (on) => {
         if (e.fork && !forkSearch) {  // §16 P7: a fork inherits the parent context incl. the injected block
           const parent = await readState($, s, e.parentAgentId ?? 'main')
           pending = { out: e, state: { tsid: uuid(), userPrompt: subagentQuery(e.prompt), hook: 'SubagentStart',
-            parentTaskId: parent?.task_session_id ?? undefined, agentType: e.subagentType || 'fork' } }
+            parentTaskId: parent?.task_session_id ?? undefined, agentType: e.subagentType || 'fork',
+            renderVariant: unrenderedVariant(s.sessionId, await cohortEnv($)) } }
           await relLog($, s, { timestamp: await nowIso($), event: 'search_skipped', hook: 'SubagentStart', reason: 'fork_inherits_context', session_id: s.sessionId, project_id: s.project, source: 'mod' })
         } else if (e.resume) {  // a rewrite of a resume is not applied. Same run with state: same task (§12). Reaped: a new one.
           const key = e.resume.agentId
@@ -721,6 +741,7 @@ export const register: Register = (on) => {
     try {
       s = await ensure($, L)
       if (!s) return res
+      if (!(await classicFresh($, s))) return res  // classic.* hooks are filtered on this seat: the Python Stop/SubagentStop learns
       const agentId = (e as any).agentId as string | undefined
       if (agentId === undefined) {
         const review = parseAceReview(e.answer)

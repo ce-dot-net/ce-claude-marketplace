@@ -94,7 +94,7 @@ def open_project_log(path, append: bool = True):
     if project_log_unsafe(path):  # re-check after mkdir: nothing may have been swapped in
         return None
     flags = os.O_WRONLY | os.O_CREAT | (os.O_APPEND if append else os.O_TRUNC) | getattr(os, "O_NOFOLLOW", 0)
-    return os.fdopen(os.open(str(path), flags, 0o644), "a" if append else "w")
+    return os.fdopen(os.open(str(path), flags, 0o600)  # rows carry prompts, "a" if append else "w")
 
 
 def data_root() -> Path:
@@ -200,6 +200,17 @@ def is_mod_active(project_id: Optional[str], session_id: Optional[str], max_age:
     try:
         import time
         return time.time() - mod_active_marker(project_id, session_id).stat().st_mtime < max_age
+    except OSError:
+        return False
+
+
+def mod_owns_learn(project_id: Optional[str], session_id: Optional[str], max_age: float = 600) -> bool:
+    """True when the mod is active AND its classic.* hooks run (mod-classic fresh). On seats where the managed-settings
+    guard filters them, the mod's turn.complete does not learn, so the Python Stop/SubagentStop must."""
+    try:
+        import time
+        return is_mod_active(project_id, session_id, max_age) and time.time() - (
+            session_dir(project_id, session_id, create=False) / "mod-classic").stat().st_mtime < max_age
     except OSError:
         return False
 

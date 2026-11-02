@@ -8,6 +8,7 @@ Tests for:
   - Line 2 has ACE metrics
   - No "Compact" label anywhere
 """
+from __future__ import annotations
 
 import json
 import os

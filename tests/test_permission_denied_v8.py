@@ -144,3 +144,29 @@ def test_shim_respects_plugin_data_disabled_flag(tmp_path):
     flag.write_text("CLI version 4.0.0 < 4.1.2")
     env.run(SCRIPT, _ev(env, "pd-off", "[Data Exfiltration]"))
     assert env.cli_calls("learn") == []
+
+
+# ── §28: render_variant names what was actually rendered ────────────────────
+
+def _variant(tmp_path, monkeypatch, marker):
+    from wpa_harness import PROJECT_ID
+    env = Env(tmp_path)
+    for k, v in env.env().items():
+        monkeypatch.setenv(k, v)
+    for k in ("ACE_RENDER_FULL_PCT", "ACE_AB_CONTROL_PCT", "ACE_AB_COMPACT_PCT"):
+        monkeypatch.delenv(k, raising=False)
+    m = _mod()
+    m._PROJECT_ID = PROJECT_ID
+    if marker:
+        sd = env.session_dir("pd-rv")
+        sd.mkdir(parents=True)
+        (sd / "mod-active").touch()
+    return m._render_variant("pd-rv")
+
+
+def test_render_variant_full_when_mod_active(tmp_path, monkeypatch):
+    assert _variant(tmp_path, monkeypatch, True) == "full"
+
+
+def test_render_variant_budget_without_mod(tmp_path, monkeypatch):
+    assert _variant(tmp_path, monkeypatch, False) == "budget"

@@ -22,6 +22,7 @@ Functions under test:
 
 Run with: pytest tests/test_ace_insights_analyzer.py -v
 """
+from __future__ import annotations
 
 import sys
 from pathlib import Path

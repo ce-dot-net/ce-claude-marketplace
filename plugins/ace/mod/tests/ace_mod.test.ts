@@ -35,7 +35,7 @@ const MIN = 60_000
 
 type SearchAnswer = { exitCode?: number; stdout?: string; stderr?: string; advanceMs?: number; killed?: boolean }
 type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; env?: Record<string, string>; files?: Record<string, string>
-  engine?: (stdin?: string) => SearchAnswer; links?: string[]
+  engine?: (stdin?: string) => SearchAnswer; links?: string[]; noClassic?: boolean
   learnExit?: number; early?: (agentId: string) => Promise<unknown> }
 type Run = { argv: string[]; stdin?: string; env?: Record<string, string>; timeoutMs?: number; files: Set<string> }
 
@@ -47,6 +47,7 @@ function host(on: any, o: Opts = {}) {
   const put = (p: string, t: string) => { files.set(p, t); mtime.set(p, now) }
   put(`${CWD}/.claude/settings.json`, JSON.stringify({ projectId: PRJ, orgId: 'org_t' }))
   for (const [k, v] of Object.entries(o.files ?? {})) put(k, v)
+  if (!o.noClassic) put(`${SDIR}/mod-classic`, String(now))  // classic.* hooks fire (no managed-settings guard)
   const runs: Run[] = [], logs: string[] = [], envAsked: string[] = []
   const env: Record<string, string> = { HOME, ...(o.env ?? {}) }
   let spawnN = 0
@@ -1207,4 +1208,24 @@ test('session.end removes the session dir unless a learn lock younger than 10 mi
   h.advance(11 * MIN)
   await $.session.end({ reason: 'other', sessionId: SID, resume: {} } as any)
   expect([...h.files.keys()].some(k => k.startsWith(SDIR + '/'))).toBe(false)
+})
+
+import { unrenderedVariant } from '../core.ts'
+test('unrenderedVariant: default env never labels an unrendered trace full (Python parity: budget)', () => {
+  expect(unrenderedVariant('sess-1', {})).toBe('budget')
+  expect(unrenderedVariant(undefined, {})).toBe('budget')
+  expect(unrenderedVariant('sess-1', { ACE_AB_CONTROL_PCT: '100' })).toBe('control')
+})
+
+// Team/Enterprise or managed-settings seats: the built-in guard filters the mod's classic.* hooks. The mod then must not
+// learn (the Python Stop does, with the background_tasks deferral); a classic event brings the learn back.
+test('classic.* hooks filtered: turn.complete does not learn; the first classic.UserPromptSubmit re-enables it', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), noClassic: true })
+  await mainTask($, h)
+  await done($)
+  expect(h.learns().length).toBe(0)
+  await ($ as any).classic.UserPromptSubmit({ prompt: HUMAN, session_id: SID })
+  await mainTask($, h)
+  await done($)
+  expect(h.learns().length).toBe(1)
 })

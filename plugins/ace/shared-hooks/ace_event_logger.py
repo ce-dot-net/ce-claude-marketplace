@@ -19,6 +19,16 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional
 
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "utils"))
+from plugin_data_dir import open_project_log  # §24: O_NOFOLLOW + symlink refusal under <cwd>/.claude/data/logs
+
+
+def _append(path: Path, line: str) -> None:
+    f = open_project_log(path)  # creates the dir; None when a symlinked component/target is refused
+    if f is not None:
+        with f:
+            f.write(line)
+
 
 class ACEEventLogger:
     """Core logging utility for ACE hook events with rotation."""
@@ -29,7 +39,6 @@ class ACEEventLogger:
 
     def __init__(self, log_dir: str = ".claude/data/logs"):
         self.log_dir = Path(log_dir)
-        self.log_dir.mkdir(parents=True, exist_ok=True)
 
     def _rotate_if_needed(self, log_path: Path) -> None:
         """Rotate log file if it exceeds MAX_FILE_SIZE."""
@@ -99,8 +108,7 @@ class ACEEventLogger:
 
         try:
             self._rotate_if_needed(log_path)
-            with open(log_path, 'a') as f:
-                f.write(json.dumps(log_entry) + '\n')
+            _append(log_path, json.dumps(log_entry) + '\n')
         except Exception as e:
             print(f"[ERROR] Failed to write log: {e}", file=sys.stderr)
 
@@ -128,8 +136,7 @@ class ACEEventLogger:
         # Log to event-specific log
         event_log_path = self.get_log_path(event_type)
         try:
-            with open(event_log_path, 'a') as f:
-                f.write(json.dumps({**error_entry, "phase": "error"}) + '\n')
+            _append(event_log_path, json.dumps({**error_entry, "phase": "error"}) + '\n')
         except Exception as e:
             print(f"[ERROR] Failed to write event log: {e}", file=sys.stderr)
 
@@ -137,8 +144,7 @@ class ACEEventLogger:
         errors_log_path = self.log_dir / "ace-errors.jsonl"
         try:
             self._rotate_if_needed(errors_log_path)
-            with open(errors_log_path, 'a') as f:
-                f.write(json.dumps(error_entry) + '\n')
+            _append(errors_log_path, json.dumps(error_entry) + '\n')
         except Exception as e:
             print(f"[ERROR] Failed to write errors log: {e}", file=sys.stderr)
 

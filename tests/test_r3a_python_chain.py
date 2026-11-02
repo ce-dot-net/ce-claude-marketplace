@@ -239,3 +239,20 @@ def test_docs_state_ace_cli_hardcodes_client_header():
     for name, text in (("CHANGELOG 8.0.0", v8), ("ADR-001", adr)):
         assert "X-ACE-Client: cli" in text, "%s must state ace-cli hard-codes X-ACE-Client: cli" % name
         assert "ACE_CLIENT_ID" in text, name
+
+
+def test_mod_owns_learn_needs_a_fresh_classic_marker(tmp_path, monkeypatch):
+    """Seats where the managed-settings guard filters the mod's classic.* hooks: the mod is active
+    (mod-active) but its Stop/SubagentStop hooks never run, so the Python Stop must keep the learn."""
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
+    import plugin_data_dir as pdd
+    sdir = tmp_path / "ace-pd" / "projects" / "prj_m" / "sessions" / "sid_m"
+    sdir.mkdir(parents=True)
+    (sdir / "mod-active").write_text("")
+    assert pdd.is_mod_active("prj_m", "sid_m") is True
+    assert pdd.mod_owns_learn("prj_m", "sid_m") is False, "no classic marker: the Python Stop learns"
+    (sdir / "mod-classic").write_text("")
+    assert pdd.mod_owns_learn("prj_m", "sid_m") is True
+    old = time.time() - 11 * 60
+    os.utime(str(sdir / "mod-classic"), (old, old))
+    assert pdd.mod_owns_learn("prj_m", "sid_m") is False
