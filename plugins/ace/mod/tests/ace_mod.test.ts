@@ -1294,3 +1294,15 @@ test('prompt.submit leaves its title in mod-title (the Python UPS sets it where 
   await submit($, HUMAN, 'composer')
   expect(h.files.has(`${SDIR}/mod-title`)).toBe(true)
 })
+
+test('§31 a subagent credits ids named in its SubagentHandback report and in its closing message', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  const st8 = JSON.parse(G.state_main_8), [a, b] = Object.keys(st8.retrieval_log_ids)
+  await spawn($, 'review the domain shift python port for parity bugs')
+  await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+  await $.tool.call({ tool: 'SubagentHandback', message: '## Findings: applied ' + a, agentId: 'agent-1' } as any)
+  await done($, 'closing: also ' + b, 'agent-1')
+  const t = h.trace(h.learns()[0]!)
+  expect(t.applied_log_ids).toEqual([a, b].filter(id => t.playbook_used.includes(id)).map(id => st8.retrieval_log_ids[id]))
+  expect(t.applied_log_ids.length).toBe(2)
+})

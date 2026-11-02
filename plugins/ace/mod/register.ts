@@ -326,7 +326,8 @@ async function reap($: any, L: Load, s: Sess, key: string, state: any) {
   L.late.delete(key)
 }
 
-async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook: 'Stop' | 'SubagentStop', effortEvent: string | undefined, summaryCap = 2000) {
+async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook: 'Stop' | 'SubagentStop', effortEvent: string | undefined, summaryCap = 2000,
+  usedText = answer) {
   const t0 = await $.clock.now()
   const agentId = key === 'main' ? undefined : key
   const recs = await takeTools($, L, s, key)
@@ -347,7 +348,7 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   const playbook: string[] = state.pattern_ids ?? []
   const rlog: Record<string, number> = state.retrieval_log_ids ?? {}
   const variant = traceVariant(state.render_variant)  // §31: stored at render time, normalized, omitted when unknown
-  const applied = appliedLogIds(usedPatternIds(playbook, state.pattern_contents ?? {}, answer), rlog)  // §31: used only
+  const applied = appliedLogIds(usedPatternIds(playbook, state.pattern_contents ?? {}, usedText), rlog)  // §31: used only
   const tsid: string | undefined = state.task_session_id ?? undefined
   const effort = effortEvent || await $.env.get('CLAUDE_EFFORT') || 'normal'
   let git: any
@@ -780,7 +781,8 @@ export const register: Register = (on) => {
         const handback = L.handback.get(agentId)  // §16 P1: the delivered report, not the closing line
         L.agentEffort.delete(agentId); L.earlyStart.delete(agentId); L.handback.delete(agentId)
         if (e.reason !== 'answer' || e.isAborted) await abstain($, L, s, agentId, await readState($, s, agentId), e.reason, 'SubagentStop')
-        else await learn($, L, s, agentId, handback || e.answer, 'SubagentStop', effort, handback ? 4000 : 2000)
+        else await learn($, L, s, agentId, handback || e.answer, 'SubagentStop', effort, handback ? 4000 : 2000,
+          [handback, e.answer].filter(Boolean).join('\n'))  // §31: handback report + closing message, as ace_after_task
       }
     } catch (err) {
       if (s) await relLog($, s, { timestamp: await nowIso($), event: 'error', hook: 'Stop', location: 'mod.turn.complete', error: String(err).slice(0, 300), source: 'mod' })
