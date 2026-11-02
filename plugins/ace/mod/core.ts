@@ -493,6 +493,11 @@ const COHORTS = new Set(['control', 'compact', 'full', 'budget'])
 // §28: the variant stored at render time wins; a state without one (written before the label existed) gets the arm.
 export const traceVariant = (stored: unknown, sessionId: string | undefined, env: Record<string, string | undefined>): string =>
   typeof stored === 'string' && COHORTS.has(stored) ? stored : renderCohort(sessionId, env)
+// Nothing was rendered (search failed / skipped): label what the Python chain labels, never 'full' (§28 names what was rendered).
+export const unrenderedVariant = (sid: string | undefined, env: Record<string, string | undefined>): string => {
+  const c = renderCohort(sid, env)
+  return c === 'full' ? 'budget' : c
+}
 // §29 RELEASE BLOCKER: under `full` (~100 shown) the injected set is no "applied" signal; the server ruling is an
 // empty list. budget/compact/control keep injected ids ∩ retrieval_log_ids.
 export function appliedLogIds(playbook: string[], rlog: Record<string, number>, variant: string): number[] {
@@ -754,7 +759,10 @@ export const PRIVATE_WRITE_SH = 'umask 077; d=$(dirname "$1"); mkdir -p "$d" && 
 // $1 = log file, $2 = cwd, stdin = rows.
 export const APPEND_SH = 'for p in "$2/.claude" "$2/.claude/data" "$(dirname "$1")" "$1"; do [ -L "$p" ] && exit 0; done; '
   + 'mkdir -p "$(dirname "$1")" || exit 0; [ -L "$1" ] && exit 0; '
-  + '[ "$(wc -c <"$1" 2>/dev/null || echo 0)" -gt 52428800 ] && mv -f "$1" "$1.1"; cat >> "$1"'
+  + 'if [ "$(wc -c <"$1" 2>/dev/null || echo 0)" -gt 52428800 ]; then b="${1%.jsonl}"; '
+  // same chain as ace_relevance_logger (.1-.3): a repo-planted symlink or directory in the chain drops the row, nothing is moved
+  + 'for i in 1 2 3; do if [ -L "$b.$i.jsonl" ] || [ -d "$b.$i.jsonl" ]; then exit 0; fi; done; '
+  + 'mv -f "$b.2.jsonl" "$b.3.jsonl" 2>/dev/null; mv -f "$b.1.jsonl" "$b.2.jsonl" 2>/dev/null; mv -f "$1" "$b.1.jsonl"; fi; cat >> "$1"'
 
 // ace_after_task._delegated_running (§16 P2): a running subagent/workflow of this task defers the main learn.
 // Monitors, shells, teammates, crons are long-lived and never defer.

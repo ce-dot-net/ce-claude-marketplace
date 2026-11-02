@@ -7,6 +7,7 @@ Runs no package code. Lock rule: only the root entry's @ace-sdk/cli spec and nod
 change, each with an https registry.npmjs.org tarball, an sha512 integrity and no new install script.
 """
 import json
+import re
 import subprocess
 import sys
 
@@ -55,13 +56,18 @@ def _lock(o, n, latest):
             if want != b:
                 errs.append(LOCK + ": root entry changes beyond the @ace-sdk/cli spec")
             continue
-        if not key.startswith("node_modules/@ace-sdk/"):
-            errs.append(LOCK + ": entry outside @ace-sdk changed: " + key)
+        if not re.fullmatch(r"node_modules/@ace-sdk/(cli|core)", key):
+            errs.append(LOCK + ": entry outside @ace-sdk/cli|core changed: " + key)
             continue
         if b is None:
             continue  # a removed @ace-sdk entry installs nothing
-        if not str(b.get("resolved", "")).startswith(REGISTRY) or not str(b.get("integrity", "")).startswith("sha512-"):
-            errs.append(LOCK + ": %s is not an npm registry tarball with sha512 integrity" % key)
+        extra = sorted({"name", "link", "alias"} & set(b))
+        if extra:
+            errs.append(LOCK + ": %s carries %s (alias/link entries are refused)" % (key, extra))
+        pkg = key[len("node_modules/"):]
+        want = "%s%s/-/%s-%s.tgz" % (REGISTRY, pkg, pkg.split("/")[-1], b.get("version"))
+        if b.get("resolved") != want or not str(b.get("integrity", "")).startswith("sha512-"):
+            errs.append(LOCK + ": %s is not its own npm registry tarball (%s) with sha512 integrity" % (key, want))
         if b.get("hasInstallScript") and not (a or {}).get("hasInstallScript"):
             errs.append(LOCK + ": %s gained an install script" % key)
     return errs
@@ -74,8 +80,10 @@ def _git_show(path):
 
 def main(argv):
     pin, latest = argv[1], argv[2]
-    changed = subprocess.run(["git", "diff", "--name-only", "HEAD"], capture_output=True, text=True,
-                             check=True).stdout.split()
+    # porcelain + untracked-files=all: a NEW file (absent from HEAD) must reach verify(), which rejects it
+    out = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all", "-z"], capture_output=True,
+                         text=True, check=True).stdout
+    changed = [e[3:] for e in out.split("\0") if len(e) > 3]
     old = {p: _git_show(p) for p in changed}
     new = {}
     for p in changed:

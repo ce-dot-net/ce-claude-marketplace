@@ -283,8 +283,10 @@ def _structural_fingerprint(tool_name: str, tool_input) -> str:
 
 def _render_variant(session_id):
     try:
-        from ace_pattern_render import render_cohort
-        return render_cohort(session_id)
+        from plugin_data_dir import is_mod_active
+        from ace_pattern_render import render_arm, render_cohort
+        # the mod renders `full`; the Python chain cannot (§28: name what was actually rendered)
+        return render_arm(session_id) if is_mod_active(_PROJECT_ID, session_id) else render_cohort(session_id)
     except Exception:
         return "budget"
 
