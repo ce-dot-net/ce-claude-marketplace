@@ -62,3 +62,20 @@ def test_commands_stay_in_commands_dir_no_skills_migration():
     assert not (COMMANDS.parent / "skills").exists() or not any(
         (COMMANDS.parent / "skills").glob("ace-*/SKILL.md")
     ), "commands were migrated to skills/ although commands/ honors disable-model-invocation"
+
+
+@pytest.mark.parametrize("name", ALL_COMMANDS)
+def test_command_running_python_allows_python3(name):
+    """WP-I: a command that runs an embedded `python3 - <<'PY'` block (ace-doctor A5,
+    ace-cleanup --legacy) must allow `Bash(python3:*)` when it restricts allowed-tools."""
+    text = (COMMANDS / (name + ".md")).read_text(encoding="utf-8")
+    allowed = _frontmatter(name).get("allowed-tools")
+    if allowed and "python3 - <<" in text:
+        assert "Bash(python3:*)" in allowed, name + ".md runs python3 but allowed-tools lacks Bash(python3:*)"
+
+
+@pytest.mark.parametrize("name", ["ace-doctor", "ace-cleanup"])
+def test_round2_commands_embed_python_block(name):
+    """WP-I (DESIGN §11 A5, §10 P-14): the checks are embedded stdlib python, run via heredoc."""
+    text = (COMMANDS / (name + ".md")).read_text(encoding="utf-8")
+    assert "python3 - " in text and "<<'PY'" in text, name + ".md must embed a `python3 - <<'PY'` block"

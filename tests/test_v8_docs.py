@@ -90,3 +90,149 @@ def test_docs_mention_statusline_user_copy_refresh():
     text = _read(README)
     assert "~/.claude/ace_statusline.sh" in text
     assert "/ace:ace-statusline-setup update" in text
+
+
+# ---------------------------------------------------------------------------
+# WP-I (round 2): DESIGN §9, §10 (accepted losses, P-25/P-27), §11 A4/A6/A7, §7 release gate
+# ---------------------------------------------------------------------------
+REPO = PLUGIN.parent.parent
+CONFIG = PLUGIN / "docs" / "guides" / "CONFIGURATION.md"
+TROUBLE = PLUGIN / "docs" / "guides" / "TROUBLESHOOTING.md"
+GATE = PLUGIN / "docs" / "RELEASE_GATE_v8.md"
+RELEASE_MANAGER = REPO / ".claude" / "agents" / "release-manager.md"
+CI = REPO / ".github" / "workflows" / "tests.yml"
+DASH = "[–-]"  # en dash or hyphen
+
+
+def _v8_section():
+    m = re.search(r"^## \[8\.0\.0\][^\n]*\n(.*?)(?=^## \[)", _read(CHANGELOG), re.S | re.M)
+    assert m, "CHANGELOG.md has no `## [8.0.0]` section"
+    return m.group(1)
+
+
+@pytest.mark.parametrize("token", [
+    "PostToolBatch",            # G4 accumulator
+    "prompt_id",                # G2 task anchor
+    "Agent",                    # G1 PreToolUse(Agent) prompt stash for SubagentStart
+    "detached",                 # A3 learn survives `claude -p` teardown
+    "pin-backoff",              # A1 pin-drop + backoff
+    "sessions.db",              # A5 doctor / cleanup
+    "--legacy",                 # P-14
+    "ACE_ASYNC_LEARNING",       # P-27: removed, learning is always async
+])
+def test_changelog_8_0_0_names_round2_mechanism(token):
+    assert token in _v8_section(), "CHANGELOG [8.0.0] must mention " + token
+
+
+def test_changelog_8_0_0_does_not_claim_pretooluse_fully_removed():
+    """Round 2 re-adds PreToolUse(Agent); only the domain-shift PreToolUse path is gone."""
+    for line in _v8_section().splitlines():
+        if re.search(r"(?i)removed hooks?", line) and "PreToolUse" in line:
+            assert "Agent" in line or "domain" in line.lower(), line
+
+
+@pytest.mark.parametrize("pattern", [
+    r"PreToolUse[^\n]*systemMessage",                        # domain-shift systemMessages
+    r"whoami",                                               # startup auth warnings
+    r"(?i)troubleshooting[^\n]*injection|Bash.error",        # Bash-error troubleshooting injection
+    r"parent_agent_id",
+    r"UTC",
+    r"~/\.ace/config\.json",                                 # legacy apiToken warnings (P-23)
+    r"/rewind",
+    r"(?i)deny.rule[^\n]*not learned",                       # §11 A4
+])
+def test_changelog_8_0_0_lists_accepted_losses(pattern):
+    sec = _v8_section()
+    m = re.search(r"(?im)^###\s*Accepted losses\s*\n(.*?)(?=^###|\Z)", sec, re.S)
+    assert m, "CHANGELOG [8.0.0] needs a `### Accepted losses` subsection (DESIGN §10, §11 A4)"
+    assert re.search(pattern, m.group(1)), "accepted losses must cover " + pattern
+
+
+@pytest.mark.parametrize("num", ["60%s111" % DASH, r"2\.3%s3\.3" % DASH, "27%s37" % DASH])
+def test_changelog_8_0_0_has_p7_baseline(num):
+    """DESIGN §9: 7.1.14 60–111 s vs v8 2.3–3.3 s blocking hook time; UPS 27–37 s."""
+    assert re.search(num, _v8_section()), "CHANGELOG [8.0.0] baseline number missing: " + num
+
+
+@pytest.mark.parametrize("num", [
+    r"0\.23%s0\.53" % DASH, r"1\.97", "81%s96" % DASH, "237", r"6\.2 s", "123 MB",   # A7
+    "41,579", "94 ms",                                                               # SYNTHESIS §3
+])
+def test_adr_001_has_final_a7_numbers(num):
+    assert re.search(num, _read(ADR)), "ADR-001 missing proven number " + num
+
+
+@pytest.mark.parametrize("token", ["prompt.submit", "agent.spawn", "tool.call", "npm ci --ignore-scripts",
+                                   "2.1.287", "v8.1"])
+def test_adr_001_has_mods_inprocess_plan(token):
+    """SYNTHESIS §3: the v8.1 mods + in-process plan, in order, with its floor."""
+    assert token in _read(ADR), "ADR-001 must carry the v8.1 plan item " + token
+
+
+@pytest.mark.parametrize("token", ["PostToolBatch", "prompt_id", "agent-prompts", "detached",
+                                   "pin-backoff", "PreToolUse"])
+def test_architecture_is_v8_final(token):
+    """DESIGN §9 G1/G2/G4, §11 A1/A3: ARCHITECTURE describes the round-2 topology."""
+    assert token in _read(ARCH), "ARCHITECTURE.md must describe " + token
+
+
+def test_architecture_failure_hook_matcher_is_star():
+    """DESIGN §10 S8: PostToolUseFailure matcher `*`, not Bash only."""
+    assert "PostToolUseFailure (Bash)" not in _read(ARCH)
+
+
+def test_configuration_timeouts_in_seconds():
+    """P-25/P-27: hooks.json timeouts are SECONDS (UPS 30); no ms values, no ACE_ASYNC_LEARNING."""
+    text = _read(CONFIG)
+    assert '"timeout": 30' in text
+    assert re.search(r"(?i)seconds", text)
+    assert not re.search(r"(?<!\d)\d{4,}ms", text)
+    for var in ("ACE_MIN_PROMPT_CHARS", "ACE_PIN_BACKOFF_MIN"):
+        assert var in text, "CONFIGURATION.md must document " + var
+
+
+@pytest.mark.parametrize("token", ["database is locked", "sessions.db", "ace-hook-errors.log",
+                                   "CLAUDE_PLUGIN_DATA", "/ace:ace-cleanup --legacy", "/ace:ace-doctor"])
+def test_troubleshooting_covers_v8(token):
+    assert token in _read(TROUBLE), "TROUBLESHOOTING.md must cover " + token
+
+
+@pytest.mark.parametrize("token", [
+    "python3 -m pytest tests",                 # full suite
+    "ACE_E2E=1",                               # e2e
+    "claude plugin validate plugins/ace --strict",
+    "--debug-file",                            # A6
+    "timed out after",                         # A6: 0 timeout lines
+    "patterns_injected",                       # A6: > 0 on the human prompt
+    "database is locked",                      # A6
+    "search_skipped",                          # §7: <task-notification> prompt
+    "ACE_CLIENT_ID",                           # S14 CLAUDE_ENV_FILE export
+    "SessionEnd",                              # S14 < 0.5 s
+    "statusline",                              # S14
+    "ACE_REVIEW",                              # S14 self-eval round-trip
+    "disabled.flag",                           # S14
+    "~/.claude/logs",                          # §7: no growth
+])
+def test_release_gate_checklist(token):
+    assert GATE.exists(), "plugins/ace/docs/RELEASE_GATE_v8.md missing (DESIGN §7 + §11 A6)"
+    text = _read(GATE)
+    assert "- [ ]" in text, "release gate must be a checklist"
+    assert token in text, "release gate must include " + token
+
+
+@pytest.mark.parametrize("token", ["python3 -m pytest tests", "ACE_E2E=1", "plugin validate",
+                                   "RELEASE_GATE_v8.md", "v{VERSION}"])
+def test_release_manager_gate(token):
+    """WP-I: release-manager runs full suite + e2e + validate and follows the live checklist."""
+    assert token in _read(RELEASE_MANAGER), "release-manager.md must include " + token
+
+
+def test_release_manager_no_stale_cli_name():
+    text = _read(RELEASE_MANAGER)
+    assert "ce-ace" not in text and "claude plugin tag" not in text
+
+
+def test_ci_runs_e2e_job():
+    """Regression (already at 997c0de): CI runs the ACE_E2E=1 hook e2e suite."""
+    text = _read(CI)
+    assert "ACE_E2E" in text and "tests/e2e" in text

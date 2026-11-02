@@ -14,11 +14,27 @@ Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topol
 - State moved from `/tmp` and `~/.claude/logs` to `$CLAUDE_PLUGIN_DATA` (default `~/.claude/plugins/data/ace-ce-dot-net-marketplace`).
 - Hook scripts are thin shims; one `ace-cli` spawn per search (no `--version`/`whoami` probes); hook timeouts in seconds.
 - New hooks: `PostToolUseFailure` (failed Bash calls feed learning), `SessionStart` compact re-injection.
-- Removed hooks: `PreToolUse`, `PreCompact`, `PermissionRequest`.
+- Removed hooks: the domain-shift `PreToolUse` path, `PreCompact`, `PermissionRequest`. `PreToolUse` returns only with matcher `Agent` (prompt stash).
+- Round 2: `PostToolBatch` (async, one event per parallel batch) replaces the per-tool `PostToolUse` accumulator; `PostToolUseFailure` matcher is `*`.
+- `prompt_id` is the task anchor and `--pin-session` value (uuid fallback); the `Agent` PreToolUse hook stashes the subagent prompt in `agent-prompts/` so SubagentStart no longer scans the transcript.
+- Learning (Stop/SubagentStop) runs as a detached process and survives `claude -p` teardown; `ACE_ASYNC_LEARNING` is removed (always async, `ACE_LEARN_INLINE=1` for tests). All async hooks print nothing.
+- A failed session pin is dropped with a pin-backoff (`ACE_PIN_BACKOFF_MIN`); new `ACE_MIN_PROMPT_CHARS` skips searches for trivial prompts.
+- `/ace:ace-doctor` flags `~/.ace-cache/sessions.db` over 100 MB and recent `database is locked` errors; new `/ace:ace-cleanup --legacy` (dry run, `--yes`, `--sessions-db`) removes v7 leftovers.
+- Measured blocking hook time per session: 7.1.14 60-111 s vs v8 2.3-3.3 s; UserPromptSubmit alone 27-37 s before.
 - 18 user-only commands set `disable-model-invocation: true` (all except ace-search, ace-learn, ace-patterns, ace-status).
 - `/ace:ace-doctor` checks Claude Code >= 2.1.300 and the plugin-data layout; plugin root comes from `installed_plugins.json`.
 - Statusline uses one Python call instead of 13 `jq` spawns (refresh the user copy with `/ace:ace-statusline-setup update`).
-- Docs: ARCHITECTURE.md updated, new `docs/technical/ADR-001-language.md`.
+- Docs: ARCHITECTURE.md updated, new `docs/technical/ADR-001-language.md`, `docs/RELEASE_GATE_v8.md`; stale v1/v3 docs deleted.
+
+### Accepted losses
+- PreToolUse domain-shift systemMessage notices are gone (the domain-shift injection itself stays on PostToolUse).
+- Startup `whoami` auth warnings are gone; `/ace:ace-doctor` shows them instead.
+- Bash-error troubleshooting injection is replaced by accumulator-only PostToolUseFailure learning.
+- The `parent_agent_id` trace field is no longer sent.
+- Trace timestamps are now UTC.
+- Legacy `~/.ace/config.json` apiToken warnings are gone.
+- `/rewind` undo is not reflected in accumulator rows.
+- Deny-rule denials are not learned (PermissionDenied fires only in auto mode; they appear only in PostToolBatch tool_response).
 
 ## [7.1.14]
 
