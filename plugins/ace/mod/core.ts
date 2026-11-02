@@ -585,7 +585,7 @@ export function searchSummary(patterns: any[]): string {
 export function searchErrorLine(error: string | undefined): string {
   if (error === 'not_authenticated') return '⚠️ [ACE] Not authenticated. Run /ace:ace-login'
   if (error === 'timeout') return '⏱️ [ACE] Search timed out. Check your connection.'
-  if (error === 'cli_not_found') return '❌ [ACE] ace-cli not found. Run: npm install -g @ace-sdk/cli'
+  if (error === 'cli_not_found') return '❌ [ACE] ace-cli not found. Run /ace:ace-install-cli'
   return '❌ [ACE] Search failed or returned no results'
 }
 
@@ -677,9 +677,11 @@ export function parseDiffStat(out: string) {
   return { insertions: g(/(\d+)\s+insertions?\(\+\)/), deletions: g(/(\d+)\s+deletions?\(-\)/) }
 }
 
-// ace_cli.run_learn argv (never --pin-session; --no-stream so server 401/500 surface).
-export function learnArgv(traceFile: string, retrievalId?: string, appliedLogIds: number[] = [], verbosity = 'detailed') {
-  const a = ['ace-cli', 'learn', '--transcript', traceFile, '--json', '--timeout', '300000', '--verbosity', verbosity, '--no-stream']
+// ace_cli.run_learn / ace_engine.learn_command argv (never --pin-session; --no-stream so server 401/500 surface).
+// head: the resolved CLI (['ace-cli'] or [node, plugin-local cli.js]) + 'learn', or [node, engine/learn.js].
+export function learnArgv(traceFile: string, retrievalId?: string, appliedLogIds: number[] = [], verbosity = 'detailed',
+  head: string[] = ['ace-cli', 'learn']) {
+  const a = [...head, '--transcript', traceFile, '--json', '--timeout', '300000', '--verbosity', verbosity, '--no-stream']
   if (retrievalId) a.push('--retrieval-id', retrievalId)
   if (appliedLogIds.length) a.push('--applied-log-ids', appliedLogIds.join(','))
   return a
@@ -688,13 +690,22 @@ export function learnArgv(traceFile: string, retrievalId?: string, appliedLogIds
 // The launcher starts the child in its own session (setsid) and returns at once, so neither the hook's return nor
 // the session group's SIGHUP/SIGKILL at `claude -p` teardown reaches the learn. The child owns the metrics row and
 // all cleanup, lock last (session.end keeps the dir while the lock is fresh). Python: already a hard plugin dependency.
+// Engine learn: exit 3 = nothing was sent, so ONLY then the CLI argv after the separator runs (ace_cli.run_learn).
+export const FALLBACK_ON_3 = '--ace-fallback-on-3--'
 const LEARN_CHILD = `import os,subprocess,sys
 trace,lock,log,ok,fail,errlog=sys.argv[1:7]
+cmds=sys.argv[7:]
+fb=[]
+if '${FALLBACK_ON_3}' in cmds:
+    k=cmds.index('${FALLBACK_ON_3}')
+    cmds,fb=cmds[:k],cmds[k+1:]
 res=trace+'.result'
 code=1
 try:
     with open(res,'ab') as f:
-        code=subprocess.run(sys.argv[7:],stdin=subprocess.DEVNULL,stdout=f,stderr=subprocess.STDOUT,timeout=310).returncode
+        code=subprocess.run(cmds,stdin=subprocess.DEVNULL,stdout=f,stderr=subprocess.STDOUT,timeout=310).returncode
+        if code==3 and fb:
+            code=subprocess.run(fb,stdin=subprocess.DEVNULL,stdout=f,stderr=subprocess.STDOUT,timeout=310).returncode
 except Exception as e:
     try:
         with open(res,'a') as f:
