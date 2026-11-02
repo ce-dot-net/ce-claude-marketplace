@@ -165,8 +165,9 @@ def _remove(path):
         pass
 
 
-def run_fixture(name):
-    """Run every hook hooks.json routes this fixture's event to; return a result dict."""
+def run_fixture(name, prepare=None):
+    """Run every hook hooks.json routes this fixture's event to; return a result dict.
+    `prepare(plugin_data, project_id, session_id)` seeds plugin-data state first (e.g. the mod-active marker)."""
     root = plugin_root()
     token = "e2e" + uuid.uuid4().hex[:12]
     sandbox = Path(tempfile.mkdtemp(prefix="ace-e2e-"))
@@ -219,6 +220,8 @@ def run_fixture(name):
         "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     })
     hooks_json = json.loads((root / "hooks" / "hooks.json").read_text())
+    if prepare is not None:
+        prepare(data, project_id, session_id)
     before = _tmp_snapshot(token)
     started = time.time() - 1
     runs = []
