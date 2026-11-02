@@ -11,7 +11,17 @@ import subprocess
 import sys
 from pathlib import Path
 
-ENGINE_DIR = Path(__file__).resolve().parents[2] / 'engine'
+
+def _plugin_root():
+    """Same rule as ace_cli._plugin_root: an ACE CLAUDE_PLUGIN_ROOT wins (a copy, a symlinked checkout), else this
+    file's plugin. The engine and its plugin-local core must come from the root the CLI resolution uses."""
+    env = os.environ.get('CLAUDE_PLUGIN_ROOT')
+    if env and (Path(env) / 'shared-hooks' / 'utils' / 'ace_cli.py').is_file():
+        return Path(env)
+    return Path(__file__).resolve().parents[2]
+
+
+ENGINE_DIR = _plugin_root() / 'engine'
 CLI_BIN = 'ace-cli'  # default argv head; ace_cli owns which CLI really runs (cli=)
 _SCOPE = ENGINE_DIR.parent / 'node_modules' / '@ace-sdk'
 PLUGIN_LOCAL_CORES = (_SCOPE / 'cli' / 'node_modules' / '@ace-sdk' / 'core', _SCOPE / 'core')  # as resolve.js
