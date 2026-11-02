@@ -11,35 +11,65 @@ reads. It is not the interpreter.
 | Option | Assessment |
 |---|---|
 | Python (stdlib only, 3.9 compatible) | Keeps 1300+ tests and all hook logic; v8 removes the real costs (shim + single spawn + cached interpreter and CLI version). **Chosen.** |
-| TypeScript / Node | Only real structural win: in-process `@ace-sdk/core` import (in-process import 0.23-0.53 s CPU vs 1.97 s for the ace-cli spawn, see the v8.1 plan). Depends on a private `dist/cjs` path and an open server-team question. Deferred. |
+| TypeScript / Node | Only real structural win: in-process `@ace-sdk/core` import (0.23-0.53 s CPU vs 1.97 s for the ace-cli spawn). That win does not need rewriting the hooks: 8.0.0 takes it through a small Node engine the Python hooks spawn (see below). |
 | Go | Rejected: new toolchain and per-platform binaries for no measured gain over a single Python exec. |
 | Rust | Rejected: same as Go, higher maintenance cost. |
-| Claude Code mods (in-process JS hooks) | Follow-up: needs Claude Code >= 2.1.287 and has a Team/Enterprise guard caveat. Not in 8.0.0. |
+| Claude Code mods (in-process JS hooks) | Added in 8.0.0 alongside the Python hooks (see below): needs Claude Code >= 2.1.287 and is skipped where the Team/Enterprise guard is seated, where the Python chain runs instead. |
 
 ## Decision
-Keep Python; reduce process count (thin bash shims that `exec` Python) and I/O.
+Keep Python; reduce process count (thin bash shims that `exec` Python) and I/O. Search and learn run through
+the in-process engine below when its gate passes.
 
-## Deferred follow-ups (not in 8.0.0; see the v8.1 plan below)
-- Claude Code mods (in-process JS hooks).
-- In-process `@ace-sdk/core` (TypeScript hooks); ace-cli/core stay off-limits and are consumed as a subprocess.
+## In-process engine (in 8.0.0)
+`plugins/ace/engine/` is plain Node with no build step, no `package.json` and no `node_modules`:
+`engine/search.js`, `engine/learn.js`, `engine/resolve.js`. The ace-cli spawn loads the whole CLI (1.97 s CPU, 237 MB);
+the engine loads only the client and context modules of the core the CLI already installed, and never opens `sessions.db`,
+which removes the lock failures on that path.
+
+**Gate.** `engine/resolve.js` first looks in the plugin's own install, `${CLAUDE_PLUGIN_ROOT}/node_modules/@ace-sdk/core` (nested
+under the plugin-local CLI, then hoisted), and then needs no ace-cli at all. Otherwise it finds `realpath(ace-cli)`, its `@ace-sdk/cli`
+package, then `@ace-sdk/core` (nested first, then hoisted). Either way it requires `dist/cjs/client/ace-client.js` and
+`dist/cjs/config/context.js`, core >= 3.2.2 on major 3, and the `AceClient` + `createContext` exports. `dist/cjs` is a private path,
+outside the core's `exports` map, so this gate is the only thing that makes it safe. Reasons: `ok`, `no_cli`, `core_missing`,
+`file_missing`, `core_too_old`, `core_too_new`, `export_missing`.
+
+**Layouts.** A plugin-local install makes PATH differences irrelevant. Without one, the engine needs `ace-cli` to resolve to a real
+`@ace-sdk/cli` install: npm global, nvm, fnm and brew do. Volta, asdf and pnpm wrappers do not, so they report `core_missing` and stay
+on the working ace-cli path. Windows is unsupported (WSL2 ok).
+
+**Fallback.** `ACE_ENGINE=cli`, no node, or a failed gate uses the ace-cli path unchanged, including pin-drop and backoff.
+A failed engine search (any non-zero exit, or output without a `similar_patterns` list) also falls back. Learn falls back only on exit 3 or a spawn error,
+because any later failure may follow the POST and a re-send could duplicate the trace and double F-080 credit.
+Every spawn writes an `event: "engine"` relevance row with `engine`, `reason`, `hook`. `/ace:ace-doctor` shows the active
+engine through `ace_engine.py --status`.
+
+**Interface** (shared by `shared-hooks/utils/ace_engine.py` and the mod, which runs the same files with
+`$.process.run(node, [engine/search.js])`, so both chains use one implementation):
+| Script | Input | Output |
+|---|---|---|
+| `resolve.js` | none | One JSON object `{ok, reason, cli_path, core_dir, core_version, min_core}`; exit 0, or exit 3 on gate failure |
+| `search.js` | stdin JSON `{query, org, project, session_id?, top_k?}` | stdout: exactly the `ace-cli search --json` object; exit 3 on gate failure, exit 1 on runtime or server failure with the error on stderr |
+| `learn.js` | `--transcript F --json [--retrieval-id R] [--applied-log-ids a,b] [--verbosity V] [--timeout MS] [--no-stream]`; org and project via `ACE_ORG_ID`/`ACE_PROJECT_ID` | Same requests as `ace-cli learn --no-stream` (always the sync POST), same `--json` object; exit 3 = nothing sent, exit 1 = the POST may have been sent |
+
+`session_id` goes to the server for its retrieval-log stamp; the engine writes no local pin. The default `cacheDir` stays on, so
+the graph sqlite keeps feeding `result.expanded` (CLI parity) and `/ace:ace-graph`.
+
+**Attribution.** ace-cli hard-codes `X-ACE-Client: cli`, so `ACE_CLIENT_ID` never reaches the server through the CLI; the engine sets the
+header itself to `claude-code-plugin/<version>`, so it also shows which path served a request. Worth telling the server and SDK teams;
+no SDK change is requested.
+
+**Numbers.** Search via the deep import: parity 100/100, 0.23-0.53 s CPU and 81-96 MB RSS vs 1.97 s and 237 MB for the ace-cli spawn.
+Wall time stays bounded by the server round trip. A plugin-local dependency installed with `npm ci --ignore-scripts` costs 6.2 s cold and 123 MB;
+the engine adds nothing to it, because it reads the core the CLI installed.
+
+## Mods (in 8.0.0)
+Floor 2.1.287 (the v8 floor 2.1.311 already clears it). Mod hooks replace the matching command hooks while the mod is active:
+- `prompt.submit` replaces `UserPromptSubmit` and renders the server-curated set inline (41,579 chars proven; cap 100K vs 10K).
+- `agent.spawn` replaces `SubagentStart` (94 ms settle): `e.prompt` is first-class.
+- `tool.call` (tool=Read) replaces domain-shift.
+- PermissionDenied, SessionStart(compact) and SessionEnd stay command hooks.
 
 Round 2 of 8.0.0 already ships `prompt_id` as the task anchor (PreToolUse `Agent` prompt stash, PostToolBatch accumulator).
-
-## v8.1 plan: mods + in-process (proven numbers)
-Floor 2.1.287 (the v8 floor 2.1.311 already clears it). One hooks.json with `modules` + `hooks`, in this order:
-1. `UserPromptSubmit` becomes `prompt.submit`: render the full server-curated set inline (41,579 chars proven; cap 100K vs 10K)
-   on the same additional-context channel. Build behind a flag; the decision to inject over 10 K is the server team's.
-2. `SubagentStart` becomes `agent.spawn` (94 ms settle): `e.prompt` is first-class, which deletes the PreToolUse `Agent` stash
-   and the transcript scan.
-3. Domain-shift becomes `tool.call` (tool=Read): one in-process hook replaces the PostToolUse shim.
-4. Search in-process via a deep import of `@ace-sdk/core` (`dist/cjs/client/ace-client.js`): parity 100/100,
-   0.23-0.53 s CPU and 81-96 MB RSS vs 1.97 s and 237 MB for the ace-cli spawn; sessions.db is never opened, which ends the
-   lock storm structurally. Private path: version-gate it with an ace-cli fallback. Shipped via package.json + lockfile
-   with `npm ci --ignore-scripts` (6.2 s cold, 123 MB; Claude Code runs it itself into `${CLAUDE_PLUGIN_ROOT}/node_modules`, not for `--plugin-dir` loads).
-5. PermissionDenied, SessionStart(compact) and SessionEnd stay command hooks (the mod `classic.*` hooks are skipped where the
-   Team/Enterprise guard is seated).
-
-Expected gain: per-search CPU 1.5-2 s down to 0.3-0.5 s, RSS -60 %; wall time stays bounded by the server round trip. v8.1 work.
 
 ## Evaluated and rejected in 8.0.0 (research pass 2)
 - `UserPromptExpansion` for slash-command names: evaluated, not useful (the expansion carries nothing the commands need; no hook added).
@@ -51,6 +81,3 @@ Expected gain: per-search CPU 1.5-2 s down to 0.3-0.5 s, RSS -60 %; wall time st
 - `render_variant` reaches the server: ace-cli forwards the trace verbatim, so the A/B attribution can use it.
 - `parent_agent_id` is the server-declared name for the parent prompt id (the local state keeps `parent_task_id`).
 - `effort_level` / `effort_weight` are dropped server-side (not stored or persisted); they stay in the local relevance log only.
-
-## Note: ACE_CLIENT_ID (m3)
-ace-cli hard-codes `X-ACE-Client: cli`, so the plugin's `ACE_CLIENT_ID` env var never reaches the server through the CLI. The env var is kept (harmless); only an in-process SDK engine could set the header.

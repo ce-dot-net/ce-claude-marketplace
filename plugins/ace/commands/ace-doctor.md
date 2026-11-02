@@ -224,8 +224,8 @@ test -f "$PLUGIN_ROOT/node_modules/better-sqlite3/build/Release/better_sqlite3.n
 GLOBAL_CLI="$(command -v 'ace-cli')"
 test -n "$GLOBAL_CLI" && echo "global ace-cli: $GLOBAL_CLI $("$GLOBAL_CLI" --version 2>/dev/null)"
 
-# Which engine is active
-test -d "$PLUGIN_ROOT/engine" && echo "engine: in-process (@ace-sdk/core), CLI as fallback" || echo "engine: CLI"
+# ace_engine.py --status: which engine runs search/learn, and why ("lib" = in-process @ace-sdk/core, "cli" = ace-cli spawn)
+python3 "$PLUGIN_ROOT/shared-hooks/utils/ace_engine.py" --status
 
 # The wrapper commands use (plugin-local first, then global)
 ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version
@@ -238,6 +238,8 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version
 - ⚠️ packages not installed: run `claude plugin update ace@ce-dot-net-marketplace`; if still missing, `/ace:ace-install-cli`
 - ⚠️ sqlite binary missing: starts working after the next session start (SessionStart runs `npm rebuild better-sqlite3` once per plugin version)
 - ❌ neither: run `/ace:ace-install-cli`
+- ✅ Engine: lib (core version from the status JSON)
+- ℹ️ Engine: cli, with the `reason` from the status JSON. This is a working fallback, not an error, so report it without alarm. `ACE_ENGINE=cli` forces it. `core_missing` is normal on volta, asdf and pnpm wrappers, where ace-cli itself is fine. `core_too_old`, `core_too_new`, `file_missing` and `export_missing` mean the core found does not pass the gate; to get the engine back, suggest `/ace:ace-install-cli`.
 
 **If Failed**:
 ```
