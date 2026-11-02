@@ -4,7 +4,7 @@
 Logs every request (method, path, headers with Authorization masked, JSON body) as one
 JSON line to the log file. Answers /api/v1/config, /patterns/search, /traces,
 /traces/stream and /api/v1/auth/refresh like the real server. FAKE_MODE=401|500 makes
-the trace POSTs fail; FAKE_GRAPH_DELAY=<s> stalls the graph edge refresh. Usage: engine_fake_server.py <port|0> <log> [<portfile>]
+the trace POSTs fail; FAKE_REFRESH=429|reuse fails the token refresh; FAKE_SEARCH=401 rejects searches; FAKE_GRAPH_DELAY=<s> stalls the graph edge refresh. Usage: engine_fake_server.py <port|0> <log> [<portfile>]
 (port 0 = pick a free port and write it to <portfile>).
 """
 import json
@@ -77,8 +77,15 @@ class H(BaseHTTPRequestHandler):
                 return self._send(500, {"message": "boom"})
             return self._send(200, TRACE_OK)
         if self.path.startswith("/patterns/search"):
+            if os.environ.get("FAKE_SEARCH") == "401":  # the token family was revoked server-side
+                return self._send(401, {"detail": "token revoked"})
             return self._send(200, SEARCH)
         if self.path.startswith("/api/v1/auth/refresh"):
+            refresh = os.environ.get("FAKE_REFRESH", "ok")
+            if refresh == "429":  # 30 req/min per IP on the refresh endpoint
+                return self._send(429, {"detail": "rate limited"})
+            if refresh == "reuse":  # a rotated token presented after the 60 s grace revokes the family
+                return self._send(400, {"error": "invalid_grant", "reason": "reuse"})
             return self._send(200, {"access_token": "ace_user_FAKEREFRESHED_0001", "refresh_token": "rfk_FAKE_NEW",
                                     "expires_in": 172800, "refresh_expires_in": 2592000})
         self._send(404, {"message": "nope"})

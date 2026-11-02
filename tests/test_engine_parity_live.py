@@ -52,6 +52,23 @@ def live_env(tmp_path_factory):
     return env, ids
 
 
+def _record(query, attempt, cli, lib):
+    """§26: every live attempt's rc + stderr, so an engine rc=1 is never undiagnosed (ENGINE_PARITY_LOG=<jsonl>)."""
+    path = os.environ.get("ENGINE_PARITY_LOG")
+    if path:
+        with open(path, "a") as f:
+            f.write(json.dumps({"query": query, "attempt": attempt, "cli_rc": cli.returncode, "lib_rc": lib.returncode,
+                                "cli_stderr": cli.stderr[-2000:], "lib_stderr": lib.stderr[-2000:],
+                                "cli_count": _count(cli), "lib_count": _count(lib)}) + "\n")
+
+
+def _count(p):
+    try:
+        return json.loads(p.stdout).get("count")
+    except ValueError:
+        return None
+
+
 def _key_sets(result):
     # order-insensitive: two live calls may rank ties differently
     return sorted(tuple(sorted(p)) for p in result["similar_patterns"])
@@ -63,14 +80,15 @@ def test_engine_search_parity_with_ace_cli(live_env, query):
     pair may be retried. An engine that really drops keys or patterns fails every attempt."""
     env, ids = live_env
     payload = json.dumps({"query": query, "org": ids["ACE_ORG_ID"], "project": ids["ACE_PROJECT_ID"]})
-    for _ in range(5):
+    for attempt in range(5):
         cli = subprocess.run([E.real_cli_path(), "search", "--stdin", "--json"], input=query,
                              capture_output=True, text=True, env=env, timeout=90)
-        if cli.returncode != 0:
-            pytest.skip("ace-cli search failed (auth/server): " + cli.stderr[:200])
         lib = subprocess.run([E.node_bin(), str(E.ENGINE / "search.js")], input=payload,
                              capture_output=True, text=True, env=env, timeout=90)
-        assert lib.returncode == 0, lib.stderr[:500]
+        _record(query, attempt, cli, lib)
+        if cli.returncode != 0:
+            pytest.skip("ace-cli search failed (auth/server): " + cli.stderr[-500:])
+        assert lib.returncode == 0, "engine rc=%d, stderr:\n%s" % (lib.returncode, lib.stderr[-2000:])
         a, b = json.loads(cli.stdout), json.loads(lib.stdout)
         assert sorted(a) == sorted(b), "top-level keys"
         assert a.get("retrieval_id") and b.get("retrieval_id"), "retrieval_id on both (F-080)"
