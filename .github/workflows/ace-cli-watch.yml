@@ -1,0 +1,99 @@
+name: ace-cli-watch
+
+# Plugin and ace-cli go hand in hand (DESIGN section 23): every plugin version runs the exact CLI it was tested with.
+# This job notices a newer @ace-sdk/cli, bumps the pin in a branch, regenerates the lock, runs the suite and the
+# contract test, and opens ONE pull request. A human reads the result, merges and releases. Nothing is merged here.
+# The default token is enough; pull requests it opens do not trigger other workflows, so the tests run in this job.
+
+on:
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compare npm with the pin
+        id: ver
+        run: |
+          LATEST=$(npm view @ace-sdk/cli version)
+          PIN=$(node -p "require('./plugins/ace/package.json').dependencies['@ace-sdk/cli']")
+          NEWER=$(node -e "const a=process.argv[1].split('.').map(Number),b=process.argv[2].split('.').map(Number);console.log(a[0]-b[0]||a[1]-b[1]||a[2]-b[2]>0?'yes':'no')" "$LATEST" "$PIN")
+          echo "latest=$LATEST" >> "$GITHUB_OUTPUT"
+          echo "pin=$PIN" >> "$GITHUB_OUTPUT"
+          echo "newer=$NEWER" >> "$GITHUB_OUTPUT"
+          echo "npm has $LATEST, the plugin pins $PIN, newer=$NEWER"
+      - name: One PR per version
+        id: open
+        if: steps.ver.outputs.newer == 'yes'
+        run: |
+          N=$(gh pr list --head "ace-cli-watch/${{ steps.ver.outputs.latest }}" --state all --json number --jq length)
+          echo "existing=$N" >> "$GITHUB_OUTPUT"
+      - name: Bump the pin, the manifests and the lock
+        if: steps.ver.outputs.newer == 'yes' && steps.open.outputs.existing == '0'
+        run: |
+          git checkout -b "ace-cli-watch/${{ steps.ver.outputs.latest }}"
+          python3 - <<'PY'
+          import json, re
+          old, new = "${{ steps.ver.outputs.pin }}", "${{ steps.ver.outputs.latest }}"
+          p = "plugins/ace/package.json"
+          d = json.load(open(p))
+          d["dependencies"]["@ace-sdk/cli"] = new
+          open(p, "w").write(json.dumps(d, indent=2) + "\n")
+          for m in ("plugins/ace/.claude-plugin/plugin.json", "plugins/ace/.claude-plugin/plugin.template.json", ".claude-plugin/marketplace.json"):
+              t = open(m).read()
+              open(m, "w").write(t.replace("ace-cli >= " + old, "ace-cli >= " + new))
+          PY
+          cd plugins/ace
+          npm install --package-lock-only --ignore-scripts
+      - name: Suite and contract test against the new pin
+        id: tests
+        if: steps.ver.outputs.newer == 'yes' && steps.open.outputs.existing == '0'
+        continue-on-error: true
+        run: |
+          python -m pip install --upgrade pip pytest
+          RC=0
+          # hermetic suite first: with plugins/ace/node_modules present the hooks under test would resolve the real CLI
+          python -m pytest tests -q -p no:cacheprovider --deselect tests/test_cli_contract.py 2>&1 | tee "$RUNNER_TEMP/suite.txt" || RC=1
+          (cd plugins/ace && npm ci --ignore-scripts && npm rebuild better-sqlite3) || RC=1
+          python -m pytest tests/test_cli_contract.py -q -p no:cacheprovider 2>&1 | tee "$RUNNER_TEMP/contract.txt" || RC=1
+          exit $RC
+      - name: Open the pull request
+        if: steps.ver.outputs.newer == 'yes' && steps.open.outputs.existing == '0'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add plugins/ace/package.json plugins/ace/package-lock.json plugins/ace/.claude-plugin .claude-plugin/marketplace.json
+          git commit -m "chore(ace): bump pinned ace-cli ${{ steps.ver.outputs.pin }} -> ${{ steps.ver.outputs.latest }}"
+          git push origin HEAD
+          OUTCOME="${{ steps.tests.outcome }}"
+          FLAGS=""
+          [ "$OUTCOME" = "success" ] || FLAGS="--draft"
+          {
+            echo "npm has @ace-sdk/cli ${{ steps.ver.outputs.latest }}; the plugin pins ${{ steps.ver.outputs.pin }}."
+            echo
+            echo "Tests against the new pin: **$OUTCOME**."
+            echo
+            echo '```'
+            tail -n 25 $RUNNER_TEMP/contract.txt
+            echo '```'
+            echo
+            echo "A failing contract test names the exact flag or field to adapt in the plugin. This PR does not bump the plugin version:"
+            echo "the release-manager does that (a pin bump is a plugin version bump), then releases."
+          } > $RUNNER_TEMP/body.md
+          gh pr create $FLAGS --base "${{ github.event.repository.default_branch }}" \
+            --title "ace-cli ${{ steps.ver.outputs.latest }}: bump the pin" --body-file $RUNNER_TEMP/body.md

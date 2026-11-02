@@ -19,6 +19,7 @@ Best-effort: any failure is swallowed silently. Hook MUST NOT block CC turns.
 from __future__ import annotations
 
 import json
+import re
 import os
 import subprocess
 import sys
@@ -51,7 +52,8 @@ _INFRA_MARKERS: tuple[str, ...] = (
 _TOOL_NAMING_MARKER = "is temporarily unavailable, so auto mode cannot determine the safety"
 
 
-_TAIL_BYTES = 32768  # FIX 2: seek-based read; never loads full transcript into memory
+_TAIL_BYTES = 262144  # FIX 2: seek-based read; 256 KB since §16 P9 (2.1.300+ records api-request lines after the denial)
+_API_REQUEST = re.compile(r'"type"\s*:\s*"api-request')
 
 
 def _read_transcript_tail(path, max_entries: int = 12) -> list:
@@ -78,6 +80,7 @@ def _read_transcript_tail(path, max_entries: int = 12) -> list:
         # Drop a possibly-partial first line when we didn't read from byte 0
         if start > 0 and lines:
             lines = lines[1:]
+        lines = [l for l in lines if not _API_REQUEST.search(l[:80])]  # P9: bulky, never a tool_result
     except (OSError, ValueError):
         return []
     candidate_lines = lines[-max_entries:] if len(lines) > max_entries else lines

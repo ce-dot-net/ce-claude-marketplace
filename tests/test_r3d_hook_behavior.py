@@ -27,6 +27,11 @@ REPORT = "## Findings\n" + "the delivered report body. " * 80
 
 
 def _handback_transcript(box, agent_id, *messages, closing="Now qdrant_search."):
+    """Deferred: box.subagent_event() rewrites the agent transcript, so the handback lines are appended after it."""
+    return lambda: _write_handback(box, agent_id, messages, closing)
+
+
+def _write_handback(box, agent_id, messages, closing):
     p = box.agent_transcript(agent_id)
     extra = []
     for i, m in enumerate(messages):
@@ -46,6 +51,8 @@ def _subagent_trace(box, agent_id, transcript, last="Now qdrant_search.", agent_
     box.write_state(sid, agent_id, task_session_id="own-uuid", user_prompt="refactor the parser module", **state)
     box.seed_tools(sid, WORK, agent_id=agent_id)
     ev = box.subagent_event(sid, agent_id, agent_type=agent_type, last_assistant_message=last)
+    if callable(transcript):
+        transcript = transcript()
     if transcript:
         ev["agent_transcript_path"] = transcript
     p = box.run_after_task(ev, ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)

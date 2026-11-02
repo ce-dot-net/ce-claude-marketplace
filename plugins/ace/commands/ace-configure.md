@@ -2,7 +2,7 @@
 disable-model-invocation: true
 description: Configure ACE server connection settings interactively
 argument-hint: "[--global] [--project]"
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(mkdir:*), Bash(cat:*), Bash(git:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(mkdir:*), Bash(cat:*), Bash(git:*), Read
 ---
 
 # Configure ACE Connection (v5.4.18)
@@ -45,23 +45,23 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 # Check for ace-cli
-if ! command -v ace-cli >/dev/null 2>&1; then
-  echo "ace-cli not found"
+if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
+  echo "ACE CLI not found"
   echo ""
   echo "Installation required:"
-  echo "  npm install -g @ace-sdk/cli"
+  echo "  /ace:ace-install-cli"
   exit 1
 fi
 
-VERSION=$(ace-cli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-echo "ace-cli found (version: $VERSION)"
+VERSION=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+echo "ACE CLI found (version: $VERSION)"
 echo ""
 ```
 
 ### Step 2: Check Authentication Status (CRITICAL)
 
 ```bash
-AUTH_STATUS=$(ace-cli whoami --json 2>&1 || echo '{"authenticated": false}')
+AUTH_STATUS=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json 2>&1 || echo '{"authenticated": false}')
 AUTHENTICATED=$(echo "$AUTH_STATUS" | jq -r '.authenticated // false')
 ```
 
@@ -96,7 +96,7 @@ Proceeding with configuration...
 
 ```bash
 # Fetch FRESH organization list from server (not cached)
-ORGS_JSON=$(ace-cli orgs --json 2>&1)
+ORGS_JSON=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli orgs --json 2>&1)
 ORG_COUNT=$(echo "$ORGS_JSON" | jq -r '.count // 0')
 ```
 
@@ -149,7 +149,7 @@ Extract the selected org_id from user's choice.
 
 ```bash
 # Fetch FRESH project list from server (not cached)
-PROJECTS_JSON=$(ace-cli projects --org "$SELECTED_ORG_ID" --json 2>&1)
+PROJECTS_JSON=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli projects --org "$SELECTED_ORG_ID" --json 2>&1)
 PROJECT_LIST=$(echo "$PROJECTS_JSON" | jq -r '.projects // []')
 PROJECT_COUNT=$(echo "$PROJECT_LIST" | jq 'length')
 ```
@@ -198,7 +198,7 @@ Extract the selected project_id.
 ### Step 7: Set Default Organization
 
 ```bash
-ace-cli switch-org "$SELECTED_ORG_ID"
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli switch-org "$SELECTED_ORG_ID"
 echo "Default organization set: $SELECTED_ORG_ID"
 ```
 
@@ -263,7 +263,7 @@ echo "  Verbosity: $VERBOSITY"
 echo ""
 echo "Verifying configuration..."
 
-STATUS=$(ace-cli status --json 2>&1 || echo '{"error": true}')
+STATUS=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli status --json 2>&1 || echo '{"error": true}')
 if echo "$STATUS" | jq -e '.error' >/dev/null 2>&1; then
   echo "Configuration saved but verification failed."
   echo "This may be normal if the project is new."
@@ -402,7 +402,7 @@ Create a project at https://ace.code-engine.app/projects
 ### "ace-cli command failed"
 ```
 ace-cli command failed. Check:
-1. ace-cli is installed: npm install -g @ace-sdk/cli
+1. ace-cli is installed: /ace:ace-install-cli
 2. You're authenticated: ace-cli whoami
 3. Network connectivity to ACE server
 ```

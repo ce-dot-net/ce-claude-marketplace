@@ -16,5 +16,5 @@ if [ -z "$ACE_ORG_ID" ] || [ -z "$ACE_PROJECT_ID" ]; then
   exit 1
 fi
 
-# Delegate to ace-cli tune with all arguments
-ace-cli tune "$@"
+# Delegate to the ace-cli wrapper (tune) with all arguments
+exec "$(dirname "${BASH_SOURCE[0]}")/ace-cli" tune "$@"

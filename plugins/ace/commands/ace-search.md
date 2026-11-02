@@ -1,7 +1,7 @@
 ---
 model: claude-haiku-4-5
 description: Semantic search for ACE patterns using natural language query
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Semantic Search
@@ -25,13 +25,13 @@ First, run this bash script to check authentication:
 # ACE Pre-flight Auth Check (v5.4.21)
 
 # Check ace-cli is available
-if ! command -v ace-cli >/dev/null 2>&1; then
+if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
   echo "ACE_STATUS=cli_not_found"
   exit 0
 fi
 
 # Check authentication status
-AUTH_JSON=$(ace-cli whoami --json 2>/dev/null || echo '{"authenticated":false}')
+AUTH_JSON=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json 2>/dev/null || echo '{"authenticated":false}')
 IS_AUTH=$(echo "$AUTH_JSON" | jq -r '.authenticated // false')
 
 if [ "$IS_AUTH" != "true" ]; then
@@ -47,7 +47,7 @@ Based on the output:
 
 - **If `ACE_STATUS=cli_not_found`**: Tell the user to install ace-cli:
   ```
-  ❌ ace-cli not found. Install: npm install -g @ace-sdk/cli
+  ❌ ace-cli not found. Install: /ace:ace-install-cli
   ```
 
 - **If `ACE_STATUS=not_authenticated`**: Use the **AskUserQuestion** tool to ask the user:
@@ -77,7 +77,7 @@ fi
 
 # Call ace-cli search - CLI reads org/project from env vars automatically
 # Threshold comes from server config (ace-cli tune show) - don't override!
-ace-cli search "$*"
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "$*"
 ```
 
 ### Parameters
@@ -98,7 +98,7 @@ ace-cli search "$*"
 
 **Note**: To limit number of results, use `jq` for filtering:
 ```bash
-ace-cli search "query" --json | jq '.patterns[:5]'  # First 5 results
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "query" --json | jq '.patterns[:5]'  # First 5 results
 ```
 The `--limit` flag is not supported by ace-cli. Use `--top-k` via server config (`/ace-tune`) instead.
 
@@ -106,15 +106,15 @@ The `--limit` flag is not supported by ace-cli. Use `--top-k` via server config 
 
 ```bash
 /ace-search JWT authentication best practices
-→ Calls: ace-cli search "JWT authentication best practices"
+→ Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "JWT authentication best practices"
 → Uses: Server config threshold (e.g., 0.45)
 
 /ace-search async test failures debugging
-→ Calls: ace-cli search "async test failures debugging"
+→ Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "async test failures debugging"
 
 # Override threshold if needed:
 /ace-search "JWT auth" --threshold 0.7
-→ Calls: ace-cli search "JWT auth" --threshold 0.7
+→ Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "JWT auth" --threshold 0.7
 
 # Domain filtering (v5.3.0+):
 /ace-search caching patterns --allowed-domains cache,performance

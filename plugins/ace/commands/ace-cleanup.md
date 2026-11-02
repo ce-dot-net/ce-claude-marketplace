@@ -3,7 +3,7 @@ disable-model-invocation: true
 model: claude-haiku-4-5
 description: Manage ACE log files and event logging toggle
 argument-hint: "[--days N] [--status] [--enable-logging] [--disable-logging] [--legacy [--yes] [--sessions-db]]"
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(rm:*), Bash(ls:*), Bash(python3:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(rm:*), Bash(ls:*), Bash(python3:*), Read
 ---
 
 # ACE Log Cleanup & Event Logging Toggle

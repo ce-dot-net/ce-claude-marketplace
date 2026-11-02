@@ -65,7 +65,7 @@ from ace_cli import run_search  # noqa: E402
 from ace_context import get_context                              # noqa: E402
 from patterns_used_state import append_patterns_used, load_state  # noqa: E402
 import plugin_data_dir                                           # noqa: E402
-from ace_relevance_logger import log_search, log_error           # noqa: E402
+from ace_relevance_logger import log_search, log_error, log_search_skipped           # noqa: E402
 from ace_pattern_render import render_patterns, render_cohort, render_compact_all  # noqa: E402
 
 # ── constants ────────────────────────────────────────────────────────────────
@@ -262,6 +262,16 @@ def _consume_stash(project, sid, prompt_id, agent_type) -> Optional[str]:
         return None
 
 
+def _parent_task_prompt(session_id, project, prompt_id) -> Optional[str]:
+    """P10: the human prompt of the task that spawned this workflow, from the parent's MAIN state - only when
+    that state belongs to the same prompt_id (a stale state of an earlier prompt must not become the query)."""
+    if not prompt_id:
+        return None
+    st = load_state(session_id, None, 'Stop', project_id=project)
+    q = str(st.get('user_prompt') or '').strip()
+    return q[:_QUERY_MAX_CHARS] if q and st.get('task_session_id') == prompt_id else None
+
+
 def main(event: Optional[Dict[str, Any]] = None) -> None:
     """Process a SubagentStart event.
 
@@ -320,14 +330,30 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         task_session_id = str(uuid.uuid4())
         parent_task_id = event.get('prompt_id') or None
 
+        # §16 P7: a fork (default-on since CC 2.1.302) inherits the parent's context INCLUDING the injected
+        # block: own pin + state so SubagentStop learns normally, but no second search / injection.
+        if agent_type == 'fork' and os.environ.get('ACE_SUBAGENT_INJECT_FORKS') != '1':
+            try:
+                append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id,
+                                     hook_event_name='SubagentStart', project_id=project,
+                                     parent_task_id=parent_task_id)
+                log_search_skipped('SubagentStart', 'fork_inherits_context', session_id, project)
+            except Exception as e:
+                log_error('SubagentStart', 'ace_subagent_start.fork', session_id, project, e)
+            sys.exit(0)
+
         # SubagentStart input has no prompt field (cc_hooks_reference.md:2553-2566):
         # own transcript first (Workflow agents), else bounded parent-transcript tail scan.
         # query_source: only stash/own_transcript are exact; parent_scan can be a sibling's prompt.
         query, query_source = None, None
-        for src, fn in (('stash', lambda: _consume_stash(project, plugin_data_dir.resolve_session_id(event),
-                                                          event.get('prompt_id'), agent_type)),
-                        ('own_transcript', lambda: _query_from_own_transcript(transcript_path, session_id, agent_id)),
-                        ('parent_scan', lambda: _extract_query_from_transcript(transcript_path, agent_type))):
+        sources = [('stash', lambda: _consume_stash(project, plugin_data_dir.resolve_session_id(event),
+                                                    event.get('prompt_id'), agent_type)),
+                   ('own_transcript', lambda: _query_from_own_transcript(transcript_path, session_id, agent_id)),
+                   ('parent_scan', lambda: _extract_query_from_transcript(transcript_path, agent_type))]
+        if agent_type == 'workflow-subagent':  # §16 P10: no Agent stash fires; parent_scan would pick a sibling's prompt
+            sources = [sources[1], ('parent_task', lambda: _parent_task_prompt(session_id, project, parent_task_id)),
+                       sources[2]]
+        for src, fn in sources:
             query = fn()
             if query:
                 query_source = src
@@ -438,7 +464,8 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                    patterns_injected=len(pattern_ids),
                    hook_ms=int((time.monotonic() - t_start) * 1000),
                    project_id=context['project'], org_id=context['org'],
-                   agent_type=agent_type, render_cohort=_cohort, parent_task_id=parent_task_id)
+                   agent_type=agent_type, render_cohort=_cohort, parent_task_id=parent_task_id,
+                   query_source=query_source)
 
         if ace_context is not None:
             output = {

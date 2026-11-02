@@ -157,7 +157,7 @@ def _search_and_inject(event, ctx, project, org, sid, agent_id, last_file, last,
     else:
         tsid = event.get('prompt_id') or load_task_session_id(sid, None, 'Stop', project_id=project) \
             or task_session_id_for(None)
-    result, _ms = run_search(query, org=org, project=project, session_id=tsid, top_k=8,
+    result, _ms = run_search(query, org=org, project=project, top_k=8,  # P8: no pin (server never credits these rows)
                              timeout=17, hook_event_name='PostToolUse')
     ok = isinstance(result, dict) and not result.get('error')
     if ok:  # a failed/timed-out search must stay retryable (domain not marked visited)

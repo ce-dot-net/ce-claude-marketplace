@@ -1,7 +1,7 @@
 ---
 disable-model-invocation: true
 description: Manual pattern management - add, update, or remove patterns in the ACE playbook
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Delta Operations
@@ -27,8 +27,8 @@ When the user runs `/ace-delta [operation]`, use ace-cli with JSON input:
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! command -v ace-cli >/dev/null 2>&1; then
-  echo "❌ ace-cli not found - Install: npm install -g @ace-sdk/cli"
+if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
+  echo "❌ ACE CLI not found - Install: /ace:ace-install-cli"
   exit 1
 fi
 
@@ -69,9 +69,9 @@ EOF
 )
 
 echo "$JSON_PAYLOAD" | if [ -n "$ORG_ID" ]; then
-  ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" delta add --stdin
+  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" delta add --stdin
 else
-  ace-cli --json --project "$PROJECT_ID" delta add --stdin
+  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --json --project "$PROJECT_ID" delta add --stdin
 fi
 ```
 
@@ -90,9 +90,9 @@ fi
 JSON_PAYLOAD='{"bullets": [{"id": "ctx-1749038476-4cb2", "content": "Updated pattern text"}]}'
 
 echo "$JSON_PAYLOAD" | if [ -n "$ORG_ID" ]; then
-  ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" delta update --stdin
+  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" delta update --stdin
 else
-  ace-cli --json --project "$PROJECT_ID" delta update --stdin
+  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --json --project "$PROJECT_ID" delta update --stdin
 fi
 ```
 
@@ -107,9 +107,9 @@ fi
 JSON_PAYLOAD='{"bullets": [{"id": "ctx-1749038476-4cb2"}]}'
 
 echo "$JSON_PAYLOAD" | if [ -n "$ORG_ID" ]; then
-  ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" delta remove --stdin
+  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" delta remove --stdin
 else
-  ace-cli --json --project "$PROJECT_ID" delta remove --stdin
+  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --json --project "$PROJECT_ID" delta remove --stdin
 fi
 ```
 
@@ -136,9 +136,9 @@ EOF
 )
 
 echo "$JSON_PAYLOAD" | if [ -n "$ORG_ID" ]; then
-  ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" delta update --stdin
+  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" delta update --stdin
 else
-  ace-cli --json --project "$PROJECT_ID" delta update --stdin
+  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --json --project "$PROJECT_ID" delta update --stdin
 fi
 ```
 

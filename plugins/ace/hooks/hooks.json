@@ -8,7 +8,8 @@
             "type": "command",
             "command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_install_cli.sh",
             "args": [],
-            "timeout": 30
+            "timeout": 30,
+            "statusMessage": "ACE: checking ace-cli\u2026"
           }
         ]
       },

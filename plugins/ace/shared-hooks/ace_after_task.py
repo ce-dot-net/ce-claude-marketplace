@@ -60,10 +60,6 @@ try:
 except Exception:
     _render_cohort = None  # type: ignore
 
-# CLI command detection
-CLI_CMD = 'ace-cli'
-
-
 from utils.machine_prompts import is_machine_prompt  # shared with WP-B UPS guard
 
 
@@ -702,6 +698,38 @@ def learn_child(path):
     run_learn_job(job)
 
 
+def _delegated_running(bg) -> bool:
+    return isinstance(bg, list) and any(
+        isinstance(b, dict) and b.get('type') in ('subagent', 'workflow') and b.get('status') == 'running' for b in bg)
+
+
+def handback_summary(path, cap=4000):
+    """§16 P1: the LAST `SubagentHandback` tool_use `message` of a subagent transcript (CC >= 2.1.271), else None.
+    Bounded tail read: the handback is the final act of the agent."""
+    try:
+        with open(path, 'rb') as f:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - 1048576))
+            lines = f.read().decode('utf-8', 'replace').splitlines()
+        found = None
+        for line in lines:
+            if 'SubagentHandback' not in line:
+                continue
+            try:
+                content = json.loads(line).get('message', {}).get('content')
+            except (ValueError, AttributeError):
+                continue
+            for b in content if isinstance(content, list) else []:
+                if isinstance(b, dict) and b.get('type') == 'tool_use' and b.get('name') == 'SubagentHandback':
+                    m = (b.get('input') or {}).get('message')
+                    if isinstance(m, str) and m.strip():
+                        found = m
+        return found[:cap] if found else None
+    except OSError:
+        return None
+
+
 def main():
     """
     ACE After Task Hook (Stop / SubagentStop) — dispatches learning to a detached child
@@ -801,6 +829,18 @@ def main():
         log_stop_telemetry(session_id=session_id, hook_type=hook_event_name,
                            background_tasks_count=len(bg) if isinstance(bg, list) else 0,
                            learn_lock_present=lock_present, learn_lock_age_seconds=lock_age)
+        # §16 P2: delegated work of THIS task still runs -> the "waiting" turn is not learned. State, tool rows
+        # and F-080 ids stay for the Stop that follows the <task-notification>. Monitors/shells are long-lived: no.
+        if hook_event_name == 'Stop' and _delegated_running(bg):
+            types = {}
+            for b in bg:
+                t = b.get('type') if isinstance(b, dict) else None
+                types[str(t)] = types.get(str(t), 0) + 1
+            try:
+                log_event("learn_deferred", session_id=session_id, types=types)
+            except Exception:
+                pass
+            sys.exit(0)
         # S9: hold the learn lock BEFORE reading any session state so a SessionEnd in between keeps
         # the dir (released in `finally` on every skip path; the learn job owns it once dispatched).
         try:
@@ -988,7 +1028,8 @@ def main():
             "result": {
                 "success": not has_errors,
                 "output": f"Executed {len(tools)} tool calls",
-                "summary": last_assistant_message[:2000] if last_assistant_message else None,  # v5.5.0: CC 2.1.51+
+                "summary": (handback_summary(agent_transcript_path) if hook_event_name == 'SubagentStop' and agent_transcript_path else None)
+                           or (last_assistant_message[:2000] if last_assistant_message else None),  # v5.5.0: CC 2.1.51+
             },
             "playbook_used": playbook_used,
             "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -1012,7 +1053,7 @@ def main():
         if agent_id:
             trace["agent_id"] = agent_id
         if _parent_task_id:
-            trace["parent_task_id"] = _parent_task_id  # §12: parent prompt_id, never the pin
+            trace["parent_agent_id"] = _parent_task_id  # §12/P3: parent prompt_id (server field name), never the pin
         # F-080: Enrich trace with retrieval provenance (omit keys when absent/empty).
         if retrieval_id:
             trace["retrieval_id"] = retrieval_id

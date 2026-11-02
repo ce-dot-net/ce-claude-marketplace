@@ -2,12 +2,14 @@
 disable-model-invocation: true
 description: Render the local ACE knowledge-graph as a self-contained interactive HTML report
 argument-hint: "[--min-weight N] [--max-edges N]"
-allowed-tools: Bash(python3:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(python3:*), Read
 ---
 
 # ACE Graph
 
 Visualise the ACE knowledge-graph stored in the local cache DB as an interactive force-directed HTML report. Nodes = patterns, edges = co-application pairs. Node colour = domain, node size = reward score, edge width = co-application weight.
+
+**Requirement:** the local graph cache is filled by the CLI (the graph cache needs ace-cli >= 4.2.1 and its sqlite binary; the plugin-pinned CLI has both). If the report says no cache DB was found, run a search first, or `/ace:ace-doctor`.
 
 ## Instructions for Claude
 
@@ -98,7 +100,7 @@ project_id = meta.get('project', '')
 project_name = None
 try:
     result = subprocess.run(
-        ['ace-cli', 'projects', '--json'],
+        [os.path.join('${CLAUDE_PLUGIN_ROOT}', 'scripts', 'ace-cli'), 'projects', '--json'],
         capture_output=True, text=True, timeout=8,
     )
     if result.returncode == 0 and result.stdout.strip():

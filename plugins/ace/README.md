@@ -14,13 +14,13 @@
 
 ## 🚀 Quick Start
 
-### 1. Install ACE CLI
+### 1. Install the plugin (the ACE CLI comes with it)
 
-```bash
-npm install -g @ace-sdk/cli
-```
+Claude Code installs the exact `@ace-sdk/cli` version pinned in `package.json` (`package-lock.json`) into the plugin
+directory when you install or update the plugin. Plugin and CLI go hand in hand: every plugin version runs the CLI it was
+tested with, and a new CLI reaches you with the next plugin update. If the CLI is missing, run `/ace:ace-install-cli`.
 
-**Requirements:** Claude Code >= 2.1.300, ace-cli >= 4.1.2
+**Requirements:** Claude Code >= 2.1.311, Node.js (for the CLI), macOS, Linux or WSL2. Windows is not supported (use WSL2).
 
 **Statusline:** `~/.claude/ace_statusline.sh` is a user copy of the plugin script; refresh it after a plugin update with `/ace:ace-statusline-setup update`.
 
@@ -223,10 +223,7 @@ Created automatically by `/ace-configure`.
 
 ### "ace-cli not found"
 
-Install the CLI:
-```bash
-npm install -g @ace-sdk/cli
-```
+Run `/ace:ace-install-cli` (it reports which CLI is used and repairs a missing install).
 
 ### "No .claude/settings.json"
 
@@ -254,10 +251,7 @@ chmod +x plugins/ace/scripts/*.sh
 
 ### Migration Steps
 
-1. **Install ace-cli:**
-   ```bash
-   npm install -g @ace-sdk/cli
-   ```
+1. **ace-cli:** installed with the plugin; run `/ace:ace-install-cli` if it is missing.
 
 2. **Update plugin:**
    ```bash
@@ -388,5 +382,5 @@ MIT License - See [LICENSE](../../LICENSE)
 **Version**: v5.4.7 (CLI Migration + Blocking Detection)
 **Status**: Active Development
 **Maintainer**: CE.NET Team
-**Requires**: Claude Code >= 2.1.300, ace-cli >= 4.1.2 (npm install -g @ace-sdk/cli)
+**Requires**: Claude Code >= 2.1.311, ace-cli = the exact pin in package.json (installed with the plugin). Windows not supported (WSL2 works).
 **Architecture**: Hooks + CLI (no MCP)

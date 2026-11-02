@@ -135,7 +135,6 @@ def test_changelog_8_0_0_does_not_claim_pretooluse_fully_removed():
     r"PreToolUse[^\n]*systemMessage",                        # domain-shift systemMessages
     r"whoami",                                               # startup auth warnings
     r"(?i)troubleshooting[^\n]*injection|Bash.error",        # Bash-error troubleshooting injection
-    r"parent_agent_id",
     r"UTC",
     r"~/\.ace/config\.json",                                 # legacy apiToken warnings (P-23)
     r"/rewind",

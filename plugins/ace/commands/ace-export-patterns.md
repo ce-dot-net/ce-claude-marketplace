@@ -2,7 +2,7 @@
 disable-model-invocation: true
 model: claude-haiku-4-5
 description: Export ACE playbook to JSON for backup or sharing
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Export Playbook
@@ -17,8 +17,8 @@ When the user runs `/ace:export-patterns`, use ace-cli to export the playbook:
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! command -v ace-cli >/dev/null 2>&1; then
-  echo "❌ ace-cli not found - Install: npm install -g @ace-sdk/cli"
+if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
+  echo "❌ ACE CLI not found - Install: /ace:ace-install-cli"
   exit 1
 fi
 
@@ -37,9 +37,9 @@ OUTPUT_FILE="${1:-ace-playbook-export.json}"
 echo "📦 Exporting ACE playbook..."
 
 if [ -n "$ORG_ID" ]; then
-  ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" export > "$OUTPUT_FILE"
+  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" export > "$OUTPUT_FILE"
 else
-  ace-cli --json --project "$PROJECT_ID" export > "$OUTPUT_FILE"
+  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --json --project "$PROJECT_ID" export > "$OUTPUT_FILE"
 fi
 
 if [ $? -eq 0 ]; then

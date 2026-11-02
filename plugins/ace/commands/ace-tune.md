@@ -1,7 +1,7 @@
 ---
 disable-model-invocation: true
 description: View and update ACE project configuration dynamically at runtime
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Configuration Management (Project-Level)
@@ -142,10 +142,10 @@ ace-cli tune --constitution-threshold 0.45
 
 ```bash
 # Single setting
-ace-cli tune --constitution-threshold 0.6
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --constitution-threshold 0.6
 
 # Multiple settings
-ace-cli tune \
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune \
   --constitution-threshold 0.5 \
   --search-top-k 15 \
   --dedup-enabled true
@@ -163,10 +163,10 @@ ace-cli tune \
 **Adjust Search Threshold**:
 ```bash
 # Lower threshold for broader matches
-ace-cli tune --constitution-threshold 0.35
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --constitution-threshold 0.35
 
 # Higher threshold for stricter matches
-ace-cli tune --constitution-threshold 0.8
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --constitution-threshold 0.8
 ```
 
 **Effect on `/ace-search`**:
@@ -177,27 +177,27 @@ ace-cli tune --constitution-threshold 0.8
 **Adjust Multiple Settings**:
 ```bash
 # Configure search behavior
-ace-cli tune \
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune \
   --constitution-threshold 0.5 \
   --search-top-k 15
 
 # Configure deduplication
-ace-cli tune --dedup-similarity-threshold 0.9
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --dedup-similarity-threshold 0.9
 
 # Configure pruning
-ace-cli tune --pruning-threshold 0.4
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --pruning-threshold 0.4
 
 # Enable token budget
-ace-cli tune --token-budget-enforcement true --max-playbook-tokens 50000
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --token-budget-enforcement true --max-playbook-tokens 50000
 ```
 
 **Reset to Defaults**:
 ```bash
 # Reset project to org/server defaults
-ace-cli tune --reset
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --reset
 
 # Verify reset
-ace-cli tune show
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune show
 ```
 
 ## Configuration Options Reference
@@ -278,22 +278,22 @@ Claude: "✅ Search threshold updated to 0.45 for this project"
 
 ```bash
 # 1. Check current settings
-ace-cli tune show
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune show
 
 # 2. Adjust search for broader matches
-ace-cli tune --constitution-threshold 0.35
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --constitution-threshold 0.35
 
 # 3. Increase max results
-ace-cli tune --search-top-k 15
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --search-top-k 15
 
 # 4. Enable token budget
-ace-cli tune --token-budget-enforcement true --max-playbook-tokens 50000
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --token-budget-enforcement true --max-playbook-tokens 50000
 
 # 5. Verify changes
-ace-cli tune show
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune show
 
 # 6. Later, reset to org/server defaults
-ace-cli tune --reset
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --reset
 ```
 
 ## Output Format

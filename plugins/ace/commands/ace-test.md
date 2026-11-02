@@ -3,7 +3,7 @@ disable-model-invocation: true
 model: claude-haiku-4-5
 description: Verify ACE plugin is properly configured and operational
 argument-hint:
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Test
@@ -48,13 +48,13 @@ echo "━━━━━━━━━━━━━━━━━━━━━━━━�
 echo ""
 
 # Test 1: CLI Installation
-echo "[1/4] Checking ace-cli installation..."
-if command -v ace-cli >/dev/null 2>&1; then
-  VERSION=$(ace-cli --version 2>&1 | head -1)
-  echo "✅ ace-cli found: $VERSION"
+echo "[1/4] Checking ACE CLI installation (the @ace-sdk/cli pinned by this plugin)..."
+if ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
+  VERSION=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version 2>&1 | head -1)
+  echo "✅ ACE CLI found: $VERSION"
 else
-  echo "❌ ace-cli not found"
-  echo "   Install: npm install -g @ace-sdk/cli"
+  echo "❌ ACE CLI not found"
+  echo "   Install: /ace:ace-install-cli"
   exit 1
 fi
 echo ""
@@ -77,7 +77,7 @@ fi
 
 # Run doctor command - CLI reads org/project from env vars automatically
 # Filter out CLI update notifications (💡 lines) that break JSON parsing
-RAW_DOCTOR=$(ace-cli doctor --json 2>&1)
+RAW_DOCTOR=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli doctor --json 2>&1)
 DOCTOR_EXIT_CODE=$?
 DOCTOR_RESULT=$(echo "$RAW_DOCTOR" | grep -v '^💡' | grep -v '^$')
 
@@ -145,7 +145,7 @@ echo "[4/4] Testing basic ACE operations..."
 
 # Test status command - CLI reads org/project from env vars automatically
 # Filter out CLI update notifications (💡 lines) that break JSON parsing
-RAW_STATUS=$(ace-cli status --json 2>&1)
+RAW_STATUS=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli status --json 2>&1)
 STATUS_EXIT_CODE=$?
 STATUS_RESULT=$(echo "$RAW_STATUS" | grep -v '^💡' | grep -v '^$')
 
@@ -172,7 +172,7 @@ echo "  - Capture learning: /ace:ace-learn"
 1. **CLI Not Found**
    ```
    ❌ ace-cli not found
-   → Install: npm install -g @ace-sdk/cli
+   → Install: /ace:ace-install-cli
    ```
 
 2. **Server Connection Failed**
@@ -253,7 +253,7 @@ All ACE operations use ace-cli:
    ```
    Error: ace-cli command not found
    → ace-cli not installed
-   → Action: npm install -g @ace-sdk/cli
+   → Action: /ace:ace-install-cli
    → Fallback: Check npm global bin is in PATH
    ```
 
@@ -365,7 +365,7 @@ Status: ❌ NOT FOUND
 
 The ACE plugin is not responding as expected. Possible causes:
 1. Plugin not installed — check: ls ~/.claude/plugins/cache/ce-dot-net-marketplace/ace/
-2. ace-cli 4.x not installed — install: npm install -g @ace-sdk/cli
+2. ace-cli 4.x not installed — install: /ace:ace-install-cli
 3. Not authenticated — run: ace-cli login (device-code auth)
 4. ACE_PROJECT_ID not configured — run: /ace:ace-configure
 

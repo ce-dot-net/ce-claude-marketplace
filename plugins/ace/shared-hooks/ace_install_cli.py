@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
-"""ACE SessionStart (v8, DESIGN §3): slim CLI check. Sync row (startup|clear) has NO whoami and NO
-network; the async `--update-check` row does the daily npm lookup.
+"""ACE SessionStart (v8, DESIGN §3/§23): slim presence check. Sync row (startup|clear): no whoami, no
+network, no npm. The CLI is the one pinned in package.json and installed by Claude Code itself
+(plugin-local); a global ace-cli >= the pin is the fallback; neither = one message naming
+/ace:ace-install-cli (never disabled.flag). The async row (flag kept: `--update-check`) runs the
+orphan sweep and the once-per-plugin-version `npm rebuild better-sqlite3`.
 
 Caches under CLAUDE_PLUGIN_DATA: python_path (read by every shim) and cli_version.json
-{path, mtime, version} so `ace-cli --version` (~1.2 s CPU) runs only when the binary changes.
+{path, mtime, version} of a GLOBAL ace-cli so `--version` (~1.2 s CPU) runs only when it changes.
 Output: at most ONE JSON object (cc_hooks_reference.md: JSON alone on stdout). Always exit 0.
 """
 import json
@@ -17,7 +20,7 @@ from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "utils"))
 
-MIN_VERSION = "4.1.2"
+CC_FLOOR = "2.1.311"  # §16 P6 (SubagentStop double-fire fix)
 _VER = re.compile(r"\d+\.\d+\.\d+")
 
 
@@ -93,54 +96,43 @@ def sweep_orphans(current_sid):
         pass
 
 
-def update_check(cli):
-    """Async daily npm check: refreshes the cache file ONLY and prints nothing
-    (cc_hooks_reference.md:4093 - an async hook's systemMessage goes to Claude, never the user).
-    The sync startup() reads the cache via update_notice()."""
-    if os.environ.get("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC") or not cli:
-        return None
-    from plugin_data_dir import data_root
-    cache = data_root() / "update-check.json"
-    today = time.strftime("%Y%m%d")
-    latest = ""
-    try:
-        c = json.loads(cache.read_text())
-        if c.get("date") == today:
-            latest = c.get("latest", "")
-        else:
-            c = None
-    except Exception:
-        c = None
-    if c is None:
-        try:
-            latest = subprocess.run(["npm", "show", "@ace-sdk/cli", "version"], capture_output=True,
-                                    text=True, timeout=20).stdout.strip()
-        except Exception:
-            latest = ""
-        try:
-            cache.parent.mkdir(parents=True, exist_ok=True)
-            _atomic_write(cache, json.dumps({"date": today, "latest": latest}))
-        except OSError:
-            pass
-    return None
-
-
-def update_notice(cli):
-    """Sync, no network: 'Update available' line from the cache the async check wrote."""
-    if os.environ.get("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC") or not cli:
-        return None
+def rebuild_sqlite():
+    """Async, once per plugin version: CC installs deps with --ignore-scripts, so better-sqlite3 has no binary
+    and ace-cli runs RAM-only (no pins, empty graph cache) until it is rebuilt (0.5 s, prebuilt). The marker is
+    written only after node can load the binary. Best-effort, silent."""
+    root = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if os.environ.get("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC") or not root or not (Path(root) / "node_modules" / "better-sqlite3").is_dir():
+        return
     from plugin_data_dir import data_root
     try:
-        latest = json.loads((data_root() / "update-check.json").read_text()).get("latest", "")
+        ver = json.loads((Path(root) / ".claude-plugin" / "plugin.json").read_text()).get("version") or "0"
     except Exception:
-        return None
-    cur = _cli_version(cli)
-    if cur and _VER.fullmatch(latest or "") and _tup(latest) > _tup(cur):
-        return "💡 [ACE] Update available: v%s → v%s. Run: npm install -g @ace-sdk/cli" % (cur, latest)
-    return None
+        ver = "0"
+    marker = data_root() / "sqlite-rebuilt"
+    try:
+        if marker.read_text().strip() == ver:
+            return
+    except OSError:
+        pass
+    try:
+        if subprocess.run(["npm", "rebuild", "better-sqlite3"], cwd=root, capture_output=True, timeout=120).returncode:
+            return
+        if subprocess.run(["node", "-e", "require('better-sqlite3')"], cwd=root, capture_output=True, timeout=30).returncode:
+            return
+        marker.parent.mkdir(parents=True, exist_ok=True)
+        _atomic_write(marker, ver)
+    except Exception:
+        pass
 
 
-def startup(ev, sid, pid, cli):
+def _cc_below_floor():
+    """Running Claude Code version if it is parseable and below CC_FLOOR, else None (unknown never disables)."""
+    v = os.environ.get("CLAUDE_CODE_VERSION", "")
+    return v if _VER.fullmatch(v) and _tup(v) < _tup(CC_FLOOR) else None
+
+
+def startup(ev, sid, pid, cli=None):
+    """`cli`: a global ace-cli path to probe (default: the one on PATH)."""
     from ace_env import client_id
     from plugin_data_dir import disabled_flag, python_path_file
     flag = disabled_flag(pid, sid)
@@ -169,20 +161,33 @@ def startup(ev, sid, pid, cli):
             dst.chmod(0o755)
     except OSError:
         pass
-    if not cli:
-        disable("CLI not installed")
-        return ["⛔ [ACE] ace-cli not found. Install: npm install -g @ace-sdk/cli. ACE hooks DISABLED."]
-    cur = _cli_version(cli)
-    if cur is None:
-        from plugin_data_dir import append_error
-        append_error("%s version_unknown cli=%s (probe timed out/unparseable; ACE stays enabled)"
-                     % (time.strftime("%Y-%m-%dT%H:%M:%S"), cli))
-    elif _tup(cur) < _tup(MIN_VERSION):
-        disable("CLI version %s < %s" % (cur, MIN_VERSION))
-        return ["⛔ [ACE] Outdated CLI: v%s (requires >= v%s). Upgrade: npm install -g @ace-sdk/cli. "
-                "ACE hooks DISABLED." % (cur, MIN_VERSION)]
+    old_cc = _cc_below_floor()
+    if old_cc:  # §15: one message, every other hook exits silently on the flag
+        disable("Claude Code %s < %s" % (old_cc, CC_FLOOR))
+        return ["⛔ [ACE] ACE 8.0 needs Claude Code >= %s (you run %s). Update Claude Code; ACE hooks are paused."
+                % (CC_FLOOR, old_cc)]
+    import ace_cli
+    g = cli or ace_cli.global_cli()
+    cur = None
+    if g and ace_cli.cli_source() != "plugin-local":
+        cur = _cli_version(g)  # caches {path, mtime, version}: ace_cli.cli_argv() reads it without a spawn
+        if cur is None:
+            from plugin_data_dir import append_error
+            append_error("%s version_unknown cli=%s (probe timed out/unparseable; ACE stays enabled)"
+                         % (time.strftime("%Y-%m-%dT%H:%M:%S"), g))
+    source = ace_cli.cli_source()
+    try:
+        from ace_relevance_logger import log_event
+        log_event("cli_source", hook="SessionStart", session_id=sid, cli_source=source, cli_version=cur)
+    except Exception:
+        pass
+    notice = []
+    if not source:  # §23: never disable for this - ACE activates by itself once a CLI appears
+        pin = ace_cli._pin()
+        why = ("ace-cli v%s is older than the v%s this plugin was tested with" % (cur, pin)) if (g and cur) else "ace-cli not found"
+        notice = ["⚠️ [ACE] %s. Run /ace:ace-install-cli. ACE learns once it is installed." % why]
 
-    msgs = []
+    msgs = list(notice)
     old, new = Path.home() / ".ace" / "config.json", Path.home() / ".config" / "ace" / "config.json"
     try:
         if old.is_file() and '"apiToken"' in old.read_text():
@@ -206,9 +211,6 @@ def startup(ev, sid, pid, cli):
                 f.write('export ACE_CLIENT_ID="%s"\n' % client_id())
         except OSError:
             pass
-    n = update_notice(cli)
-    if n:
-        msgs.append(n)
     return msgs
 
 
@@ -216,16 +218,15 @@ def main():
     from ace_env import read_event, resolve_ids
     ev = read_event()
     sid, pid = resolve_ids(ev)
-    cli = shutil.which("ace-cli")
-    if "--update-check" in sys.argv[1:]:
+    if "--update-check" in sys.argv[1:]:  # async row (name kept for hooks.json): sweep + sqlite rebuild
         try:
             sweep_orphans(ev.get("session_id"))
+            rebuild_sqlite()
         except Exception:
             pass
-        update_check(cli)
         msgs = []
     else:
-        msgs = startup(ev, sid, pid, cli)
+        msgs = startup(ev, sid, pid)
     if msgs:
         print(json.dumps({"systemMessage": "\n".join(msgs)}, ensure_ascii=False))
     return 0
