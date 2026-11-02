@@ -629,3 +629,16 @@ class TestMainStopNotAffected:
         assert captured["learn_called"], (
             "Main Stop must NOT be suppressed by the SubagentStop degenerate-skip guard"
         )
+
+
+def test_degenerate_event_never_learns_the_main_transcript(tmp_path, monkeypatch):
+    """v8 integration: a degenerate SubagentStop (no agent_id/agent_type/agent_transcript_path)
+    carries only the MAIN transcript_path (cc_hooks_reference.md:2591); reading the main
+    prompt from it is the v7.1.4 -main fallback -> must Stage-2 skip, zero learn."""
+    event = _empty_agent_subagent_event(tmp_path, transcript_uuid=None)
+    event["agent_type"] = ""
+    event["transcript_path"] = str(tmp_path / "main-session.jsonl")
+    records, captured = _run_main(tmp_path, monkeypatch, event,
+                                  user_prompt_return="real main-session prompt")
+    assert not captured["learn_called"]
+    assert any(r.get("event") == "subagent_degenerate_skip" for r in records)

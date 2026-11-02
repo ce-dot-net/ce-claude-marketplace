@@ -6,8 +6,14 @@ if ! command -v ace-cli >/dev/null 2>&1; then
   exit 1
 fi
 
-export ACE_ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-export ACE_PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+_ace_setting() {  # $1 settings key, $2 env-block key; stdlib JSON read, no jq
+  python3 -c 'import json,sys
+try: s=json.load(open(".claude/settings.json"))
+except Exception: s={}
+print(s.get(sys.argv[1]) or (s.get("env") or {}).get(sys.argv[2]) or "")' "$1" "$2" 2>/dev/null || true
+}
+export ACE_ORG_ID="$(_ace_setting orgId ACE_ORG_ID)"
+export ACE_PROJECT_ID="$(_ace_setting projectId ACE_PROJECT_ID)"
 
 if [ -z "$ACE_ORG_ID" ] || [ -z "$ACE_PROJECT_ID" ]; then
   echo "❌ Run /ace-configure first"

@@ -125,10 +125,9 @@ Implements using learned patterns!
 ```
 plugins/ace/
 ├── scripts/
-│   ├── ace_before_task_wrapper.sh    # Bash forwarder
-│   └── ace_after_task_wrapper.sh     # Bash forwarder
+│   └── ace_*_wrapper.sh               # thin shims -> shared-hooks/*.py
 ├── hooks/
-│   └── hooks.json                     # 5 events: SessionStart, UserPromptSubmit, PermissionRequest, PreCompact, Stop
+│   └── hooks.json                     # hook topology (see ARCHITECTURE.md)
 ├── commands/
 │   ├── ace-search.md                  # CLI wrappers
 │   ├── ace-patterns.md
@@ -305,8 +304,8 @@ echo '{"prompt":"implement auth"}' | \
   ./scripts/ace_before_task_wrapper.sh
 
 # Test after-task hook
-echo '{}' | \
-  ./scripts/ace_after_task_wrapper.sh
+echo '{"hook_event_name":"Stop"}' | \
+  ./scripts/ace_stop_wrapper.sh
 ```
 
 ### Debugging

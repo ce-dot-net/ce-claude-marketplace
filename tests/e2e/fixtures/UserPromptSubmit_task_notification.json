@@ -1,0 +1,8 @@
+{
+  "session_id": "__SESSION__",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "__CWD__",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "<task-notification>\n<task-id>biruqquty</task-id>\n<summary>Monitor event: \"Coach: coachd läuft unter launchd, der Monitor liest dessen Meldungen: RESUME nach /clear, HANDOFF_PENDING, PreCompact, STILLS\"</summary>\n<event>BUS_LOOP_LAG lag_s=1.395 ROLLE_WEG pane=w48:p1</event>\n</task-notification>"
+}

@@ -659,9 +659,11 @@ def main():
         if plugin_data_dir.disabled_flag(context['project'], session_id).exists():
             sys.exit(0)  # set by SessionStart when the CLI is unusable
 
-        # Handle SubagentStop: use agent's transcript
-        if hook_event_name == 'SubagentStop' and 'agent_transcript_path' in event:
-            transcript_path = event['agent_transcript_path']
+        # Handle SubagentStop: use agent's transcript. transcript_path is the MAIN session's
+        # (cc_hooks_reference.md:2591); a degenerate event without agent_transcript_path must
+        # not read the main prompt (v7.1.4 -main fallback) -> Stage 2 skip below.
+        if hook_event_name == 'SubagentStop':
+            transcript_path = event.get('agent_transcript_path') or ''
 
         # v6.0.0: Read agent_type natively from hook event (CC 2.1.69+)
         agent_type = event.get('agent_type', 'main')
