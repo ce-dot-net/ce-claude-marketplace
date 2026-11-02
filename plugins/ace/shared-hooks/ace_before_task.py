@@ -192,6 +192,14 @@ def expand_abbreviations(prompt: str) -> str:
     return result.strip()
 
 
+def _num(v):
+    """int/float (not bool, finite) as-is, else 0."""
+    import math
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return 0
+    return v if math.isfinite(v) else 0
+
+
 def check_eval_request_and_review():
     """Fire-and-forget self-eval: read eval request, inject context, parse ACE_REVIEW.
 
@@ -208,10 +216,13 @@ def check_eval_request_and_review():
     if eval_request_file.exists():
         try:
             eval_data = json.loads(eval_request_file.read_text())
-            patterns_injected = eval_data.get('patterns_injected', 0)
-            avg_relevance = eval_data.get('avg_relevance', 0)
-            domains = eval_data.get('domains', 0)
-            tools_executed = eval_data.get('tools_executed', 0)
+            if not isinstance(eval_data, dict):
+                eval_data = {}
+            # §24: a repo-controlled file reaches the model's context: numbers only, anything else is 0.
+            patterns_injected = _num(eval_data.get('patterns_injected'))
+            avg_relevance = _num(eval_data.get('avg_relevance'))
+            domains = _num(eval_data.get('domains'))
+            tools_executed = _num(eval_data.get('tools_executed'))
 
             # Build additionalContext for silent eval injection
             # Frame for HUMAN DEVELOPER perspective — ask for ACE_REVIEW marker

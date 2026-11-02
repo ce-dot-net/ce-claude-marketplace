@@ -277,3 +277,57 @@ def test_detached_engine_learn_falls_back_to_cli_only_on_exit_3(tmp_path, engine
     assert ran[0].startswith(str(fake_dir / "fake-engine")) and "--ace-fallback-on-3--" not in ran[0]
     assert (len(ran) == 2 and ran[1].startswith(str(fake_dir / "ace-cli") + " learn")) == cli_runs, ran
     assert log.read_text() == ('{"ok": 1}' if engine_rc in (0, 3) else '{"ok": 0}') + "\n"
+
+
+# ---------- §24: the mod's shell writers, run for real ----------
+
+def _shell():
+    p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", str(HERE / "mod_parity_node.mjs")],
+                       input=json.dumps({"fixtures": [], "sids": [], "envs": [], "roots": [], "learnJob": None}),
+                       capture_output=True, text=True, timeout=60)
+    assert p.returncode == 0, p.stderr[-2000:]
+    return json.loads(p.stdout)["shell"]
+
+
+def _append(script, cwd, text):
+    log = cwd / ".claude" / "data" / "logs" / "ace-relevance.jsonl"
+    subprocess.run(["/bin/sh", "-c", script, "sh", str(log), str(cwd)], input=text, text=True, timeout=10)
+    return log
+
+
+@pytest.mark.skipif(not NODE, reason="node not installed")
+@pytest.mark.parametrize("link", [".claude", ".claude/data", ".claude/data/logs", ".claude/data/logs/ace-relevance.jsonl"])
+def test_mod_append_refuses_symlinks(tmp_path, link):
+    cwd, outside = tmp_path / "repo", tmp_path / "outside"
+    outside.mkdir()
+    (outside / "data" / "logs").mkdir(parents=True)
+    victim = outside / "victim"
+    victim.write_text("keep\n")
+    parent = (cwd / link).parent
+    parent.mkdir(parents=True, exist_ok=True)
+    os.symlink(victim if link.endswith(".jsonl") else outside, cwd / link)
+    _append(_shell()["append"], cwd, '{"row": 1}\n')
+    assert victim.read_text() == "keep\n"
+    assert not [p for p in outside.rglob("*") if p.is_file() and p != victim]
+
+
+@pytest.mark.skipif(not NODE, reason="node not installed")
+def test_mod_append_writes_a_normal_project(tmp_path):
+    cwd = tmp_path / "repo"
+    cwd.mkdir()
+    script = _shell()["append"]
+    _append(script, cwd, '{"row": 1}\n')
+    log = _append(script, cwd, '{"row": 2}\n')
+    assert log.read_text() == '{"row": 1}\n{"row": 2}\n'
+
+
+@pytest.mark.skipif(not NODE, reason="node not installed")
+def test_mod_private_write_is_0600_in_a_0700_dir(tmp_path):
+    target = tmp_path / "data" / "sessions" / "s1" / "patterns-used-main.json"
+    for text in ("first", "second prompt"):
+        subprocess.run(["/bin/sh", "-c", _shell()["privateWrite"], "sh", str(target)], input=text, text=True,
+                       timeout=10, check=True)
+    assert target.read_text() == "second prompt"
+    assert stat.S_IMODE(target.stat().st_mode) == 0o600
+    assert stat.S_IMODE(target.parent.stat().st_mode) == 0o700
+    assert [p.name for p in target.parent.iterdir()] == ["patterns-used-main.json"]

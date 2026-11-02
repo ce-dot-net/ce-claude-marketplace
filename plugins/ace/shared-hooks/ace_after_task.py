@@ -594,10 +594,11 @@ def parse_ace_review(message, review_file='.claude/data/logs/ace-review-result.j
         return
     t = regex_module.search(r'\d+m\d*s? saved|\d+s saved|\d+ ?min', message)
     try:
-        Path(review_file).parent.mkdir(parents=True, exist_ok=True)
-        Path(review_file).write_text(json.dumps({
-            'quality_pct': int(m.group(1)),
-            'time_saved': t.group(0).replace(' saved', '') if t else ''}))
+        f = plugin_data_dir.open_project_log(review_file, append=False)  # §24: no symlink out of the project
+        if f is not None:
+            with f:
+                f.write(json.dumps({'quality_pct': int(m.group(1)),
+                                    'time_saved': t.group(0).replace(' saved', '') if t else ''}))
     except Exception:
         pass
 
@@ -605,11 +606,13 @@ def parse_ace_review(message, review_file='.claude/data/logs/ace-review-result.j
 def write_eval_request(patterns_injected, tools_executed, path='.claude/data/logs/ace-eval-request.json'):
     """Next UserPromptSubmit (ace_before_task.check_eval_request_and_review) turns this into a silent self-eval."""
     try:
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        Path(path).write_text(json.dumps({
-            'patterns_injected': patterns_injected, 'avg_relevance': 0, 'domains': 0,
-            'tools_executed': tools_executed, 'success': True,
-            'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}))
+        f = plugin_data_dir.open_project_log(path, append=False)  # §24: no symlink out of the project
+        if f is not None:
+            with f:
+                f.write(json.dumps({
+                    'patterns_injected': patterns_injected, 'avg_relevance': 0, 'domains': 0,
+                    'tools_executed': tools_executed, 'success': True,
+                    'timestamp': datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')}))
     except Exception:
         pass
 
@@ -666,7 +669,7 @@ def dispatch_learn(job, session_id):
         try:
             import uuid
             f = plugin_data_dir.session_dir(job['project'], session_id) / ('learn-job-%s.json' % uuid.uuid4().hex)
-            f.write_text(json.dumps(job))
+            plugin_data_dir.private_write(f, json.dumps(job))  # §24: the job holds the trace (user prompt)
             try:
                 Path(job['lock']).touch()
             except OSError:

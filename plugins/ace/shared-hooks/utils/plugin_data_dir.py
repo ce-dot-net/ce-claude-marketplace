@@ -30,12 +30,71 @@ def _safe(component: Optional[str]) -> str:
     return s
 
 
-def _mk(path: Path) -> Path:
+def _mk(path: Path, private: bool = False) -> Path:
     try:
         path.mkdir(parents=True, exist_ok=True)
+        if private:  # §24: holds prompts / traces
+            os.chmod(path, 0o700)
     except OSError:
         pass
     return path
+
+
+def private_dir(path: Path) -> Path:
+    return _mk(Path(path), private=True)
+
+
+def private_write(path, text: str) -> None:
+    """Atomic create+rename, mode 0600 (mkstemp), dir 0700 (§24: traces and state hold user prompts)."""
+    import tempfile
+    path = Path(path)
+    private_dir(path.parent)
+    fd, tmp = tempfile.mkstemp(dir=str(path.parent), prefix=".w-", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def project_log_unsafe(path) -> bool:
+    """§24: <cwd>/.claude/data/logs is repo-controlled. True when writing `path` could leave the project: a symlinked
+    component of a relative path (or the target), or a resolved dir outside cwd. An absolute dir (an explicit
+    log_dir) only must not itself be, or hold the target as, a symlink."""
+    path = Path(path)
+    if path.is_symlink():
+        return True
+    if path.is_absolute():
+        return path.parent.is_symlink()
+    base = Path(os.getcwd())
+    cur = base
+    for part in path.parent.parts:
+        cur = cur / part
+        if cur.is_symlink():
+            return True
+    try:
+        (base / path).parent.resolve().relative_to(base.resolve())
+    except (ValueError, OSError):
+        return True
+    return False
+
+
+def open_project_log(path, append: bool = True):
+    """Open a <cwd>/.claude/data/logs file for writing without following a symlinked target (O_NOFOLLOW),
+    or None when project_log_unsafe. Creates the dir."""
+    path = Path(path)
+    if project_log_unsafe(path):
+        return None
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if project_log_unsafe(path):  # re-check after mkdir: nothing may have been swapped in
+        return None
+    flags = os.O_WRONLY | os.O_CREAT | (os.O_APPEND if append else os.O_TRUNC) | getattr(os, "O_NOFOLLOW", 0)
+    return os.fdopen(os.open(str(path), flags, 0o644), "a" if append else "w")
 
 
 def data_root() -> Path:
@@ -73,7 +132,7 @@ def project_dir(project_id: Optional[str], create: bool = True) -> Path:
 
 def session_dir(project_id: Optional[str], session_id: Optional[str], create: bool = True) -> Path:
     p = project_dir(project_id, create=False) / "sessions" / _safe(session_id)
-    return _mk(p) if create else p
+    return _mk(p, private=True) if create else p
 
 
 def _file(path: Path) -> Path:
