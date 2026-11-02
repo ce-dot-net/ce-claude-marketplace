@@ -606,6 +606,34 @@ def test_stop_without_a_transcript_keeps_the_db_rows_only(box):
     assert box.cli_calls("learn") == []
 
 
+def test_stop_shows_one_learning_line_when_it_dispatched(box):
+    """Item 2: the sync Stop prints ONE systemMessage line when it dispatched a learn (mod parity text)."""
+    sid = "sess-line"
+    box.seed_tools(sid, WORK)
+    box.write_state(sid, user_prompt="implement the retry policy for the uploader")
+    proc = box.run_after_task(box.stop_event(sid, last_assistant_message="Done. ACE_REVIEW: 80% | 5m saved | ok"),
+                              ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
+    assert proc.returncode == 0, proc.stderr
+    assert json.loads(proc.stdout) == {"systemMessage": "ACE · learning sent · 80% · ~5m saved"}
+    sid = "sess-line-2"
+    box.seed_tools(sid, WORK)
+    box.write_state(sid, user_prompt="implement the retry policy for the uploader")
+    proc = box.run_after_task(box.stop_event(sid), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
+    assert json.loads(proc.stdout) == {"systemMessage": "ACE · learning sent"}
+
+
+def test_skipped_stop_and_subagent_stop_print_nothing(box):
+    sid = "sess-line-skip"
+    box.write_state(sid, user_prompt="implement the retry policy for the uploader")
+    proc = box.run_after_task(box.stop_event(sid), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)  # no tools: skipped
+    assert proc.returncode == 0 and proc.stdout == ""
+    box.seed_tools(sid, WORK, agent_id="a-line")
+    box.write_state(sid, "a-line", user_prompt="refactor the parser module")
+    proc = box.run_after_task(box.subagent_event(sid, "a-line"), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
+    assert proc.returncode == 0 and proc.stdout == ""
+    assert box.cli_calls("learn"), "the subagent learn ran"
+
+
 def test_dead_event_logger_is_gone():
     """final review: ace_event_logger.py had no caller and wrote through symlinks; it is deleted."""
     assert not EVENT_LOGGER.exists()

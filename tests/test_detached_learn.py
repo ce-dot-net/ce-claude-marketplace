@@ -60,7 +60,7 @@ def test_hook_returns_fast_while_detached_learn_runs(box):
     t0 = time.monotonic()
     p = box.run_after_task(box.stop_event(sid, last_assistant_message="Applied ctx-1."), **_env(FAKE_LEARN_SLEEP="2"))  # §31: used
     took = time.monotonic() - t0
-    assert p.returncode == 0 and p.stdout == "", p.stderr
+    assert p.returncode == 0 and json.loads(p.stdout) == {"systemMessage": "ACE · learning sent"}, p.stderr  # item 2: the one learn line
     assert took < 1.2, "hook must not wait for the learn (took %.2fs)" % took
     lock = box.session_dir(sid) / "learn-inflight-main.lock"
     assert lock.exists(), "lock must be held while the detached learn runs"
@@ -146,7 +146,7 @@ def test_learn_lock_held_before_session_state_is_read(box, monkeypatch, capsys):
     assert seen, "Stop must read the session state"
     assert all(seen), "learn-inflight lock must be held before the session state is read"
     assert not lock.exists(), "inline learn must release the lock"
-    assert capsys.readouterr().out == ""
+    assert json.loads(capsys.readouterr().out) == {"systemMessage": "ACE · learning sent"}  # item 2
 
 
 def test_skipped_stop_leaves_no_lock(box):

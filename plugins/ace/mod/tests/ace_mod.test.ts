@@ -18,7 +18,7 @@ import S8 from './fixtures/search_8.ts'
 import SEDGE from './fixtures/search_edge.ts'
 import G from './fixtures/golden.ts'
 import { statusLine, hasSubstantialWork, traceVariant } from '../core.ts'
-import { pyLoads, PRIVATE_WRITE_SH, evalStats, evalInjection } from '../core.ts'
+import { pyLoads, PRIVATE_WRITE_SH, evalStats, evalInjection, learnLine } from '../core.ts'
 
 const HOME = '/home/u', CWD = '/proj', SID = 'sess-1', PRJ = 'prj_t'
 const PROOT = decodeURIComponent(new URL('../..', import.meta.url).pathname).replace(/\/$/, '')  // $.plugin.root
@@ -789,6 +789,36 @@ async function mainTask($: any, h: any, tools: any[] = [{ tool: 'Edit', file_pat
 }
 const done = ($: any, answer = 'done', agentId?: string) =>
   $.turn.complete({ answer, durationMs: 5, isAborted: false, turnId: agentId ? 'ta' : 't1', reason: 'answer', ...(agentId ? { agentId } : {}) } as any)
+
+test('item 2: learnLine = one line, unknown parts left out', async () => {
+  expect(learnLine({ quality_pct: 80, time_saved: '5m' })).toBe('ACE · learning sent · 80% · ~5m saved')
+  expect(learnLine({ quality_pct: 70, time_saved: '12 min' })).toBe('ACE · learning sent · 70% · ~12m saved')
+  expect(learnLine({ quality_pct: 60, time_saved: '30s' })).toBe('ACE · learning sent · 60%')
+  expect(learnLine(null)).toBe('ACE · learning sent')
+})
+
+test('item 2: a dispatched main learn shows one line beneath the answer; skips and subagents show none', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  const r: any = await done($, 'ACE_REVIEW: 80% | 5m saved | ok')
+  expect(h.learns().length).toBe(1)
+  expect(r.text).toBe('ACE · learning sent · 80% · ~5m saved')
+  expect(r.text.includes('\n')).toBe(false)
+  await mainTask($, h)
+  expect(((await done($, 'all done')) as any).text).toBe('ACE · learning sent')
+  await mainTask($, h, [{ tool: 'Read', file_path: '/proj/x.py' }])  // no substantial work: skipped
+  expect(((await done($, 'looked')) as any).text).toBe('looked')
+  await spawn($, 'review the domain shift python port for parity bugs')
+  await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+  expect(((await done($, 'sub done', 'agent-1')) as any).text).toBe('sub done')
+})
+
+test('item 2: classic hooks filtered (the Python Stop learns): the mod shows no line', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), noClassic: true })
+  await mainTask($, h)
+  expect(((await done($, 'finished')) as any).text).toBe('finished')
+  expect(h.learns().length).toBe(0)
+})
 
 test('turn.complete main: detached learn (--no-stream, F-080 flags, --timeout 300000), lock taken before the spawn', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_RENDER_FULL_PCT: '0' } })

@@ -285,7 +285,8 @@ def test_guarded_seat_learn_duties_move_to_python(name):
     r = H.run_fixture(name, prepare=_marker(5, classic=False))
     try:
         assert _artifacts(r) != [], "%s: the Python hook must do the classic duty the guard took from the mod" % name
-        assert all(run["stdout"].strip() == "" for run in r["runs"])
+        assert all(run["stdout"].strip() == "" or json.loads(run["stdout"]) == {"systemMessage": "ACE · learning sent"}
+                   for run in r["runs"])  # item 2: Python dispatched the Stop learn -> its one line
     finally:
         shutil.rmtree(str(r["sandbox"]), ignore_errors=True)
 

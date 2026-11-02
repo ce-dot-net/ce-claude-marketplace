@@ -80,7 +80,8 @@ def test_ups_env_cli_never_runs_engine(prefix_env, monkeypatch):
 def test_stop_learns_via_lib_engine(prefix_env):
     tmp, made = prefix_env
     r = _run("Stop", made)
-    assert all(run["stdout"] == "" for run in r["runs"]), "Stop prints nothing (G3)"
+    assert all(run["stdout"] == "" or json.loads(run["stdout"]) == {"systemMessage": "ACE · learning sent"}
+               for run in r["runs"]), "Stop prints only its one learn line (item 2)"
     assert [x for x in E.read_jsonl(tmp / "core.log") if x.get("op") == "learn"], "learn went through the engine"
     assert not [c for c in r["cli_calls"] if c["argv"][:1] == ["learn"]]
 
