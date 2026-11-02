@@ -1526,9 +1526,9 @@ def test_subagent_start_state_records_user_prompt_and_hook_event_name(tmp_path):
     assert state.get("hook_event_name") == "SubagentStart"
 
 
-def test_subagent_start_search_timeout_is_15s(tmp_path, monkeypatch):
-    """WP-D: python-side search timeout 15 s (hooks.json gives the hook 20 s).
-    Regression guard (already true on the foundation)."""
+def test_subagent_start_search_timeout_is_25s(tmp_path, monkeypatch):
+    """DESIGN §11 A2: python-side search timeout 25 s (hooks.json gives the hook 30 s;
+    p7: 15 s killed healthy searches under load)."""
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "plugin-data"))
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
@@ -1547,4 +1547,4 @@ def test_subagent_start_search_timeout_is_15s(tmp_path, monkeypatch):
         mod.main(event=_make_event(tmp_path, transcript_path=transcript_path))
     except SystemExit:
         pass
-    assert seen.get("timeout") == 15
+    assert seen.get("timeout") == 25

@@ -7,7 +7,8 @@
   on the success path (auth check only inside the failure branch).
 - Failures are logged with the CALLER's hook_event_name (v7 hard-coded
   "UserPromptSubmit" for SubagentStart/PostToolUse failures too).
-- run_learn = single `ace-cli learn` spawn, subprocess timeout 120 s.
+- run_learn = single `ace-cli learn` spawn, subprocess timeout 300 s, --timeout 300000 (P-18).
+- round 2: run_search default timeout 25 (A2); recall_session deleted; ACE_CLIENT_ID (P-8).
 subprocess is mocked everywhere: the real ace-cli is never executed.
 """
 import importlib
@@ -71,7 +72,7 @@ def test_run_search_single_spawn_minimal_argv(cli):
         result, ms = cli.run_search("fix auth bug", hook_event_name="UserPromptSubmit")
     assert run.call_count == 1, "exactly one spawn; no --version / whoami probes"
     assert run.call_args.args[0] == ["ace-cli", "search", "--stdin", "--json"]
-    assert run.call_args.kwargs["timeout"] == 15
+    assert run.call_args.kwargs["timeout"] == 25, "DESIGN §11 A2: run_search default timeout 25 s"
     assert run.call_args.kwargs["input"] == "fix auth bug".encode()
     assert result == RESP
     assert isinstance(ms, int) and ms >= 0
@@ -154,7 +155,7 @@ def test_run_search_keyword_only_options(cli):
 
 # ── run_learn ──
 
-def test_run_learn_single_spawn_timeout_120(cli):
+def test_run_learn_single_spawn_timeout_300(cli):
     seen = {}
 
     def fake_run(cmd, **kw):
@@ -171,7 +172,10 @@ def test_run_learn_single_spawn_timeout_120(cli):
     assert run.call_count == 1
     assert seen["cmd"][:2] == ["ace-cli", "learn"]
     assert "--json" in seen["cmd"]
-    assert seen["kw"]["timeout"] == 120
+    assert seen["kw"]["timeout"] == 300, "DESIGN §10 P-18: run_learn(timeout=300)"
+    k = seen["cmd"].index("--timeout")
+    assert seen["cmd"][k + 1] == "300000", "DESIGN §10 P-18: ace-cli --timeout 300000 (one source of truth)"
+    assert "--pin-session" not in seen["cmd"], "DESIGN §11 A1: run_learn never pins"
     i = seen["cmd"].index("--retrieval-id")
     assert seen["cmd"][i + 1] == "r-1"
     j = seen["cmd"].index("--applied-log-ids")
@@ -197,3 +201,49 @@ def test_run_learn_failure_logs_passed_hook(cli, tmp_path):
     assert result is None
     errs = [e for e in _relevance(tmp_path) if e.get("event") == "error"]
     assert errs and errs[-1]["hook"] == "SubagentStop"
+
+
+# ── round 2 (DESIGN §10/§11) ──
+
+def test_recall_session_deleted(cli):
+    """DESIGN §10: dead `recall_session` / `ace-cli cache recall` export removed."""
+    assert not hasattr(cli, "recall_session")
+    src = (REPO / "plugins" / "ace" / "shared-hooks" / "utils" / "ace_cli.py").read_text()
+    assert "'cache', 'recall'" not in src and '"cache", "recall"' not in src
+
+
+def test_run_learn_timeout_flag_matches_python_timeout_for_custom_value(cli):
+    """DESIGN §10 P-18: the --timeout passed to ace-cli equals the Python timeout (ms)."""
+    with patch("subprocess.run",
+               return_value=MagicMock(returncode=0, stdout="{}", stderr="")) as run:
+        cli.run_learn({"task": "t"}, timeout=300, hook_event_name="Stop")
+    cmd = run.call_args.args[0]
+    assert cmd[cmd.index("--timeout") + 1] == str(run.call_args.kwargs["timeout"] * 1000)
+
+
+def _plugin_version():
+    return json.loads((REPO / "plugins" / "ace" / ".claude-plugin" / "plugin.json").read_text())["version"]
+
+
+@pytest.mark.parametrize("call", ["search", "learn"])
+def test_client_id_env_on_every_spawn(cli, monkeypatch, call):
+    """DESIGN §10 P-8: shims no longer source _ace_env.sh, so ace_cli._env() sets
+    ACE_CLIENT_ID=claude-code-plugin/<plugin.json version> on every spawn when unset."""
+    monkeypatch.delenv("ACE_CLIENT_ID", raising=False)
+    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT", raising=False)
+    with patch("subprocess.run", return_value=_ok() if call == "search" else
+               MagicMock(returncode=0, stdout="{}", stderr="")) as run:
+        if call == "search":
+            cli.run_search("q", session_id="s", hook_event_name="UserPromptSubmit")
+        else:
+            cli.run_learn({"task": "t"}, hook_event_name="Stop")
+    for c in run.call_args_list:
+        assert c.kwargs["env"]["ACE_CLIENT_ID"] == "claude-code-plugin/%s" % _plugin_version()
+
+
+def test_client_id_user_override_kept(cli, monkeypatch):
+    """P-8: a user-set ACE_CLIENT_ID is not overwritten."""
+    monkeypatch.setenv("ACE_CLIENT_ID", "custom/1")
+    with patch("subprocess.run", return_value=_ok()) as run:
+        cli.run_search("q", hook_event_name="UserPromptSubmit")
+    assert run.call_args.kwargs["env"]["ACE_CLIENT_ID"] == "custom/1"
