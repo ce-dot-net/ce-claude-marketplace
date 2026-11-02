@@ -274,3 +274,18 @@ def test_doctor_hook_list_matches_hooks_json_sync_async():
         line = next(l for l in lines if re.match(r"^\d+b?\. `%s`" % event, l))
         assert ("(async" in line) == is_async, line
         assert ("sync" in line), "say sync or async: " + line
+
+
+# ---- item 6: ace-cleanup / ace-insights describe v8 (no event logger) ----
+
+def test_cleanup_has_no_event_logging_toggle():
+    text = _read(PLUGIN / "commands" / "ace-cleanup.md")
+    for gone in ("ACE_EVENT_LOGGING", "--enable-logging", "--disable-logging", "Event Logging", "ace-tools.db"):
+        assert gone not in text, gone
+    assert "ace-relevance." in text and "ace-hook-errors.log" in text
+
+
+def test_insights_names_the_v8_domain_shift_hook():
+    text = _read(PLUGIN / "commands" / "ace-insights.md")
+    assert "PreToolUse hook" not in text
+    assert "PostToolUse Read/Glob/Grep" in text

@@ -31,7 +31,7 @@ if not log_path.exists():
     print('')
     print('Metrics will be recorded after:')
     print('  1. Pattern searches (UserPromptSubmit hook)')
-    print('  2. Domain shifts (PreToolUse hook)')
+    print('  2. Domain shifts (PostToolUse Read/Glob/Grep hook)')
     print('  3. Task completions (Stop hook)')
     print('')
     print('Try running a few tasks with ACE enabled first!')
