@@ -165,7 +165,7 @@ def test_subagent_stop_uses_stored_subagentstart_query_first(box):
     the transcript is only the fallback."""
     sid, agent = "s-r3a-sub", "a1b2c3d4e5f6a7b8c"
     stored = "audit the payment webhook retry logic for idempotency bugs"
-    box.write_state(sid, agent=agent, user_prompt=stored, task_session_id="sub-tsid-1")
+    box.write_state(sid, agent=agent, user_prompt=stored, query_source="stash", task_session_id="sub-tsid-1")
     ev = box.subagent_event(sid, agent, agent_type="general-purpose")  # writes the default transcript
     _write_transcript(Path(ev["agent_transcript_path"]), _subagent_entries())  # replace with the real shape
     p = box.run_after_task(ev)

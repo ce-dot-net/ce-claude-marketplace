@@ -244,7 +244,8 @@ def test_stop_hooks_are_sync_timeout_15(event):
 
 # ── §13.2 sync Stop: < 0.5 s, silent, learn survives the killed parent ───────────────────
 
-def test_sync_stop_fast_silent_and_detached_learn_survives_killed_parent(w):
+@pytest.mark.parametrize("sig", ["SIGKILL", "SIGHUP"])
+def test_sync_stop_fast_silent_and_detached_learn_survives_killed_parent(w, sig):
     _seed_work(w)
     ev = w.event("Stop")
     (hook,) = w.hooks_for(ev)
@@ -261,12 +262,12 @@ def test_sync_stop_fast_silent_and_detached_learn_survives_killed_parent(w):
         "p = subprocess.run(argv, input=raw, capture_output=True, text=True, cwd=cwd, timeout=15)\n"
         "open(out, 'w').write(json.dumps({'rc': p.returncode, 'stdout': p.stdout, 'stderr': p.stderr,"
         " 'wall': time.monotonic() - t0}))\n"
-        "os.killpg(0, signal.SIGKILL)\n")
+        "os.killpg(0, signal.%s)\n" % sig)
     parent = subprocess.Popen([sys.executable, "-c", runner, json.dumps(w.argv_of(hook)), json.dumps(ev),
                                str(w.proj), str(result)], env=env, start_new_session=True,
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     parent.wait(timeout=30)
-    assert parent.returncode == -signal.SIGKILL, "parent did not reach its teardown kill"
+    assert parent.returncode == -getattr(signal, sig), "parent did not reach its teardown kill"
     r = json.loads(result.read_text())
     assert r["rc"] == 0, r["stderr"][-500:]
     assert r["stdout"] == "", "sync Stop must print nothing: %r" % r["stdout"][:300]
@@ -428,3 +429,26 @@ def test_parallel_reads_same_domain_inject_once(w):
     outs = [so for r in results for (_h, rc, so, _se, _t) in r if so.strip()]
     assert len(w.cli_calls("search")) == 1, w.cli_calls()
     assert len(outs) == 1, outs
+
+
+# ── review fix: parallel same-type siblings must not learn with a sibling's guessed query ──
+
+def test_sibling_fanout_uses_own_transcript_not_parent_scan_guess(w):
+    a = "Agent A: audit src/auth/login.py for SQL injection"
+    b = "Agent B: write release notes for the billing module"
+    w._write(w.transcript, [
+        {"type": "user", "message": {"role": "user", "content": "Refactor the auth login flow"}},
+        {"type": "assistant", "message": {"role": "assistant", "content": [
+            {"type": "tool_use", "id": "t1", "name": "Agent", "input": {"subagent_type": "general-purpose", "prompt": a}},
+            {"type": "tool_use", "id": "t2", "name": "Agent", "input": {"subagent_type": "general-purpose", "prompt": b}}]}}])
+    ents = w.subagent_entries()
+    ents[0]["message"]["content"] = b
+    ents[1]["message"]["content"][1]["text"] = b
+    w._write(w.agent_transcript, ents)
+    for p in (a, b):  # same prompt_id + type -> stash tombstoned ambiguous
+        for _h, rc, _o, se, _t in w.run(w.agent_pretooluse(prompt=p)):
+            assert rc == 0, se
+    for ev in ("SubagentStart", "SubagentStop"):
+        for _h, rc, _o, se, _t in w.run(w.event(ev, prompt_id=w.prompt_id, agent_type="general-purpose")):
+            assert rc == 0, se
+    assert w.cli_calls("learn")[0]["trace"]["task"] == "User request: " + b
