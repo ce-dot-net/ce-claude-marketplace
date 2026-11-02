@@ -246,3 +246,31 @@ def test_readme_discloses_the_v8_render_contract_and_drops_the_stale_flow():
         assert must in text, must
     for stale in ("Found 3 relevant patterns", "Bash(ace-cli *)", "~/.ace-logs", "Hook detects keywords", "v5.1.17"):
         assert stale not in text, stale
+
+
+# ---- item 5: docs match the code (marker windows, sync/async of each hook) ----
+
+DOCTOR = PLUGIN / "commands" / "ace-doctor.md"
+
+
+def _changelog_8():
+    return re.search(r"^## \[8\.0\.0\][^\n]*\n(.*?)(?=^## \[)", _read(CHANGELOG), re.S | re.M).group(1)
+
+
+@pytest.mark.parametrize("doc", ["doctor", "changelog"])
+def test_docs_no_longer_say_600_s_or_10_min_marker(doc):
+    text = _read(DOCTOR) if doc == "doctor" else _changelog_8()
+    assert not re.search(r"600\s*s\b", text), "the mod markers are 15 s / 120 s (plugin_data_dir), not 600 s"
+    assert not re.search(r"mod-active[^.\n]{0,40}10 min", text)
+    assert "15 s" in text and "120 s" in text
+
+
+def test_doctor_hook_list_matches_hooks_json_sync_async():
+    import json
+    hooks = json.loads((PLUGIN / "hooks" / "hooks.json").read_text())["hooks"]
+    lines = _read(DOCTOR).splitlines()
+    for event in ("Stop", "SubagentStop", "PermissionDenied", "PostToolBatch", "PostToolUseFailure"):
+        is_async = all(h.get("async") for g in hooks[event] for h in g["hooks"])
+        line = next(l for l in lines if re.match(r"^\d+b?\. `%s`" % event, l))
+        assert ("(async" in line) == is_async, line
+        assert ("sync" in line), "say sync or async: " + line
