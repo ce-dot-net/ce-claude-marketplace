@@ -64,6 +64,7 @@ def _hint_files():
     repo = PLUGIN.parent.parent
     files = _doc_files() + [repo / ".claude" / "agents" / "release-manager.md"]
     files += sorted((PLUGIN / "shared-hooks").rglob("*.py")) + sorted((PLUGIN / "scripts").glob("*.sh"))
+    files += sorted((PLUGIN / "mod").glob("*.ts")) + sorted((PLUGIN / "engine").glob("*.js"))  # the mod's systemMessage too
     return [p for p in files if p.name != "ace-install-cli.md"]
 
 

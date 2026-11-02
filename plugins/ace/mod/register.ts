@@ -6,7 +6,7 @@ import {
   pyLoads, pyDumps, sanitize, renderFull, renderBudget, renderCompact, renderDomainShift, renderCohort, renderPatternsDict,
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
-  detachedLearnArgv, parseAceReview, parseDiffStat, evalInjection, searchRow, searchSummary, searchErrorLine, sessionTitle,
+  detachedLearnArgv, FALLBACK_ON_3, parseAceReview, parseDiffStat, evalInjection, searchRow, searchSummary, searchErrorLine, sessionTitle,
   subagentQuery, isNoTaskCommand, STATE_CAP, traceVariant, appliedLogIds, type StateUpdate, type ToolRec, type Cohort,
 } from './core.ts'
 
@@ -76,20 +76,58 @@ function aceEnv(s: Sess): Record<string, string> {
   return env
 }
 
-const isAuthFailure = (t: string) => /unauthorized|401|not logged in|no api token/i.test(t)
+const isAuthFailure = (t: string) => /unauthorized|401|not logged in|no api token|token_expired/i.test(t)
+
+// §17/§23: the same order as ace_cli.cli_argv: the plugin-local pinned CLI, else the global `ace-cli` on PATH.
+async function cliHead($: any): Promise<string[]> {
+  const js = `${$.plugin.root}/node_modules/@ace-sdk/cli/dist/cli.js`
+  return await $.fs.exists(js).catch(() => false) ? ['node', js] : ['ace-cli']
+}
+// §14: the in-process engine (shared with ace_engine.py); its own gate exits 3 when the core is unusable. ACE_ENGINE=cli opts out.
+async function engineScript($: any, name: string): Promise<string | null> {
+  if (String(await $.env.get('ACE_ENGINE') ?? '').toLowerCase() === 'cli') return null
+  const p = `${$.plugin.root}/engine/${name}`
+  return await $.fs.exists(p).catch(() => false) ? p : null
+}
+// One engine search: { resp } or { why } (fall back to ace-cli), or { timeout } (no fallback, as ace_cli._search_lib).
+async function engineSearch($: any, s: Sess, script: string, query: string, pin: string | undefined, topK: number | undefined, budgetMs: number) {
+  const payload: any = { query, org: s.org, project: s.project, session_id: pin, top_k: topK }
+  for (const k of Object.keys(payload)) if (!payload[k]) delete payload[k]
+  let r: any
+  try { r = await $.process.run(['node', script], { stdin: JSON.stringify(payload), env: aceEnv(s), timeoutMs: budgetMs }) }
+  catch (err) { return /ENOENT|not found/i.test(String(err)) ? { why: 'spawn failed: ' + String(err).slice(0, 200) } : { timeout: true } }
+  if (r.exitCode === 0) {
+    try { const resp = sanitize(pyLoads(r.stdout)); if (resp && Array.isArray(resp.similar_patterns)) return { resp } } catch { /* below */ }
+    return { why: 'unexpected output (no similar_patterns list)' }
+  }
+  return { why: `exit ${r.exitCode}: ${String(r.stderr).trim().slice(0, 200)}` }
+}
 // ace_cli.run_search + §11 A1: while pin-backoff is young no pin at all; a locked/empty pinned search is re-run ONCE
 // without the pin, only within what is left of the blocking budget.
 async function search($: any, s: Sess, query: string, pin: string | undefined, topK: number | undefined, budgetMs: number) {
   const t0 = await $.clock.now()
+  let engineWhy: string | undefined = 'no engine'
+  const eng = await engineScript($, 'search.js')
+  if (eng) {
+    const e = await engineSearch($, s, eng, query, pin, topK, budgetMs)
+    const ms = await $.clock.now() - t0
+    if ('resp' in e) return { resp: e.resp, error: undefined, ms, pinFailed: false, pinSkipped: undefined, pinMs: undefined, stderr: '', engine: 'lib', engineWhy: 'ok' }
+    if ('timeout' in e) return { resp: null, error: 'timeout', ms, pinFailed: false, pinSkipped: undefined, pinMs: undefined, stderr: '', engine: 'lib', engineWhy: 'timeout' }
+    engineWhy = 'lib failed: ' + e.why
+    budgetMs -= ms
+    if (budgetMs < 2000) return { resp: null, error: 'timeout', ms, pinFailed: false, pinSkipped: undefined, pinMs: undefined, stderr: e.why.slice(0, 300), engine: 'lib', engineWhy }
+  }
+  const t1 = await $.clock.now()
+  const head = await cliHead($)
   const backoffPath = `${s.root}/pin-backoff`
   let usePin = pin, pinSkipped: string | undefined, pinFailed = false
   if (usePin) {
     const min = Number(await $.env.get('ACE_PIN_BACKOFF_MIN'))
-    const age = await $.fs.stat(backoffPath).then((st: any) => t0 - st.mtimeMs, () => Infinity)
+    const age = await $.fs.stat(backoffPath).then((st: any) => t1 - st.mtimeMs, () => Infinity)
     if (age < (Number.isFinite(min) && min > 0 ? min : 30) * 60_000) { usePin = undefined; pinSkipped = 'backoff' }
   }
   const spawn = async (p: string | undefined, timeoutMs: number) => {
-    const argv = ['ace-cli', 'search', '--stdin', '--json', ...(p ? ['--pin-session', p] : []), ...(topK ? ['--top-k', String(topK)] : [])]
+    const argv = [...head, 'search', '--stdin', '--json', ...(p ? ['--pin-session', p] : []), ...(topK ? ['--top-k', String(topK)] : [])]
     try { return { ...(await $.process.run(argv, { stdin: query, env: aceEnv(s), timeoutMs })), threw: '' } }
     catch (err) { return { exitCode: -1, stdout: '', stderr: String(err), threw: String(err) } }
   }
@@ -100,11 +138,11 @@ async function search($: any, s: Sess, query: string, pin: string | undefined, t
   const killed = !!r.threw && !cliMissing
   const locked = /database is locked/i.test(r.stderr)
   const killedPin = !!usePin && killed
-  const pinMs = usePin ? await $.clock.now() - t0 : undefined   // data for PIN_SHARE (live: 11.9 s, p7: 27-37 s under load)
+  const pinMs = usePin ? await $.clock.now() - t1 : undefined   // data for PIN_SHARE (live: 11.9 s, p7: 27-37 s under load)
   if (usePin && locked) await $.fs.write(backoffPath, '')   // only the sticky lock suspends pins globally (p2/p6)
   if (usePin && !cliMissing && (locked || killed || (!r.stdout.trim() && !isAuthFailure(r.stderr)))) {
     pinFailed = true
-    const left = budgetMs - (await $.clock.now() - t0)
+    const left = budgetMs - (await $.clock.now() - t1)
     if (left >= 2000) r = await spawn(undefined, left) // A2: never overrun the hook budget with a floored retry
   }
   let resp: any = null, error: string | undefined
@@ -115,7 +153,7 @@ async function search($: any, s: Sess, query: string, pin: string | undefined, t
   // A kill alone may be a slow server. Only a re-run that then answers in less time than the pin was given points
   // at the pin. ponytail: server latency varies, so a false 30-min backoff is possible; a lock probe would need the sqlite path.
   if (killedPin && !r.threw && r.exitCode === 0) await $.fs.write(backoffPath, '')
-  return { resp, error, ms: await $.clock.now() - t0, pinFailed, pinSkipped, pinMs, stderr: String(r.stderr).slice(0, 300) }
+  return { resp, error, ms: await $.clock.now() - t0, pinFailed, pinSkipped, pinMs, stderr: String(r.stderr).slice(0, 300), engine: 'cli', engineWhy }
 }
 
 // Per-load state, created in register (a reload starts over). What a learn needs is on disk: the F-080 state, the tool
@@ -287,7 +325,13 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
     success, execution_time_seconds: Math.round((await $.clock.now() - t0) / 10) / 100, learning_sent: sent })
   const log = `${s.logs}/ace-relevance.jsonl`
   const python = (await readText($, `${s.root}/python_path`))?.trim()
-  const argv = detachedLearnArgv({ learnArgv: learnArgv(traceFile, state.retrieval_id ?? undefined, applied, await $.env.get('ACE_VERBOSITY') || 'detailed'),
+  const verbosity = await $.env.get('ACE_VERBOSITY') || 'detailed'
+  const cliLearn = learnArgv(traceFile, state.retrieval_id ?? undefined, applied, verbosity, [...await cliHead($), 'learn'])
+  const engLearn = await engineScript($, 'learn.js')
+  const learnCmd = engLearn  // §14: the engine learns; ace-cli only when it exits 3 (nothing sent)
+    ? [...learnArgv(traceFile, state.retrieval_id ?? undefined, applied, verbosity, ['node', engLearn]), FALLBACK_ON_3, ...cliLearn]
+    : cliLearn
+  const argv = detachedLearnArgv({ learnArgv: learnCmd,
     trace: traceFile, lock, log, rowOk: pyDumps(await row(true)), rowFail: pyDumps(await row(false)), errLog: `${s.root}/logs/ace-hook-errors.log`, python })
   const spawned = await run($, argv, { env: aceEnv(s), timeoutMs: LAUNCHER_MS })
   if (!spawned || spawned.exitCode !== 0) {  // no child will clean up, or write the metrics row
@@ -370,7 +414,7 @@ async function onPrompt($: any, L: Load, e: any): Promise<any> {
   await relLog($, s, searchRow({ hook: 'UserPromptSubmit', sessionId: s.sessionId, userPrompt: e.text, query, returned, injected: r.patterns,
     projectId: s.project, orgId: s.org, agentType: 'main', cohort: r.cohort, hookMs: await $.clock.now() - t0, nowIso: await nowIso($),
     extra: { search_ms: sr.ms, pin_ms: sr.pinMs, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, truncated_for_cap: r.truncated || undefined,
-      context_chars: r.context?.length ?? 0, task_session_id: tsid, mid_turn: defer || undefined, source: 'mod' } }))
+      context_chars: r.context?.length ?? 0, task_session_id: tsid, mid_turn: defer || undefined, engine: sr.engine, engine_reason: sr.engineWhy, source: 'mod' } }))
   const processed = renderPatternsDict(sr.resp).dict.similar_patterns
   $.ui.log(searchSummary(processed))
   L.pendingTitle = sessionTitle(processed, await readJson($, `${s.logs}/ace-review-result.json`))
@@ -385,7 +429,7 @@ async function subagentRender($: any, s: Sess, sr: any, query: string, agentType
   await relLog($, s, searchRow({ hook: 'SubagentStart', sessionId: s.sessionId, userPrompt: query, query, returned: sr.resp.similar_patterns || [], injected: r.patterns,
     projectId: s.project, orgId: s.org, agentType, cohort: r.cohort, hookMs: await $.clock.now() - t0, nowIso: await nowIso($),
     extra: { search_ms: sr.ms, pin_ms: sr.pinMs, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, truncated_for_cap: r.truncated || undefined, context_chars: r.context?.length ?? 0,
-      task_session_id: tsid, parent_task_id: parent ?? null, source: 'mod', ...extra } }))
+      task_session_id: tsid, parent_task_id: parent ?? null, engine: sr.engine, engine_reason: sr.engineWhy, source: 'mod', ...extra } }))
   return r
 }
 

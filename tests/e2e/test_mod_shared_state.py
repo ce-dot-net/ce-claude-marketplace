@@ -247,3 +247,33 @@ def test_stale_mod_marker_leaves_python_hooks_working():
         assert [c["argv"][:1] for c in r["cli_calls"]] == [["search"]]
     finally:
         shutil.rmtree(str(r["sandbox"]), ignore_errors=True)
+
+
+@pytest.mark.skipif(not NODE, reason="node not installed")
+@pytest.mark.parametrize("engine_rc,cli_runs", [(3, True), (1, False), (0, False)])
+def test_detached_engine_learn_falls_back_to_cli_only_on_exit_3(tmp_path, engine_rc, cli_runs):
+    """§14: exit 3 = nothing sent -> ace-cli learns; any other engine exit may have POSTed -> never re-sent."""
+    fake_dir = tmp_path / "bin"
+    fake_dir.mkdir()
+    for name, rc in (("fake-engine", engine_rc), ("ace-cli", 0)):
+        f = fake_dir / name
+        f.write_text("#!/bin/sh\nprintf '%s\\n' \"$0 $*\" >> \"$FAKE_LEARN_MARKER\"\nexit " + str(rc) + "\n")
+        f.chmod(0o755)
+    trace = tmp_path / "ace-trace-x.json"
+    trace.write_text("{}")
+    lock = tmp_path / "learn-inflight-main.lock"
+    lock.write_text("")
+    log = tmp_path / "logs" / "ace-relevance.jsonl"
+    marker = tmp_path / "ran"
+    flags = ["--transcript", str(trace), "--json"]
+    learn = [str(fake_dir / "fake-engine")] + flags + ["--ace-fallback-on-3--", str(fake_dir / "ace-cli"), "learn"] + flags
+    argv = _launcher_argv({"learnArgv": learn, "trace": str(trace), "lock": str(lock), "log": str(log),
+                           "rowOk": '{"ok": 1}', "rowFail": '{"ok": 0}'})
+    subprocess.run(argv, env=dict(os.environ, FAKE_LEARN_MARKER=str(marker)), timeout=10, check=True)
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline and lock.exists():
+        time.sleep(0.1)
+    ran = marker.read_text().splitlines()
+    assert ran[0].startswith(str(fake_dir / "fake-engine")) and "--ace-fallback-on-3--" not in ran[0]
+    assert (len(ran) == 2 and ran[1].startswith(str(fake_dir / "ace-cli") + " learn")) == cli_runs, ran
+    assert log.read_text() == ('{"ok": 1}' if engine_rc in (0, 3) else '{"ok": 0}') + "\n"

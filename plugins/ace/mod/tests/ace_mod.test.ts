@@ -20,6 +20,10 @@ import G from './fixtures/golden.ts'
 import { pyLoads } from '../core.ts'
 
 const HOME = '/home/u', CWD = '/proj', SID = 'sess-1', PRJ = 'prj_t'
+const PROOT = decodeURIComponent(new URL('../..', import.meta.url).pathname).replace(/\/$/, '')  // $.plugin.root
+const LOCAL_CLI = `${PROOT}/node_modules/@ace-sdk/cli/dist/cli.js`
+// the ace-cli arguments of a spawn, whichever head resolved it: the bare global name or [node, plugin-local cli.js]
+const cliOf = (argv: string[]): string[] | null => argv[0] === 'ace-cli' ? argv.slice(1) : argv[0] === 'node' && argv[1] === LOCAL_CLI ? argv.slice(2) : null
 const ROOT = `${HOME}/.claude/plugins/data/ace-inline`
 const PDIR = `${ROOT}/projects/${PRJ}`, SDIR = `${PDIR}/sessions/${SID}`
 const REL = `${CWD}/.claude/data/logs/ace-relevance.jsonl`
@@ -31,6 +35,7 @@ const MIN = 60_000
 
 type SearchAnswer = { exitCode?: number; stdout?: string; stderr?: string; advanceMs?: number; killed?: boolean }
 type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; env?: Record<string, string>; files?: Record<string, string>
+  engine?: (stdin?: string) => SearchAnswer
   learnExit?: number; early?: (agentId: string) => Promise<unknown> }
 type Run = { argv: string[]; stdin?: string; env?: Record<string, string>; timeoutMs?: number; files: Set<string> }
 
@@ -67,9 +72,17 @@ function host(on: any, o: Opts = {}) {
     return { value: { kind: 'file', size: files.get(e.path)!.length, mtimeMs: mtime.get(e.path), isLink: false } }
   })
   on('process.run', (_$: any, e: any) => {
-    const argv = [...e.argv] as string[], init = e.init ?? {}
+    let argv = [...e.argv] as string[]
+    const init = e.init ?? {}
     runs.push({ argv, stdin: init.stdin, env: init.env, timeoutMs: init.timeoutMs, files: new Set(files.keys()) })
-    if (argv[0] === 'ace-cli' && argv[1] === 'search') {
+    if (argv[0] === 'node' && argv[1] === `${PROOT}/engine/search.js`) {
+      const a = o.engine ? o.engine(init.stdin) : { exitCode: 3, stderr: 'gate: no_cli' }
+      now += a.advanceMs ?? 0
+      if (a.killed) throw new Error('ace: $.process.run(node) aborted: still running after timeoutMs')
+      return res(a.exitCode ?? 0, a.stdout ?? '', a.stderr ?? '')
+    }
+    if (cliOf(argv)?.[0] === 'search') {
+      argv = ['ace-cli', ...cliOf(argv)!]
       const a = (o.search ?? dflt)(argv, init.stdin)
       now += a.advanceMs ?? 0
       if (a.killed) throw new Error('ace: $.process.run(ace-cli) aborted: still running after timeoutMs')
@@ -101,9 +114,9 @@ function host(on: any, o: Opts = {}) {
   on('classic.Stop', () => ({}))
   on('classic.SubagentStop', () => ({}))
 
-  const isSearch = (r: Run) => r.argv[0] === 'ace-cli' && r.argv[1] === 'search'
+  const isSearch = (r: Run) => cliOf(r.argv)?.[0] === 'search'
   const searches = () => runs.filter(isSearch)
-  const learns = () => runs.filter(r => !isSearch(r) && r.argv.includes('ace-cli') && r.argv.includes('learn'))
+  const learns = () => runs.filter(r => !isSearch(r) && (r.argv.includes('ace-cli') || r.argv.includes(LOCAL_CLI)) && r.argv.includes('learn'))
   const rows = () => runs.filter(r => r.argv.includes(REL) && typeof r.stdin === 'string')
     .flatMap(r => r.stdin!.split('\n').filter(Boolean).map(l => JSON.parse(l)))
   const state = (agent = 'main') => {
@@ -655,6 +668,64 @@ test('trace parity with ace_after_task.py: fields, effort from classic.Stop, git
   expect(t.effort_weight).toBe(1.5)
   expect(t.git.commit_hash).toBe('abc123')
   expect(t.git.branch).toBe('main')
+})
+
+// ---------- §14/§17/§23: the same CLI/engine resolution as ace_cli.cli_argv / ace_engine (plugin-local first) ----------
+
+test('plugin-local ace-cli wins: search and learn spawn [node, <root>/node_modules/@ace-sdk/cli/dist/cli.js]', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), files: { [LOCAL_CLI]: '' } })
+  await mainTask($, h)
+  await done($)
+  const s = h.searches()[0]!
+  expect(s.argv.slice(0, 3)).toEqual(['node', LOCAL_CLI, 'search'])
+  const L = h.learns()[0]!
+  expect(L.argv.includes(LOCAL_CLI)).toBe(true)
+  expect(L.argv[L.argv.indexOf(LOCAL_CLI) - 1]).toBe('node')
+})
+
+test('engine present: the search runs in-process (node engine/search.js, JSON stdin with the pin), no ace-cli search', async ($, on) => {
+  let got: any
+  const h = host(on, { files: { [`${PROOT}/engine/search.js`]: '' }, engine: (stdin) => { got = JSON.parse(stdin!); return { stdout: S8 } } })
+  const r: any = await submit($)
+  expect(h.searches().length).toBe(0)
+  expect(got.query).toBe(HUMAN)
+  expect(got.project).toBe(PRJ)
+  expect(got.org).toBe('org_t')
+  expect(got.session_id).toBe(h.state()!.task_session_id)
+  expect(r.context[0].includes('<ace-patterns shown="8"')).toBe(true)
+  expect(h.rows().find((x: any) => x.event === 'search')!.engine).toBe('lib')
+})
+
+test('engine gate fails (exit 3): the ace-cli path runs with the pin, within the budget left', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), files: { [`${PROOT}/engine/search.js`]: '' },
+    engine: () => ({ exitCode: 3, stderr: 'gate: core_missing', advanceMs: 1000 }) })
+  await submit($)
+  expect(h.searches().length).toBe(1)
+  expect(h.pin(h.searches()[0]!)).toBe(h.state()!.task_session_id)
+  expect(h.searches()[0]!.timeoutMs! <= 24_000).toBe(true)
+  const row = h.rows().find((x: any) => x.event === 'search')!
+  expect(row.engine).toBe('cli')
+  expect(String(row.engine_reason)).toContain('core_missing')
+})
+
+test('ACE_ENGINE=cli: no engine spawn at all', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_ENGINE: 'cli' }, files: { [`${PROOT}/engine/search.js`]: '' },
+    engine: () => { throw new Error('engine must not run') } })
+  await submit($)
+  expect(h.runs.some(r => r.argv[1] === `${PROOT}/engine/search.js`)).toBe(false)
+  expect(h.searches().length).toBe(1)
+})
+
+test('engine present: the detached learn runs engine/learn.js and falls back to ace-cli only on exit 3', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), files: { [`${PROOT}/engine/learn.js`]: '' } })
+  await mainTask($, h)
+  await done($)
+  const a = h.runs.find(r => r.argv.includes(`${PROOT}/engine/learn.js`))!.argv
+  const i = a.indexOf(`${PROOT}/engine/learn.js`), sep = a.indexOf('--ace-fallback-on-3--')
+  expect(a[i - 1]).toBe('node')
+  expect(sep > i).toBe(true)
+  expect(a.slice(i + 1, sep)).toEqual(a.slice(sep + 3))  // same flags on both engines
+  expect(a.slice(sep + 1, sep + 3)).toEqual(['ace-cli', 'learn'])
 })
 
 // ---------- §28 render_variant contract / §29 applied_log_ids under full ----------
