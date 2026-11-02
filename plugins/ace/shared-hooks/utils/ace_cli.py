@@ -215,7 +215,7 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
         with os.fdopen(fd, 'w') as f:
             json.dump(trace, f, default=str)
         cmd = [CLI_CMD, 'learn', '--transcript', path, '--json',
-               '--timeout', str(int(timeout * 1000)), '--verbosity', verbosity]
+               '--timeout', str(int(timeout * 1000)), '--verbosity', verbosity, '--no-stream']  # stream mode exits 0 on server 401/500 (m3)
         if retrieval_id:
             cmd += ['--retrieval-id', retrieval_id]
         if applied_log_ids:
@@ -367,51 +367,3 @@ def check_auth_status(warn_threshold_hours: float = 2.0) -> Optional[str]:
         pass  # Non-fatal
 
     return None
-
-
-def ensure_authenticated() -> tuple:
-    """
-    Pre-flight authentication check for ACE operations - v5.4.21
-
-    Returns:
-        Tuple of (is_authenticated: bool, error_message: Optional[str])
-        - (True, None) if authenticated
-        - (False, "error message") if not authenticated
-
-    Usage:
-        is_ok, error = ensure_authenticated()
-        if not is_ok:
-            # Handle auth failure - show error to user
-            return {"error": "not_authenticated", "message": error}
-
-    Note:
-        This is a SYNCHRONOUS check. Use at the start of slash commands
-        or utility functions to fail fast with a clear message.
-    """
-    try:
-        result = subprocess.run(
-            [CLI_CMD, 'whoami', '--json'],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-
-        # Parse stdout regardless of returncode (CLI returns JSON even on error)
-        if result.stdout:
-            try:
-                data = json.loads(result.stdout)
-                if data.get('authenticated', False):
-                    return (True, None)
-                else:
-                    message = data.get('message', 'Not logged in')
-                    return (False, f"❌ [ACE] {message}. Run /ace-login to authenticate.")
-            except json.JSONDecodeError:
-                pass
-
-        # CLI failed without valid JSON
-        return (False, "❌ [ACE] Authentication check failed. Run /ace-login to setup.")
-
-    except subprocess.TimeoutExpired:
-        return (False, "❌ [ACE] Authentication check timed out. Check your connection.")
-    except FileNotFoundError:
-        return (False, "❌ [ACE] ace-cli not found. Run: npm install -g @ace-sdk/cli")

@@ -32,7 +32,7 @@ def main() -> None:
         if not ctx:
             return
         sid = plugin_data_dir.resolve_session_id(event)
-        if plugin_data_dir.is_disabled(ctx['project'], sid):
+        if plugin_data_dir.is_disabled(ctx['project'], sid) or plugin_data_dir.is_mod_active(ctx['project'], sid):
             return
         stype = str(ti.get('subagent_type') or 'general-purpose')
         data = {"prompt": str(ti.get('prompt') or ''), "subagent_type": stype,

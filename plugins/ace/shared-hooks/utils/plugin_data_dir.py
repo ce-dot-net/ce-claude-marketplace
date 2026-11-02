@@ -130,6 +130,20 @@ def is_disabled(project_id: Optional[str], session_id: Optional[str]) -> bool:
         return False
 
 
+def mod_active_marker(project_id: Optional[str], session_id: Optional[str]) -> Path:
+    """§13.1: the mod touches this at session.start / every prompt.submit. Never creates dirs."""
+    return session_dir(project_id, session_id, create=False) / "mod-active"
+
+
+def is_mod_active(project_id: Optional[str], session_id: Optional[str], max_age: float = 600) -> bool:
+    """True when the mod-active marker is younger than 10 min -> the Python hook early-exits."""
+    try:
+        import time
+        return time.time() - mod_active_marker(project_id, session_id).stat().st_mtime < max_age
+    except OSError:
+        return False
+
+
 def learn_lock(project_id: Optional[str], session_id: Optional[str], agent: Optional[str]) -> Path:
     name = "learn-inflight-%s.lock" % _safe(agent or "main")
     return _file(session_dir(project_id, session_id, create=False) / name)

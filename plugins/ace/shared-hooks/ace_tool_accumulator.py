@@ -266,7 +266,7 @@ def hook_main(failure: bool) -> None:
         if not (sid and tool and tuid):
             return
         ctx = get_context()
-        if not ctx or plugin_data_dir.is_disabled(ctx['project'], sid):
+        if not ctx or plugin_data_dir.is_disabled(ctx['project'], sid) or plugin_data_dir.is_mod_active(ctx['project'], sid):
             return  # no ACE project (nothing reads these rows) or P-26 disabled
         if failure:
             # doc cc_hooks_reference.md:2287-2330 — `error` is display text, key on its first line
@@ -315,7 +315,7 @@ def batch_main() -> None:
         if not sid or not isinstance(calls, list):
             return
         ctx = get_context()
-        if not ctx or plugin_data_dir.is_disabled(ctx['project'], sid):
+        if not ctx or plugin_data_dir.is_disabled(ctx['project'], sid) or plugin_data_dir.is_mod_active(ctx['project'], sid):
             return
         for c in calls:
             if not (isinstance(c, dict) and c.get('tool_name') and c.get('tool_use_id')):

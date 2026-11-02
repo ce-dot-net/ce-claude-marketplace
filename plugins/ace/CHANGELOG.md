@@ -17,7 +17,7 @@ Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topol
 - Removed hooks: the domain-shift `PreToolUse` path, `PreCompact`, `PermissionRequest`. `PreToolUse` returns only with matcher `Agent` (prompt stash).
 - Round 2: `PostToolBatch` (async, one event per parallel batch) replaces the per-tool `PostToolUse` accumulator; `PostToolUseFailure` matcher is `*`.
 - Main agent: `prompt_id` is the task anchor and `--pin-session` value (uuid fallback). Every subagent is its own ACE session: SubagentStart mints a fresh uuid4 (parent `prompt_id` kept only as `parent_task_id`); the `Agent` PreToolUse hook stashes the subagent prompt in `agent-prompts/` so SubagentStart no longer scans the transcript.
-- Learning (Stop/SubagentStop) runs as a detached process and survives `claude -p` teardown; `ACE_ASYNC_LEARNING` is removed (always async, `ACE_LEARN_INLINE=1` for tests). All async hooks print nothing.
+- Stop/SubagentStop are sync hooks (timeout 15, print nothing) that only dispatch a detached, SIGHUP-safe learn process, so learning survives `claude -p` teardown (async hooks are killed there); `ACE_ASYNC_LEARNING` is removed (always async, `ACE_LEARN_INLINE=1` for tests). All async hooks print nothing.
 - A failed session pin is dropped with a pin-backoff (`ACE_PIN_BACKOFF_MIN`); new `ACE_MIN_PROMPT_CHARS` skips searches for trivial prompts.
 - `/ace:ace-doctor` flags `~/.ace-cache/sessions.db` over 100 MB and recent `database is locked` errors; new `/ace:ace-cleanup --legacy` (dry run, `--yes`, `--sessions-db`) removes v7 leftovers.
 - Measured blocking hook time per session: 7.1.14 60-111 s vs v8 2.3-3.3 s; UserPromptSubmit alone 27-37 s before.
@@ -25,6 +25,9 @@ Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topol
 - `/ace:ace-doctor` checks Claude Code >= 2.1.300 and the plugin-data layout; plugin root comes from `installed_plugins.json`.
 - Statusline uses one Python call instead of 13 `jq` spawns (refresh the user copy with `/ace:ace-statusline-setup update`).
 - Docs: ARCHITECTURE.md updated, new `docs/technical/ADR-001-language.md`, `docs/RELEASE_GATE_v8.md`; stale v1/v3 docs deleted.
+
+- Round 3a: subagent learn uses SubagentStart's stored query first (transcript fallback skips `<system-reminder>` blocks); Write/Edit are traced as Success; a timed-out `ace-cli --version` probe no longer disables ACE (logged as `version_unknown`); `ace-cli learn` runs with `--no-stream` so server 401/500 surface; dead `ensure_authenticated` removed; Python hooks early-exit while the mod's `mod-active` marker is younger than 10 min.
+- Info for server/SDK teams: ace-cli hard-codes the header `X-ACE-Client: cli`; the plugin's `ACE_CLIENT_ID` env var never reaches the server through the CLI (kept, harmless).
 
 ### Accepted losses
 - Successful tool calls carry no `duration_ms` (PostToolBatch has none; only `PostToolUseFailure` rows do).

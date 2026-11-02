@@ -325,7 +325,7 @@ def main():
             _ctx = get_context()
         except Exception:
             _ctx = None
-        if _ctx and plugin_data_dir.is_disabled(_ctx['project'], event.get('session_id') or ''):
+        if _ctx and (plugin_data_dir.is_disabled(_ctx['project'], event.get('session_id') or '') or plugin_data_dir.is_mod_active(_ctx['project'], event.get('session_id') or '')):
             sys.exit(0)
 
         _reason = _skip_reason(user_prompt)
@@ -354,7 +354,7 @@ def main():
         session_id = event.get('session_id', str(uuid.uuid4()))
 
         # P-26: session OR project disabled.flag stops everything, before any state is written.
-        if plugin_data_dir.is_disabled(context['project'], session_id):
+        if plugin_data_dir.is_disabled(context['project'], session_id) or plugin_data_dir.is_mod_active(context['project'], session_id):
             sys.exit(0)
 
         # Per-task session_id = hook prompt_id (G2), else uuid4.

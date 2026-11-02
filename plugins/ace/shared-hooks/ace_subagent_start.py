@@ -290,7 +290,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         project = context['project']
 
         # §4: per-session disabled flag under plugin data.
-        if plugin_data_dir.is_disabled(project, plugin_data_dir.resolve_session_id(event)):
+        if plugin_data_dir.is_disabled(project, plugin_data_dir.resolve_session_id(event)) or plugin_data_dir.is_mod_active(project, plugin_data_dir.resolve_session_id(event)):
             sys.exit(0)
 
         # Resume / teammate re-wake re-fires SubagentStart (cc_hooks_reference.md:2549):

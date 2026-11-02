@@ -41,3 +41,6 @@ Floor 2.1.287 (the v8 floor 2.1.300 already clears it). One hooks.json with `mod
    Team/Enterprise guard is seated).
 
 Expected gain: per-search CPU 1.5-2 s down to 0.3-0.5 s, RSS -60 %; wall time stays bounded by the server round trip. v8.1 work.
+
+## Note: ACE_CLIENT_ID (m3)
+ace-cli hard-codes `X-ACE-Client: cli`, so the plugin's `ACE_CLIENT_ID` env var never reaches the server through the CLI. The env var is kept (harmless); only an in-process SDK engine could set the header.
