@@ -667,3 +667,59 @@ def test_record_tool_c4_api(tmp_path, monkeypatch):
     assert [s["tool"] for s in trajectory] == ["Edit", "Bash"]
     assert trajectory[0]["action"] == "Edited b.py"
     assert "Exit code 1" in trajectory[1]["result"]
+
+
+# ---------------------------------------------------------------------------
+# 7. Round 2 (WP-H): P-12 relevance rows via the logger, UTC timestamps
+# ---------------------------------------------------------------------------
+
+def test_after_task_writes_no_relevance_rows_by_hand():
+    """DESIGN §10 P-12: keymap / degenerate / playbook_load rows go through
+    ace_relevance_logger (one writer: rotation + UTC), never a hand-rolled open()."""
+    src = AFTER_TASK.read_text()
+    code = "\n".join(l for l in src.splitlines() if not l.lstrip().startswith("#"))
+    assert "ace-relevance.jsonl" not in code, \
+        "ace_after_task.py still appends to ace-relevance.jsonl directly"
+
+
+def test_after_task_relevance_rows_go_through_logger(box, monkeypatch, capsys):
+    """P-12 behavioral: every row ace_after_task emits passes ACERelevanceLogger._write_log."""
+    import io
+    import ace_after_task as at
+    import ace_relevance_logger as rl
+    sid = "sess-p12"
+    agent = "p12agent"
+    box.seed_tools(sid, WORK, agent_id=agent)
+    box.write_state(sid, agent=agent, user_prompt="refactor the parser module")
+    for k, v in box.env(ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID).items():
+        monkeypatch.setenv(k, v)
+    monkeypatch.chdir(box.project)
+    monkeypatch.setattr(rl, "_logger", None)
+    routed = []
+    real = rl.ACERelevanceLogger._write_log
+
+    def spy(self, entry):
+        routed.append(entry.get("event"))
+        return real(self, entry)
+
+    monkeypatch.setattr(rl.ACERelevanceLogger, "_write_log", spy)
+    monkeypatch.setattr(at, "run_learn", lambda *a, **kw: ({}, 1))
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(box.subagent_event(sid, agent))))
+    with pytest.raises(SystemExit):
+        at.main()
+    written = [json.loads(l).get("event") for l in
+               (box.project / ".claude" / "data" / "logs" / "ace-relevance.jsonl").read_text().splitlines()]
+    for ev in ("subagent_stop_keymap", "playbook_load"):
+        assert ev in written, written
+        assert ev in routed, "%s row bypassed the relevance logger" % ev
+
+
+def test_learn_trace_timestamp_is_utc(box):
+    """DESIGN §10 accepted loss: 'trace timestamps now UTC' (was naive local isoformat)."""
+    sid = "sess-utc"
+    box.seed_tools(sid, WORK)
+    box.write_state(sid, user_prompt="implement the utc trace timestamp")
+    p = box.run_after_task(box.stop_event(sid), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
+    assert p.returncode == 0, p.stderr
+    ts = box.cli_calls("learn")[0]["trace"]["timestamp"]
+    assert ts.endswith("Z") or ts.endswith("+00:00"), ts
