@@ -62,6 +62,7 @@ sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 from ace_cli import run_search  # noqa: E402
+import ace_search_cache  # noqa: E402
 from ace_context import get_context                              # noqa: E402
 from patterns_used_state import append_patterns_used, injected_contents, load_state  # noqa: E402
 import plugin_data_dir                                           # noqa: E402
@@ -378,15 +379,21 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
 
         # ── ACE search keyed to subagent's query ──────────────────────────────
         # task_intent is INTENTIONALLY OMITTED — server-authoritative (v7.0.1)
-        patterns_response, _search_ms = run_search(
-            query=query,
-            org=context['org'],
-            project=context['project'],
-            session_id=task_session_id,
-            timeout=25,
-            hook_event_name='SubagentStart',
-            # task_intent deliberately NOT passed
-        )
+        # §32: a real cached hit (same project, exact query, < 15 min, not yet served to this agent) skips the spawn;
+        # it carries the cached retrieval_id, so the trace is credited from that search.
+        patterns_response = ace_search_cache.reuse_get(context['project'], 'subagent', query, agent_id)
+        cache_hit = patterns_response is not None
+        if not cache_hit:
+            patterns_response, _search_ms = run_search(
+                query=query,
+                org=context['org'],
+                project=context['project'],
+                session_id=task_session_id,
+                timeout=25,
+                hook_event_name='SubagentStart',
+                # task_intent deliberately NOT passed
+            )
+            ace_search_cache.reuse_put(context['project'], 'subagent', query, agent_id, patterns_response)
 
         if not patterns_response:
             # Search failed or returned nothing — degrade gracefully
@@ -466,7 +473,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                    hook_ms=int((time.monotonic() - t_start) * 1000),
                    project_id=context['project'], org_id=context['org'],
                    agent_type=agent_type, render_cohort=_cohort, parent_task_id=parent_task_id,
-                   query_source=query_source)
+                   query_source=query_source, cache_hit=cache_hit)
 
         if ace_context is not None:
             output = {

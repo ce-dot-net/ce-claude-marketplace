@@ -74,7 +74,7 @@ def _sstart(env, agent_id, prompt_id=PROMPT_ID):
           "transcript_path": str(_transcript(env)), "agent_id": agent_id, "agent_type": "Explore"}
     if prompt_id:
         ev["prompt_id"] = prompt_id
-    return env.run("ace_subagent_start_wrapper.sh", ev)
+    return env.run("ace_subagent_start_wrapper.sh", ev, extra_env={"ACE_LOCAL_REUSE": ""})  # per-agent pins, not §32 reuse
 
 
 def test_subagent_start_pin_is_fresh_uuid4_not_prompt_id(env):

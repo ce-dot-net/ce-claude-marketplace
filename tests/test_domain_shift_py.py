@@ -261,7 +261,7 @@ def test_domain_shift_per_agent_domain_history(env):
     agent (its own domain-last file), so it gets its own search."""
     env.run(SHIM, _read_event(env, str(env.proj / "src/auth/login_handler.py")))
     proc = env.run(SHIM, _read_event(env, str(env.proj / "src/auth/login_handler.py"),
-                                     agent_id="agent-sub-1"))
+                                     agent_id="agent-sub-1"), extra_env={"ACE_LOCAL_REUSE": ""})  # §32 reuse off
     assert proc.returncode == 0
     assert len(_search_calls(env)) == 2
     assert (env.session_dir(SID) / "domain-last-agent-sub-1.txt").read_text().strip() == "auth"

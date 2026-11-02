@@ -441,7 +441,7 @@ export function renderDomainShift(resp: any, domain: string) {
 }
 
 // ---------- render_cohort (salt "render:", same bucket as ace_pattern_render) ----------
-function sha256Hex(text: string): string {
+export function sha256Hex(text: string): string {
   const bytes: number[] = []
   for (const ch of text) { // UTF-8
     const c = ch.codePointAt(0)!
@@ -795,3 +795,9 @@ export const APPEND_SH = 'umask 077; for p in "$2/.claude" "$2/.claude/data" "$(
 // Monitors, shells, teammates, crons are long-lived and never defer.
 export const delegatedRunning = (bg: unknown): boolean => Array.isArray(bg)
   && bg.some((b: any) => b && typeof b === 'object' && (b.type === 'subagent' || b.type === 'workflow') && b.status === 'running')
+
+// DESIGN §32: ace_search_cache key (sha256 of project \x1f kind \x1f normalized query), same file as the Python chain.
+export const REUSE_TTL_MS = 15 * 60_000
+export const normalizeQuery = (q: string) => String(q ?? '').replace(/<task-id>[\s\S]*?<\/task-id>/gi, ' ').split(/\s+/).filter(Boolean).join(' ').toLowerCase()
+export const reuseKey = (project: string, kind: string, query: string) => sha256Hex([project, kind, normalizeQuery(query)].join('\x1f'))
+export const reuseEnabled = (raw: unknown, kind: string) => (raw == null ? 'domain,subagent' : String(raw)).split(',').map(x => x.trim()).includes(kind)

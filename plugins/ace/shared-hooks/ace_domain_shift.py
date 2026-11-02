@@ -21,6 +21,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 import plugin_data_dir                                    # noqa: E402
 from ace_cli import run_search                            # noqa: E402
+import ace_search_cache                                  # noqa: E402
 from ace_context import get_context                       # noqa: E402
 from ace_relevance_logger import log_domain_shift, log_error  # noqa: E402
 from patterns_used_state import (append_patterns_used, injected_contents, load_task_session_id,  # noqa: E402
@@ -159,8 +160,13 @@ def _search_and_inject(event, ctx, project, org, sid, agent_id, last_file, last,
         # prompt_id that must not replace the human prompt_id the task was pinned/credited under (§16 P2).
         tsid = load_task_session_id(sid, None, 'Stop', project_id=project) \
             or event.get('prompt_id') or task_session_id_for(None)
-    result, _ms = run_search(query, org=org, project=project, top_k=8,  # P8: no pin (server never credits these rows)
-                             timeout=17, hook_event_name='PostToolUse')
+    # §32: a real cached hit (same project, exact query, < 15 min, not yet served to this agent) skips the spawn
+    result = ace_search_cache.reuse_get(project, 'domain', query, agent_id or 'main')
+    cache_hit = result is not None
+    if not cache_hit:
+        result, _ms = run_search(query, org=org, project=project, top_k=8,  # P8: no pin (server never credits these rows)
+                                 timeout=17, hook_event_name='PostToolUse')
+        ace_search_cache.reuse_put(project, 'domain', query, agent_id or 'main', result)
     ok = isinstance(result, dict) and not result.get('error')
     if ok:  # a failed/timed-out search must stay retryable (domain not marked visited)
         try:
@@ -177,7 +183,7 @@ def _search_and_inject(event, ctx, project, org, sid, agent_id, last_file, last,
     log_domain_shift(session_id=sid, from_domain=last, to_domain=matched, file_path=file_path,
                      patterns_found=returned, search_succeeded=ok, project_id=project,
                      hook='PostToolUse', patterns_injected=len(kept_ids),
-                     hook_ms=int((time.monotonic() - t0) * 1000), agent_id=agent_id or None)
+                     hook_ms=int((time.monotonic() - t0) * 1000), agent_id=agent_id or None, cache_hit=cache_hit)
     if not additional:
         return
 
