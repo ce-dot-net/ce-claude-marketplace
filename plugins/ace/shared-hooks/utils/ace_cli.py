@@ -4,6 +4,9 @@
 v8 (DESIGN §5 C2): run_search / run_learn are exactly ONE ace-cli spawn each.
 No --version probe, no whoami pre-check; both return (result_or_None, duration_ms).
 The search cache moved to ace_search_cache (disk) and is consulted by the hooks.
+
+v8 (DESIGN §14): when the ace_engine gate passes they spawn the in-process core engine
+instead, and fall back to the ace-cli path below.
 """
 
 import json
@@ -11,11 +14,18 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, Tuple
+
+
+_utils_dir = str(Path(__file__).resolve().parent)
+if _utils_dir not in sys.path:
+    sys.path.insert(0, _utils_dir)
+import ace_engine  # noqa: E402
 
 
 CLI_CMD = 'ace-cli'  # name of the global fallback; spawns go through _cmd()/cli_argv()
@@ -201,6 +211,49 @@ def _log_pin(session_id, hook_event_name, **fields) -> None:
         pass
 
 
+def _log_engine(engine, reason, hook_event_name, **fields) -> None:
+    """Best-effort relevance row: which engine this spawn used and why (DESIGN §14)."""
+    try:
+        entry = {"timestamp": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+                 "event": "engine", "engine": engine, "reason": reason, "hook": hook_event_name}
+        entry.update(fields)
+        from ace_relevance_logger import ACERelevanceLogger
+        ACERelevanceLogger()._write_log(entry)
+    except Exception:
+        pass
+
+
+def _failure_reason(result) -> str:
+    return "exit %s: %s" % (result.returncode, _text(result.stderr).strip()[:200])
+
+
+def _search_lib(node, query, org, project, session_id, top_k, timeout, hook_event_name):
+    """One engine spawn: (parsed_result, None) or (None, why_it_failed). A timeout propagates."""
+    argv, stdin = ace_engine.search_command(query, org=org, project=project, session_id=session_id,
+                                            top_k=top_k, node=node)
+    t0 = time.monotonic()
+    try:
+        result = subprocess.run(argv, input=stdin, capture_output=True, timeout=timeout, env=_env(org, project))
+    except subprocess.TimeoutExpired:
+        _log_engine("lib", "timeout", hook_event_name, ok=False, ms=_ms(t0))
+        raise
+    except OSError as e:
+        reason = "spawn failed: %s" % str(e)[:200]
+    else:
+        reason = _failure_reason(result)
+        if result.returncode == 0:
+            try:
+                parsed = json.loads(_text(result.stdout))
+                if isinstance(parsed, dict) and isinstance(parsed.get("similar_patterns"), list):
+                    _log_engine("lib", "ok", hook_event_name, ok=True, ms=_ms(t0))
+                    return parsed, None
+            except ValueError:
+                pass
+            reason = "unexpected output (no similar_patterns list)"
+    _log_engine("lib", reason, hook_event_name, ok=False, ms=_ms(t0))
+    return None, reason
+
+
 def _is_auth_failure(stderr: str, stdout: str) -> bool:
     return (any(x in stderr.lower() for x in ['unauthorized', '401', 'not logged in', 'no api token', 'token_expired'])
             or any(x in stdout.lower() for x in ['not logged in', 'no api token']))
@@ -213,7 +266,8 @@ def _ms(t0: float) -> int:
 def run_search(query: str, *, org: str = None, project: str = None, session_id: str = None,
                top_k: int = None, timeout: int = 25,
                hook_event_name: str = "UserPromptSubmit") -> Tuple[Optional[Dict[str, Any]], int]:
-    """ONE `ace-cli search --stdin --json [--pin-session X] [--top-k N]` spawn.
+    """ONE engine spawn if the gate passes, else or on its failure ONE
+    `ace-cli search --stdin --json [--pin-session X] [--top-k N]` spawn.
 
     Returns (result_dict_or_None, duration_ms). Structured error dicts are kept:
     {"error": "not_authenticated"|"timeout"|"cli_not_found", "message": ...}.
@@ -222,19 +276,33 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
     Failures are logged with the CALLER's hook_event_name.
     """
     t0 = time.monotonic()
-    pin = session_id
+    t_cli = t0
+    pin = None
     try:
+        node, reason = ace_engine.preflight()
+        if node:
+            parsed, reason = _search_lib(node, query, org, project, session_id, top_k, timeout, hook_event_name)
+            if parsed is not None:
+                return parsed, _ms(t0)
+            t_cli = time.monotonic()
+            timeout -= t_cli - t0
+            if timeout < 2:  # A2: never overrun the hook budget with a fallback
+                _log_cli_error("ace_engine_failed_no_budget", -1, '', reason, query=query, project_id=project,
+                               hook_event_name=hook_event_name)
+                return None, _ms(t0)
+            reason = "lib failed: " + reason
+        _log_engine("cli", reason, hook_event_name)
+        pin = session_id
         if pin and _pin_backoff_active():  # sessions.db lock is sticky (p2): don't even try
             pin = None
             _log_pin(session_id, hook_event_name, pin_skipped="backoff")
-        base = _cmd('search', '--stdin', '--json')
-        tail = ['--top-k', str(top_k)] if top_k else []
-        stdin = query.encode('utf-8', errors='replace')
 
-        def spawn(c, to):
-            return subprocess.run(c, input=stdin, capture_output=True, timeout=to, env=_env(org, project))
+        def spawn(with_pin, to):
+            argv, stdin = ace_engine.search_command(query, session_id=pin if with_pin else None, top_k=top_k,
+                                                    cli=_cmd())
+            return subprocess.run(argv, input=stdin, capture_output=True, timeout=to, env=_env(org, project))
 
-        result = spawn(base + (['--pin-session', pin] if pin else []) + tail, timeout)
+        result = spawn(True, timeout)
         stderr = clean_stderr(_text(result.stderr))
         stdout = _text(result.stdout)
         # A1: a pinned search that dies on the sessions.db lock (or prints nothing) is
@@ -244,9 +312,9 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
             _log_pin(session_id, hook_event_name, pin_failed=True)
             if locked or _SQLITE_UNUSABLE.search(stderr):  # sticky lock, or `--ignore-scripts` without the
                 _touch_backoff()  # better-sqlite3 binary (until the SessionStart rebuild): don't pay 2 spawns per prompt
-            remaining = timeout - (time.monotonic() - t0)
+            remaining = timeout - (time.monotonic() - t_cli)
             if remaining >= 2:  # A2: never overrun the hook budget with a floored retry
-                result = spawn(base + tail, remaining)
+                result = spawn(False, remaining)
                 stderr = clean_stderr(_text(result.stderr))
                 stdout = _text(result.stdout)
         if result.returncode != 0:
@@ -280,7 +348,9 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
               org: str = None, project: str = None, verbosity: str = 'detailed',
               timeout: int = 300,
               hook_event_name: str = "Stop") -> Tuple[Optional[Dict[str, Any]], int]:
-    """ONE `ace-cli learn --transcript <tmpfile>` spawn (F-080 flags kept).
+    """ONE engine or `ace-cli learn --transcript <tmpfile>` spawn (F-080 flags kept).
+
+    The engine falls back to ace-cli only when it exited 3 (nothing sent) or could not spawn.
 
     The trace goes through a temp file (learn --stdin breaks above ~64KB pipe
     buffer); the file is always removed. Returns (parsed_json_or_None, ms).
@@ -297,16 +367,33 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
     try:
         with os.fdopen(fd, 'w') as f:
             json.dump(trace, f, default=str)
-        cmd = _cmd('learn', '--transcript', path, '--json',
-                   '--timeout', str(int(timeout * 1000)), '--verbosity', verbosity, '--no-stream')  # stream mode exits 0 on server 401/500 (m3)
-        if retrieval_id:
-            cmd += ['--retrieval-id', retrieval_id]
-        if applied_log_ids:
-            cmd += ['--applied-log-ids', ','.join(str(x) for x in applied_log_ids)]
-        # A lock failure may occur after the server POST: retrying learn could
-        # duplicate the trace / double F-080 credit, so learn never retries.
-        result = subprocess.run(cmd, text=True, capture_output=True, timeout=timeout,
-                                env=_env(org, project))
+        def spawn(node, to):
+            cmd = ace_engine.learn_command(path, retrieval_id=retrieval_id, applied_log_ids=applied_log_ids,
+                                           verbosity=verbosity, timeout=timeout, node=node, cli=None if node else _cmd())
+            return subprocess.run(cmd, text=True, capture_output=True, timeout=to, env=_env(org, project))
+
+        # A lock or server failure may occur after the server POST: retrying learn could
+        # duplicate the trace / double F-080 credit, so learn never retries once it may have sent.
+        result = None
+        node, reason = ace_engine.preflight()
+        if node:
+            try:
+                result = spawn(node, timeout)
+            except subprocess.TimeoutExpired:  # the POST may have been sent: log, but no fallback
+                _log_engine("lib", "timeout", hook_event_name, ok=False, ms=_ms(t0))
+                raise
+            except OSError as e:
+                reason = "lib failed: spawn failed: %s" % str(e)[:200]
+                _log_engine("lib", reason, hook_event_name, ok=False, ms=_ms(t0))
+            else:
+                ok = result.returncode == 0
+                _log_engine("lib", "ok" if ok else _failure_reason(result), hook_event_name, ok=ok, ms=_ms(t0))
+                if result.returncode == 3:
+                    reason = "lib failed: " + _failure_reason(result)
+                    result = None
+        if result is None:
+            _log_engine("cli", reason, hook_event_name)
+            result = spawn(None, timeout)
         if result.returncode != 0:
             _log_cli_error("ace_cli_learn_nonzero_exit", result.returncode, _text(result.stdout),
                            clean_stderr(_text(result.stderr)), project_id=project, hook_event_name=hook_event_name)
