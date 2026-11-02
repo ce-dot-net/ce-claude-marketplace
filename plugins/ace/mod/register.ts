@@ -6,7 +6,7 @@ import {
   pyLoads, pyDumps, sanitize, renderFull, renderBudget, renderCompact, renderDomainShift, renderCohort, renderPatternsDict,
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
-  detachedLearnArgv, FALLBACK_ON_3, reuseKey, reuseEnabled, REUSE_TTL_MS, parseAceReview, parseDiffStat, evalInjection, searchRow, searchSummary, searchErrorLine, sessionTitle,
+  detachedLearnArgv, FALLBACK_ON_3, reuseKey, reuseEnabled, REUSE_TTL_MS, parseAceReview, parseDiffStat, evalInjection, searchRow, searchSummary, searchErrorLine, statusLine, topDomains, sessionTitle,
   subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, appliedLogIds, usedPatternIds, injectedContents, type StateUpdate, type ToolRec, type Cohort,
 } from './core.ts'
 
@@ -498,7 +498,8 @@ async function onPrompt($: any, L: Load, e: any): Promise<any> {
     extra: { search_ms: sr.ms, pin_ms: sr.pinMs, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, truncated_for_cap: r.truncated || undefined,
       context_chars: r.context?.length ?? 0, task_session_id: tsid, mid_turn: defer || undefined, engine: sr.engine, engine_reason: sr.engineWhy, source: 'mod' } }))
   const processed = renderPatternsDict(sr.resp).dict.similar_patterns
-  $.ui.log(searchSummary(processed))
+  $.ui.log(statusLine({ injected: r.patterns.length, returned: returned.length, cohort: r.cohort, domains: topDomains(r.patterns) }))
+  $.ui.log(searchSummary(processed), { to: 'debug' })
   L.pendingTitle = sessionTitle(processed, await readJson($, `${s.logs}/ace-review-result.json`))
   // a managed-settings guard filters classic.UserPromptSubmit: the Python UPS sets this title then (per-duty markers)
   if (L.pendingTitle) await $.fs.write(`${s.sdir}/mod-title`, L.pendingTitle)
