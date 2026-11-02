@@ -7,7 +7,7 @@ import {
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
   detachedLearnArgv, FALLBACK_ON_3, parseAceReview, parseDiffStat, evalInjection, searchRow, searchSummary, searchErrorLine, sessionTitle,
-  subagentQuery, isNoTaskCommand, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, appliedLogIds, type StateUpdate, type ToolRec, type Cohort,
+  subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, appliedLogIds, type StateUpdate, type ToolRec, type Cohort,
 } from './core.ts'
 
 const SEARCH_MS = 25000, DOMAIN_MS = 17000 // §11 A2: blocking budget per search, retry included
@@ -185,6 +185,9 @@ type Load = {
   agentEffort: Map<string, string>              // classic.SubagentStop's effort for that agent's turn.complete
   lastClaim: Map<string, string>                // key -> newest claimed domain: only that one writes domain-last
   markerAt: number
+  stopDefer: string[] | null                    // classic.Stop: background task types while delegated work runs (§16 P2)
+  deferred: string | undefined                  // tsid of the main task whose learn waits for its delegated work
+  handback: Map<string, string>                 // agentId -> last SubagentHandback message (§16 P1)
   claims: Set<string>                           // ponytail: in-process; the marker silences the Python hook, so no second process races this one
   queues: Map<string, Promise<unknown>>         // per state file: parallel hooks read-merge-write in turn
 }
@@ -282,6 +285,17 @@ async function gitContext($: any, cwd: string) {
   return ctx
 }
 
+// §16 P2: the deferral survives a mod reload on disk (tsid only).
+const deferFile = (s: Sess) => `${s.sdir}/learn-deferred`
+async function deferredAnchor($: any, L: Load, s: Sess): Promise<string | null> {
+  const tsid = L.deferred ?? (await readText($, deferFile(s)))?.trim()
+  return tsid && (await readState($, s, 'main'))?.task_session_id === tsid ? tsid : null
+}
+async function clearDeferred($: any, L: Load, s: Sess) {
+  L.deferred = undefined
+  if (await $.fs.exists(deferFile(s))) await rm($, deferFile(s))
+}
+
 // Reap a finished task's state; main keeps rendered-main.txt for the SessionStart compact re-inject (patterns_used_state).
 async function reap($: any, L: Load, s: Sess, key: string, state: any) {
   if (key === 'main' && state?.rendered_context) await writePrivate($, `${s.sdir}/rendered-main.txt`, state.rendered_context)
@@ -290,7 +304,7 @@ async function reap($: any, L: Load, s: Sess, key: string, state: any) {
   L.late.delete(key)
 }
 
-async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook: 'Stop' | 'SubagentStop', effortEvent: string | undefined) {
+async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook: 'Stop' | 'SubagentStop', effortEvent: string | undefined, summaryCap = 2000) {
   const t0 = await $.clock.now()
   const agentId = key === 'main' ? undefined : key
   const recs = await takeTools($, L, s, key)
@@ -323,7 +337,7 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   } catch { /* git context is optional */ }
   const { trace, success } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
     tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied,
-    nowIso: await nowIso($), renderVariant: variant, effort, git })
+    nowIso: await nowIso($), renderVariant: variant, effort, git, summaryCap })
 
   // Lock BEFORE the spawn (session.end keeps the dir); the trace lives under <root>/tmp as run_learn's does.
   const lock = `${s.sdir}/learn-inflight-${safe(key)}.lock`
@@ -372,7 +386,8 @@ async function onPrompt($: any, L: Load, e: any): Promise<any> {
     : e.isMeta ? 'machine_prompt' : e.command && isNoTaskCommand(e.command.name) ? 'ace_command'
     : skipReason(text, s.minChars, s.extraPrefixes)
   if (reason) {
-    if (!midTurn) L.pendingMain = null
+    // §16 P2: the <task-notification> of a deferred task continues that task (its turn's tools join its learn)
+    if (!midTurn) L.pendingMain = reason === 'machine_prompt' ? await deferredAnchor($, L, s) : null
     if (reason !== 'ace_command') await relLog($, s, { timestamp: await nowIso($), event: 'search_skipped', hook: 'UserPromptSubmit', reason, session_id: s.sessionId, project_id: s.project, origin: e.origin?.kind ?? null, source: 'mod' })
     return e
   }
@@ -389,6 +404,7 @@ async function onPrompt($: any, L: Load, e: any): Promise<any> {
     : updateState($, L, s, 'main', u, true)
   if (!defer) {
     L.pendingMain = tsid
+    await clearDeferred($, L, s)  // accepted edge (CHANGELOG): a new human prompt before the notification drops the deferred learn
     await clearTools($, L, s, 'main')
     if (await $.fs.exists(pendingFile(s))) await rm($, pendingFile(s))
   }
@@ -529,7 +545,7 @@ async function domainShift($: any, L: Load, e: any, key: string): Promise<string
     const t1 = await $.clock.now()
     const state = await readState($, s, key)
     const tsid: string = state?.task_session_id ?? uuid()
-    const sr = await search($, s, query, tsid, 8, DOMAIN_MS)
+    const sr = await search($, s, query, undefined, 8, DOMAIN_MS)  // §16 P8: no pin; tsid only for the state merge
     // A failed search stays retryable. Parallel domains: the newest claim writes, so the finishing order cannot flip it.
     if (sr.resp && L.lastClaim.get(key) === matched) await $.fs.write(lastFile, matched)
     const rd = sr.resp && (sr.resp.similar_patterns || []).length ? renderDomainShift(sr.resp, matched) : null
@@ -553,7 +569,8 @@ async function abstain($: any, L: Load, s: Sess, key: string, state: any, reason
 export const register: Register = (on) => {
   const L: Load = { sess: null, pendingMain: undefined, pendingTitle: undefined, stopEffort: undefined, domains: null,
     turnAnchor: new Map(), tools: new Map(), spawnPrompts: new Map(), placeholders: new Set(), late: new Map(), agentTypes: new Map(),
-    earlyStart: new Map(), agentEffort: new Map(), lastClaim: new Map(), markerAt: 0, claims: new Set(), queues: new Map() }
+    earlyStart: new Map(), agentEffort: new Map(), lastClaim: new Map(), markerAt: 0, claims: new Set(), queues: new Map(),
+    stopDefer: null, deferred: undefined, handback: new Map() }
   const effortOf = (e: any): unknown => e.effort && typeof e.effort === 'object' ? e.effort.level : e.effort
 
   on('session.start', async ($, e, next) => {
@@ -584,6 +601,7 @@ export const register: Register = (on) => {
     await refreshMarker($, L)  // Stop is the Python hook that would reap the state, and it runs after this one
     const raw = effortOf(e)
     if (typeof raw === 'string' && raw) L.stopEffort = raw
+    L.stopDefer = delegatedRunning(e.background_tasks) ? (e.background_tasks as any[]).map(b => String(b?.type)) : null
     return next(e)
   })
   on('classic.SubagentStop', async ($, e: any, next) => {
@@ -634,8 +652,14 @@ export const register: Register = (on) => {
     let out: any = e, pending: any = null
     try {
       const s = await ensure($, L)
-      if (s && !e.fork && !(await disabled($, s))) {
-        if (e.resume) {  // a rewrite of a resume is not applied. Same run with state: same task (§12). Reaped: a new one.
+      const forkSearch = String(await $.env.get('ACE_SUBAGENT_INJECT_FORKS') ?? '') === '1'
+      if (s && (!e.fork || !e.resume) && !(await disabled($, s))) {
+        if (e.fork && !forkSearch) {  // §16 P7: a fork inherits the parent context incl. the injected block
+          const parent = await readState($, s, e.parentAgentId ?? 'main')
+          pending = { out: e, state: { tsid: uuid(), userPrompt: subagentQuery(e.prompt), hook: 'SubagentStart',
+            parentTaskId: parent?.task_session_id ?? undefined, agentType: e.subagentType || 'fork' } }
+          await relLog($, s, { timestamp: await nowIso($), event: 'search_skipped', hook: 'SubagentStart', reason: 'fork_inherits_context', session_id: s.sessionId, project_id: s.project, source: 'mod' })
+        } else if (e.resume) {  // a rewrite of a resume is not applied. Same run with state: same task (§12). Reaped: a new one.
           const key = e.resume.agentId
           L.agentTypes.set(key, e.subagentType)
           if (!(await readState($, s, key))) {
@@ -677,6 +701,7 @@ export const register: Register = (on) => {
     try {
       s = await ensure($, L)
       if (s) await recordTool($, L, s, key, toolRec(e.tool, e, r.result, !!r.isError, r.deny, t0, Date.now()))
+      if (e.tool === 'SubagentHandback' && key !== 'main' && typeof (e as any).message === 'string') L.handback.set(key, (e as any).message)
     } catch { /* accumulation never breaks a tool call */ }
     const contexts: string[] = []
     try {
@@ -705,14 +730,22 @@ export const register: Register = (on) => {
         const anchor = L.turnAnchor.has(e.turnId) ? L.turnAnchor.get(e.turnId) : state?.task_session_id
         L.turnAnchor.delete(e.turnId)
         const effort = L.stopEffort; L.stopEffort = undefined
+        const running = L.stopDefer; L.stopDefer = null
         if (!anchor || (state && state.task_session_id !== anchor)) await clearTools($, L, s, 'main')
-        else if (e.reason !== 'answer' || e.isAborted) await abstain($, L, s, 'main', state, e.reason, 'Stop')
-        else await learn($, L, s, 'main', e.answer, 'Stop', effort)
+        else if (e.reason !== 'answer' || e.isAborted) { await clearDeferred($, L, s); await abstain($, L, s, 'main', state, e.reason, 'Stop') }
+        else if (running && state) {  // §16 P2: state, tools and F-080 ids stay for the Stop after the notification
+          L.deferred = anchor
+          await $.fs.write(deferFile(s), anchor)
+          const types: Record<string, number> = {}
+          for (const t of running) types[t] = (types[t] ?? 0) + 1
+          await relLog($, s, { timestamp: await nowIso($), event: 'learn_deferred', hook: 'Stop', session_id: s.sessionId, types, task_session_id: anchor, source: 'mod' })
+        } else { await clearDeferred($, L, s); await learn($, L, s, 'main', e.answer, 'Stop', effort) }
       } else {
         const effort = L.agentEffort.get(agentId)
-        L.agentEffort.delete(agentId); L.earlyStart.delete(agentId)
+        const handback = L.handback.get(agentId)  // §16 P1: the delivered report, not the closing line
+        L.agentEffort.delete(agentId); L.earlyStart.delete(agentId); L.handback.delete(agentId)
         if (e.reason !== 'answer' || e.isAborted) await abstain($, L, s, agentId, await readState($, s, agentId), e.reason, 'SubagentStop')
-        else await learn($, L, s, agentId, e.answer, 'SubagentStop', effort)
+        else await learn($, L, s, agentId, handback || e.answer, 'SubagentStop', effort, handback ? 4000 : 2000)
       }
     } catch (err) {
       if (s) await relLog($, s, { timestamp: await nowIso($), event: 'error', hook: 'Stop', location: 'mod.turn.complete', error: String(err).slice(0, 300), source: 'mod' })

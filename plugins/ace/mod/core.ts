@@ -652,13 +652,14 @@ export function truncateTrace(trace: any): any {
 export function buildTrace(a: {
   userPrompt: string; tools: ToolRec[]; answer: string; playbookUsed: string[]; agentType: string; tsid?: string; agentId?: string
   parentTaskId?: string; retrievalId?: string; appliedLogIds: number[]; nowIso: string; renderVariant: string; effort: string; git?: any
+  summaryCap?: number  // 2000 for the closing answer, 4000 for a SubagentHandback report (ace_after_task.handback_summary)
 }) {
   const success = !a.tools.some(t => t.failed)
   const trace: any = {
     task: `User request: ${cpSlice(a.userPrompt, 2000)}`,
     trajectory: a.tools.map((t, k) => ({ step: k + 1, tool: t.tool, action: t.action,
       result: t.result, start_ms: t.start_ms, end_ms: t.end_ms, duration_ms: t.end_ms - t.start_ms })),
-    result: { success, output: `Executed ${a.tools.length} tool calls`, summary: a.answer ? cpSlice(a.answer, 2000) : null },
+    result: { success, output: `Executed ${a.tools.length} tool calls`, summary: a.answer ? cpSlice(a.answer, a.summaryCap ?? 2000) : null },
     playbook_used: a.playbookUsed,
     timestamp: a.nowIso,
     agent_type: a.agentType,
@@ -754,3 +755,8 @@ export const PRIVATE_WRITE_SH = 'umask 077; d=$(dirname "$1"); mkdir -p "$d" && 
 export const APPEND_SH = 'for p in "$2/.claude" "$2/.claude/data" "$(dirname "$1")" "$1"; do [ -L "$p" ] && exit 0; done; '
   + 'mkdir -p "$(dirname "$1")" || exit 0; [ -L "$1" ] && exit 0; '
   + '[ "$(wc -c <"$1" 2>/dev/null || echo 0)" -gt 52428800 ] && mv -f "$1" "$1.1"; cat >> "$1"'
+
+// ace_after_task._delegated_running (§16 P2): a running subagent/workflow of this task defers the main learn.
+// Monitors, shells, teammates, crons are long-lived and never defer.
+export const delegatedRunning = (bg: unknown): boolean => Array.isArray(bg)
+  && bg.some((b: any) => b && typeof b === 'object' && (b.type === 'subagent' || b.type === 'workflow') && b.status === 'running')
