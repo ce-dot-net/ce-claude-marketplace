@@ -201,12 +201,17 @@ command -v ace-cli >/dev/null 2>&1 && echo "INSTALLED" || echo "NOT FOUND"
 
 # If installed, check version
 ace-cli --version
+
+# ace_engine.py --status: which engine runs search/learn, and why ("lib" = in-process @ace-sdk/core, "cli" = ace-cli spawn)
+python3 "${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils/ace_engine.py" --status
 ```
 
 **Report**:
 - ✅ ace-cli installed and accessible
 - ⚠️ ace-cli installed but old version
 - ❌ ace-cli not found
+- ✅ Engine: lib (core version from the status JSON)
+- ℹ️ Engine: cli, with the `reason` from the status JSON. This is a working fallback, not an error. `ACE_ENGINE=cli` forces it; `core_too_old`, `core_missing`, `file_missing` and `export_missing` mean the installed core does not pass the gate, so suggest `npm install -g @ace-sdk/cli`.
 
 **If Failed**:
 ```

@@ -47,26 +47,35 @@ def live_env(tmp_path_factory):
     shutil.copy(str(E.REPO / ".claude" / "settings.json"), str(d / "settings.json"))
     ids = json.loads((d / "settings.json").read_text())["env"]
     env = {k: v for k, v in os.environ.items() if not k.startswith("ACE_") and k != "XDG_CONFIG_HOME"}
-    env.update(HOME=REAL_HOME, ACE_ORG_ID=ids["ACE_ORG_ID"], ACE_PROJECT_ID=ids["ACE_PROJECT_ID"])
+    env.update(HOME=REAL_HOME, ACE_ORG_ID=ids["ACE_ORG_ID"], ACE_PROJECT_ID=ids["ACE_PROJECT_ID"],
+               PATH=E.path_with(E.make_prefix(d, core="real")))  # conftest's fake ace-cli would fail the gate
     return env, ids
+
+
+def _key_sets(result):
+    # order-insensitive: two live calls may rank ties differently
+    return sorted(tuple(sorted(p)) for p in result["similar_patterns"])
 
 
 @pytest.mark.parametrize("query", QUERIES)
 def test_engine_search_parity_with_ace_cli(live_env, query):
+    """Two live ace-cli calls can differ from EACH OTHER too (100 vs 101 patterns, per-pattern keys), so a
+    pair may be retried. An engine that really drops keys or patterns fails every attempt."""
     env, ids = live_env
-    cli = subprocess.run([E.real_cli_path(), "search", "--stdin", "--json"], input=query,
-                         capture_output=True, text=True, env=env, timeout=90)
-    if cli.returncode != 0:
-        pytest.skip("ace-cli search failed (auth/server): " + cli.stderr[:200])
-    lib = subprocess.run([E.node_bin(), str(E.ENGINE / "search.js")],
-                         input=json.dumps({"query": query, "org": ids["ACE_ORG_ID"], "project": ids["ACE_PROJECT_ID"]}),
-                         capture_output=True, text=True, env=env, timeout=90)
-    assert lib.returncode == 0, lib.stderr[:500]
-    a, b = json.loads(cli.stdout), json.loads(lib.stdout)
-    assert sorted(a) == sorted(b), "top-level keys"
-    pa, pb = a["similar_patterns"], b["similar_patterns"]
-    assert len(pa) == len(pb), "pattern count"
+    payload = json.dumps({"query": query, "org": ids["ACE_ORG_ID"], "project": ids["ACE_PROJECT_ID"]})
+    for _ in range(5):
+        cli = subprocess.run([E.real_cli_path(), "search", "--stdin", "--json"], input=query,
+                             capture_output=True, text=True, env=env, timeout=90)
+        if cli.returncode != 0:
+            pytest.skip("ace-cli search failed (auth/server): " + cli.stderr[:200])
+        lib = subprocess.run([E.node_bin(), str(E.ENGINE / "search.js")], input=payload,
+                             capture_output=True, text=True, env=env, timeout=90)
+        assert lib.returncode == 0, lib.stderr[:500]
+        a, b = json.loads(cli.stdout), json.loads(lib.stdout)
+        assert sorted(a) == sorted(b), "top-level keys"
+        assert a.get("retrieval_id") and b.get("retrieval_id"), "retrieval_id on both (F-080)"
+        if _key_sets(a) == _key_sets(b) and a.get("count") == b.get("count"):
+            return
+    assert len(a["similar_patterns"]) == len(b["similar_patterns"]), "pattern count"
     assert a.get("count") == b.get("count")
-    # order-insensitive: two live calls may rank ties differently
-    assert sorted(tuple(sorted(x)) for x in pa) == sorted(tuple(sorted(y)) for y in pb), "per-pattern key sets"
-    assert a.get("retrieval_id") and b.get("retrieval_id"), "retrieval_id on both (F-080)"
+    assert _key_sets(a) == _key_sets(b), "per-pattern key sets"

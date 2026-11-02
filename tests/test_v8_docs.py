@@ -163,10 +163,10 @@ def test_adr_001_has_final_a7_numbers(num):
 
 
 @pytest.mark.parametrize("token", ["prompt.submit", "agent.spawn", "tool.call", "npm ci --ignore-scripts",
-                                   "2.1.287", "v8.1"])
+                                   "2.1.287"])
 def test_adr_001_has_mods_inprocess_plan(token):
-    """SYNTHESIS §3: the v8.1 mods + in-process plan, in order, with its floor."""
-    assert token in _read(ADR), "ADR-001 must carry the v8.1 plan item " + token
+    """SYNTHESIS §3 + DESIGN §13.1/§14: mods + in-process core with the floor, all in 8.0.0."""
+    assert token in _read(ADR), "ADR-001 must carry " + token
 
 
 @pytest.mark.parametrize("token", ["PostToolBatch", "prompt_id", "agent-prompts", "detached",

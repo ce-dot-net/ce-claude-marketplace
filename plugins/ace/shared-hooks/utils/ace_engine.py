@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""Which process runs a search/learn: the in-process @ace-sdk/core engine or ace-cli (DESIGN §14).
+
+argv builders only; ace_cli.py owns spawning and fallback. `python3 ace_engine.py --status`
+prints select() as JSON (used by /ace:ace-doctor).
+"""
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+CLI_CMD = 'ace-cli'
+ENGINE_DIR = Path(__file__).resolve().parents[2] / 'engine'
+
+
+def preflight():
+    """(node_or_None, reason) without spawning anything; search.js/learn.js run the full gate (exit 3)."""
+    if (os.environ.get('ACE_ENGINE') or '').lower() == 'cli':
+        return None, 'ACE_ENGINE=cli'
+    node = shutil.which('node')
+    if not node:
+        return None, 'no node on PATH'
+    cli = shutil.which(CLI_CMD)
+    if not cli:
+        return None, 'no_cli'
+    if '@ace-sdk/cli' not in os.path.realpath(cli).replace(os.sep, '/'):
+        return None, 'core_missing: ace-cli is not an @ace-sdk/cli install'
+    return node, 'ok'
+
+
+def select():
+    """Full gate for reporting: {"engine", "reason", "node", "core_dir", "core_version"}."""
+    node, reason = preflight()
+    out = {'engine': 'cli', 'reason': reason, 'node': node, 'core_dir': None, 'core_version': None}
+    if not node:
+        return out
+    try:
+        r = subprocess.run([node, str(ENGINE_DIR / 'resolve.js')], capture_output=True, text=True, timeout=20)
+        gate = json.loads(r.stdout)
+    except (OSError, ValueError, subprocess.SubprocessError) as e:
+        out['reason'] = 'resolve failed: %s' % str(e)[:200]
+        return out
+    out.update(reason=gate.get('reason'), core_dir=gate.get('core_dir'), core_version=gate.get('core_version'))
+    if gate.get('ok'):
+        out['engine'] = 'lib'
+    return out
+
+
+def search_command(query, *, org=None, project=None, session_id=None, top_k=None, node=None):
+    """(argv, stdin_bytes). node=None -> ace-cli (session_id becomes --pin-session), else the engine."""
+    if node:
+        payload = {'query': query, 'org': org, 'project': project, 'session_id': session_id, 'top_k': top_k}
+        payload = {k: v for k, v in payload.items() if v}
+        return [node, str(ENGINE_DIR / 'search.js')], json.dumps(payload).encode('utf-8')
+    argv = [CLI_CMD, 'search', '--stdin', '--json']
+    if session_id:
+        argv += ['--pin-session', session_id]
+    if top_k:
+        argv += ['--top-k', str(top_k)]
+    return argv, query.encode('utf-8', errors='replace')
+
+
+def learn_command(trace_path, *, retrieval_id=None, applied_log_ids=None, verbosity='detailed',
+                  timeout=300, node=None):
+    """argv for the same flags on either engine (org/project travel via ACE_ORG_ID/ACE_PROJECT_ID)."""
+    head = [node, str(ENGINE_DIR / 'learn.js')] if node else [CLI_CMD, 'learn']
+    # --no-stream: stream mode exits 0 on server 401/500 (m3)
+    argv = head + ['--transcript', trace_path, '--json', '--timeout', str(int(timeout * 1000)),
+                   '--verbosity', verbosity, '--no-stream']
+    if retrieval_id:
+        argv += ['--retrieval-id', retrieval_id]
+    if applied_log_ids:
+        argv += ['--applied-log-ids', ','.join(str(x) for x in applied_log_ids)]
+    return argv
+
+
+if __name__ == '__main__':
+    if '--status' not in sys.argv[1:]:
+        sys.exit('usage: ace_engine.py --status')
+    print(json.dumps(select()))
