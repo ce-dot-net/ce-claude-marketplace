@@ -794,7 +794,7 @@ def main():
         if not context:
             skip_learning("No project context found", event)
             sys.exit(0)
-        if plugin_data_dir.is_disabled(context['project'], session_id) or plugin_data_dir.mod_owns_learn(context['project'], session_id):
+        if plugin_data_dir.is_disabled(context['project'], session_id) or plugin_data_dir.mod_owns_learn(context['project'], session_id, plugin_data_dir.MOD_HANDOFF_S):
             sys.exit(0)  # session flag (CLI unusable), project flag (P-26), or the mod learns (its classic.* hooks run)
 
         # Self-eval answer in the last message -> review file for the statusline (after the gates)

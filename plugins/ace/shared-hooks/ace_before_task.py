@@ -97,8 +97,8 @@ def _title_for_guarded_mod(project, event):
     """The mod searched, but a managed-settings guard filters its classic.UserPromptSubmit (no mod-classic marker):
     set the title it computed (mod-title). Never over a custom /rename title, never while disabled."""
     sid = event.get('session_id') or ''
-    if (event.get('session_title') or plugin_data_dir.is_disabled(project, sid) or not plugin_data_dir.is_mod_active(project, sid)
-            or plugin_data_dir.mod_owns_learn(project, sid)):
+    if (event.get('session_title') or plugin_data_dir.is_disabled(project, sid) or not plugin_data_dir.is_mod_active(project, sid, plugin_data_dir.MOD_HANDOFF_S)
+            or plugin_data_dir.mod_owns_learn(project, sid, plugin_data_dir.MOD_HANDOFF_S)):
         return
     try:
         title = (plugin_data_dir.session_dir(project, sid, create=False) / 'mod-title').read_text().strip()
@@ -368,7 +368,7 @@ def main():
             _ctx = get_context()
         except Exception:
             _ctx = None
-        if _ctx and (plugin_data_dir.is_disabled(_ctx['project'], event.get('session_id') or '') or plugin_data_dir.is_mod_active(_ctx['project'], event.get('session_id') or '')):
+        if _ctx and (plugin_data_dir.is_disabled(_ctx['project'], event.get('session_id') or '') or plugin_data_dir.is_mod_active(_ctx['project'], event.get('session_id') or '', plugin_data_dir.MOD_HANDOFF_S)):
             _title_for_guarded_mod(_ctx['project'], event)
             sys.exit(0)
 
@@ -398,7 +398,7 @@ def main():
         session_id = event.get('session_id', str(uuid.uuid4()))
 
         # P-26: session OR project disabled.flag stops everything, before any state is written.
-        if plugin_data_dir.is_disabled(context['project'], session_id) or plugin_data_dir.is_mod_active(context['project'], session_id):
+        if plugin_data_dir.is_disabled(context['project'], session_id) or plugin_data_dir.is_mod_active(context['project'], session_id, plugin_data_dir.MOD_HANDOFF_S):
             sys.exit(0)
 
         # Per-task session_id = hook prompt_id (G2), else uuid4.

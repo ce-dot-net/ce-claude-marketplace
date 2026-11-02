@@ -195,8 +195,15 @@ def mod_active_marker(project_id: Optional[str], session_id: Optional[str]) -> P
     return session_dir(project_id, session_id, create=False) / "mod-active"
 
 
-def is_mod_active(project_id: Optional[str], session_id: Optional[str], max_age: float = 600) -> bool:
-    """True when the mod-active marker is younger than 10 min -> the Python hook early-exits."""
+# The mod rewrites mod-active right before every event whose Python hook must step aside (prompt.submit before the
+# UPS, agent.spawn, tool.call, classic.Stop/SubagentStop). A crashed or unloaded mod (Claude Code unloads user mods
+# after 3 worker crashes) stops writing, so the Python chain takes over within seconds instead of 10 minutes.
+MOD_HANDOFF_S = 15      # hooks that run right after a mod write: UPS, PreToolUse(Agent), SubagentStart, Stop, SubagentStop
+MOD_AFTER_TOOL_S = 120  # hooks after a tool ran (domain shift, tool accumulation): the tool's own time sits in between
+
+
+def is_mod_active(project_id: Optional[str], session_id: Optional[str], max_age: float = MOD_AFTER_TOOL_S) -> bool:
+    """True when the mod-active marker is younger than max_age -> the Python hook early-exits."""
     try:
         import time
         return time.time() - mod_active_marker(project_id, session_id).stat().st_mtime < max_age
@@ -204,7 +211,7 @@ def is_mod_active(project_id: Optional[str], session_id: Optional[str], max_age:
         return False
 
 
-def mod_owns_learn(project_id: Optional[str], session_id: Optional[str], max_age: float = 600) -> bool:
+def mod_owns_learn(project_id: Optional[str], session_id: Optional[str], max_age: float = MOD_AFTER_TOOL_S) -> bool:
     """True when the mod is active AND its classic.* hooks run (mod-classic fresh). On seats where the managed-settings
     guard filters them, the mod's turn.complete does not learn, so the Python Stop/SubagentStop must."""
     try:
