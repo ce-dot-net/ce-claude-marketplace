@@ -2,7 +2,7 @@
 disable-model-invocation: true
 model: claude-haiku-4-5
 description: Comprehensive ACE installation and health diagnostic
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(uname:*), Bash(bash:*), Bash(node:*), Bash(curl:*), Bash(ls:*), Bash(test:*), Bash(claude:*), Bash(cat:*), Bash(tail:*), Bash(sort:*), Bash(python3:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(uname:*), Bash(bash:*), Bash(node:*), Bash(ls:*), Bash(test:*), Bash(claude:*), Bash(cat:*), Bash(tail:*), Bash(sort:*), Bash(python3:*), Read
 ---
 
 # ACE Doctor - Installation & Health Diagnostic
@@ -262,67 +262,54 @@ Recommended Actions:
 
 ### Check 5: ACE Server Connectivity
 
-**What to Check**:
+**What to Check** (one authenticated round trip through the same ace-cli the hooks use; org and project come from
+`.claude/settings.json`, the token from the device-code login):
 ```bash
-# Read auth token from global config (ace-cli 4.x device-code format)
-XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
-API_TOKEN=$(jq -r '.auth.token // empty' "$XDG_HOME/ace/config.json")
 PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // .projectId // empty' .claude/settings.json)
-SERVER_URL="https://ace-api.code-engine.app"
-
-# Test connection to ACE server
-curl -s -X GET \
-  -H "Authorization: Bearer $API_TOKEN" \
-  "$SERVER_URL/api/projects/$PROJECT_ID/playbook" \
-  -w "\nHTTP: %{http_code}\n" \
-  -o /dev/null
+OUT=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli ${PROJECT_ID:+--project "$PROJECT_ID"} status --json 2>&1); RC=$?
+echo "exit: $RC"; printf '%s\n' "$OUT" | head -c 600
 ```
 
-**Report**:
-- ✅ ACE server reachable and authenticated (HTTP 200)
-- ⚠️ Server reachable but authentication failed (HTTP 401)
-- ⚠️ Project not found (HTTP 404)
-- ❌ Server unreachable (connection timeout/refused)
+**Report** (exit code first, then the error text):
+- ✅ exit 0: server reachable, authenticated, project found (show the pattern count from the JSON if present)
+- ⚠️ non-zero, text mentions `401`, `unauthorized`, `expired` or `login`: authentication failed
+- ⚠️ non-zero, text mentions `404` or `not found`: project not found
+- ❌ non-zero, text mentions `ENOTFOUND`, `ECONNREFUSED`, `ETIMEDOUT`, `fetch failed` or `timeout`: server unreachable
 
 **If Failed**:
 ```
 ❌ ACE Server: UNREACHABLE
 
 Server URL: https://ace-api.code-engine.app
-HTTP Status: Connection refused
+Error: <first line of the ace-cli output>
 
 Possible Causes:
 1. Network connectivity issues
 2. Firewall blocking HTTPS
-3. Incorrect server URL
 
 Recommended Actions:
-1. Test connection: curl https://ace-api.code-engine.app/api/health
+1. Re-run: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli doctor
 2. Check firewall settings
 3. Try different network (WiFi vs. Ethernet)
 4. Confirm auth status: /ace:ace-login
 ```
 
-**If 401 Unauthorized**:
+**If authentication failed**:
 ```
 ⚠️ ACE Server: AUTHENTICATION FAILED
 
-Server URL: https://ace-api.code-engine.app
-HTTP Status: 401 Unauthorized
+Error: <first line of the ace-cli output>
 
 Recommended Actions:
-1. Verify API token is correct
-2. Check token hasn't expired
-3. Run: /ace:ace-configure --global
-4. Get new token from ACE server admin
+1. Run: /ace:ace-login
+2. Check: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami
 ```
 
-**If 404 Not Found**:
+**If project not found**:
 ```
 ⚠️ ACE Server: PROJECT NOT FOUND
 
 Project ID: prj_xxxxx
-HTTP Status: 404 Not Found
 
 Recommended Actions:
 1. Verify project ID exists in ACE server
@@ -628,7 +615,7 @@ After running all checks, present results in this format:
 [2] Global Configuration................. ✅ PASS
 [3] Project Configuration................ ✅ PASS
 [4] CLI Availability..................... ✅ PASS (v4.1.0)
-[5] ACE Server Connectivity.............. ✅ PASS (HTTP 200)
+[5] ACE Server Connectivity.............. ✅ PASS (ace-cli status)
 [6] Hooks Registered..................... ✅ PASS (11/11)
 [7] CLI Configuration.................... ✅ PASS (device-code)
 [8] Version Status....................... ✅ PASS
@@ -685,7 +672,7 @@ Report issues: https://github.com/ce-dot-net/ce-claude-marketplace/issues
 [2] Global Configuration................. ✅ PASS
 [3] Project Configuration................ ⚠️  WARN
 [4] CLI Availability..................... ✅ PASS (v4.1.0)
-[5] ACE Server Connectivity.............. ✅ PASS (HTTP 200)
+[5] ACE Server Connectivity.............. ✅ PASS (ace-cli status)
 [6] Hooks Registered..................... ⚠️  WARN (8/11)
 [7] CLI Configuration.................... ✅ PASS
 [8] Version Status....................... ⚠️  WARN

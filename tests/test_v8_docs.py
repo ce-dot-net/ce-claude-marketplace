@@ -289,3 +289,13 @@ def test_insights_names_the_v8_domain_shift_hook():
     text = _read(PLUGIN / "commands" / "ace-insights.md")
     assert "PreToolUse hook" not in text
     assert "PostToolUse Read/Glob/Grep" in text
+
+
+def test_doctor_connectivity_probe_uses_ace_cli_not_dead_endpoints():
+    """fix 4: /api/projects/<id>/playbook and /api/health are 404 on prod -> check [5] was always WARN."""
+    text = _read(DOCTOR)
+    check5 = re.search(r"### Check 5:.*?(?=^### Check 6)", text, re.S | re.M).group(0)
+    for dead in ("/api/health", "/playbook", "curl"):
+        assert dead not in text if dead != "curl" else dead not in check5, dead
+    assert re.search(r"\$\{CLAUDE_PLUGIN_ROOT\}/scripts/ace-cli .*status --json", check5)
+    assert "(HTTP 200)" not in text
