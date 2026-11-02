@@ -93,3 +93,12 @@ def test_has_substantial_work_accepts_mcp_prefix():
 
 def test_has_substantial_work_empty_list():
     assert has_substantial_work_from_accumulated([]) is False
+
+
+def test_trivial_filter_matches_the_commands_not_paths():
+    """A task naming plugins/ace/... or /opt/ace-tools is real work; /plugin and /ace-* themselves stay trivial."""
+    from ace_after_task import is_trivial_task
+    for work in ('fix the marker in plugins/ace/mod/register.ts', 'rename the folder /opt/ace-tools/bin in the docs'):
+        assert not is_trivial_task(work), work
+    for cmd in ('/plugin', 'please run /plugin install now', '/ace-status', 'run /ace-doctor for this project'):
+        assert is_trivial_task(cmd), cmd

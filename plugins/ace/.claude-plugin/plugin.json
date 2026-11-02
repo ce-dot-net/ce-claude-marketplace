@@ -9,6 +9,7 @@
   "homepage": "https://github.com/ce-dot-net/ce-ai-ace",
   "repository": "https://github.com/ce-dot-net/ce-ai-ace",
   "license": "MIT",
+  "hooks": "./mod/hooks.json",
   "keywords": [
     "claude-code",
     "ace",
