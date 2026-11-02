@@ -26,7 +26,7 @@ if _utils_dir not in sys.path:
 import ace_engine  # noqa: E402
 
 # v6.0.0: Legacy CLI removed, ace-cli is the only supported command
-CLI_CMD = ace_engine.CLI_CMD
+CLI_CMD = 'ace-cli'
 
 _AUTH_MSG = {"error": "not_authenticated", "message": "Not logged in. Run /ace-login first."}
 
@@ -160,12 +160,12 @@ def _search_lib(node, query, org, project, session_id, top_k, timeout, hook_even
         if result.returncode == 0:
             try:
                 parsed = json.loads(_text(result.stdout))
-                if isinstance(parsed, dict):
+                if isinstance(parsed, dict) and isinstance(parsed.get("similar_patterns"), list):
                     _log_engine("lib", "ok", hook_event_name, ok=True, ms=_ms(t0))
                     return parsed, None
             except ValueError:
                 pass
-            reason = "non-JSON output"
+            reason = "unexpected output (no similar_patterns list)"
     _log_engine("lib", reason, hook_event_name, ok=False, ms=_ms(t0))
     return None, reason
 
@@ -214,7 +214,8 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
             _log_pin(session_id, hook_event_name, pin_skipped="backoff")
 
         def spawn(with_pin, to):
-            argv, stdin = ace_engine.search_command(query, session_id=pin if with_pin else None, top_k=top_k)
+            argv, stdin = ace_engine.search_command(query, session_id=pin if with_pin else None, top_k=top_k,
+                                                    cli=[CLI_CMD])
             return subprocess.run(argv, input=stdin, capture_output=True, timeout=to, env=_env(org, project))
 
         result = spawn(True, timeout)
@@ -284,7 +285,7 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
             json.dump(trace, f, default=str)
         def spawn(node, to):
             cmd = ace_engine.learn_command(path, retrieval_id=retrieval_id, applied_log_ids=applied_log_ids,
-                                           verbosity=verbosity, timeout=timeout, node=node)
+                                           verbosity=verbosity, timeout=timeout, node=node, cli=[CLI_CMD])
             return subprocess.run(cmd, text=True, capture_output=True, timeout=to, env=_env(org, project))
 
         # A lock or server failure may occur after the server POST: retrying learn could
@@ -294,6 +295,9 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
         if node:
             try:
                 result = spawn(node, timeout)
+            except subprocess.TimeoutExpired:  # the POST may have been sent: log, but no fallback
+                _log_engine("lib", "timeout", hook_event_name, ok=False, ms=_ms(t0))
+                raise
             except OSError as e:
                 reason = "lib failed: spawn failed: %s" % str(e)[:200]
                 _log_engine("lib", reason, hook_event_name, ok=False, ms=_ms(t0))

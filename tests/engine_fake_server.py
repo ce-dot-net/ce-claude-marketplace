@@ -4,7 +4,7 @@
 Logs every request (method, path, headers with Authorization masked, JSON body) as one
 JSON line to the log file. Answers /api/v1/config, /patterns/search, /traces,
 /traces/stream and /api/v1/auth/refresh like the real server. FAKE_MODE=401|500 makes
-the trace POSTs fail. Usage: engine_fake_server.py <port|0> <log> [<portfile>]
+the trace POSTs fail; FAKE_GRAPH_DELAY=<s> stalls the graph edge refresh. Usage: engine_fake_server.py <port|0> <log> [<portfile>]
 (port 0 = pick a free port and write it to <portfile>).
 """
 import json
@@ -51,6 +51,9 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self._log(None)
+        if "graph" in self.path:
+            time.sleep(float(os.environ.get("FAKE_GRAPH_DELAY", "0")))
+            return self._send(200, {"edges": [], "patterns": []})
         if self.path.startswith("/api/v1/config"):
             return self._send(200, {"search_threshold": 0.5, "search_top_k": 100,
                                     "runtime_settings": {"learningEnabled": True,

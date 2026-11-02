@@ -26,13 +26,19 @@ the in-process engine below when its gate passes.
 the engine loads only the client and context modules of the core the CLI already installed, and never opens `sessions.db`,
 which removes the lock failures on that path.
 
-**Gate.** `engine/resolve.js` finds `realpath(ace-cli)`, its `@ace-sdk/cli` package, then `@ace-sdk/core` (nested first, then
-hoisted). It requires `dist/cjs/client/ace-client.js` and `dist/cjs/config/context.js`, core >= 3.2.2, and the
-`AceClient` + `createContext` exports. `dist/cjs` is a private path, outside the core's `exports` map, so this gate is the
-only thing that makes it safe. Reasons: `ok`, `no_cli`, `core_missing`, `file_missing`, `core_too_old`, `export_missing`.
+**Gate.** `engine/resolve.js` first looks in the plugin's own install, `${CLAUDE_PLUGIN_ROOT}/node_modules/@ace-sdk/core` (nested
+under the plugin-local CLI, then hoisted), and then needs no ace-cli at all. Otherwise it finds `realpath(ace-cli)`, its `@ace-sdk/cli`
+package, then `@ace-sdk/core` (nested first, then hoisted). Either way it requires `dist/cjs/client/ace-client.js` and
+`dist/cjs/config/context.js`, core >= 3.2.2 on major 3, and the `AceClient` + `createContext` exports. `dist/cjs` is a private path,
+outside the core's `exports` map, so this gate is the only thing that makes it safe. Reasons: `ok`, `no_cli`, `core_missing`,
+`file_missing`, `core_too_old`, `core_too_new`, `export_missing`.
+
+**Layouts.** A plugin-local install makes PATH differences irrelevant. Without one, the engine needs `ace-cli` to resolve to a real
+`@ace-sdk/cli` install: npm global, nvm, fnm and brew do. Volta, asdf and pnpm wrappers do not, so they report `core_missing` and stay
+on the working ace-cli path. Windows is unsupported (WSL2 ok).
 
 **Fallback.** `ACE_ENGINE=cli`, no node, or a failed gate uses the ace-cli path unchanged, including pin-drop and backoff.
-A failed engine search (any non-zero exit or non-JSON output) also falls back. Learn falls back only on exit 3 or a spawn error,
+A failed engine search (any non-zero exit, or output without a `similar_patterns` list) also falls back. Learn falls back only on exit 3 or a spawn error,
 because any later failure may follow the POST and a re-send could duplicate the trace and double F-080 credit.
 Every spawn writes an `event: "engine"` relevance row with `engine`, `reason`, `hook`. `/ace:ace-doctor` shows the active
 engine through `ace_engine.py --status`.
@@ -48,12 +54,13 @@ engine through `ace_engine.py --status`.
 `session_id` goes to the server for its retrieval-log stamp; the engine writes no local pin. The default `cacheDir` stays on, so
 the graph sqlite keeps feeding `result.expanded` (CLI parity) and `/ace:ace-graph`.
 
-**Attribution.** Engine traffic carries `X-ACE-Client: claude-code-plugin/<version>`. The ace-cli path hard-codes `cli`, so the
-header also shows which path served a request. Worth telling the server and SDK teams; no SDK change is requested.
+**Attribution.** ace-cli hard-codes `X-ACE-Client: cli`, so `ACE_CLIENT_ID` never reaches the server through the CLI; the engine sets the
+header itself to `claude-code-plugin/<version>`, so it also shows which path served a request. Worth telling the server and SDK teams;
+no SDK change is requested.
 
 **Numbers.** Search via the deep import: parity 100/100, 0.23-0.53 s CPU and 81-96 MB RSS vs 1.97 s and 237 MB for the ace-cli spawn.
 Wall time stays bounded by the server round trip. A plugin-local dependency installed with `npm ci --ignore-scripts` costs 6.2 s cold and 123 MB;
-the engine does not need it, because it reads the core the CLI installed.
+the engine adds nothing to it, because it reads the core the CLI installed.
 
 ## Mods (in 8.0.0)
 Floor 2.1.287 (the v8 floor 2.1.300 already clears it). Mod hooks replace the matching command hooks while the mod is active:

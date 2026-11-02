@@ -11,8 +11,10 @@ import subprocess
 import sys
 from pathlib import Path
 
-CLI_CMD = 'ace-cli'
 ENGINE_DIR = Path(__file__).resolve().parents[2] / 'engine'
+CLI_BIN = 'ace-cli'  # default argv head; ace_cli owns which CLI really runs (cli=)
+_SCOPE = ENGINE_DIR.parent / 'node_modules' / '@ace-sdk'
+PLUGIN_LOCAL_CORES = (_SCOPE / 'cli' / 'node_modules' / '@ace-sdk' / 'core', _SCOPE / 'core')  # as resolve.js
 
 
 def preflight():
@@ -22,7 +24,12 @@ def preflight():
     node = shutil.which('node')
     if not node:
         return None, 'no node on PATH'
-    cli = shutil.which(CLI_CMD)
+    missing = [f for f in ('search.js', 'learn.js', 'resolve.js') if not (ENGINE_DIR / f).is_file()]
+    if missing:  # node would exit 1 on these, which learn must read as "may have sent"
+        return None, 'engine file missing: %s' % ','.join(missing)
+    if any(d.is_dir() for d in PLUGIN_LOCAL_CORES):  # DESIGN §23: no ace-cli needed
+        return node, 'ok'
+    cli = shutil.which(CLI_BIN)
     if not cli:
         return None, 'no_cli'
     if '@ace-sdk/cli' not in os.path.realpath(cli).replace(os.sep, '/'):
@@ -48,13 +55,13 @@ def select():
     return out
 
 
-def search_command(query, *, org=None, project=None, session_id=None, top_k=None, node=None):
-    """(argv, stdin_bytes). node=None -> ace-cli (session_id becomes --pin-session), else the engine."""
+def search_command(query, *, org=None, project=None, session_id=None, top_k=None, node=None, cli=None):
+    """(argv, stdin_bytes). node=None -> the CLI head `cli` (session_id becomes --pin-session), else the engine."""
     if node:
         payload = {'query': query, 'org': org, 'project': project, 'session_id': session_id, 'top_k': top_k}
         payload = {k: v for k, v in payload.items() if v}
         return [node, str(ENGINE_DIR / 'search.js')], json.dumps(payload).encode('utf-8')
-    argv = [CLI_CMD, 'search', '--stdin', '--json']
+    argv = list(cli or (CLI_BIN,)) + ['search', '--stdin', '--json']
     if session_id:
         argv += ['--pin-session', session_id]
     if top_k:
@@ -63,9 +70,9 @@ def search_command(query, *, org=None, project=None, session_id=None, top_k=None
 
 
 def learn_command(trace_path, *, retrieval_id=None, applied_log_ids=None, verbosity='detailed',
-                  timeout=300, node=None):
+                  timeout=300, node=None, cli=None):
     """argv for the same flags on either engine (org/project travel via ACE_ORG_ID/ACE_PROJECT_ID)."""
-    head = [node, str(ENGINE_DIR / 'learn.js')] if node else [CLI_CMD, 'learn']
+    head = [node, str(ENGINE_DIR / 'learn.js')] if node else list(cli or (CLI_BIN,)) + ['learn']
     # --no-stream: stream mode exits 0 on server 401/500 (m3)
     argv = head + ['--transcript', trace_path, '--json', '--timeout', str(int(timeout * 1000)),
                    '--verbosity', verbosity, '--no-stream']

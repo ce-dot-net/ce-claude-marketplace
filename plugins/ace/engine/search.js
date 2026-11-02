@@ -28,8 +28,10 @@ const { AceClient, createContext } = loadCoreOrExit();
     session_id: input.session_id,
     expandNeighbors: true,
   });
-  // No process.exit: the core's hourly graph-edge refresh finishes in the background, like in ace-cli.
   process.stdout.write(JSON.stringify(result) + '\n');
+  // The core's hourly graph-edge refresh finishes in the background, like in ace-cli, but a stalled
+  // one must not hold the caller until its timeout discards the result printed above.
+  setTimeout(() => process.exit(0), 3000).unref();
 })().catch((e) => {
   process.stderr.write(((e && e.message) || String(e)) + '\n');
   process.exit(1);

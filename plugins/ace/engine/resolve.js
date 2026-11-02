@@ -9,8 +9,9 @@ const MIN_CORE = '3.2.2';
 const CLIENT = 'dist/cjs/client/ace-client.js';
 const CONTEXT = 'dist/cjs/config/context.js';
 
+const parts = (v) => String(v).split('-')[0].split('.').map(Number);
+
 function olderThanFloor(version) {
-  const parts = (v) => String(v).split('-')[0].split('.').map(Number);
   const a = parts(version);
   const b = parts(MIN_CORE);
   for (let i = 0; i < 3; i++) {
@@ -24,6 +25,7 @@ function findCli() {
     const candidate = path.join(dir || '.', 'ace-cli');
     try {
       fs.accessSync(candidate, fs.constants.X_OK);
+      if (!fs.statSync(candidate).isFile()) continue;
       return fs.realpathSync(candidate);
     } catch (_) { /* next PATH entry */ }
   }
@@ -58,14 +60,25 @@ function findCore(cliPath) {
   return null;
 }
 
+// DESIGN §23: the plugin's own install wins, so PATH and node managers stop mattering.
+function findPluginLocalCore() {
+  const scope = path.join(__dirname, '..', 'node_modules', '@ace-sdk');
+  return [path.join(scope, 'cli', 'node_modules', '@ace-sdk', 'core'), path.join(scope, 'core')]
+    .find((d) => (readPackage(d) || {}).name === '@ace-sdk/core') || null;
+}
+
 function resolve() {
-  const out = { ok: false, reason: 'no_cli', cli_path: findCli(), core_dir: null, core_version: null, min_core: MIN_CORE };
-  if (!out.cli_path) return out;
-  out.core_dir = findCore(out.cli_path);
-  if (!out.core_dir) { out.reason = 'core_missing'; return out; }
+  const out = { ok: false, reason: 'no_cli', cli_path: findCli(), core_dir: findPluginLocalCore(), core_version: null, min_core: MIN_CORE };
+  if (!out.core_dir) {
+    if (!out.cli_path) return out;
+    out.core_dir = findCore(out.cli_path);
+    if (!out.core_dir) { out.reason = 'core_missing'; return out; }
+  }
   out.core_version = readPackage(out.core_dir).version || null;
   if (![CLIENT, CONTEXT].every((f) => fs.existsSync(path.join(out.core_dir, f)))) { out.reason = 'file_missing'; return out; }
   if (olderThanFloor(out.core_version)) { out.reason = 'core_too_old'; return out; }
+  // The export gate only checks method names on a private path: a new major is unverified.
+  if (parts(out.core_version)[0] > parts(MIN_CORE)[0]) { out.reason = 'core_too_new'; return out; }
   try {
     const { AceClient } = require(path.join(out.core_dir, CLIENT));
     const { createContext } = require(path.join(out.core_dir, CONTEXT));
