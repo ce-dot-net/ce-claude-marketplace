@@ -8,6 +8,7 @@ output limit. Local state only: no ace-cli call, no /tmp, never blocks.
 """
 import json
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -20,6 +21,15 @@ from ace_relevance_logger import log_error     # noqa: E402
 from patterns_used_state import load_rendered_context     # noqa: E402
 
 _CAP = 10000
+
+
+def restore_notice(rendered: str) -> str:
+    """One line (v7.1.14 'Restored N patterns after compaction'); N = the render's shown="N" attribute."""
+    m = re.match(r'<[\w-]+[^>]*?\bshown="(\d+)"', rendered)
+    if not m:
+        return "ACE · restored patterns after compaction"
+    n = int(m.group(1))
+    return "ACE · restored %d pattern%s after compaction" % (n, "" if n == 1 else "s")
 
 
 def main() -> None:
@@ -42,7 +52,7 @@ def main() -> None:
             pass
         rendered = load_rendered_context(sid, project_id=ctx['project'])
         if rendered and isinstance(rendered, str):
-            print(json.dumps({"hookSpecificOutput": {
+            print(json.dumps({"systemMessage": restore_notice(rendered), "hookSpecificOutput": {
                 "hookEventName": "SessionStart", "additionalContext": rendered[:_CAP]}}))
     except Exception as e:
         log_error('SessionStart', 'ace_session_start.main', error=e)  # DESIGN §3.1; exit 0, no stdout

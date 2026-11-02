@@ -157,3 +157,23 @@ def test_compact_bad_stdin_exits_zero_silently(env, raw):
     """WP-D: never fail SessionStart — rc 0, empty stdout."""
     proc = _run(env, raw=raw)
     assert proc.returncode == 0 and proc.stdout.strip() == ""
+
+
+def test_compact_shows_one_restore_line_with_the_pattern_count(env):
+    """Item 4 (v7.1.14 '📚 [ACE] Restored N patterns after compaction'): one systemMessage line when re-injected."""
+    env.write_state(SID, None, rendered_context='<ace-patterns shown="3" of="9" agent-type="main">{}</ace-patterns>')
+    out = json.loads(_run(env, _event(env)).stdout)
+    assert out["systemMessage"] == "ACE · restored 3 patterns after compaction"
+    assert out["hookSpecificOutput"]["additionalContext"].startswith("<ace-patterns shown=\"3\"")
+
+
+def test_compact_restore_line_singular_and_without_count(env):
+    env.write_state(SID, None, rendered_context='<ace-patterns shown="1" of="1">{}</ace-patterns>')
+    assert json.loads(_run(env, _event(env)).stdout)["systemMessage"] == "ACE · restored 1 pattern after compaction"
+    env.write_state(SID, None, rendered_context="<ace-patterns>{}</ace-patterns>")
+    assert json.loads(_run(env, _event(env)).stdout)["systemMessage"] == "ACE · restored patterns after compaction"
+
+
+def test_compact_nothing_reinjected_no_notice(env):
+    proc = _run(env, _event(env))
+    assert proc.stdout.strip() == ""
