@@ -73,7 +73,10 @@ def main() -> None:
         if event.get('tool_name') not in _TOOLS:
             return
         ti = event.get('tool_input') or {}
-        file_path = ti.get('file_path') or ti.get('path') or ti.get('pattern')
+        file_path = ti.get('file_path') or ti.get('path')
+        if not file_path and event.get('tool_name') == 'Glob':
+            g = ti.get('pattern')  # a Grep `pattern` is a regex, never a path
+            file_path = g if isinstance(g, str) and '/' in g and '*' not in os.path.basename(g) else None
         if not file_path or not isinstance(file_path, str):
             return
         cwd = event.get('cwd')
@@ -104,10 +107,6 @@ def main() -> None:
             last = last_file.read_text().strip().lower()
         except OSError:
             last = ''
-        try:
-            last_file.write_text(matched)
-        except OSError:
-            pass
         if matched == last:
             return
 
@@ -120,6 +119,11 @@ def main() -> None:
         result, _ms = run_search(query, org=org, project=project, session_id=tsid, top_k=8,
                                  timeout=10, hook_event_name='PostToolUse')
         ok = isinstance(result, dict) and not result.get('error')
+        if ok:  # a failed/timed-out search must stay retryable (domain not marked visited)
+            try:
+                last_file.write_text(matched)
+            except OSError:
+                pass
         patterns = result.get('similar_patterns') if ok else None
         stripped = strip_and_gate(result) if patterns else None
         returned = len((stripped or {}).get('similar_patterns') or [])
@@ -141,8 +145,16 @@ def main() -> None:
             rlid = (p.get('match_factors') or {}).get('retrieval_log_id') if isinstance(p, dict) else None
             if p.get('id') in keep and isinstance(rlid, int) and not isinstance(rlid, bool):
                 rlog[p['id']] = rlid
+        # Keep the task's FIRST retrieval_id (main UPS search): rlog ids merge, but overwriting
+        # the rid would attribute main-search log ids to the domain-shift retrieval.
+        try:
+            from patterns_used_state import _read_state_file, state_file_path
+            _sf = state_file_path(sid, agent_id or None, None, project)
+            has_rid = _sf.exists() and bool(_read_state_file(_sf)[1])
+        except Exception:
+            has_rid = False
         append_patterns_used(sid, agent_id or None, kept_ids,
-                             retrieval_id=result.get('retrieval_id') or None,
+                             retrieval_id=None if has_rid else (result.get('retrieval_id') or None),
                              retrieval_log_ids=rlog, task_session_id=tsid, project_id=project)
         print(json.dumps({"hookSpecificOutput": {
             "hookEventName": "PostToolUse", "additionalContext": additional}}))

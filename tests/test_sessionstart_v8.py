@@ -176,8 +176,9 @@ def test_update_check_reports_newer_version(tmp_path):
     """Async update check still tells the user about a newer @ace-sdk/cli."""
     env = Env(tmp_path, cli_version="4.2.2")
     r = _start(env, args=("--update-check",), FAKE_NPM_LATEST="4.3.0")
-    out = parse_stdout(r.stdout)
-    assert out and "4.3.0" in out.get("systemMessage", ""), r.stdout
+    assert r.stdout.strip() == "", "async update-check must print nothing (doc :4093)"
+    out = parse_stdout(_start(env, sid="u-sync").stdout)  # sync startup reads the cache, no network
+    assert out and "4.3.0" in out.get("systemMessage", ""), out
 
 
 def test_update_check_no_bogus_update_when_installed_is_newer(tmp_path):
@@ -187,6 +188,7 @@ def test_update_check_no_bogus_update_when_installed_is_newer(tmp_path):
     r = _start(env, args=("--update-check",), FAKE_NPM_LATEST="4.1.2")
     assert len([c for c in env.npm_calls() if c.startswith(("show", "view"))]) == 1
     assert "Update available" not in r.stdout
+    assert "Update available" not in _start(env, sid="u-sync").stdout
 
 
 def test_sync_startup_is_fast_with_warm_cache(tmp_path):

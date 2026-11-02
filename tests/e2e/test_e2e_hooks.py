@@ -87,6 +87,16 @@ def test_e2e_stdout_empty_or_valid_json_with_allowed_fields(name):
 
 
 @pytest.mark.parametrize("name", FIXTURES)
+def test_e2e_async_hooks_print_nothing(name):
+    """cc_hooks_reference.md:4093: an async hook's systemMessage/additionalContext goes to
+    Claude, never the user -> async hooks (Stop, SubagentStop, PermissionDenied, update-check)
+    must leave stdout empty. DESIGN §9 G3."""
+    loud = {tuple(run["scripts"]): run["stdout"] for run in result(name)["runs"]
+            if run["hook"].get("async") and run["stdout"].strip()}
+    assert not loud, loud
+
+
+@pytest.mark.parametrize("name", FIXTURES)
 def test_e2e_no_tmp_or_claude_logs_artifacts(name):
     """DESIGN §0/§4: no writes to /tmp (state lives under CLAUDE_PLUGIN_DATA), no files in
     ~/.claude/logs (critic T25: 84,590 ace-background-subagent-* files), no mktemp leftovers."""

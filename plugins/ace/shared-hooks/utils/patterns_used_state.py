@@ -174,7 +174,7 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
                          retrieval_id=None, retrieval_log_ids=None,
                          task_session_id=None, project_id=None,
                          user_prompt=None, rendered_context=None,
-                         hook_event_name=None):
+                         hook_event_name=None, reset=False):
     """Append+dedupe valid pattern IDs to the per-agent file; return the full list.
 
     F-080: optional params retrieval_id (str|None) and retrieval_log_ids (dict|None).
@@ -186,6 +186,9 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
     Backward compat: existing bare-list files are read transparently.
     bool guard: retrieval_log_ids values that are bool are excluded even though
     bool is a subclass of int.
+    reset=True: a NEW task starts (UPS anchor write) - ignore whatever an interrupted earlier
+    task left on disk (Stop does not run on interrupt, cc_hooks_reference.md:2733) so its
+    ids/retrieval_id are never credited to this task.
     """
     if not session_id:
         return []
@@ -199,7 +202,7 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
     sf.parent.mkdir(parents=True, exist_ok=True)
     with _locked(sf):
         try:
-            prior_raw = json.loads(sf.read_text()) if sf.exists() else {}
+            prior_raw = json.loads(sf.read_text()) if (sf.exists() and not reset) else {}
         except Exception:
             prior_raw = {}
         existing_ids, existing_rid, existing_rlog, existing_tsid = _parse_state(prior_raw)

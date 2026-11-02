@@ -105,7 +105,7 @@ class Box:
             PATH=os.pathsep.join([str(self.bin), os.path.dirname(sys.executable),
                                   os.environ.get("PATH", "")]),
             ACE_FAKE_CLI_LOG=str(self.cli_log),
-            ACE_DEBUG_HOOKS="0",
+            ACE_DEBUG_HOOKS="0", ACE_LEARN_INLINE="1",
         )
         env.update({k: str(v) for k, v in extra.items()})
         return env

@@ -56,28 +56,23 @@ def sanitize_response(obj: Any) -> Any:
 from ace_cli import run_search, check_auth_status
 from ace_context import get_context
 from ace_relevance_logger import log_search_metrics, log_search_skipped
-import ace_search_cache
+from machine_prompts import is_machine_prompt
 import plugin_data_dir
 
-# Machine-generated "prompts" (CC injects these as UserPromptSubmit turns):
-# searching them is pure noise (critic T1: 97-99.7% of UPS searches).
-MACHINE_PREFIXES = (
-    '<task-notification', '<agent-message', '<cross-session-message',
-    '[SYSTEM NOTIFICATION', '<local-command', '<command-name>', '<bash-input>',
-    '<bash-stdout>', '<bash-stderr>',
-)
-_LEADING_REMINDER = re.compile(r'\A\s*<system-reminder>.*?</system-reminder>\s*', re.DOTALL)
+# Machine-generated "prompts" (CC injects these as UserPromptSubmit turns): searching them is
+# pure noise (critic T1). One shared prefix list (utils/machine_prompts.py).
+_LEADING_REMINDER = re.compile(r'\A(?:\s*<system-reminder>.*?</system-reminder>)+\s*', re.DOTALL | re.IGNORECASE)
 
 
 def _skip_reason(prompt):
     """Return a reason string when the prompt must not trigger a search, else None."""
     stripped = prompt.strip()
-    # Leading injected <system-reminder> blocks are not the human's text: drop them,
+    # Leading injected <system-reminder> blocks are not the human's text: drop them all,
     # then judge what is left (a reminder-only prompt becomes empty -> machine).
-    stripped = _LEADING_REMINDER.sub('', stripped).strip() if stripped.startswith('<system-reminder>') else stripped
+    stripped = _LEADING_REMINDER.sub('', stripped).strip()
     if not stripped and prompt.strip():
         return 'machine_prompt'
-    if stripped.startswith(MACHINE_PREFIXES):
+    if is_machine_prompt(stripped):
         return 'machine_prompt'
     try:
         min_chars = int(os.environ.get('ACE_MIN_PROMPT_CHARS', '12'))
@@ -89,6 +84,8 @@ def _skip_reason(prompt):
 
 
 def _log_skipped(event, reason, context):
+    if not (context or {}).get('project'):
+        return  # ACE not configured here: do not litter .claude/data/logs in unrelated repos
     try:
         log_search_skipped('UserPromptSubmit', reason, event.get('session_id'),
                            (context or {}).get('project'))
@@ -376,7 +373,7 @@ def main():
         # will merge pattern_ids + retrieval_id into this same file via merge logic.
         try:
             append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id,
-                                 user_prompt=user_prompt, hook_event_name='UserPromptSubmit')
+                                 user_prompt=user_prompt, hook_event_name='UserPromptSubmit', reset=True)
         except Exception:
             pass  # non-fatal
 
@@ -392,29 +389,18 @@ def main():
         # Call ace-cli search --stdin with optional session pinning.
         # Pass task_session_id (not CC conversation session_id) so the server pins
         # retrieved patterns under this task's ID — each task gets its own pin bucket.
-        # v8: disk cache (15 min) consulted before the single ace-cli spawn.
+        # F-080: ALWAYS search with --pin-session for this task's tsid. A disk-cache hit would
+        # carry no retrieval_id / applied_log_ids and never pin the tsid, so a repeated prompt
+        # ("continue with the refactor") would lose its credit. (ace_search_cache is for the
+        # SubagentStart fan-out only.)
         _cache_hit = False
-        patterns_response = ace_search_cache.get(context['project'], 'main', search_query)
-        if isinstance(patterns_response, dict):
-            _cache_hit = True
-            # F-080: the cached retrieval_id / retrieval_log rows belong to an EARLIER task;
-            # crediting them to this task would double-credit them and the new tsid was never
-            # --pin-session'ed. Inject the patterns but send no credit flags (no ids at all).
-            patterns_response.pop('retrieval_id', None)
-            for _p in patterns_response.get('similar_patterns') or []:
-                if isinstance(_p, dict) and isinstance(_p.get('match_factors'), dict):
-                    _p['match_factors'].pop('retrieval_log_id', None)
-        else:
-            patterns_response, _search_ms = run_search(
-                query=search_query,
-                org=context['org'],
-                project=context['project'],
-                session_id=task_session_id,
-                hook_event_name='UserPromptSubmit',
-            )
-            if (isinstance(patterns_response, dict) and not patterns_response.get('error')
-                    and 'similar_patterns' in patterns_response):
-                ace_search_cache.put(context['project'], 'main', search_query, patterns_response)
+        patterns_response, _search_ms = run_search(
+            query=search_query,
+            org=context['org'],
+            project=context['project'],
+            session_id=task_session_id,
+            hook_event_name='UserPromptSubmit',
+        )
 
         # v5.3.5: Sanitize response to remove invalid Unicode surrogates
         # These can break the Claude API's JSON parser
@@ -518,6 +504,8 @@ def main():
             # CRITICAL: Save pattern IDs for reinforcement learning.
             # render_patterns returns only budget-limited injected ids (no gate drop).
 
+        _rendered_for_state = ace_context  # pattern block only: compact re-inject must not replay the eval ask
+
         # Append fire-and-forget eval injection if present (from previous task's Stop hook).
         # CC hard-caps additionalContext at 10,000 chars; trim eval_injection (cosmetic) to fit.
         # Control arm: ace_context is None — skip eval injection (model sees zero patterns).
@@ -535,7 +523,7 @@ def main():
                                  retrieval_log_ids=_retrieval_log_map,
                                  task_session_id=task_session_id,
                                  user_prompt=user_prompt,
-                                 rendered_context=ace_context if ace_context is not None else '',
+                                 rendered_context=_rendered_for_state if _rendered_for_state is not None else '',
                                  hook_event_name='UserPromptSubmit')
         except Exception:
             pass
@@ -627,6 +615,11 @@ def main():
     except Exception as e:
         # Log error but don't block workflow
         print(f"[ERROR] ACE before-task hook failed: {e}", file=sys.stderr)
+        try:
+            from ace_relevance_logger import log_error
+            log_error('UserPromptSubmit', 'ace_before_task.main', error=e)
+        except Exception:
+            pass
         sys.exit(0)
 
 

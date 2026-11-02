@@ -24,7 +24,7 @@ import subprocess
 import sys
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "utils"))
 
@@ -306,7 +306,7 @@ def _build_trace(event: dict) -> dict:
             "output": f"denied: {reason}",
         },
         "playbook_used": [],
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
         "agent_type": "permission_gate",
         "session_id": session_id,
         # Domain tag — client-side classification; server respects this for searchPatterns
