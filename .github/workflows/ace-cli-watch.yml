@@ -5,8 +5,12 @@ name: ace-cli-watch
 # contract test, and opens ONE pull request. A human reads the result, merges and releases. Nothing is merged here.
 #
 # Two jobs, so freshly published npm code never runs next to a write token:
-#   test = contents: read, no persisted credentials. Bumps, installs, runs the tests, uploads a patch + results.
-#   pr   = the only job with write permissions. Applies the patch and opens the PR. Executes no package code.
+#   test = contents: read, no persisted credentials. Bumps (lock with --ignore-scripts: no package code), uploads the
+#          patch BEFORE any package code runs, then installs and runs the tests and uploads their logs separately.
+#   pr   = the only job with write permissions. Executes no package code. Applies the early patch, verifies at JSON level
+#          that it changes only the pin and @ace-sdk lock entries (.github/scripts/verify_bump.py), opens the PR.
+#          The test outcome comes from the runner (job output); the log tails are untrusted display text.
+# Actions are pinned by commit SHA.
 #
 # ONE-TIME REPO SETTING (owner): Settings > Actions > General > Workflow permissions > "Allow GitHub Actions to
 # create and approve pull requests". Without it `gh pr create` is refused; the job then fails with an error that says
@@ -31,14 +35,15 @@ jobs:
       latest: ${{ steps.ver.outputs.latest }}
       pin: ${{ steps.ver.outputs.pin }}
       existing: ${{ steps.open.outputs.existing }}
+      outcome: ${{ steps.tests.outcome }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: "20"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065  # v5.6.0
         with:
           python-version: "3.12"
       - name: Compare npm with the pin
@@ -77,6 +82,13 @@ jobs:
           # the patch is cut NOW: nothing the tests below do can end up in the pull request
           mkdir -p "$RUNNER_TEMP/out"
           git diff -- plugins/ace/package.json plugins/ace/package-lock.json plugins/ace/.claude-plugin .claude-plugin/marketplace.json > "$RUNNER_TEMP/out/bump.patch"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        # uploaded before any package code runs: nothing the tests below execute can reach the patch the pr job applies
+        if: steps.ver.outputs.newer == 'yes' && steps.open.outputs.existing == '0'
+        with:
+          name: ace-cli-bump-patch
+          path: ${{ runner.temp }}/out/bump.patch
+          if-no-files-found: error
       - name: Suite and contract test against the new pin
         id: tests
         if: steps.ver.outputs.newer == 'yes' && steps.open.outputs.existing == '0'
@@ -84,24 +96,20 @@ jobs:
         shell: bash  # = bash -eo pipefail: a failing pytest must fail the step through `| tee`
         run: |
           python -m pip install --upgrade pip pytest
+          mkdir -p "$RUNNER_TEMP/logs"
           RC=0
           # hermetic suite first: the harnesses are hermetic anyway, but this keeps the order cheap and obvious
-          python -m pytest tests -q -p no:cacheprovider --deselect tests/test_cli_contract.py 2>&1 | tee "$RUNNER_TEMP/out/suite.txt" || RC=1
+          python -m pytest tests -q -p no:cacheprovider --deselect tests/test_cli_contract.py 2>&1 | tee "$RUNNER_TEMP/logs/suite.txt" || RC=1
           (cd plugins/ace && npm ci --ignore-scripts && npm rebuild better-sqlite3) || RC=1
-          python -m pytest tests/test_cli_contract.py -q -p no:cacheprovider 2>&1 | tee "$RUNNER_TEMP/out/contract.txt" || RC=1
+          python -m pytest tests/test_cli_contract.py -q -p no:cacheprovider 2>&1 | tee "$RUNNER_TEMP/logs/contract.txt" || RC=1
           exit $RC
-      - name: Record the outcome
-        if: steps.ver.outputs.newer == 'yes' && steps.open.outputs.existing == '0'
-        run: |
-          echo "${{ steps.tests.outcome }}" > "$RUNNER_TEMP/out/outcome.txt"
-          echo "${{ steps.ver.outputs.latest }}" > "$RUNNER_TEMP/out/latest.txt"
-          echo "${{ steps.ver.outputs.pin }}" > "$RUNNER_TEMP/out/pin.txt"
-      - uses: actions/upload-artifact@v4
-        if: steps.ver.outputs.newer == 'yes' && steps.open.outputs.existing == '0'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02  # v4.6.2
+        # written by package code: display text only, never applied or trusted
+        if: always() && steps.ver.outputs.newer == 'yes' && steps.open.outputs.existing == '0'
         with:
-          name: ace-cli-bump
-          path: ${{ runner.temp }}/out
-          if-no-files-found: error
+          name: ace-cli-bump-logs
+          path: ${{ runner.temp }}/logs
+          if-no-files-found: warn
 
   pr:
     needs: test
@@ -113,21 +121,27 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
         with:
-          name: ace-cli-bump
-          path: ${{ runner.temp }}/out
-      - name: Apply the patch (no package code is run in this job)
+          name: ace-cli-bump-patch
+          path: ${{ runner.temp }}/patch
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093  # v4.3.0
+        continue-on-error: true  # the tests may have died before writing a log
+        with:
+          name: ace-cli-bump-logs
+          path: ${{ runner.temp }}/logs
+      - name: Apply and verify the patch (no package code is run in this job)
         id: apply
+        env:
+          LATEST: ${{ needs.test.outputs.latest }}
+          PIN: ${{ needs.test.outputs.pin }}
         run: |
-          OUT="$RUNNER_TEMP/out"
-          LATEST=$(cat "$OUT/latest.txt"); PIN=$(cat "$OUT/pin.txt")
-          # the artifact is data from another job: only plain versions and an allow-listed patch go any further
+          PATCH="$RUNNER_TEMP/patch"
           for V in "$LATEST" "$PIN"; do
             echo "$V" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "::error::not a plain version: $V"; exit 1; }
           done
-          if git apply --numstat "$OUT/bump.patch" | awk '{print $3}' | grep -Evx 'plugins/ace/package\.json|plugins/ace/package-lock\.json|plugins/ace/\.claude-plugin/[A-Za-z.]+\.json|\.claude-plugin/marketplace\.json'; then
+          if git apply --numstat "$PATCH/bump.patch" | awk '{print $3}' | grep -Evx 'plugins/ace/package\.json|plugins/ace/package-lock\.json|plugins/ace/\.claude-plugin/[A-Za-z.]+\.json|\.claude-plugin/marketplace\.json'; then
             echo "::error::patch touches a file outside the allow-list"; exit 1
           fi
           BRANCH="ace-cli-watch/$LATEST"
@@ -139,15 +153,18 @@ jobs:
             echo "branch $BRANCH already exists on origin; opening the PR from it"
           else
             git checkout -b "$BRANCH"
-            git apply "$OUT/bump.patch"
+            git apply "$PATCH/bump.patch"
+            # JSON-level allow-list: only the pinned version and @ace-sdk registry tarballs may change
+            python3 .github/scripts/verify_bump.py "$PIN" "$LATEST"
             git add plugins/ace/package.json plugins/ace/package-lock.json plugins/ace/.claude-plugin .claude-plugin/marketplace.json
             git commit -m "chore(ace): bump pinned ace-cli $PIN -> $LATEST"
             git push origin "$BRANCH"
           fi
       - name: Open the pull request
+        env:
+          OUTCOME: ${{ needs.test.outputs.outcome }}
         run: |
-          OUT="$RUNNER_TEMP/out"
-          OUTCOME=$(cat "$OUT/outcome.txt")
+          LOGS="$RUNNER_TEMP/logs"
           FLAGS=""
           [ "$OUTCOME" = "success" ] || FLAGS="--draft"
           {
@@ -155,13 +172,14 @@ jobs:
             echo
             echo "Tests against the new pin: **$OUTCOME**."
             echo
+            echo "Log tails below are untrusted output of the new package (backticks and @ neutralised)."
             echo "Contract test:"
             echo '```'
-            tail -n 25 "$OUT/contract.txt" 2>/dev/null || echo "(not run)"
+            tail -n 25 "$LOGS/contract.txt" 2>/dev/null | cut -c1-300 | sed "s/\`/'/g; s/@/(at)/g" || echo "(not run)"
             echo '```'
             echo "Suite:"
             echo '```'
-            tail -n 25 "$OUT/suite.txt" 2>/dev/null || echo "(not run)"
+            tail -n 25 "$LOGS/suite.txt" 2>/dev/null | cut -c1-300 | sed "s/\`/'/g; s/@/(at)/g" || echo "(not run)"
             echo '```'
             echo
             echo "A failing contract test names the exact flag or field to adapt in the plugin. This PR does not bump the plugin version:"
