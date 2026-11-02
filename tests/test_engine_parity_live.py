@@ -88,6 +88,8 @@ def test_engine_search_parity_with_ace_cli(live_env, query):
         _record(query, attempt, cli, lib)
         if cli.returncode != 0:
             pytest.skip("ace-cli search failed (auth/server): " + cli.stderr[-500:])
+        if lib.returncode != 0 and "Server error (" in lib.stderr and attempt < 4:
+            continue  # §26 finding: the live server answers a transient 404 "Project ... not found"; in a hook the CLI fallback covers it
         assert lib.returncode == 0, "engine rc=%d, stderr:\n%s" % (lib.returncode, lib.stderr[-2000:])
         a, b = json.loads(cli.stdout), json.loads(lib.stdout)
         assert sorted(a) == sorted(b), "top-level keys"
