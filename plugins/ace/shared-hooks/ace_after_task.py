@@ -154,6 +154,27 @@ def has_substantial_work_from_accumulated(tools: list) -> bool:
     return False
 
 
+def tool_failed(resp) -> bool:
+    """A failed step: error / stderr, or (fix 5a) a non-zero exit code - structured or the transcript's
+    "Exit code N" text - unless the tool interpreted it (grep exit 1 = no matches). Parity: mod/core.ts toolRec."""
+    if not isinstance(resp, dict):
+        return False
+    if resp.get('error') or resp.get('stderr'):
+        return True
+    c = resp.get('content')
+    if isinstance(c, str):
+        m = regex_module.match(r'Exit code (\d+)', c)
+        if m and int(m.group(1)) != 0:
+            return True
+    if resp.get('returnCodeInterpretation'):
+        return False
+    code = resp.get('exit_code', resp.get('exitCode', 0))
+    try:
+        return int(code or 0) != 0
+    except (TypeError, ValueError):
+        return False
+
+
 def summarize_tool_action(tool_name: str, tool_input: dict) -> str:
     """
     Create human-readable action summary for tool call.
@@ -979,8 +1000,7 @@ def main():
         has_errors = False
         for _, _, tool_response_json, _, *_ in tools:
             try:
-                resp = json.loads(tool_response_json) if tool_response_json else {}
-                if resp.get('error') or resp.get('stderr'):
+                if tool_failed(json.loads(tool_response_json) if tool_response_json else {}):
                     has_errors = True
                     break
             except Exception:
