@@ -177,3 +177,20 @@ def test_sessionend_during_detached_learn_keeps_dir_then_learn_completes(box):
     assert _wait(lambda: box.cli_calls("learn"), 6)
     trace = box.cli_calls("learn")[0]["trace"]
     assert trace.get("retrieval_id") == "ret-9" and trace.get("applied_log_ids") == [41]
+
+
+@pytest.mark.parametrize("hook", ["Stop", "SubagentStop"])
+def test_execution_row_names_the_real_hook(box, monkeypatch, hook):
+    """fix 5c: a subagent's execution row says SubagentStop (it said Stop), as the mod's does."""
+    import ace_after_task as at
+    import ace_relevance_logger as rl
+    monkeypatch.setattr(at, "run_learn", lambda trace, **kw: ({}, 1))
+    rows = []
+    monkeypatch.setattr(rl.get_relevance_logger(), "_write_log", rows.append)
+    d = box.session_dir("s-hook")
+    d.mkdir(parents=True, exist_ok=True)
+    at.run_learn_job({"trace": {"task": "t"}, "org": ORG_ID, "project": PROJECT_ID, "hook_event_name": hook,
+                      "lock": str(d / "learn-inflight-x.lock"),
+                      "metrics": {"session_id": "s-hook", "patterns_used": [], "tools_executed": 1,
+                                  "state_changing_tools": 1, "success": True, "execution_time_seconds": 0.1}})
+    assert [r["hook"] for r in rows if r.get("event") == "execution"] == [hook]

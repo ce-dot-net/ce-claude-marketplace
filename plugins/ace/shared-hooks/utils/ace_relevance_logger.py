@@ -280,6 +280,7 @@ class ACERelevanceLogger:
         agent_type: Optional[str] = None,
         used_ids_count: Optional[int] = None,
         used_source: Optional[str] = None,
+        hook: str = 'Stop',
     ) -> None:
         """
         Log task execution metrics for correlation with pattern usage.
@@ -289,7 +290,7 @@ class ACERelevanceLogger:
         entry = {
             'timestamp': _utc_now(),
             'event': 'execution',
-            'hook': 'Stop',
+            'hook': hook,  # fix 5c: Stop or SubagentStop
             'session_id': session_id,
             'project_id': project_id,
             'agent_type': agent_type or 'main',

@@ -752,7 +752,7 @@ def run_learn_job(job):
         except OSError:
             pass
     try:
-        log_execution_metrics(learning_sent=response is not None, **job['metrics'])
+        log_execution_metrics(learning_sent=response is not None, hook=job.get('hook_event_name') or 'Stop', **job['metrics'])
     except Exception:
         pass
 
