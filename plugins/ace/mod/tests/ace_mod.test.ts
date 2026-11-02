@@ -36,7 +36,7 @@ const MIN = 60_000
 type SearchAnswer = { exitCode?: number; stdout?: string; stderr?: string; advanceMs?: number; killed?: boolean }
 type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; env?: Record<string, string>; files?: Record<string, string>
   engine?: (stdin?: string) => SearchAnswer; links?: string[]; noClassic?: boolean; defaultArm?: boolean
-  learnExit?: number; early?: (agentId: string) => Promise<unknown> }
+  learnExit?: number; early?: (agentId: string) => Promise<unknown>; beforeWrite?: (path: string) => Promise<unknown> }
 type Run = { argv: string[]; stdin?: string; env?: Record<string, string>; timeoutMs?: number; files: Set<string> }
 
 // In-memory engine: fs (with mtimes on the mocked clock), env, clock, session, process. Every argv is recorded.
@@ -91,7 +91,7 @@ function host(on: any, o: Opts = {}) {
       if (a.killed) throw new Error('ace: $.process.run(ace-cli) aborted: still running after timeoutMs')
       return res(a.exitCode ?? 0, a.stdout ?? '', a.stderr ?? '')
     }
-    if (argv[0] === '/bin/sh' && argv[2] === PRIVATE_WRITE_SH) { put(argv[4], init.stdin ?? ''); return res(0, '') }  // umask 077 + rename
+    if (argv[0] === '/bin/sh' && argv[2] === PRIVATE_WRITE_SH) { if (o.beforeWrite) return Promise.resolve(o.beforeWrite(argv[4])).then(() => { put(argv[4], init.stdin ?? ''); return res(0, '') }); put(argv[4], init.stdin ?? ''); return res(0, '') }  // umask 077 + rename
     if (argv[0] === 'git' || argv[0].endsWith('/git')) return res(0, git(argv))
     if (o.learnExit !== undefined && argv.includes('ace-cli') && argv.includes('learn')) return res(o.learnExit, '')
     if (argv.some(a => /(^|[\s;&|(])rm($|\s)/.test(a) || a === 'rm'))
@@ -626,6 +626,25 @@ test('a woken teammate (turn.start only, its state reaped): the message is the n
   expect(h.searches().length).toBe(2)
   await done($, 'second', 'agent-1')
   expect(h.learns().length).toBe(2)
+})
+
+test('a turn.start that lands while the spawn state is still being written is not a woken teammate: 1 search, 1 tsid, ids kept', async ($, on) => {
+  let racing: Promise<unknown> | undefined, fired = false
+  const h = host(on, { search: () => ({ stdout: S8 }), beforeWrite: async (path) => {
+    if (fired || !path.endsWith('patterns-used-agent-1.json')) return
+    fired = true
+    racing = Promise.resolve($.turn.start({ text: 'review the domain shift python port for parity bugs', turnId: 'r1', agentId: 'agent-1' } as any))
+    await new Promise(r => setTimeout(r, 20))  // the turn.start runs to its state read before the write lands
+  } })
+  await spawn($, 'review the domain shift python port for parity bugs')
+  await racing
+  expect(h.searches().length).toBe(1)
+  const st = h.state('agent-1')!
+  expect(st.task_session_id).toBe(h.pin(h.searches()[0]!)!)
+  const want = JSON.parse(S8).similar_patterns.map((p: any) => p.id).filter((id: any) => /^[\w-]+$/.test(id ?? ''))
+  expect(want.length > 0 && [...st.pattern_ids].sort().join()).toBe([...want].sort().join())
+  await $.tool.call({ tool: 'Bash', command: 'ls', agentId: 'agent-1' } as any)
+  expect(h.searches().length).toBe(1)  // no late search queued
 })
 
 // ---------- tool.call Read: domain shift ----------

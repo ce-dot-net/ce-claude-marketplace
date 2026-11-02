@@ -713,8 +713,10 @@ export const register: Register = (on) => {
       if (pending && s && res.agentId && !res.deny) {
         // The docs do not order this against the agent's first events: merge, so nothing it already did is lost.
         const key = res.agentId as string
-        L.agentTypes.set(key, (e as any).subagentType)
+        // Persist BEFORE publishing the type: a turn.start that sees a known type but no state reads it as a woken
+        // teammate and re-anchors the run (second tsid, second search). Unknown type = earlyStart, harmless.
         await updateState($, L, s, key, pending.state)
+        L.agentTypes.set(key, (e as any).subagentType)
         const early = L.earlyStart.get(key)
         L.earlyStart.delete(key)
         if ((e as any).workflow) {
