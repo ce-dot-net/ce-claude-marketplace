@@ -418,3 +418,20 @@ def test_adr_records_engine_decision_and_mod_interface():
     for s in ("Windows", "WSL2", "Volta", "asdf", "nvm", "core_too_new", "node_modules/@ace-sdk/core"):
         assert s in text, "ADR-001 must document " + s
     assert "v8.1 plan" not in text, "§14: in-process core is IN 8.0.0, not deferred to 8.1"
+
+
+def test_engine_root_follows_an_ace_plugin_root_env(tmp_path, monkeypatch):
+    """The engine (and its plugin-local core) come from the same root as ace_cli.cli_argv: an ACE
+    CLAUDE_PLUGIN_ROOT wins. Otherwise a copy without node_modules would still run the repo's real core."""
+    root = tmp_path / "ace"
+    (root / "shared-hooks" / "utils").mkdir(parents=True)
+    (root / "shared-hooks" / "utils" / "ace_cli.py").write_text("")
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(root))
+    import ace_engine
+    m = importlib.reload(ace_engine)
+    assert m.ENGINE_DIR == root / "engine"
+    assert all(str(d).startswith(str(root)) for d in m.PLUGIN_LOCAL_CORES)
+    monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path / "foreign-plugin"))
+    assert importlib.reload(ace_engine).ENGINE_DIR == E.ENGINE
+    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT")
+    importlib.reload(ace_engine)
