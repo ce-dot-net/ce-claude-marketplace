@@ -264,7 +264,7 @@ A pin bump is a plugin version bump. The `ace-cli-watch` workflow opens the PR (
 1. `cd plugins/ace && npm install --package-lock-only --ignore-scripts` (lock regen), commit `package-lock.json`.
 2. `npm ci --ignore-scripts && npm rebuild better-sqlite3`, then `python3 -m pytest tests/test_cli_contract.py` must pass.
    A failure names the exact flag/field to adapt in the plugin.
-3. The `Requires:` text of all four manifests and the CHANGELOG comes from package.json (`ace-cli = <pin>`), not from a constant.
+3. The `Requires:` text of all four manifests and the CHANGELOG comes from package.json (`ace-cli >= <pin>`), not from a constant.
 4. Bump the plugin version in the same release; re-run the full suite afterwards.
 
 ---

@@ -27,7 +27,7 @@ test -n "$GLOBAL_CLI" && echo "global: $GLOBAL_CLI $("$GLOBAL_CLI" --version 2>/
 ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version
 ```
 
-Tell the user which source is used (plugin-local wins over global). A global CLI older than the pin is not used;
+Tell the user which source is used (plugin-local wins over global). The hooks do not use a global CLI older than the pin (the commands' wrapper runs whichever it finds);
 a different one works but is untested with this plugin version. If plugin-local is present and the version equals the
 pin, stop: nothing to repair.
 
@@ -43,7 +43,7 @@ no network, or `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` set (Claude Code skips
 ## Step 3: Install the packages by hand
 
 ```bash
-cd "${CLAUDE_PLUGIN_ROOT}" && npm ci --ignore-scripts && npm rebuild better-sqlite3
+npm ci --ignore-scripts --prefix "${CLAUDE_PLUGIN_ROOT}" && npm rebuild better-sqlite3 --prefix "${CLAUDE_PLUGIN_ROOT}"
 ```
 
 `npm ci` installs exactly the locked pin; the rebuild gives the CLI its local cache (otherwise SessionStart does it once).

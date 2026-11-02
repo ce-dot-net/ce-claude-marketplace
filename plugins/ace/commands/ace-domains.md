@@ -137,14 +137,14 @@ Without knowing domain names, `--allowed-domains` is unusable:
 
 ```
 # Before: guessing domain names
-ace-cli search "auth" --allowed-domains "typescript"
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "auth" --allowed-domains "typescript"
 Result: 0 patterns (wrong domain name!)
 
 # After: using discovered domain names
 /ace-domains
 → "typescript-development-practices"
 
-ace-cli search "auth" --allowed-domains "typescript-development-practices"
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "auth" --allowed-domains "typescript-development-practices"
 Result: Filtered patterns! ✓
 ```
 

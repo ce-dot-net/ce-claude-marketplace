@@ -61,7 +61,9 @@ argv = sys.argv[1:]
 if argv[:1] in (["-e"], ["-p"], ["--eval"], ["--print"]):
     with open(os.environ["FAKE_NODE_LOG"], "a") as f:
         f.write(json.dumps({"argv": argv, "cwd": os.getcwd()}) + "\n")
-    sys.exit(int(os.environ.get("FAKE_NODE_REQUIRE_RC", "0")))
+    # the load probe: FAKE_NODE_REQUIRE_RC forces a result; else it passes once a (fake) `npm rebuild` has run
+    rc = os.environ.get("FAKE_NODE_REQUIRE_RC")
+    sys.exit(int(rc) if rc is not None else (0 if os.path.exists(os.environ["FAKE_BUILT"]) else 1))
 script = argv[0] if argv else ""
 pkg = os.path.join(os.path.dirname(os.path.dirname(script)), "package.json")
 respond(argv[1:], "plugin-local", json.load(open(pkg)).get("version", "0.0.0"))
@@ -70,8 +72,12 @@ respond(argv[1:], "plugin-local", json.load(open(pkg)).get("version", "0.0.0"))
 _FAKE_NPM = "#!%s\n" + r'''
 import json, os, sys
 with open(os.environ["FAKE_NPM_LOG"], "a") as f:
-    f.write(json.dumps({"argv": sys.argv[1:], "cwd": os.getcwd()}) + "\n")
-sys.exit(int(os.environ.get("FAKE_NPM_RC", "0")))
+    f.write(json.dumps({"argv": sys.argv[1:], "cwd": os.getcwd(),
+                        "ignore_scripts": os.environ.get("npm_config_ignore_scripts")}) + "\n")
+rc = int(os.environ.get("FAKE_NPM_RC", "0"))
+if rc == 0 and sys.argv[1:2] == ["rebuild"]:
+    open(os.environ["FAKE_BUILT"], "w").close()
+sys.exit(rc)
 '''
 
 
@@ -133,7 +139,8 @@ class Box3d:
         e = {"HOME": str(self.home), "PATH": str(self.bin), "CLAUDE_PLUGIN_ROOT": str(self.root),
              "CLAUDE_PLUGIN_DATA": str(self.data), "XDG_CONFIG_HOME": str(self.xdg),
              "CLAUDE_PROJECT_DIR": str(self.proj), "LANG": "en_US.UTF-8", "ACE_LEARN_INLINE": "1",
-             "FAKE_CLI_LOG": str(self.cli_log), "FAKE_NPM_LOG": str(self.npm_log), "FAKE_NODE_LOG": str(self.node_log)}
+             "FAKE_CLI_LOG": str(self.cli_log), "FAKE_NPM_LOG": str(self.npm_log), "FAKE_NODE_LOG": str(self.node_log),
+             "FAKE_BUILT": str(self.tmp / "sqlite-built")}
         for k, v in extra.items():
             if v is None:
                 e.pop(k, None)

@@ -37,9 +37,9 @@ claude --version
 # Compare against 2.1.311: older => WARN, ACE pauses itself (SessionStart writes disabled.flag and says so)
 
 # Plugin data layout (v8): Claude Code substitutes the exact token below (cc_hooks_reference.md:480).
-# Other plugins export THEIR CLAUDE_PLUGIN_DATA into the shared env file: only a path containing /ace is ours.
+# Other plugins export THEIR CLAUDE_PLUGIN_DATA into the shared env file: only a data dir whose NAME starts with ace is ours.
 DATA="${CLAUDE_PLUGIN_DATA}"
-case "$DATA" in */ace*) ;; *) DATA="$HOME/.claude/plugins/data/ace-ce-dot-net-marketplace" ;; esac
+case "${DATA##*/}" in ace*) ;; *) DATA="$HOME/.claude/plugins/data/ace-ce-dot-net-marketplace" ;; esac
 ls -la "$DATA"
 test -r "$DATA/python_path" && cat "$DATA/python_path"   # written by SessionStart
 test -r "$DATA/cli_version.json" && cat "$DATA/cli_version.json"   # version of a GLOBAL ace-cli (fallback only)
@@ -351,7 +351,7 @@ test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "hooks.json: EXISTS"
 ```
 
 **Expected Hooks** (v8 round 2: PostToolBatch + PreToolUse(Agent) included incl. the async row: orphan sweep + one-time sqlite rebuild):
-1. `SessionStart` → `ace_install_cli.sh` (startup|clear; plus the async row, flag `--update-check`)
+1. `SessionStart` → `ace_install_cli.sh` (startup|clear|resume; plus the async row, flag `--update-check`)
 2. `SessionStart` (compact) → `ace_sessionstart_compact.sh`
 3. `UserPromptSubmit` → `ace_before_task_wrapper.sh`
 4. `PostToolBatch` (async, one event per parallel tool batch) → accumulator script (`ace_posttooluse_wrapper.sh --batch`)

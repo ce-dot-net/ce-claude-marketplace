@@ -60,11 +60,11 @@ class TestConsolidatedSessionStart:
         """v8 (DESIGN §3): source routing moved into matchers: startup|clear, startup (async), compact."""
         data = json.loads(_read(HOOKS_JSON))
         matchers = [g['matcher'] for g in data['hooks']['SessionStart']]
-        assert matchers == ['startup|clear', 'startup', 'compact']
+        assert matchers == ['startup|clear|resume', 'startup', 'compact']
 
     def test_sessionstart_reads_source_field(self):
-        """No source branching left in the CLI check: resume never matches."""
-        assert 'resume' not in [g['matcher'] for g in json.loads(_read(HOOKS_JSON))['hooks']['SessionStart']]
+        """No source branching left in the CLI check: the source is the matcher."""
+        assert 'startup|clear|resume' in [g['matcher'] for g in json.loads(_read(HOOKS_JSON))['hooks']['SessionStart']]
 
     def test_sessionstart_handles_compact_source(self):
         """compact is its own matcher routed to the re-inject shim."""
@@ -73,9 +73,9 @@ class TestConsolidatedSessionStart:
                    for g in groups)
 
     def test_sessionstart_handles_resume_source(self):
-        """The CLI check does not run on resume (matcher startup|clear only)."""
+        """The floor check + stale old-CC disabled.flag clearing also run on resume (CC updated between sessions)."""
         groups = json.loads(_read(HOOKS_JSON))['hooks']['SessionStart']
-        assert not any('resume' in g['matcher'] for g in groups)
+        assert any('resume' in g['matcher'] and 'ace_install_cli.sh' in g['hooks'][0]['command'] for g in groups)
 
     def test_no_separate_compact_in_hooks_json(self):
         """v8: the compact matcher exists and is NOT the CLI-check script."""

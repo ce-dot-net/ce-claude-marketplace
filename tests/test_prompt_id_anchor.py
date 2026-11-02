@@ -129,12 +129,17 @@ def test_domain_shift_state_tsid_is_prompt_id_without_state(env):
     assert env.read_state(SID)["task_session_id"] == PROMPT_ID
 
 
-def test_domain_shift_prompt_id_beats_stale_state_tsid(env):
-    """G2 'state keyed by prompt_id': a tsid left by an EARLIER prompt (e.g. a skipped
-    machine prompt did not reset it) must not be reused for the current prompt."""
-    env.write_state(SID, None, task_session_id="tsid-from-previous-prompt")
+def test_domain_shift_keeps_the_stored_anchor_over_the_event_prompt_id(env):
+    """§16 P2 (reverses G2 here): UPS writes the anchor on every human prompt, so the stored tsid is the task's.
+    After a deferred Stop the <task-notification> turn has a NEW prompt_id that must not replace it."""
+    env.write_state(SID, None, task_session_id="tsid-of-the-human-prompt")
     _read(env)
     assert _pins(env) == [None]
+    assert env.read_state(SID)["task_session_id"] == "tsid-of-the-human-prompt"
+
+
+def test_domain_shift_without_stored_anchor_falls_back_to_prompt_id(env):
+    _read(env)
     assert env.read_state(SID)["task_session_id"] == PROMPT_ID
 
 

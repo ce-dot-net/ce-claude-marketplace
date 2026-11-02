@@ -12,6 +12,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from plugin_copy import hermetic_root
+
 REPO = Path(__file__).resolve().parent.parent
 PLUGIN_ROOT = REPO / "plugins" / "ace"
 SCRIPTS = PLUGIN_ROOT / "scripts"
@@ -79,7 +81,7 @@ class HookEnv:
             "PATH": path,
             "HOME": str(self.home),
             "CLAUDE_PLUGIN_DATA": str(self.pd),
-            "CLAUDE_PLUGIN_ROOT": str(PLUGIN_ROOT),
+            "CLAUDE_PLUGIN_ROOT": str(hermetic_root()),
             "ACE_FAKE_CLI_LOG": str(self.cli_log),
             "LANG": "en_US.UTF-8",
         }

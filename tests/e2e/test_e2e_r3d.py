@@ -61,6 +61,10 @@ def test_deferred_task_learns_once_with_the_human_prompt_after_the_notification(
     note = str(os.urandom(4).hex())
     _run_ok(w, w.event("UserPromptSubmit_task_notification", prompt_id="note-" + note))
     assert json.loads(_state(w).read_text())["task_session_id"] == w.prompt_id, "the guard must not touch the main state"
+    # a tool call in the notification turn (domain shift) must keep the human anchor, not adopt note-<id>
+    w.write_domains()
+    _run_ok(w, w.event("PostToolUse_Read", prompt_id="note-" + note))
+    assert json.loads(_state(w).read_text())["task_session_id"] == w.prompt_id, "domain shift overwrote the anchor"
     _run_ok(w, w.event("Stop", prompt_id="note-" + note, last_assistant_message=FINAL))
     (learn,) = w.cli_calls("learn")
     t = learn["trace"]
@@ -124,5 +128,41 @@ def test_no_hook_ever_runs_npm_view_show_or_install(w):
 
 
 def test_startup_row_has_a_status_message(w):
-    (sync,) = [h for g in w.hooks_json["hooks"]["SessionStart"] if g.get("matcher") == "startup|clear" for h in g["hooks"]]
+    (sync,) = [h for g in w.hooks_json["hooks"]["SessionStart"] if g.get("matcher") == "startup|clear|resume" for h in g["hooks"]]
     assert sync.get("statusMessage") == "ACE: checking ace-cli…"
+
+
+def test_deferred_stop_then_new_human_prompt_records_the_loss(w):
+    _human(w)
+    _run_ok(w, w.event("Stop_background_running", prompt_id=w.prompt_id))
+    assert (w.session_dir / "learn-deferred").exists()
+    assert not _relevance(w, "learn_deferred_lost")
+    _run_ok(w, w.event("UserPromptSubmit_human", prompt="Now fix the second bug in the importer", prompt_id="p-next"))
+    (row,) = _relevance(w, "learn_deferred_lost")
+    assert row["reason"] == "new_prompt"
+    assert not (w.session_dir / "learn-deferred").exists()
+
+
+def test_deferred_stop_then_session_end_records_the_loss(w):
+    _human(w)
+    _run_ok(w, w.event("Stop_background_running", prompt_id=w.prompt_id))
+    _run_ok(w, w.event("SessionEnd"))
+    (row,) = _relevance(w, "learn_deferred_lost")
+    assert row["reason"] == "session_end"
+
+
+def test_deferred_task_that_learns_leaves_no_loss(w):
+    _human(w)
+    _run_ok(w, w.event("Stop_background_running", prompt_id=w.prompt_id))
+    _run_ok(w, w.event("UserPromptSubmit_task_notification", prompt_id="note-x"))
+    _run_ok(w, w.event("Stop", prompt_id="note-x", last_assistant_message=FINAL))
+    _run_ok(w, w.event("SessionEnd"))
+    assert not _relevance(w, "learn_deferred_lost")
+
+
+def test_missing_cli_says_nothing_on_prompts(w):
+    """§23: SessionStart names /ace:ace-install-cli once; every human prompt after that stays silent."""
+    out = _run_ok(w, w.event("UserPromptSubmit_human", prompt=HUMAN, prompt_id=w.prompt_id), PATH="/usr/bin:/bin")
+    assert out == [""], out
+    assert not w.cli_calls()
+    assert not list(w.data.rglob("disabled.flag"))

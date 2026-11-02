@@ -13,6 +13,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from plugin_copy import hermetic_root
+
 REPO = Path(__file__).resolve().parent.parent
 PLUGIN = REPO / "plugins" / "ace"
 SCRIPTS = PLUGIN / "scripts"
@@ -83,7 +85,7 @@ class Env:
         e = {k: v for k, v in os.environ.items() if k not in drop}
         e.update({
             "HOME": str(self.home),
-            "CLAUDE_PLUGIN_ROOT": str(PLUGIN),
+            "CLAUDE_PLUGIN_ROOT": str(hermetic_root()),
             "CLAUDE_PLUGIN_DATA": str(self.data),
             "PATH": "%s:/usr/bin:/bin" % self.bin,
             "FAKE_CLI_LOG": str(self.cli_log),

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # The one entry point commands use (DESIGN §17/§23): plugin-local pinned CLI first, then a global ace-cli;
 # drops ace-cli's own "Update available ... npm install -g" stderr lines; stdout and exit code untouched.
-ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+# the script's own location, not CLAUDE_PLUGIN_ROOT: another plugin's exported root must not hide the pinned CLI
+ROOT="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)"  # builtins only: PATH may hold nothing else
 JS="$ROOT/node_modules/@ace-sdk/cli/dist/cli.js"
 if [ -f "$JS" ] && command -v node >/dev/null 2>&1; then
   RUN=(node "$JS")

@@ -72,3 +72,11 @@ def test_no_global_install_hint_outside_the_repair_command(path):
     bad = [i for i, l in enumerate(path.read_text(encoding="utf-8", errors="replace").splitlines(), 1)
            if re.search(r"npm (?:install|i) -g\b.*@ace-sdk/cli", l)]
     assert bad == [], "%s:%s must point at /ace:ace-install-cli" % (path.name, bad[:5])
+
+
+def test_commands_never_tell_the_model_to_run_a_bare_ace_cli():
+    """A clean machine has no global ace-cli: runnable lines go through the plugin wrapper (DESIGN §17/§23)."""
+    bare = re.compile(r"(?:^\s*(?:\$\s*)?|: )ace-cli\s+(?:-|tune|search|learn|login|logout|whoami|bootstrap|status|domains|top|delta|doctor)\b")
+    hits = [f"{p.name}:{n}" for p in sorted((PLUGIN / "commands").glob("*.md"))
+            for n, l in enumerate(p.read_text().splitlines(), 1) if bare.search(l) and "scripts/ace-cli" not in l]
+    assert hits == []

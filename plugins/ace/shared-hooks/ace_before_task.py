@@ -379,6 +379,15 @@ def main():
         # fails, or errors.  The later append_patterns_used call (inside `if pattern_ids:`)
         # will merge pattern_ids + retrieval_id into this same file via merge logic.
         try:
+            if not agent_id:  # a Stop deferred for a running agent never got its notification: record the loss
+                _mark = plugin_data_dir.session_dir(context.get('project'), session_id, create=False) / 'learn-deferred'
+                if _mark.exists():
+                    from ace_relevance_logger import log_event
+                    log_event('learn_deferred_lost', reason='new_prompt', session_id=session_id)
+                    _mark.unlink()
+        except Exception:
+            pass
+        try:
             append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id,
                                  user_prompt=user_prompt, hook_event_name='UserPromptSubmit', reset=True)
         except Exception:
@@ -437,7 +446,9 @@ def main():
             elif error_type == 'timeout':
                 output = {"systemMessage": f"⏱️ [ACE] {error_msg}"}
             elif error_type == 'cli_not_found':
-                output = {"systemMessage": f"❌ [ACE] {error_msg}"}
+                # SessionStart already said it once (§23); a message on every prompt is noise. Log only.
+                _log_skipped(event, 'cli_not_found', context)
+                sys.exit(0)
             else:
                 output = {"systemMessage": f"❌ [ACE] {error_msg}"}
 

@@ -403,7 +403,7 @@ Create a project at https://ace.code-engine.app/projects
 ```
 ace-cli command failed. Check:
 1. ace-cli is installed: /ace:ace-install-cli
-2. You're authenticated: ace-cli whoami
+2. You're authenticated: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami
 3. Network connectivity to ACE server
 ```
 
