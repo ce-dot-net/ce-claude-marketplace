@@ -26,6 +26,7 @@ import subprocess
 import sys
 
 import pytest
+from pathlib import Path
 
 import engine_harness as E
 
@@ -175,7 +176,7 @@ def test_status_cli_prints_selection_json(tmp_path):
 
 def _run_in_copy(plugin, code, path, cwd):
     """Run `code` against the plugin copy's ace_engine/ace_cli (ENGINE_DIR follows __file__)."""
-    env = dict(os.environ, PATH=path)
+    env = dict(os.environ, PATH=path, CLAUDE_PLUGIN_ROOT=str(plugin))  # as Claude Code runs it: its own root
     env.pop("ACE_ENGINE", None)
     r = subprocess.run([sys.executable, "-c", "import json,sys; sys.path.insert(0, %r)\n%s"
                         % (str(plugin / "shared-hooks" / "utils"), code)],
@@ -432,6 +433,7 @@ def test_engine_root_follows_an_ace_plugin_root_env(tmp_path, monkeypatch):
     assert m.ENGINE_DIR == root / "engine"
     assert all(str(d).startswith(str(root)) for d in m.PLUGIN_LOCAL_CORES)
     monkeypatch.setenv("CLAUDE_PLUGIN_ROOT", str(tmp_path / "foreign-plugin"))
-    assert importlib.reload(ace_engine).ENGINE_DIR == E.ENGINE
-    monkeypatch.delenv("CLAUDE_PLUGIN_ROOT")
+    own = Path(ace_engine.__file__).resolve().parents[2] / "engine"
+    assert importlib.reload(ace_engine).ENGINE_DIR == own
+    monkeypatch.undo()  # restore the session env, then the module, so later tests see the hermetic root again
     importlib.reload(ace_engine)
