@@ -56,9 +56,9 @@ import time
 # render_cohort: imported here for render_variant trace stamping (MUST-FIX 2).
 # Guarded so a missing/broken import never prevents the hook from running.
 try:
-    from ace_pattern_render import render_cohort as _render_cohort
+    from ace_pattern_render import trace_render_variant as _trace_render_variant
 except Exception:
-    _render_cohort = None  # type: ignore
+    _trace_render_variant = None  # type: ignore
 
 from utils.machine_prompts import is_machine_prompt  # shared with WP-B UPS guard
 
@@ -929,6 +929,12 @@ def main():
         # load_retrieval_ids is read-only (does NOT unlink). Must call it first so
         # the state file is still present when load_playbook_used later unlinks it.
         retrieval_log_map = {} if no_agent_state else load_retrieval_ids(session_id, agent_id, hook_event_name)
+        _stored_variant = None  # §28: the variant rendered at search time (read before the state is reaped)
+        if not no_agent_state:
+            try:
+                _stored_variant = load_state(session_id, agent_id, hook_event_name).get('render_variant')
+            except Exception:
+                pass
         # Also read retrieval_id and task_session_id from the state file (before unlink).
         # Both load_retrieval_ids and load_task_session_id are read-only.
         _retrieval_id_from_state = None
@@ -975,6 +981,14 @@ def main():
         applied_log_ids = [
             retrieval_log_map[pid] for pid in playbook_used if pid in retrieval_log_map
         ]
+        try:
+            _render_variant = _trace_render_variant(_stored_variant, session_id)
+        except Exception:
+            _render_variant = 'budget'  # never omit it (§28); this chain renders budget by default
+        if _render_variant == 'full':
+            # §29 RELEASE BLOCKER: under `full` (~100 shown) the injected set is no "applied" signal; crediting it
+            # WARMs every pattern. Server ruling: empty list. retrieval_id + playbook_used stay unchanged.
+            applied_log_ids = []
         # Use retrieval_id read from state file (before load_playbook_used unlinked it).
         retrieval_id = _retrieval_id_from_state
 
@@ -1046,16 +1060,9 @@ def main():
         # across tasks (the exact bug this fixes). NULL on the server is better than wrong.
         if task_session_id:
             trace["session_id"] = task_session_id
-            # MUST-FIX 2: stamp render_variant for attribution join (server ExecutionTraceRequest).
-            # Recomputing from task_session_id is deterministic — same session_id + same env
-            # → matches injection-time cohort exactly.  Wrapped in try/except: a failure
-            # here must never break the learn trace (hot-path-safe).
-            try:
-                if _render_cohort is not None:
-                    trace["render_variant"] = _render_cohort(task_session_id)
-            except Exception:
-                pass  # non-fatal: omit field, do not break trace
         # else: omit — server leaves session_id NULL, no false cross-task correlation
+        # §28: render_variant on EVERY trace (with or without a pin) = what was actually rendered.
+        trace["render_variant"] = _render_variant
         if agent_id:
             trace["agent_id"] = agent_id
         if _parent_task_id:

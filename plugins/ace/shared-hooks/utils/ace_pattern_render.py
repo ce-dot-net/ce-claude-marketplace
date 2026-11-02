@@ -446,41 +446,50 @@ def _read_ab_pcts():
     return ctrl, compact
 
 
-def render_cohort(session_id: Optional[str]) -> str:
-    """Deterministically assign a session to a render cohort.
+def render_arm(session_id: Optional[str]) -> str:
+    """The A/B arm of a conversation (DESIGN §28), shared with the mod's renderCohort (parity test).
 
-    Returns one of: 'control' | 'compact' | 'budget'.
-
-    Algorithm:
-      bucket = sha256(session_id)[:8 hex chars] % 100
-      if session_id is falsy → 'budget'  (never experiment without anchor)
-      if bucket < CONTROL_PCT            → 'control'
-      if bucket < CONTROL_PCT+COMPACT_PCT→ 'compact'
-      else                               → 'budget'
-
-    Env knobs are read fresh on every call so the server can enable/disable
-    the experiment without restarting the plugin process.
-
-    Default (no env or both 0) → 100% 'budget' (= current shipped behavior,
-    zero user degradation).
+    Arms in bucket order: control, compact, full (ACE_RENDER_FULL_PCT, default 100), rest budget.
+    bucket = sha256("render:" + session_id)[:8 hex] % 100, where session_id is the STABLE Claude Code
+    session id (subagents of the conversation share it), never the per-task pin. No id -> 'full'.
     """
-    if not session_id:
-        return "budget"
-
     ctrl_pct, compact_pct = _read_ab_pcts()
-
-    # Both zero → dormant, all budget (fast-path)
-    if ctrl_pct == 0 and compact_pct == 0:
-        return "budget"
-
-    digest = hashlib.sha256(("render:" + session_id).encode()).hexdigest()
-    bucket = int(digest[:8], 16) % 100
-
+    try:
+        full_pct = int(os.environ.get("ACE_RENDER_FULL_PCT", "100"))
+    except (TypeError, ValueError):
+        full_pct = 100
+    if full_pct < 0:
+        full_pct = 100
+    full_pct = min(full_pct, 100 - ctrl_pct - compact_pct)
+    if not session_id:
+        return "full"
+    bucket = int(hashlib.sha256(("render:" + session_id).encode()).hexdigest()[:8], 16) % 100
     if bucket < ctrl_pct:
         return "control"
     if bucket < ctrl_pct + compact_pct:
         return "compact"
+    if bucket < ctrl_pct + compact_pct + full_pct:
+        return "full"
     return "budget"
+
+
+def render_cohort(session_id: Optional[str]) -> str:
+    """What the PYTHON chain renders for this conversation: 'control' | 'compact' | 'budget'.
+
+    The Python chain has no full renderer, so the full arm renders budget-verbatim and is labelled
+    'budget' (render_variant names what was actually rendered, §28). Default env -> 'budget'.
+    """
+    arm = render_arm(session_id)
+    return "budget" if arm == "full" else arm
+
+
+RENDER_VARIANTS = ("control", "compact", "full", "budget")
+
+
+def trace_render_variant(stored: Optional[str], session_id: Optional[str]) -> str:
+    """render_variant for a trace (§28): the variant stored at render time (the mod may have stored 'full'),
+    else what this chain renders for the conversation. Never None: a missing label is 'unknown' server-side."""
+    return stored if stored in RENDER_VARIANTS else render_cohort(session_id)
 
 
 def render_compact_all(

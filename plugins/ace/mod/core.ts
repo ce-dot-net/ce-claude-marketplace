@@ -484,6 +484,15 @@ const pyInt = (v: string | undefined, dflt: number): number | null => {
   return /^\s*[+-]?\d+\s*$/.test(v) ? parseInt(v, 10) : null
 }
 export type Cohort = 'control' | 'compact' | 'full' | 'budget'
+const COHORTS = new Set(['control', 'compact', 'full', 'budget'])
+// §28: the variant stored at render time wins; a state without one (written before the label existed) gets the arm.
+export const traceVariant = (stored: unknown, sessionId: string | undefined, env: Record<string, string | undefined>): string =>
+  typeof stored === 'string' && COHORTS.has(stored) ? stored : renderCohort(sessionId, env)
+// §29 RELEASE BLOCKER: under `full` (~100 shown) the injected set is no "applied" signal; the server ruling is an
+// empty list. budget/compact/control keep injected ids ∩ retrieval_log_ids.
+export function appliedLogIds(playbook: string[], rlog: Record<string, number>, variant: string): number[] {
+  return variant === 'full' ? [] : playbook.filter(id => id in rlog).map(id => rlog[id])
+}
 // ace_pattern_render._read_ab_pcts + ACE_RENDER_FULL_PCT (default 100). Arms in bucket order:
 // control, compact, full, budget. No anchor -> full (never experiment without one).
 export function renderCohort(sid: string | undefined, env: Record<string, string | undefined>): Cohort {
@@ -513,7 +522,7 @@ export function dataRootFromPluginRoot(home: string, root: string, name: string,
 
 // ---------- patterns_used_state.append_patterns_used: same merge, same key order, same bytes ----------
 export type StateUpdate = { ids?: string[]; retrievalId?: string | null; rlog?: Record<string, number>; tsid?: string | null
-  userPrompt?: string; rendered?: string; hook?: string; parentTaskId?: string; agentType?: string }
+  userPrompt?: string; rendered?: string; hook?: string; parentTaskId?: string; agentType?: string; renderVariant?: string }
 export function mergeState(prior: any, u: StateUpdate): any {
   const p = prior && typeof prior === 'object' && !Array.isArray(prior) ? prior : {}
   const ids: string[] = Array.isArray(p.pattern_ids) ? [...p.pattern_ids] : Array.isArray(prior) ? [...prior] : []
@@ -532,6 +541,8 @@ export function mergeState(prior: any, u: StateUpdate): any {
   if (he) state.hook_event_name = he
   const pt = u.parentTaskId ?? p.parent_task_id
   if (pt) state.parent_task_id = pt
+  const rv = u.renderVariant ?? p.render_variant // §28: the variant ACTUALLY rendered, read back at learn
+  if (rv) state.render_variant = rv
   const at = u.agentType ?? p.agent_type // mod-only: its turn.complete carries no agent type; Python ignores the key
   if (at) state.agent_type = at
   return state
@@ -647,9 +658,10 @@ export function buildTrace(a: {
     timestamp: a.nowIso,
     agent_type: a.agentType,
   }
-  if (a.tsid) { trace.session_id = a.tsid; trace.render_variant = a.renderVariant }
+  if (a.tsid) trace.session_id = a.tsid
+  trace.render_variant = a.renderVariant // §28: on EVERY trace, pin or not
   if (a.agentId) trace.agent_id = a.agentId
-  if (a.parentTaskId) trace.parent_task_id = a.parentTaskId
+  if (a.parentTaskId) trace.parent_agent_id = a.parentTaskId // §16 P3: server field name (local state keeps parent_task_id)
   if (a.retrievalId) trace.retrieval_id = a.retrievalId
   if (a.appliedLogIds.length) trace.applied_log_ids = a.appliedLogIds
   trace.effort_level = a.effort

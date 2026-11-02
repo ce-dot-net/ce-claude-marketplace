@@ -201,7 +201,8 @@ def expected_main_state(search_text, prompt=HUMAN_PROMPT, tsid=TSID_PLACEHOLDER)
     with tempfile.TemporaryDirectory() as d:
         pus.append_patterns_used("s", None, ids, state_dir=d, retrieval_id=resp.get("retrieval_id"),
                                  retrieval_log_ids=rlog, task_session_id=tsid, user_prompt=prompt,
-                                 rendered_context=rendered, hook_event_name="UserPromptSubmit", reset=True)
+                                 rendered_context=rendered, hook_event_name="UserPromptSubmit", reset=True,
+                                 render_variant="full")  # §28: the mod renders the full arm by default
         return (Path(d) / "patterns-used-main.json").read_text()
 
 

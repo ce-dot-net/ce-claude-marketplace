@@ -400,9 +400,8 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         if not pattern_list:
             sys.exit(0)
 
-        # ── A/B cohort assignment (deterministic, per task_session_id) ──────────
-        # Dormant by default: ACE_AB_CONTROL_PCT=0 / ACE_AB_COMPACT_PCT=0 → budget.
-        _cohort = render_cohort(task_session_id)
+        # ── A/B cohort (§28): the conversation's arm (CC session_id, shared with the main agent), never the pin.
+        _cohort = render_cohort(session_id)
 
         retrieval_id = patterns_response.get('retrieval_id') or None
         agent_id_attr = f'agent-type="{agent_type}" agent-id="{agent_id}"' if agent_id else f'agent-type="{agent_type}"'
@@ -417,7 +416,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
             try:
                 append_patterns_used(session_id, agent_id, [],
                                      retrieval_id=retrieval_id,
-                                     task_session_id=task_session_id, project_id=project)
+                                     task_session_id=task_session_id, project_id=project, render_variant=_cohort)
             except Exception as e:
                 log_error('SubagentStart', 'ace_subagent_start.control', session_id, project, e)
 
@@ -435,7 +434,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                         retrieval_id=retrieval_id,
                         retrieval_log_ids=retrieval_log_map,
                         task_session_id=task_session_id,
-                        project_id=project, rendered_context=ace_context,
+                        project_id=project, rendered_context=ace_context, render_variant=_cohort,
                     )
                 except Exception as e:
                     log_error('SubagentStart', 'ace_subagent_start.state', session_id, project, e)
@@ -454,7 +453,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                         retrieval_id=retrieval_id,
                         retrieval_log_ids=retrieval_log_map,
                         task_session_id=task_session_id,
-                        project_id=project, rendered_context=ace_context,
+                        project_id=project, rendered_context=ace_context, render_variant=_cohort,
                     )
                 except Exception as e:
                     log_error('SubagentStart', 'ace_subagent_start.state', session_id, project, e)

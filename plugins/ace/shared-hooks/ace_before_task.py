@@ -458,10 +458,9 @@ def main():
         pattern_list = patterns_response.get('similar_patterns', [])
         original_pattern_list = list(pattern_list)  # Keep original for logging
 
-        # ── A/B cohort assignment (deterministic, per task_session_id) ──────────
-        # Dormant by default: ACE_AB_CONTROL_PCT=0 / ACE_AB_COMPACT_PCT=0 → budget.
-        # Domain-shift paths (PreToolUse/PostToolUse) are NOT affected.
-        _cohort = render_cohort(task_session_id)
+        # ── A/B cohort (§28): bucket on the STABLE CC session_id (one arm per conversation), never the
+        # per-task pin. Default: the full arm, which this chain renders as budget. Domain-shift unaffected.
+        _cohort = render_cohort(session_id)
 
         # Capture top-3 patterns WITH match_factors BEFORE render so that
         # _format_bullet_token can use ucb_score for display.  render_patterns
@@ -542,7 +541,7 @@ def main():
                                  task_session_id=task_session_id,
                                  user_prompt=user_prompt,
                                  rendered_context=_rendered_for_state if _rendered_for_state is not None else '',
-                                 hook_event_name='UserPromptSubmit')
+                                 hook_event_name='UserPromptSubmit', render_variant=_cohort)
         except Exception as e:
             from ace_relevance_logger import log_error
             log_error('UserPromptSubmit', 'ace_before_task.state_write', session_id, context['project'], e)

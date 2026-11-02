@@ -7,7 +7,7 @@ import {
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
   detachedLearnArgv, parseAceReview, parseDiffStat, evalInjection, searchRow, searchSummary, searchErrorLine, sessionTitle,
-  subagentQuery, isNoTaskCommand, STATE_CAP, type StateUpdate, type ToolRec, type Cohort,
+  subagentQuery, isNoTaskCommand, STATE_CAP, traceVariant, appliedLogIds, type StateUpdate, type ToolRec, type Cohort,
 } from './core.ts'
 
 const SEARCH_MS = 25000, DOMAIN_MS = 17000 // §11 A2: blocking budget per search, retry included
@@ -204,8 +204,9 @@ async function cohortEnv($: any) {
 }
 
 // §13.1 cohort arms; `rendered` = the ≤ 10K re-inject copy (C1). control: search + anchor, nothing injected.
-async function renderArm($: any, resp: any, tag: string, attrs: string, tsid: string) {
-  const cohort: Cohort = renderCohort(tsid, await cohortEnv($))
+// §28: bucket on the STABLE CC session id (one arm per conversation; subagents share it), never the per-task pin.
+async function renderArm($: any, resp: any, tag: string, attrs: string, sessionId: string) {
+  const cohort: Cohort = renderCohort(sessionId, await cohortEnv($))
   if (cohort === 'control') return { cohort, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: '', truncated: false }
   const r = cohort === 'compact' ? renderCompact(resp, tag, attrs) : cohort === 'budget' ? renderBudget(resp, tag, attrs) : renderFull(resp, tag, attrs)
   const rendered = cohort === 'full' ? renderFull(resp, tag, attrs, STATE_CAP).context : r.context
@@ -260,9 +261,10 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   }
   const playbook: string[] = state.pattern_ids ?? []
   const rlog: Record<string, number> = state.retrieval_log_ids ?? {}
-  const applied = playbook.filter(id => id in rlog).map(id => rlog[id])
-  const tsid: string | undefined = state.task_session_id ?? undefined
   const env = await cohortEnv($)
+  const variant = traceVariant(state.render_variant, s.sessionId, env)  // stored at render time, never recomputed (§29)
+  const applied = appliedLogIds(playbook, rlog, variant)
+  const tsid: string | undefined = state.task_session_id ?? undefined
   const effort = effortEvent || await $.env.get('CLAUDE_EFFORT') || 'normal'
   let git: any
   try {
@@ -272,7 +274,7 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   } catch { /* git context is optional */ }
   const { trace, success } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
     tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied,
-    nowIso: await nowIso($), renderVariant: renderCohort(tsid, env), effort, git })
+    nowIso: await nowIso($), renderVariant: variant, effort, git })
 
   // Lock BEFORE the spawn (session.end keeps the dir); the trace lives under <root>/tmp as run_learn's does.
   const lock = `${s.sdir}/learn-inflight-${safe(key)}.lock`
@@ -357,8 +359,8 @@ async function onPrompt($: any, L: Load, e: any): Promise<any> {
     $.ui.log(searchErrorLine(sr.error))
     return withEval([])
   }
-  const r = await renderArm($, sr.resp, 'ace-patterns', 'agent-type="main"', tsid)
-  await save({ ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, tsid, userPrompt: e.text, rendered: r.rendered, hook: 'UserPromptSubmit' })
+  const r = await renderArm($, sr.resp, 'ace-patterns', 'agent-type="main"', s.sessionId)
+  await save({ ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, tsid, userPrompt: e.text, rendered: r.rendered, hook: 'UserPromptSubmit', renderVariant: r.cohort })
   const ds = domainsSummary(sr.resp)
   if (Object.keys(ds).length) {
     L.domains = domainNames(ds)
@@ -379,7 +381,7 @@ const logSubagentError = async ($: any, s: Sess, sr: any) => relLog($, s, { time
 
 async function subagentRender($: any, s: Sess, sr: any, query: string, agentType: string, tsid: string, t0: number, parent: string | undefined, extra: any) {
   const attr = `agent-type="${String(agentType).replace(/"/g, '&quot;')}"`
-  const r = await renderArm($, sr.resp, 'ace-patterns-subagent', attr, tsid)
+  const r = await renderArm($, sr.resp, 'ace-patterns-subagent', attr, s.sessionId)
   await relLog($, s, searchRow({ hook: 'SubagentStart', sessionId: s.sessionId, userPrompt: query, query, returned: sr.resp.similar_patterns || [], injected: r.patterns,
     projectId: s.project, orgId: s.org, agentType, cohort: r.cohort, hookMs: await $.clock.now() - t0, nowIso: await nowIso($),
     extra: { search_ms: sr.ms, pin_ms: sr.pinMs, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, truncated_for_cap: r.truncated || undefined, context_chars: r.context?.length ?? 0,
@@ -407,7 +409,7 @@ async function lateInject($: any, L: Load, s: Sess, key: string): Promise<string
   const sr = await search($, s, query, tsid, undefined, DOMAIN_MS)
   if (!sr.resp) { await logSubagentError($, s, sr); return null }
   const r = await subagentRender($, s, sr, query, st.agent_type ?? 'unknown', tsid, t0, st.parent_task_id, { late: true })
-  await updateState($, L, s, key, { ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered })
+  await updateState($, L, s, key, { ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort })
   return r.context
 }
 
@@ -442,7 +444,7 @@ async function beforeSpawn($: any, L: Load, s: Sess, e: any) {
   }
   const r = await subagentRender($, s, sr, query, e.subagentType, tsid, t0, state.parentTaskId, { workflow: e.workflow?.runId })
   return { out: r.context ? { ...e, prompt: `${e.prompt}\n\n${r.context}` } : e,
-    state: { ...state, ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered } }
+    state: { ...state, ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort } }
 }
 
 // ace_domain_shift.main
