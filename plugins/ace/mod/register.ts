@@ -305,13 +305,15 @@ async function cohortEnv($: any) {
 // (`seen`) are left out; nothing new -> nothing injected.
 async function renderArm($: any, resp: any, tag: string, attrs: string, sessionId: string, seen?: Set<string>) {
   const cohort: Cohort = renderCohort(sessionId, await cohortEnv($))
+  // item 3: the full arm's re-inject copy is the budget render (<= 9,500) of the WHOLE response, never the deduped subset
+  const reinject = cohort === 'full' ? renderBudget(resp, tag, attrs).context as string : ''
   if (cohort === 'full' && seen?.size) {
     resp = { ...resp, similar_patterns: (resp.similar_patterns || []).filter((p: any) => !seen.has(p?.id)) }
-    if (!resp.similar_patterns.length) return { cohort, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: '', truncated: false }
+    if (!resp.similar_patterns.length) return { cohort, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: reinject, truncated: false }
   }
   if (cohort === 'control') return { cohort, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: '', truncated: false }
   const r = cohort === 'compact' ? renderCompact(resp, tag, attrs) : cohort === 'budget' ? renderBudget(resp, tag, attrs) : renderFull(resp, tag, attrs)
-  const rendered = cohort === 'full' ? renderFull(resp, tag, attrs, STATE_CAP).context : r.context
+  const rendered = cohort === 'full' ? reinject : r.context
   return { cohort, context: r.context as string | null, ids: r.ids, rlog: r.rlog, patterns: r.patterns, rendered, truncated: cohort === 'full' && r.shown < r.total }
 }
 

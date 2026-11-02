@@ -1024,6 +1024,17 @@ test('§31 dedupe under full: later prompts inject only new ids; a compaction (r
   expect(shownOf(r3.context[0])).toBe(8)
 })
 
+test('item 3: full arm re-inject copy = budget render of the FULL response, independent of the dedupe', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await submit($)
+  expect(h.state()!.rendered_context).toBe(G.budget_main_8)
+  const r2: any = await submit($, HUMAN + ' again')  // all tracked ids already seen: almost nothing injected
+  expect(shownOf(r2.context[0])).toBe(2)
+  expect(h.state()!.rendered_context).toBe(G.budget_main_8)
+  expect(G.budget_main_8.length <= 9500).toBe(true)
+  expect(shownOf(G.budget_main_8)).toBe(8)
+})
+
 test('§31 budget never dedupes (it re-ranks the top-N every prompt)', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }), defaultArm: true })
   await submit($)
