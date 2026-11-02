@@ -563,6 +563,49 @@ def test_eval_request_carries_the_task_eval_stats(box):
     assert (data["avg_relevance"], data["domains"]) == (80, 2)
 
 
+def _main_transcript(box, entries):
+    p = box.root / "main-transcript.jsonl"
+    p.write_text("\n".join(json.dumps(e) for e in entries) + "\n")
+    return str(p)
+
+
+def _tool_turn(tuid, name, inp, result="ok"):
+    return [{"type": "assistant", "message": {"role": "assistant", "content": [
+                {"type": "tool_use", "id": tuid, "name": name, "input": inp}]}},
+            {"type": "user", "message": {"role": "user", "content": [
+                {"type": "tool_result", "tool_use_id": tuid, "content": result}]}}]
+
+
+def test_stop_adds_tool_calls_the_async_batch_hook_has_not_written_yet(box):
+    """Item 8: PostToolBatch is async (no ordering vs Stop), so the last batch can be missing from
+    the db at Stop. Stop fills the gap from the main transcript tail (calls after the last user
+    prompt): the learn gate and the trajectory see the Bash call; db rows are not duplicated."""
+    sid = "sess-race"
+    box.seed_tools(sid, [("Read", {"file_path": "src/app.py"}, {"content": "x"})])  # toolu_sess-race_0
+    entries = [{"type": "user", "message": {"role": "user", "content": "old task text here please"}}] + \
+        _tool_turn("toolu_old", "Write", {"file_path": "old.py"}) + \
+        [{"type": "user", "message": {"role": "user", "content": "implement the retry policy for the uploader"}}] + \
+        _tool_turn("toolu_sess-race_0", "Read", {"file_path": "src/app.py"}) + \
+        _tool_turn("toolu_late", "Bash", {"command": "pytest -q"}, "3 passed")
+    box.write_state(sid, user_prompt="implement the retry policy for the uploader")
+    proc = box.run_after_task(box.stop_event(sid, transcript_path=_main_transcript(box, entries)),
+                              ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID, ACE_LEARN_INLINE="1")
+    assert proc.returncode == 0, proc.stderr
+    learns = box.cli_calls("learn")
+    assert len(learns) == 1, "the Bash call from the transcript makes the task substantial"
+    tools = [st.get("action") for st in learns[0]["trace"]["trajectory"]]
+    assert tools == ["Read app.py", "Ran: pytest -q"], tools  # db row once, the late Bash added, the older task's Write not
+
+
+def test_stop_without_a_transcript_keeps_the_db_rows_only(box):
+    sid = "sess-race-none"
+    box.seed_tools(sid, [("Read", {"file_path": "src/app.py"}, {"content": "x"})])
+    box.write_state(sid, user_prompt="implement the retry policy for the uploader")
+    proc = box.run_after_task(box.stop_event(sid), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID, ACE_LEARN_INLINE="1")
+    assert proc.returncode == 0, proc.stderr
+    assert box.cli_calls("learn") == []
+
+
 def test_dead_event_logger_is_gone():
     """final review: ace_event_logger.py had no caller and wrote through symlinks; it is deleted."""
     assert not EVENT_LOGGER.exists()
