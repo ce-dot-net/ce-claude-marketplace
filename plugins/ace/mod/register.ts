@@ -674,18 +674,25 @@ export const register: Register = (on) => {
   // item A: patterns survive a main compaction natively. session.compact (not on guarded seats) sets the flag and the
   // mod-compact marker (the Python SessionStart(compact) re-inject steps aside); prompt.compose then adds the task's
   // re-inject copy as its own section until the next prompt injects fresh.
+  // The marker goes down BEFORE next(): the Python SessionStart(compact) runs inside it and must already see it.
   on('session.compact', async ($, e, next) => {
-    const r: any = await next(e)
+    let mark: string | null = null
     try {
-      if (!e.agentId && e.trigger !== 'precompute' && r && !r.skip) {
+      if (!e.agentId && e.trigger !== 'precompute') {
         const s = await ensure($, L)
-        if (s && !(await disabled($, s))) {
-          L.compacted = true
-          await $.fs.write(`${s.sdir}/mod-compact`, String(await $.clock.now()))
-          if (await $.fs.exists(`${s.sdir}/full-injected.json`)) await rm($, `${s.sdir}/full-injected.json`)  // §31 dedupe starts over
-        }
+        if (s && !(await disabled($, s))) { mark = `${s.sdir}/mod-compact`; await $.fs.write(mark, String(await $.clock.now())) }
       }
-    } catch { /* the Python SessionStart(compact) hook re-injects */ }
+    } catch { mark = null /* the Python SessionStart(compact) hook re-injects */ }
+    let r: any
+    try { r = await next(e) } catch (err) { if (mark) await rm($, mark).catch(() => {}); throw err }
+    if (!mark) return r
+    try {
+      if (r && !r.skip) {
+        L.compacted = true
+        const fi = mark.replace(/mod-compact$/, 'full-injected.json')
+        if (await $.fs.exists(fi)) await rm($, fi)  // §31 dedupe starts over
+      } else await rm($, mark)  // no compaction: a later real one must not be silenced
+    } catch { /* stale marker ages out (MOD_COMPACT_S) */ }
     return r
   })
 
