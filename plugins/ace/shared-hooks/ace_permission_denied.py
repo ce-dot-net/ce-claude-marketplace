@@ -282,12 +282,11 @@ def _structural_fingerprint(tool_name: str, tool_input) -> str:
 
 
 def _render_variant(session_id):
-    """§31: 'budget'|'full' for this conversation's chain (the mod renders its arm, Python only budget); None = omit."""
+    """§31: the variant stored at render time ('budget'|'full'); None = omit (never derived from the arm)."""
     try:
-        from plugin_data_dir import is_mod_active
-        from ace_pattern_render import normalize_render_variant, render_arm, render_cohort
-        return normalize_render_variant(render_arm(session_id) if is_mod_active(_PROJECT_ID, session_id)
-                                        else render_cohort(session_id))
+        from patterns_used_state import load_state
+        from ace_pattern_render import normalize_render_variant
+        return normalize_render_variant(load_state(session_id, None, 'Stop', project_id=_PROJECT_ID).get('render_variant'))
     except Exception:
         return None
 
@@ -324,10 +323,11 @@ def _build_trace(event: dict) -> dict:
         "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
         "agent_type": "permission_gate",
         "session_id": session_id,
-        "conversation_id": str(session_id)[:512],  # §31: the stable CC session id
         # Domain tag — client-side classification; server respects this for searchPatterns
         "domains": ["permission-boundary"],
     }
+    if session_id:  # §31: the stable CC session id; never send ''
+        trace["conversation_id"] = str(session_id)[:512]
     variant = _render_variant(session_id)
     if variant:  # §31: omitted when unknown
         trace["render_variant"] = variant

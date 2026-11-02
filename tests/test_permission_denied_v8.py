@@ -148,32 +148,38 @@ def test_shim_respects_plugin_data_disabled_flag(tmp_path):
 
 # ── §28: render_variant names what was actually rendered ────────────────────
 
-def _variant(tmp_path, monkeypatch, marker):
+def _stored(tmp_path, monkeypatch, variant):
     from wpa_harness import PROJECT_ID
     env = Env(tmp_path)
     for k, v in env.env().items():
         monkeypatch.setenv(k, v)
-    for k in ("ACE_RENDER_FULL_PCT", "ACE_AB_CONTROL_PCT", "ACE_AB_COMPACT_PCT"):
-        monkeypatch.delenv(k, raising=False)
     m = _mod()
     m._PROJECT_ID = PROJECT_ID
-    if marker:
+    if variant is not False:
         sd = env.session_dir("pd-rv")
         sd.mkdir(parents=True)
-        (sd / "mod-active").touch()
-    return m._render_variant("pd-rv")
+        (sd / "patterns-used-main.json").write_text(json.dumps({"pattern_ids": [], "render_variant": variant}))
+    return m
 
 
-def test_render_variant_follows_the_mod_arm_when_mod_active(tmp_path, monkeypatch):
-    assert _variant(tmp_path, monkeypatch, True) == "budget"  # §31 default: full share 0
+@pytest.mark.parametrize("stored,want", [("full", "full"), (" Budget ", "budget"), ("control", None), (None, None)])
+def test_render_variant_is_the_stored_one(tmp_path, monkeypatch, stored, want):
+    m = _stored(tmp_path, monkeypatch, stored)
+    assert m._render_variant("pd-rv") == want
 
 
-def test_render_variant_full_when_mod_active_in_the_full_split(tmp_path, monkeypatch):
-    m = _mod()
-    monkeypatch.setattr("plugin_data_dir.is_mod_active", lambda *a, **k: True)
+def test_render_variant_omitted_without_state(tmp_path, monkeypatch):
+    m = _stored(tmp_path, monkeypatch, False)
+    assert m._render_variant("pd-rv") is None
+    assert "render_variant" not in m._build_trace({"session_id": "pd-rv", "tool_name": "Bash", "tool_input": {}})
+
+
+def test_render_variant_not_derived_from_the_arm(tmp_path, monkeypatch):
     monkeypatch.setenv("ACE_RENDER_FULL_PCT", "100")
-    assert m._render_variant("pd-rv") == "full"
+    m = _stored(tmp_path, monkeypatch, False)
+    assert m._render_variant("pd-rv") is None
 
 
-def test_render_variant_budget_without_mod(tmp_path, monkeypatch):
-    assert _variant(tmp_path, monkeypatch, False) == "budget"
+def test_conversation_id_omitted_when_session_id_empty():
+    t = _mod()._build_trace({"tool_name": "Bash", "tool_input": {}})
+    assert "conversation_id" not in t

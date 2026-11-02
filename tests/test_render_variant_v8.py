@@ -160,6 +160,8 @@ def test_subagent_trace_carries_stored_variant(box):
     assert "--applied-log-ids" not in learn["argv"]
 
 
-def test_permission_denied_trace_carries_render_variant(clean_env):
-    t = _pd_mod()._build_trace({"session_id": "pd-rv", "tool_name": "Bash", "tool_input": {"command": "ls"}})
-    assert t["render_variant"] == "budget"
+def test_permission_denied_trace_carries_render_variant(clean_env, tmp_path):
+    from test_permission_denied_v8 import _stored
+    m = _stored(tmp_path, clean_env, "full")
+    t = m._build_trace({"session_id": "pd-rv", "tool_name": "Bash", "tool_input": {"command": "ls"}})
+    assert t["render_variant"] == "full"
