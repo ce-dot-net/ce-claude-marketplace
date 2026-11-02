@@ -126,13 +126,15 @@ class World:
     def session_dir(self):
         return self.data / "projects" / self.project_id / "sessions" / self.session_id
 
-    def marker(self, age_s):
-        p = self.session_dir / "mod-active"
-        p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text("")
-        t = time.time() - age_s
-        os.utime(str(p), (t, t))
-        return p
+    def marker(self, age_s, classic=True):
+        """mod-active, plus mod-classic unless classic=False (managed-settings guard filters the classic.* hooks)."""
+        for name in ("mod-active", "mod-classic") if classic else ("mod-active",):
+            p = self.session_dir / name
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_text("")
+            t = time.time() - age_s
+            os.utime(str(p), (t, t))
+        return self.session_dir / "mod-active"
 
     def stash_agent_prompt(self, prompt=STORED_QUERY, subagent_type="general-purpose"):
         d = self.session_dir / "agent-prompts"
