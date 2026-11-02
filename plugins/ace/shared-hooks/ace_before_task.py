@@ -615,6 +615,7 @@ def main():
                 render_cohort=_cohort,
                 hook_ms=int((time.monotonic() - t_start) * 1000),
                 cache_hit=_cache_hit,
+                task_session_id=task_session_id,
             )
         except Exception:
             pass  # Non-fatal: continue without logging

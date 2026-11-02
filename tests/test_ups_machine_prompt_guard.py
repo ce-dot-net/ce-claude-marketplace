@@ -240,6 +240,13 @@ def test_human_prompt_single_ace_cli_spawn_with_pin_session(project, fake_cli, m
     assert _additional_context(out)
 
 
+def test_human_prompt_search_row_carries_task_session_id(project, fake_cli, monkeypatch, capsys):
+    """fix 5b: the UPS search row names the task pin (the mod writes it too)."""
+    _run(monkeypatch, capsys, HUMAN_PROMPT, project)
+    row = [e for e in _relevance(project) if e.get("event") == "search"][-1]
+    assert row.get("task_session_id") == _main_state()["task_session_id"], row
+
+
 # ── (3) no UPS disk cache (F-080: every turn searches with --pin-session) ───
 
 def test_repeated_prompt_searches_again_with_pin_session(project, fake_cli, monkeypatch, capsys):

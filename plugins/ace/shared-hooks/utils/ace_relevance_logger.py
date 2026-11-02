@@ -101,6 +101,7 @@ class ACERelevanceLogger:
         cache_hit: Optional[bool] = None,
         parent_task_id: Optional[str] = None,
         query_source: Optional[str] = None,
+        task_session_id: Optional[str] = None,
     ) -> None:
         """
         Log pattern search and injection metrics.
@@ -164,6 +165,8 @@ class ACERelevanceLogger:
             entry['parent_task_id'] = parent_task_id
         if query_source:
             entry['query_source'] = query_source
+        if task_session_id:  # fix 5b: the task pin, as the mod's search row
+            entry['task_session_id'] = task_session_id
 
         self._write_log(entry)
 
