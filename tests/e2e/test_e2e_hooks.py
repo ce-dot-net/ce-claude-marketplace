@@ -41,9 +41,10 @@ EXPECTED_ROUTES = {
     "SessionStart_compact": [("ace_sessionstart_compact.sh", False)],
     "UserPromptSubmit_human": [("ace_before_task_wrapper.sh", False)],
     "UserPromptSubmit_task_notification": [("ace_before_task_wrapper.sh", False)],
-    # TEMPORARY until WP-H moves the accumulator to PostToolBatch (DESIGN §9 G4): `*` row stays
-    "PostToolUse_Write": [("ace_posttooluse_wrapper.sh", True)],
-    "PostToolUse_Read": [("ace_posttooluse_domain_inject.sh", False), ("ace_posttooluse_wrapper.sh", True)],
+    # §9 G4: the accumulator moved to PostToolBatch; PostToolUse keeps only the sync domain-shift
+    "PostToolUse_Write": [],
+    "PostToolUse_Read": [("ace_posttooluse_domain_inject.sh", False)],
+    "PostToolBatch": [("ace_posttooluse_wrapper.sh", True)],
     "PostToolUseFailure_Bash": [("ace_posttoolusefailure_wrapper.sh", True)],
     "SubagentStart": [("ace_subagent_start_wrapper.sh", False)],
     "SubagentStop": [("ace_subagent_stop_wrapper.sh", True)],
@@ -148,8 +149,9 @@ def test_e2e_subagentstop_empty_agent_type_makes_zero_cli_calls():
 
 
 def test_e2e_posttooluse_accumulator_makes_zero_cli_calls():
-    """DESIGN §3/§6 WP-C: the PostToolUse accumulator only records into sqlite (0 ace-cli)."""
-    r = result("PostToolUse_Write")
+    """DESIGN §3/§6 WP-C, §9 G4: the PostToolBatch accumulator only records into sqlite (0 ace-cli)."""
+    r = result("PostToolBatch")
+    assert r["runs"], "PostToolBatch fixture must reach the accumulator"
     assert r["cli_calls"] == [], _cli_summary(r)
 
 

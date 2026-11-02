@@ -31,8 +31,6 @@ EXPECTED = {
     ("UserPromptSubmit", "", "ace_before_task_wrapper.sh", (), False, 30,
      "ACE: searching patterns…"),
     ("PreToolUse", "Agent", "ace_pretooluse_agent_stash.sh", (), False, 5, None),
-    # TEMPORARY until WP-H: the per-tool accumulator row stays; PostToolBatch --batch is a no-op
-    ("PostToolUse", "*", "ace_posttooluse_wrapper.sh", ("--log",), True, None, None),
     ("PostToolBatch", "", "ace_posttooluse_wrapper.sh", ("--batch",), True, None, None),
     ("PostToolUse", "Read|Glob|Grep", "ace_posttooluse_domain_inject.sh", (), False, 20,
      "ACE: domain shift…"),
@@ -89,8 +87,7 @@ def test_no_per_tool_posttooluse_accumulator():
     """§9 G4: PostToolBatch (one event per batch, no matcher support, doc :311/:2351)
     replaces the PostToolUse `*` accumulator; only the sync domain-shift stays on PostToolUse."""
     hooks = json.loads(HOOKS_JSON.read_text())["hooks"]
-    # TEMPORARY until WP-H replaces the `*` accumulator: expect ["*", "Read|Glob|Grep"] then.
-    assert [g.get("matcher") for g in hooks["PostToolUse"]] == ["*", "Read|Glob|Grep"]
+    assert [g.get("matcher") for g in hooks["PostToolUse"]] == ["Read|Glob|Grep"]
     assert all("matcher" not in g for g in hooks["PostToolBatch"]), \
         "PostToolBatch has no matcher support (doc :311); omit the key"
 
