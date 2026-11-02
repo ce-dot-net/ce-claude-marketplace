@@ -551,23 +551,10 @@ def test_eval_request_written_by_python_when_patterns_were_injected(box):
     assert data["timestamp"].endswith("Z")
 
 
-def test_event_logger_is_noop_unless_enabled(tmp_path):
-    """code-stop F11 / DESIGN §6 WP-C: ace_event_logger.py is gated on
-    ACE_EVENT_LOGGING=1 inside Python (SubagentStop ran it ungated, 4.1 MB
-    ace-subagentstop.jsonl)."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("ACE_")}
-    proc = subprocess.run(
-        [sys.executable, str(EVENT_LOGGER), "--event-type", "SubagentStop", "--phase", "start"],
-        input=json.dumps({"session_id": "s"}), capture_output=True, text=True,
-        timeout=30, cwd=str(tmp_path), env=env)
-    assert proc.returncode == 0, proc.stderr
-    assert not (tmp_path / ".claude").exists(), \
-        "event logger must write nothing unless ACE_EVENT_LOGGING=1"
+def test_dead_event_logger_is_gone():
+    """final review: ace_event_logger.py had no caller and wrote through symlinks; it is deleted."""
+    assert not EVENT_LOGGER.exists()
 
-
-# ---------------------------------------------------------------------------
-# 6. Accumulator (C4) — db location, sqlite hygiene, API
-# ---------------------------------------------------------------------------
 
 def test_posttooluse_shim_records_event_from_stdin_silently(box):
     """critic V3/T6, DESIGN §3 PostToolUse `--log` row: the accumulator reads

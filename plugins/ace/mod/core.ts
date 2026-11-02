@@ -757,7 +757,7 @@ export const PRIVATE_WRITE_SH = 'umask 077; d=$(dirname "$1"); mkdir -p "$d" && 
 // O_APPEND through the shell: safe beside the Python hooks writing the same jsonl; size rotation as ace_relevance_logger.
 // §24: <cwd>/.claude/data/logs is repo-controlled: a symlinked component or target is refused (row dropped).
 // $1 = log file, $2 = cwd, stdin = rows.
-export const APPEND_SH = 'for p in "$2/.claude" "$2/.claude/data" "$(dirname "$1")" "$1"; do [ -L "$p" ] && exit 0; done; '
+export const APPEND_SH = 'umask 077; for p in "$2/.claude" "$2/.claude/data" "$(dirname "$1")" "$1"; do [ -L "$p" ] && exit 0; done; '
   + 'mkdir -p "$(dirname "$1")" || exit 0; [ -L "$1" ] && exit 0; '
   + 'if [ "$(wc -c <"$1" 2>/dev/null || echo 0)" -gt 52428800 ]; then b="${1%.jsonl}"; '
   // same chain as ace_relevance_logger (.1-.3): a repo-planted symlink or directory in the chain drops the row, nothing is moved
