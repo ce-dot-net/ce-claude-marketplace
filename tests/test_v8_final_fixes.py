@@ -14,11 +14,11 @@ def _env(box, **kw):
     return box.env(ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID, **kw)
 
 
-def test_async_stop_prints_nothing_on_learn_and_on_skip(box):
+def test_stop_prints_only_the_learn_line_on_learn_and_nothing_on_skip(box):
     box.seed_tools("s-quiet", WORK)
     box.write_state("s-quiet", user_prompt="implement the quiet feature properly")
     p = box.run_after_task(box.stop_event("s-quiet"), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
-    assert p.stdout == "" and len(box.cli_calls("learn")) == 1
+    assert json.loads(p.stdout) == {"systemMessage": "ACE · learning sent"} and len(box.cli_calls("learn")) == 1  # item 2
     box.write_state("s-skip", user_prompt="<task-notification>x</task-notification>")
     p = box.run_after_task(box.stop_event("s-skip"), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
     assert p.stdout == ""
@@ -42,7 +42,7 @@ def test_learn_is_detached_by_default(box):
     box.write_state("s-det", user_prompt="implement the detached learn path")
     p = box.run_after_task(box.stop_event("s-det"), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID,
                            ACE_LEARN_INLINE="")
-    assert p.returncode == 0 and p.stdout == ""
+    assert p.returncode == 0 and json.loads(p.stdout) == {"systemMessage": "ACE · learning sent"}
     for _ in range(100):
         if box.cli_calls("learn"):
             break

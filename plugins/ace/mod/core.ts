@@ -318,6 +318,17 @@ export function evalStats(injected: any[], returned: any[]): { avg_relevance: nu
   return { avg_relevance: Math.max(0, Math.min(100, rel)), domains: doms.size }
 }
 
+// item 2: the ONE end-of-task line (v7.1.14 "✅ [ACE] N% quality | ~Xm saved | Learning in background"), unknown parts
+// left out. Same text as the Python Stop systemMessage (ace_after_task.learn_line).
+export function learnLine(review: { quality_pct?: unknown; time_saved?: unknown } | null | undefined): string {
+  let line = 'ACE · learning sent'
+  const pct = num(review?.quality_pct)
+  if (pct !== undefined && Number.isFinite(pct)) line += ` · ${pct}%`
+  const m = /(\d+)\s*m/.exec(String(review?.time_saved ?? ''))
+  if (m && Number(m[1]) > 0) line += ` · ~${Number(m[1])}m saved`
+  return line
+}
+
 // ace_before_task.check_eval_request_and_review text. §24: the file is repo-controlled and reaches the model's
 // context, so every field is a number (finite int/float; anything else 0), never text.
 export function evalInjection(d: any): string {

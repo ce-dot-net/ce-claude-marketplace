@@ -6,7 +6,7 @@ import {
   pyLoads, pyDumps, sanitize, renderFull, renderBudget, renderCompact, renderDomainShift, renderCohort, renderPatternsDict,
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
-  detachedLearnArgv, FALLBACK_ON_3, reuseKey, reuseEnabled, REUSE_TTL_MS, parseAceReview, parseDiffStat, evalInjection, evalStats, num, searchRow, searchSummary, searchErrorLine, statusLine, topDomains, sessionTitle,
+  detachedLearnArgv, FALLBACK_ON_3, reuseKey, reuseEnabled, REUSE_TTL_MS, parseAceReview, parseDiffStat, evalInjection, evalStats, num, learnLine, searchRow, searchSummary, searchErrorLine, statusLine, topDomains, sessionTitle,
   subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, appliedLogIds, usedPatternIds, injectedContents, type StateUpdate, type ToolRec, type Cohort,
 } from './core.ts'
 
@@ -356,8 +356,9 @@ async function reap($: any, L: Load, s: Sess, key: string, state: any) {
   L.late.delete(key)
 }
 
+// true = a learn was dispatched (the detached launcher started)
 async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook: 'Stop' | 'SubagentStop', effortEvent: string | undefined, summaryCap = 2000,
-  usedText = answer) {
+  usedText = answer): Promise<boolean> {
   const t0 = await $.clock.now()
   const agentId = key === 'main' ? undefined : key
   const recs = await takeTools($, L, s, key)
@@ -365,7 +366,7 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   if (!state) {
     await clearTools($, L, s, key)
     if (hook === 'Stop') await relLog($, s, { timestamp: await nowIso($), event: 'learn_skipped', hook, session_id: s.sessionId, reason: 'no_task_state', source: 'mod' })
-    return
+    return false
   }
   const prompt: string = state.user_prompt ?? ''
   const agentType: string = agentId ? state.agent_type ?? 'unknown' : 'main'
@@ -373,7 +374,7 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   if (skip) {
     await reap($, L, s, key, state)
     await relLog($, s, { timestamp: await nowIso($), event: 'learn_skipped', hook, session_id: s.sessionId, reason: skip, tools: recs.length, agent_id: agentId ?? null, source: 'mod' })
-    return
+    return false
   }
   const playbook: string[] = state.pattern_ids ?? []
   const rlog: Record<string, number> = state.retrieval_log_ids ?? {}
@@ -425,6 +426,7 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   await relLog($, s, { timestamp: await nowIso($), event: 'learn_dispatched', hook, session_id: s.sessionId, agent_id: agentId ?? null,
     agent_type: agentType, task_session_id: tsid ?? null, parent_task_id: state.parent_task_id ?? null, retrieval_id: state.retrieval_id ?? null,
     applied_log_ids: applied.length, patterns_used: playbook.length, tools_executed: recs.length, success, spawn_exit: spawned?.exitCode ?? null, source: 'mod' })
+  return !!spawned && spawned.exitCode === 0
 }
 
 async function onPrompt($: any, L: Load, e: any): Promise<any> {
@@ -792,6 +794,7 @@ export const register: Register = (on) => {
   on('turn.complete', async ($, e, next) => {
     const res = await next(e)
     let s: Sess | null = null
+    let line: string | undefined  // item 2: shown beneath the answer when this hook dispatched the main learn
     try {
       s = await ensure($, L)
       if (!s) return res
@@ -814,7 +817,10 @@ export const register: Register = (on) => {
           const types: Record<string, number> = {}
           for (const t of running) types[t] = (types[t] ?? 0) + 1
           await relLog($, s, { timestamp: await nowIso($), event: 'learn_deferred', hook: 'Stop', session_id: s.sessionId, types, task_session_id: anchor, source: 'mod' })
-        } else { await clearDeferred($, L, s); await learn($, L, s, 'main', e.answer, 'Stop', effort) }
+        } else {
+          await clearDeferred($, L, s)
+          if (await learn($, L, s, 'main', e.answer, 'Stop', effort)) line = learnLine(review)
+        }
       } else {
         const effort = L.agentEffort.get(agentId)
         const handback = L.handback.get(agentId)  // §16 P1: the delivered report, not the closing line
@@ -826,7 +832,7 @@ export const register: Register = (on) => {
     } catch (err) {
       if (s) await relLog($, s, { timestamp: await nowIso($), event: 'error', hook: 'Stop', location: 'mod.turn.complete', error: String(err).slice(0, 300), source: 'mod' })
     }
-    return res
+    return line ? { ...res, text: line } : res
   })
 
   on('session.end', async ($, e, next) => {

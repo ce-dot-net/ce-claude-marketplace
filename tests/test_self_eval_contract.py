@@ -54,7 +54,8 @@ def _ups(box, sid, prompt="refactor the uploader retry policy to use exponential
 def _stop(box, sid, msg="Done."):
     p = box.run_after_task(box.stop_event(sid, last_assistant_message=msg),
                            ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
-    assert p.returncode == 0 and p.stdout == "", p.stderr
+    assert p.returncode == 0, p.stderr
+    assert p.stdout == "" or json.loads(p.stdout)["systemMessage"].startswith("ACE · learning sent")  # item 2
     return p
 
 

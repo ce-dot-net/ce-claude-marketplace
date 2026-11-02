@@ -639,20 +639,38 @@ def _user_prompt_from_transcript(transcript_path: str, first: bool = False) -> s
         return "No user prompt found"
 
 
+def review_of(message):
+    """{'quality_pct', 'time_saved'} of an `ACE_REVIEW: N% | Xm saved | ...` line, else None (mod parseAceReview)."""
+    m = regex_module.search(r'ACE_REVIEW:\s*(\d+)', message or '')
+    if not m:
+        return None
+    t = regex_module.search(r'\d+m\d*s? saved|\d+s saved|\d+ ?min', message)
+    return {'quality_pct': int(m.group(1)), 'time_saved': t.group(0).replace(' saved', '') if t else ''}
+
+
+def learn_line(review):
+    """Item 2: the ONE end-of-task line, unknown parts left out (mod learnLine)."""
+    line = 'ACE · learning sent'
+    if review and isinstance(review.get('quality_pct'), int):
+        line += ' · %d%%' % review['quality_pct']
+    m = regex_module.search(r'(\d+)\s*m', str((review or {}).get('time_saved') or ''))
+    if m and int(m.group(1)) > 0:
+        line += ' · ~%dm saved' % int(m.group(1))
+    return line
+
+
 def parse_ace_review(message, review_file='.claude/data/logs/ace-review-result.json'):
     """`ACE_REVIEW: N% | Xm saved | ...` in the last assistant message -> review file
     (read by the statusline). Pure Python: a message without a time phrase used to
     abort the old bash parse (set -eo pipefail) before learning ran."""
-    m = regex_module.search(r'ACE_REVIEW:\s*(\d+)', message or '')
-    if not m:
+    r = review_of(message)
+    if not r:
         return
-    t = regex_module.search(r'\d+m\d*s? saved|\d+s saved|\d+ ?min', message)
     try:
         f = plugin_data_dir.open_project_log(review_file, append=False)  # §24: no symlink out of the project
         if f is not None:
             with f:
-                f.write(json.dumps({'quality_pct': int(m.group(1)),
-                                    'time_saved': t.group(0).replace(' saved', '') if t else ''}))
+                f.write(json.dumps(r))
     except Exception:
         pass
 
@@ -1187,7 +1205,7 @@ def main():
 
         # STEP 8: hand the learn to a detached child (see dispatch_learn) - the 120 s learn must not run
         # inside this process (Stop is sync, timeout 15; async hooks die at `claude -p` teardown,
-        # cc_hooks_reference.md:4086). Print NOTHING (stdout reaches Claude).
+        # cc_hooks_reference.md:4086). Prints only the one systemMessage line below (main Stop, item 2).
         try:
             state_changing_tools = ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit']
             job = {
@@ -1222,6 +1240,8 @@ def main():
         if job:
             handed_off = True
             dispatch_learn(job, session_id)
+            if hook_event_name == 'Stop':  # item 2: one line, main agent only (sync hook: CC shows systemMessage)
+                print(json.dumps({"systemMessage": learn_line(review_of(last_assistant_message))}))
         sys.exit(0)
 
     except Exception as e:

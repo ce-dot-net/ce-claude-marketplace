@@ -273,7 +273,8 @@ def test_sync_stop_fast_silent_and_detached_learn_survives_killed_parent(w, sig)
     assert parent.returncode == -getattr(signal, sig), "parent did not reach its teardown kill"
     r = json.loads(result.read_text())
     assert r["rc"] == 0, r["stderr"][-500:]
-    assert r["stdout"] == "", "sync Stop must print nothing: %r" % r["stdout"][:300]
+    assert json.loads(r["stdout"]) == {"systemMessage": "ACE · learning sent"}, \
+        "sync Stop prints only its one learn line (item 2): %r" % r["stdout"][:300]
     budget = float(os.environ.get("ACE_E2E_STOP_BUDGET_S", "2.0"))  # the point: not the 2 s learn; CI runners are slow
     assert r["wall"] < budget, "sync Stop must return before the learn finishes (%.1f s): %.2f s" % (budget, r["wall"])
     assert _wait(lambda: w.cli_calls("learn", done=True), 6), \
