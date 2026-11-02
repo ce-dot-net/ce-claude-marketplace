@@ -19,9 +19,27 @@ reads. It is not the interpreter.
 ## Decision
 Keep Python; reduce process count (thin bash shims that `exec` Python) and I/O.
 
-## Deferred follow-ups (not in 8.0.0)
+## Deferred follow-ups (not in 8.0.0; see the v8.1 plan below)
 - `prompt_id` as the `--pin-session` value instead of the home-grown `task_session_id` (needs a live check that it reaches SubagentStart/SubagentStop input).
 - `PostToolBatch` instead of per-tool PostToolUse for the accumulator (one spawn per parallel batch; different `tool_response` shape).
 - `UserPromptExpansion` for matching slash-command names.
 - Claude Code mods (in-process JS hooks).
 - In-process `@ace-sdk/core` (TypeScript hooks); ace-cli/core stay off-limits and are consumed as a subprocess.
+
+Round 2 of 8.0.0 already ships `prompt_id` as the task anchor (PreToolUse `Agent` prompt stash, PostToolBatch accumulator).
+
+## v8.1 plan: mods + in-process (proven numbers)
+Floor 2.1.287 (the v8 floor 2.1.300 already clears it). One hooks.json with `modules` + `hooks`, in this order:
+1. `UserPromptSubmit` becomes `prompt.submit`: render the full server-curated set inline (41,579 chars proven; cap 100K vs 10K)
+   on the same additional-context channel. Build behind a flag; the decision to inject over 10 K is the server team's.
+2. `SubagentStart` becomes `agent.spawn` (94 ms settle): `e.prompt` is first-class, which deletes the PreToolUse `Agent` stash
+   and the transcript scan.
+3. Domain-shift becomes `tool.call` (tool=Read): one in-process hook replaces the PostToolUse shim.
+4. Search in-process via a deep import of `@ace-sdk/core` (`dist/cjs/client/ace-client.js`): parity 100/100,
+   0.23-0.53 s CPU and 81-96 MB RSS vs 1.97 s and 237 MB for the ace-cli spawn; sessions.db is never opened, which ends the
+   lock storm structurally. Private path: version-gate it with an ace-cli fallback. Shipped via package.json + lockfile
+   with `npm ci --ignore-scripts` (6.2 s cold, 123 MB; install into `CLAUDE_PLUGIN_DATA`, not for `--plugin-dev` loads).
+5. PermissionDenied, SessionStart(compact) and SessionEnd stay command hooks (the mod `classic.*` hooks are skipped where the
+   Team/Enterprise guard is seated).
+
+Expected gain: per-search CPU 1.5-2 s down to 0.3-0.5 s, RSS -60 %; wall time stays bounded by the server round trip. v8.1 work.

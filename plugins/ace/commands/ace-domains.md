@@ -28,7 +28,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# CLI detection: ace-cli (preferred) or ce-ace (fallback)
+# CLI detection: ace-cli
 if ! command -v ace-cli >/dev/null 2>&1; then
   echo "ace-cli not found - Install: npm install -g @ace-sdk/cli"
   exit 1
