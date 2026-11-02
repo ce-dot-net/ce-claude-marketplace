@@ -122,6 +122,9 @@ def is_trivial_task(task_description: str) -> bool:
     return False
 
 
+MIN_RESEARCH_CALLS = 3
+
+
 def has_substantial_work_from_accumulated(tools: list) -> bool:
     """
     Check for substantial work using accumulated tool data.
@@ -135,8 +138,11 @@ def has_substantial_work_from_accumulated(tools: list) -> bool:
         tools: List of tuples (tool_name, tool_input, tool_response, tool_use_id)
 
     Returns:
-        True if ANY state-changing tool was used
+        True if ANY state-changing tool was used, or (v8) the task made >= MIN_RESEARCH_CALLS
+        tool calls of any kind: research/analysis tasks carry learnings too. Parity: mod/core.ts.
     """
+    if len(tools) >= MIN_RESEARCH_CALLS:
+        return True
     state_changing = ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit']
 
     for tool_name, _, _, _, *_ in tools:
@@ -987,7 +993,8 @@ def main():
 
         # §31: render_variant = what was rendered ('budget'|'full'), OMITTED when unknown (never defaulted).
         try:
-            _render_variant = _trace_render_variant(_stored_variant, session_id)
+            _render_variant = _trace_render_variant(_stored_variant, session_id,
+                                                    mod=plugin_data_dir.is_mod_active(context['project'], session_id))
         except Exception:
             _render_variant = None
         # §31: applied_log_ids = only the injected patterns ACTUALLY USED (id or a >= 40-char verbatim content

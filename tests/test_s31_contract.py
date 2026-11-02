@@ -51,7 +51,17 @@ def test_full_split_never_without_a_conversation_id(clean_env):
                                       ("control", None), ("compact", None), ("", None), (None, None), (7, None)])
 def test_normalize_render_variant(raw, want):
     assert normalize_render_variant(raw) == want
-    assert trace_render_variant(raw, "conv-1") == want, "unknown is omitted, never recomputed to budget"
+    assert trace_render_variant(raw, None) == want, "no stored label and no conversation: omitted"
+
+
+def test_trace_without_a_search_carries_its_conversations_arm(clean_env):
+    """Server request (2026-11-02): traces with conversation_id but no search before must still carry the arm."""
+    clean_env.setenv("ACE_RENDER_FULL_PCT", "100")
+    assert trace_render_variant(None, "conv-1", mod=True) == "full"      # the mod renders the full arm as full
+    assert trace_render_variant(None, "conv-1") == "budget"              # the Python chain renders it as budget
+    assert trace_render_variant("budget", "conv-1", mod=True) == "budget"  # a stored label always wins
+    clean_env.setenv("ACE_AB_CONTROL_PCT", "100"); clean_env.setenv("ACE_RENDER_FULL_PCT", "0")
+    assert trace_render_variant(None, "conv-1", mod=True) is None        # control/compact are no server labels
 
 
 # ── "actually used" ─────────────────────────────────────────────────────────────────────
@@ -135,12 +145,12 @@ def test_conversation_id_truncated_to_512(clean_env):
     assert t["conversation_id"] == "c" * 512
 
 
-def test_unknown_variant_is_omitted(box):
+def test_unknown_variant_falls_back_to_the_conversation_arm(box):
     for i, stored in enumerate((None, "control", "compact")):
         b = Box(box.root / ("v%d" % i))
         st = {} if stored is None else {"render_variant": stored}
         learn = _learn(b, b.stop_event("s31-u"), **st)
-        assert "render_variant" not in learn["trace"], stored
+        assert learn["trace"]["render_variant"] == "budget", stored  # Python chain: the conversation arm as budget
 
 
 def test_subagent_inherits_the_conversation_id_and_uses_its_report(box):
@@ -157,7 +167,7 @@ def test_permission_denied_trace_carries_conversation_id_and_a_normalized_varian
     from test_permission_denied_v8 import _mod as _pd_mod
     t = _pd_mod()._build_trace({"session_id": "pd-31", "tool_name": "Bash", "tool_input": {"command": "ls"}})
     assert t["conversation_id"] == "pd-31"
-    assert "render_variant" not in t  # no stored variant -> omitted
+    assert t["render_variant"] == "budget"  # no stored variant -> the conversation arm (Python chain)
     assert "applied_log_ids" not in t
 
 

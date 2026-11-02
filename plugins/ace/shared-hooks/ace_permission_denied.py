@@ -282,11 +282,13 @@ def _structural_fingerprint(tool_name: str, tool_input) -> str:
 
 
 def _render_variant(session_id):
-    """§31: the variant stored at render time ('budget'|'full'); None = omit (never derived from the arm)."""
+    """§31: the variant stored at render time ('budget'|'full'); without one, the conversation's arm (server request)."""
     try:
         from patterns_used_state import load_state
-        from ace_pattern_render import normalize_render_variant
-        return normalize_render_variant(load_state(session_id, None, 'Stop', project_id=_PROJECT_ID).get('render_variant'))
+        from ace_pattern_render import trace_render_variant
+        import plugin_data_dir
+        stored = load_state(session_id, None, 'Stop', project_id=_PROJECT_ID).get('render_variant')
+        return trace_render_variant(stored, session_id, mod=plugin_data_dir.is_mod_active(_PROJECT_ID, session_id))
     except Exception:
         return None
 
