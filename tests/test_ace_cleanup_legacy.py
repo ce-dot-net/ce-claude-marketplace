@@ -181,3 +181,38 @@ def test_cleanup_doc_has_no_v7_vocabulary():
     assert "ace-relevance.prev" not in text
     assert "ace-pretooluse" not in text and "ace-precompact" not in text
     assert "CLAUDE_PLUGIN_DATA" in text
+
+
+def test_default_tmpdir_is_literal_tmp_and_prefixes_narrow(world, monkeypatch):
+    """ACE_LEGACY_TMPDIR unset + TMPDIR elsewhere: block must scan the literal /tmp, not $TMPDIR."""
+    src = _block()
+    assert 'os.path.join(os.sep, "tmp")' in src and "gettempdir" not in src
+    script = world["tmp_path"] / "legacy_default.py"
+    # run the block with the literal /tmp swapped for the fixture dir, to prove the default branch is used
+    script.write_text(src.replace('os.path.join(os.sep, "tmp")', repr(str(world["tmpd"]))), encoding="utf-8")
+    other = world["tmp_path"] / "elsewhere"
+    other.mkdir()
+    (other / "ace-domain-zzz.txt").write_text("x")
+    (world["tmpd"] / "ace-agile-1.txt").write_text("x")  # unrelated ace-* tool: must not be listed
+    env = {k: v for k, v in os.environ.items() if k != "ACE_LEGACY_TMPDIR"}
+    env.update(HOME=str(world["home"]), TMPDIR=str(other))
+    r = subprocess.run([sys.executable, str(script), "--legacy"], cwd=str(world["proj"]),
+                       env=env, capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    assert str(world["f"]["tmp_ace"]) in r.stdout
+    assert "ace-domain-zzz" not in r.stdout and "ace-agile" not in r.stdout
+
+
+def test_main_block_with_legacy_deletes_nothing(world):
+    """The default-cleanup bash block must exit early on --legacy (dry run promise)."""
+    text = _text()
+    i = text.index("```bash")
+    blk = text[i + len("```bash"):text.index("\n```", i)]
+    old = world["proj"] / ".claude" / "data" / "logs" / "ace-posttooluse-x.jsonl"
+    old.write_text("{}\n")
+    t = time.time() - 30 * 86400
+    os.utime(old, (t, t))
+    r = subprocess.run(["bash", "-c", blk, "bash", "--legacy"], cwd=str(world["proj"]),
+                       env=dict(os.environ, HOME=str(world["home"])), capture_output=True, text=True, timeout=30)
+    assert r.returncode == 0, r.stderr
+    assert old.exists() and "Deleted" not in r.stdout

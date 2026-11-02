@@ -35,6 +35,10 @@ while [[ $# -gt 0 ]]; do
       ENABLE_LOGGING="disable"
       shift
       ;;
+    --legacy)
+      # handled by the separate "Legacy cleanup" block below; never run the default cleanup
+      exit 0
+      ;;
     *)
       shift
       ;;
@@ -195,7 +199,9 @@ v7 left behind. It is a **dry run** by default: it prints the absolute paths and
   when sessions.db is over 100 MB (it is a 24 h-TTL local cache; stop running `ace-cli` processes first).
 
 Candidates: `~/.claude/logs/ace-background-*` (zero-byte, or non-empty and older than 30 days), your own
-`ace-*` files in the system temp dir (override with `ACE_LEGACY_TMPDIR`), and
+v7 temp files in `/tmp` (`ace-session-*`, `ace-domain-*`, `ace-domains-*`, `ace-update-check-*`,
+`ace-patterns-precompact-*`, `ace-learn-inflight-*`, `ace-disabled-*`, `ace-eval-requested-*`; override the
+directory with `ACE_LEGACY_TMPDIR`), and
 `.claude/data/logs/ace-patterns-used-*` in the current project.
 
 Run the block with the flags you were given (`$ARGUMENTS`); without `--legacy` it does nothing:
@@ -203,7 +209,7 @@ Run the block with the flags you were given (`$ARGUMENTS`); without `--legacy` i
 ```bash
 python3 - $ARGUMENTS <<'PY'
 # ace-cleanup: legacy
-import os, sys, glob, time, tempfile
+import os, sys, glob, time
 
 args = sys.argv[1:]
 if "--legacy" not in args:
@@ -221,13 +227,17 @@ for p in glob.glob(os.path.join(home, ".claude", "logs", "ace-background-*")):
         continue
     if st.st_size == 0 or st.st_mtime < cutoff:
         cands.append(p)
-tmpd = os.environ.get("ACE_LEGACY_TMPDIR") or tempfile.gettempdir()
-for p in glob.glob(os.path.join(tmpd, "ace-*")):
-    try:
-        if os.path.isfile(p) and os.stat(p).st_uid == os.getuid():
-            cands.append(p)
-    except OSError:
-        pass
+# v7 hardcoded the literal /tmp (not $TMPDIR, which differs on macOS)
+tmpd = os.environ.get("ACE_LEGACY_TMPDIR") or os.path.join(os.sep, "tmp")
+V7_PREFIXES = ("session", "domain", "domains", "update-check", "patterns-precompact",
+               "learn-inflight", "disabled", "eval-requested")
+for pre in V7_PREFIXES:
+    for p in glob.glob(os.path.join(tmpd, "ace-%s-*" % pre)):
+        try:
+            if os.path.isfile(p) and os.stat(p).st_uid == os.getuid():
+                cands.append(p)
+        except OSError:
+            pass
 cands += glob.glob(os.path.join(os.getcwd(), ".claude", "data", "logs", "ace-patterns-used-*"))
 sdb = os.path.join(home, ".ace-cache", "sessions.db")
 sdb_files = []

@@ -325,7 +325,7 @@ test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "hooks.json: EXISTS"
 2. `SessionStart` (compact) → `ace_sessionstart_compact.sh`
 3. `UserPromptSubmit` → `ace_before_task_wrapper.sh`
 4. `PostToolBatch` (async, one event per parallel tool batch) → accumulator script (`ace_posttooluse_wrapper.sh --batch`)
-   - `PreToolUse` (matcher `Agent` only, sync) → prompt stash into `agent-prompts/` for SubagentStart (the only PreToolUse hook in v8)
+4b. `PreToolUse` (matcher `Agent` only, sync) → `ace_pretooluse_agent_stash.sh`: prompt stash into `agent-prompts/` for SubagentStart (the only PreToolUse hook in v8)
 5. `PostToolUse` (Read|Glob|Grep) → `ace_posttooluse_domain_inject.sh`
 6. `PostToolUseFailure` (matcher `*`, async) → `ace_posttoolusefailure_wrapper.sh`
 7. `SubagentStart` → `ace_subagent_start_wrapper.sh`
@@ -488,23 +488,27 @@ if os.path.exists(db) and os.path.getsize(db) > 100 * MB:
 log = os.path.join(os.getcwd(), ".claude", "data", "logs", "ace-relevance.jsonl")
 cutoff = time.time() - 24 * 3600
 locked = 0
-try:
-    with open(log, encoding="utf-8", errors="replace") as fh:
-        for line in fh:
-            if "database is locked" not in line:
-                continue
-            try:
-                ts = json.loads(line).get("timestamp", "")
-                t = datetime.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
-            except Exception:
-                continue
-            if t >= cutoff:
-                locked += 1
-except OSError:
-    pass
+for path in (log, log + ".1"):  # also the rotated file
+    try:
+        with open(path, encoding="utf-8", errors="replace") as fh:
+            for line in fh:
+                try:
+                    row = json.loads(line)
+                    # stderr_sample is cut at 300 chars, so also count pin-drop rows
+                    if not ("database is locked" in line or row.get("pin_failed") is True
+                            or row.get("pin_skipped") == "backoff"):
+                        continue
+                    ts = row.get("timestamp", "")
+                    t = datetime.strptime(ts[:19], "%Y-%m-%dT%H:%M:%S").replace(tzinfo=timezone.utc).timestamp()
+                except Exception:
+                    continue
+                if t >= cutoff:
+                    locked += 1
+    except OSError:
+        pass
 if locked:
     warned = True
-    print("WARN: %d 'database is locked' error(s) in ace-relevance.jsonl in the last 24 h" % locked)
+    print("WARN: %d lock incident(s) ('database is locked' / pin_failed / pin backoff) in ace-relevance.jsonl in the last 24 h" % locked)
 if warned:
     print("Fix: stop running ace-cli processes (pkill -f ace-cli), then delete ~/.ace-cache/sessions.db,")
     print("     sessions.db-wal and sessions.db-shm (a 24 h-TTL cache, safe to drop) - or run")

@@ -208,3 +208,16 @@ def test_doctor_describes_round2_topology():
     doc = _doc()
     assert "PostToolBatch" in doc
     assert re.search(r"PreToolUse[^\n]*Agent", doc)
+
+
+def test_a5_counts_pin_failed_and_backoff_rows(tmp_path):
+    home = tmp_path / "home"; proj = tmp_path / "proj"
+    (home / ".ace-cache").mkdir(parents=True)
+    logs = proj / ".claude" / "data" / "logs"; logs.mkdir(parents=True)
+    ts = _iso(datetime.now(timezone.utc))
+    (logs / "ace-relevance.jsonl").write_text(json.dumps({"timestamp": ts, "event": "search", "pin_failed": True}) + "\n")
+    (logs / "ace-relevance.jsonl.1").write_text(json.dumps({"timestamp": ts, "event": "search", "pin_skipped": "backoff"}) + "\n")
+    script = tmp_path / "a5.py"; script.write_text(_a5_block(), encoding="utf-8")
+    r = subprocess.run([sys.executable, str(script)], cwd=str(proj), env=dict(os.environ, HOME=str(home)),
+                       capture_output=True, text=True, timeout=30)
+    assert "2 lock incident" in r.stdout, r.stdout

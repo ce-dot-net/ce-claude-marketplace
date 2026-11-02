@@ -13,8 +13,10 @@ Run before every release. Automated part first, then one live session with `clau
 - [ ] 0 `timed out after` lines for ACE hooks
 - [ ] `patterns_injected` > 0 on the human prompt in `ace-relevance.jsonl`
 - [ ] 0 `database is locked` rows for the session
+- [ ] Locked-retry / pin-drop path exercised (a `pin_failed` row is logged, patterns still injected)
 - [ ] A `<task-notification>` prompt logs `search_skipped`
 - [ ] The Stop learn row is present after the session exits (detached path)
+- [ ] Async accumulator durability (accumulator rows are present after Stop)
 - [ ] Async hooks produced 0 bytes of stdout
 - [ ] `CLAUDE_ENV_FILE` exports (`ACE_CLIENT_ID`) reach later hooks
 - [ ] SessionEnd completes in < 0.5 s
