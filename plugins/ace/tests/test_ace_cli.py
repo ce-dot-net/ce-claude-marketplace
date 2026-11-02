@@ -13,7 +13,15 @@ from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).parent.parent / 'shared-hooks' / 'utils'))
 
+import pytest
+
 from ace_cli import run_search
+
+
+@pytest.fixture(autouse=True)
+def _cli_only(monkeypatch):
+    """The CLI path only: a developer machine with a global ace-cli + core would otherwise try the engine first."""
+    monkeypatch.setenv("ACE_ENGINE", "cli")
 
 
 def _res(rc, stdout, stderr=b''):
