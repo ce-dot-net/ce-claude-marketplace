@@ -138,3 +138,24 @@ def test_cli_flags_unchanged(env, tmp_path):
     r3 = subprocess.run([sys.executable, str(script), "--strip-and-gate"],
                         input=payload, capture_output=True, text=True, env=e, cwd=str(tmp_path))
     assert r3.returncode == 0 and "similar_patterns" in json.loads(r3.stdout)
+
+
+# ── DESIGN §9 G2: prompt_id is the task anchor ──────────────────────────────
+
+PROMPT_ID = "550e8400-e29b-41d4-a716-446655440000"
+
+
+def test_task_session_id_seed_is_prompt_id(env):
+    """G2 (p3 PROVEN: identical prompt_id on UPS -> PreToolUse -> SubagentStart -> ... -> Stop):
+    the task_session_id seed is the hook input prompt_id when present."""
+    pus, _ = env
+    assert pus.task_session_id_for({"prompt_id": PROMPT_ID}) == PROMPT_ID
+
+
+@pytest.mark.parametrize("event", [{}, {"prompt_id": ""}, {"prompt_id": None}, None])
+def test_task_session_id_falls_back_to_uuid4(env, event):
+    """G2: headless / older CC without prompt_id -> fresh uuid4 (unique per call)."""
+    import uuid
+    pus, _ = env
+    a, b = pus.task_session_id_for(event), pus.task_session_id_for(event)
+    assert uuid.UUID(a).version == 4 and a != b

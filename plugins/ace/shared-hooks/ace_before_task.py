@@ -25,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 from validation import is_valid_pattern_id
-from patterns_used_state import append_patterns_used
+from patterns_used_state import append_patterns_used, task_session_id_for
 from ace_pattern_render import render_patterns, render_cohort, render_compact_all
 
 
@@ -320,12 +320,16 @@ def main():
         if _cwd and os.path.isdir(_cwd):
             os.chdir(_cwd)
 
+        # P-26: session OR project disabled.flag stops everything BEFORE any state/log is written.
+        try:
+            _ctx = get_context()
+        except Exception:
+            _ctx = None
+        if _ctx and plugin_data_dir.is_disabled(_ctx['project'], event.get('session_id') or ''):
+            sys.exit(0)
+
         _reason = _skip_reason(user_prompt)
         if _reason == 'machine_prompt' or _reason == 'prompt_too_short':
-            try:
-                _ctx = get_context()
-            except Exception:
-                _ctx = None
             _log_skipped(event, _reason, _ctx)
             sys.exit(0)
 
@@ -341,7 +345,7 @@ def main():
             sys.exit(0)
 
         # Get project context from .claude/settings.json
-        context = get_context()
+        context = _ctx or get_context()
         if not context:
             print(json.dumps({"systemMessage": "⚠️ [ACE] No project context found - skipping search"}))
             sys.exit(0)
@@ -350,13 +354,17 @@ def main():
         # ace_after_task.py reads event.get('session_id') — we must use the same key
         session_id = event.get('session_id', str(uuid.uuid4()))
 
-        # Generate a fresh per-task session_id (task_session_id = uuid4).
+        # P-26: session OR project disabled.flag stops everything, before any state is written.
+        if plugin_data_dir.is_disabled(context['project'], session_id):
+            sys.exit(0)
+
+        # Per-task session_id = hook prompt_id (G2), else uuid4.
         # This is passed to ace-cli search --pin-session and stored in the state file
         # so ace_after_task can set trace["session_id"] = task_session_id, pinning
         # each task's retrieval rows + trajectory under one ID on the server.
         # The CC conversation session_id (above) remains the state-file KEY and is
         # used for ace-relevance.jsonl / ace-spawn-log.jsonl telemetry.
-        task_session_id = str(uuid.uuid4())
+        task_session_id = task_session_id_for(event)  # G2: prompt_id anchor, else uuid4
 
         use_session_pinning = True  # v8: always pin (no --version probe)
 
@@ -377,9 +385,6 @@ def main():
         except Exception:
             pass  # non-fatal
 
-        # DESIGN §4/T17: disabled.flag in this session's plugin-data dir stops the search.
-        if plugin_data_dir.disabled_flag(context['project'], session_id).exists():
-            sys.exit(0)
         auth_warning = None  # v8: auth check only in the failure branch (C2)
 
         # Minimal enhancement: Expand abbreviations for semantic clarity
@@ -399,6 +404,7 @@ def main():
             org=context['org'],
             project=context['project'],
             session_id=task_session_id,
+            timeout=25,
             hook_event_name='UserPromptSubmit',
         )
 

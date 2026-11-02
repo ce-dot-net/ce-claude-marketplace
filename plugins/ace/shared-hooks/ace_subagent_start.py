@@ -62,7 +62,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 from ace_cli import run_search  # noqa: E402
 from ace_context import get_context                              # noqa: E402
-from patterns_used_state import append_patterns_used, load_state  # noqa: E402
+from patterns_used_state import append_patterns_used, load_state, task_session_id_for  # noqa: E402
 import plugin_data_dir                                           # noqa: E402
 from ace_relevance_logger import log_search, log_error           # noqa: E402
 from ace_pattern_render import render_patterns, render_cohort, render_compact_all  # noqa: E402
@@ -240,6 +240,23 @@ def _query_from_own_transcript(transcript_path: str, session_id: str, agent_id: 
     return None
 
 
+def _consume_stash(project, sid, prompt_id, agent_type) -> Optional[str]:
+    """G1: prompt written by the PreToolUse Agent stash for this prompt_id + agent_type;
+    deleted once read. None when absent (caller falls back to the transcript scan)."""
+    if not prompt_id:
+        return None
+    try:
+        f = plugin_data_dir.agent_prompt_file(project, sid, prompt_id, agent_type)
+        data = json.loads(f.read_text())
+        f.unlink()
+        if (data or {}).get('ambiguous'):
+            return None
+        q = str((data or {}).get('prompt') or (data or {}).get('description') or '').strip()
+        return q[:_QUERY_MAX_CHARS] or None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
 def main(event: Optional[Dict[str, Any]] = None) -> None:
     """Process a SubagentStart event.
 
@@ -273,7 +290,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         project = context['project']
 
         # §4: per-session disabled flag under plugin data.
-        if plugin_data_dir.disabled_flag(project, plugin_data_dir.resolve_session_id(event)).exists():
+        if plugin_data_dir.is_disabled(project, plugin_data_dir.resolve_session_id(event)):
             sys.exit(0)
 
         # Resume / teammate re-wake re-fires SubagentStart (cc_hooks_reference.md:2549):
@@ -293,11 +310,13 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         # Passed to run_search as the --pin-session value and stored in the state
         # file so SubagentStop's ace_after_task can set trace["session_id"] to this
         # value (correlates search↔learn per-subagent-task, not per conversation).
-        task_session_id = str(uuid.uuid4())
+        task_session_id = task_session_id_for(event)  # G2: spawning prompt_id, else uuid4
 
         # SubagentStart input has no prompt field (cc_hooks_reference.md:2553-2566):
         # own transcript first (Workflow agents), else bounded parent-transcript tail scan.
-        query = (_query_from_own_transcript(transcript_path, session_id, agent_id)
+        query = (_consume_stash(project, plugin_data_dir.resolve_session_id(event), event.get('prompt_id'),
+                                agent_type)
+                 or _query_from_own_transcript(transcript_path, session_id, agent_id)
                  or _extract_query_from_transcript(transcript_path, agent_type))
 
         # Persist the per-task anchor IMMEDIATELY (before search / early-exits) so
@@ -323,7 +342,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
             org=context['org'],
             project=context['project'],
             session_id=task_session_id,
-            timeout=15,
+            timeout=25,
             hook_event_name='SubagentStart',
             # task_intent deliberately NOT passed
         )

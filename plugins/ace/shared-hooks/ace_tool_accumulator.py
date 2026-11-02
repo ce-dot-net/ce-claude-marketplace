@@ -269,6 +269,8 @@ def hook_main(failure: bool) -> None:
 def main():
     """Hook mode (`--log`/`--no-log`/`--failure`) or the debug CLI (get/clear/stats)."""
     flags = [a for a in sys.argv[1:] if a.startswith('--')]
+    if sys.argv[1:2] == ['--batch']:
+        return  # ponytail: WP-H implements PostToolBatch; until then a silent rc-0 no-op
     if not sys.argv[1:] or sys.argv[1] in ('--log', '--no-log', '--failure'):
         hook_main('--failure' in flags)
         return
