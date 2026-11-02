@@ -1,0 +1,16 @@
+{
+  "session_id": "__SESSION__",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "__CWD__",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUseFailure",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "npm test",
+    "description": "Run test suite"
+  },
+  "tool_use_id": "toolu_01ABC123",
+  "error": "Exit code 1\nError: Cannot find module 'express'",
+  "is_interrupt": false,
+  "duration_ms": 4187
+}

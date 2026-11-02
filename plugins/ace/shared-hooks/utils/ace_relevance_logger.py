@@ -221,8 +221,7 @@ class ACERelevanceLogger:
         Records how many CC-managed background tasks were running at
         session-stop time, alongside the in-flight learn-lock state. This is
         purely informational — it never influences the
-        /tmp/ace-learn-inflight-{session}.lock mechanism or PreCompact
-        blocking, which remain owned by the bash wrappers.
+        plugin-data learn-inflight lock mechanism.
 
         Robustness (risk #3): never raises; malformed inputs degrade to safe
         defaults so a logging failure cannot break the Stop hook.
