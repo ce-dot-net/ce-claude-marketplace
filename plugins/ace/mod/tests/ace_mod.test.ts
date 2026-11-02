@@ -19,7 +19,7 @@ import SEDGE from './fixtures/search_edge.ts'
 import G from './fixtures/golden.ts'
 import USED_CASES from './fixtures/used_cases.ts'
 import { statusLine, hasSubstantialWork, traceVariant } from '../core.ts'
-import { pyLoads, PRIVATE_WRITE_SH, evalStats, evalInjection, learnLine, usedPatternIds, toolHaystack } from '../core.ts'
+import { pyLoads, PRIVATE_WRITE_SH, evalStats, evalInjection, learnLine, reviewLine, usedPatternIds, toolHaystack } from '../core.ts'
 
 const HOME = '/home/u', CWD = '/proj', SID = 'sess-1', PRJ = 'prj_t'
 const PROOT = decodeURIComponent(new URL('../..', import.meta.url).pathname).replace(/\/$/, '')  // $.plugin.root
@@ -818,6 +818,24 @@ test('item D/H1: Haiku self-eval (not blocking the turn) writes the review and i
   const row = execRow(h)
   expect([row.used_ids_count, row.used_source]).toEqual([1, 'model'])
   expect(h.files.has(EVAL_REQ)).toBe(false)  // no HTML-comment self-eval request while the mod is active
+})
+
+test('fix 2: the Haiku review arrives after the turn: ONE extra line "ACE · review N% · ~Xm saved"; none at 0% or without a review', async ($, on) => {
+  const cases: [string, string | null][] = [['ACE_REVIEW: 70% | 4m saved | helped', 'ACE · review 70% · ~4m saved'],
+    ['ACE_REVIEW: 55% | n/a | meh', 'ACE · review 55%'], ['ACE_REVIEW: 0% | 0m saved | none', null], ['no review here', null]]
+  let text = ''
+  const h = host(on, { search: () => ({ stdout: S8 }), selfEval: true, defaultArm: true, model: () => ({ isAnswered: true, text, usage: {} }) })  // budget arm: no dedupe across tasks
+  for (const [i, [t, want]] of cases.entries()) {
+    text = t
+    const from = h.logs.length
+    await mainTask($, h)
+    const r: any = await done($)
+    expect(r.text).toBe('ACE · learning sent')
+    await settle(h, i + 1)
+    expect(h.logs.slice(from).filter((l: string) => l.startsWith('ACE · review'))).toEqual(want ? [want] : [])
+  }
+  expect(reviewLine({ quality_pct: 80, time_saved: '12 min' })).toBe('ACE · review 80% · ~12m saved')
+  expect(reviewLine(null)).toBe(null)
 })
 
 test('item D/H1: a failed or timed-out model call falls back to the token evidence (H2); the learn still goes out', async ($, on) => {

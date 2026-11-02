@@ -332,6 +332,14 @@ export function learnLine(review: { quality_pct?: unknown; time_saved?: unknown 
   return line
 }
 
+// fix 2: the async Haiku review's own line (the learn line went out at turn.complete without it); null at 0% / no review
+export function reviewLine(review: { quality_pct?: unknown; time_saved?: unknown } | null | undefined): string | null {
+  const pct = num(review?.quality_pct)
+  if (pct === undefined || !Number.isFinite(pct) || pct <= 0) return null
+  const m = /(\d+)\s*m/.exec(String(review?.time_saved ?? ''))
+  return `ACE · review ${pct}%` + (m && Number(m[1]) > 0 ? ` · ~${Number(m[1])}m saved` : '')
+}
+
 // item D / H1: the Haiku self-eval request (a $.model.complete prompt, never the conversation): the task, its tool
 // calls, the injected patterns as `id: content` lines and the final answer, each capped; two lines back.
 export function selfEvalPrompt(a: { task: string; answer: string; ids: string[]; contents: Record<string, string>; tools: ToolRec[] }): string {
