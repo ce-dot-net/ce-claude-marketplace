@@ -236,8 +236,9 @@ def run_fixture(name):
         # real accumulator hook so this stays independent of where the plugin keeps its db.
         seed_raw = load("PostToolUse_Write")
         seed = json.loads(seed_raw)
-        for hook in routed_hooks(hooks_json, "PostToolUse", seed):
-            _run_hook(argv_of(hook), seed_raw, str(proj), env)
+        # (PostToolUse `*` moved to PostToolBatch in round 2; seed the accumulator script directly.)
+        seeder = {"command": "${CLAUDE_PLUGIN_ROOT}/scripts/ace_posttooluse_wrapper.sh", "args": ["--log"]}
+        _run_hook(argv_of(seeder), seed_raw, str(proj), env)
 
     for hook in routed_hooks(hooks_json, event_name, event):
         rc, out, err, wall, left_bg = _run_hook(argv_of(hook), raw, str(proj), env)

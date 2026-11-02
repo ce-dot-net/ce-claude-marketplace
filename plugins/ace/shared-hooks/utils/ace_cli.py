@@ -8,7 +8,6 @@ The search cache moved to ace_search_cache (disk) and is consulted by the hooks.
 
 import json
 import os
-import random
 import subprocess
 import tempfile
 import time
@@ -73,22 +72,48 @@ def _env(org, project):
     return env
 
 
-def _spawn(cmd, **kw):
-    """subprocess.run; on a sqlite 'database is locked' failure retry ONCE after
-    a short random sleep (client-side, DESIGN §8; concurrent ace-cli processes)."""
-    t0 = time.monotonic()
-    budget = kw.get('timeout')
-    r = subprocess.run(cmd, **kw)
-    if r.returncode != 0 and 'database is locked' in _text(r.stderr).lower():
-        time.sleep(random.uniform(0.2, 0.6))
-        if budget is not None:
-            # Retry only inside the original deadline (hook timeout > call timeout).
-            left = budget - (time.monotonic() - t0)
-            if left < 1:
-                return r
-            kw = dict(kw, timeout=left)
-        r = subprocess.run(cmd, **kw)
-    return r
+def _plugin_dir():
+    """Import plugin_data_dir (same utils dir) lazily; None if unavailable."""
+    try:
+        import sys as _sys
+        _u = str(Path(__file__).resolve().parent)
+        if _u not in _sys.path:
+            _sys.path.insert(0, _u)
+        import plugin_data_dir
+        return plugin_data_dir
+    except Exception:
+        return None
+
+
+def _pin_backoff_active() -> bool:
+    """True while <root>/pin-backoff is younger than ACE_PIN_BACKOFF_MIN (default 30) min."""
+    try:
+        pdd = _plugin_dir()
+        mins = float(os.environ.get('ACE_PIN_BACKOFF_MIN') or 30)
+        return pdd is not None and (time.time() - pdd.pin_backoff_file().stat().st_mtime) < mins * 60
+    except Exception:
+        return False
+
+
+def _log_pin(session_id, hook_event_name, **fields) -> None:
+    """Best-effort relevance row for a pin failure/skip (DESIGN §11 A1)."""
+    try:
+        entry = {"timestamp": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+                 "event": "pin", "hook": hook_event_name, "session_id": session_id}
+        entry.update(fields)
+        import sys as _sys
+        _u = str(Path(__file__).resolve().parent)
+        if _u not in _sys.path:
+            _sys.path.insert(0, _u)
+        from ace_relevance_logger import ACERelevanceLogger
+        ACERelevanceLogger()._write_log(entry)
+    except Exception:
+        pass
+
+
+def _is_auth_failure(stderr: str, stdout: str) -> bool:
+    return (any(x in stderr.lower() for x in ['unauthorized', '401', 'not logged in', 'no api token'])
+            or any(x in stdout.lower() for x in ['not logged in', 'no api token']))
 
 
 def _ms(t0: float) -> int:
@@ -96,7 +121,7 @@ def _ms(t0: float) -> int:
 
 
 def run_search(query: str, *, org: str = None, project: str = None, session_id: str = None,
-               top_k: int = None, timeout: int = 15,
+               top_k: int = None, timeout: int = 25,
                hook_event_name: str = "UserPromptSubmit") -> Tuple[Optional[Dict[str, Any]], int]:
     """ONE `ace-cli search --stdin --json [--pin-session X] [--top-k N]` spawn.
 
@@ -108,28 +133,41 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
     """
     t0 = time.monotonic()
     try:
-        cmd = [CLI_CMD, 'search', '--stdin', '--json']
-        if session_id:
-            cmd.extend(['--pin-session', session_id])
-        if top_k:
-            cmd.extend(['--top-k', str(top_k)])
+        pin = session_id
+        if pin and _pin_backoff_active():  # sessions.db lock is sticky (p2): don't even try
+            pin = None
+            _log_pin(session_id, hook_event_name, pin_skipped="backoff")
+        base = [CLI_CMD, 'search', '--stdin', '--json']
+        tail = ['--top-k', str(top_k)] if top_k else []
+        stdin = query.encode('utf-8', errors='replace')
 
-        result = _spawn(cmd, input=query.encode('utf-8', errors='replace'), capture_output=True,
-                        timeout=timeout, env=_env(org, project))
+        def spawn(c, to):
+            return subprocess.run(c, input=stdin, capture_output=True, timeout=to, env=_env(org, project))
+
+        result = spawn(base + (['--pin-session', pin] if pin else []) + tail, timeout)
         stderr = _text(result.stderr)
         stdout = _text(result.stdout)
-
+        # A1: a pinned search that dies on the sessions.db lock (or prints nothing) is
+        # re-run ONCE without the pin; the pinned command itself is never re-run.
+        if pin and ('database is locked' in stderr.lower()
+                    or (not stdout.strip() and not _is_auth_failure(stderr, stdout))):
+            _log_pin(session_id, hook_event_name, pin_failed=True)
+            try:
+                _plugin_dir().pin_backoff_file().touch()
+            except Exception:
+                pass
+            result = spawn(base + tail, max(timeout - (time.monotonic() - t0), 2))
+            stderr = _text(result.stderr)
+            stdout = _text(result.stdout)
         if result.returncode != 0:
-            if any(x in stderr.lower() for x in ['unauthorized', '401', 'not logged in', 'no api token']):
-                return dict(_AUTH_MSG), _ms(t0)
-            if any(x in stdout.lower() for x in ['not logged in', 'no api token']):
+            if _is_auth_failure(stderr, stdout):
                 return dict(_AUTH_MSG), _ms(t0)
             _log_cli_error("ace_cli_nonzero_exit", result.returncode, stdout, stderr,
                            query=query, project_id=project, hook_event_name=hook_event_name)
             return None, _ms(t0)
 
         try:
-            return json.loads(result.stdout), _ms(t0)
+            return json.loads(stdout), _ms(t0)
         except json.JSONDecodeError as _je:
             _log_cli_error("ace_cli_json_parse_failed", result.returncode, stdout, stderr,
                            query=query, project_id=project, hook_event_name=hook_event_name,
@@ -148,7 +186,7 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
 
 def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_ids=None,
               org: str = None, project: str = None, verbosity: str = 'detailed',
-              timeout: int = 120,
+              timeout: int = 300,
               hook_event_name: str = "Stop") -> Tuple[Optional[Dict[str, Any]], int]:
     """ONE `ace-cli learn --transcript <tmpfile>` spawn (F-080 flags kept).
 
@@ -161,7 +199,7 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
         with os.fdopen(fd, 'w') as f:
             json.dump(trace, f, default=str)
         cmd = [CLI_CMD, 'learn', '--transcript', path, '--json',
-               '--timeout', str(max(timeout - 5, 1) * 1000), '--verbosity', verbosity]
+               '--timeout', str(int(timeout * 1000)), '--verbosity', verbosity]
         if retrieval_id:
             cmd += ['--retrieval-id', retrieval_id]
         if applied_log_ids:
@@ -194,58 +232,6 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
             os.unlink(path)
         except Exception:
             pass
-
-
-def recall_session(session_id: str, org: str = None, project: str = None) -> Optional[Dict[str, Any]]:
-    """
-    Recall pinned patterns from session storage (v1.0.11+)
-
-    Args:
-        session_id: Session ID to recall
-        org: Organization ID (optional, passed via environment)
-        project: Project ID (optional, passed via environment)
-
-    Returns:
-        Recalled patterns as dict, or None on error
-
-    Note:
-        Session recall is FAST (~10ms) and does NOT make server calls.
-        Sessions expire after 24 hours (configurable TTL).
-        Non-fatal failure - returns None if session not found/expired.
-
-    Response format (same as run_search):
-        {
-            "similar_patterns": [...],
-            "count": N,
-            "threshold": 0.75,
-            "session_id": "uuid",
-            "pinned_at": timestamp,
-            "expires_at": timestamp
-        }
-    """
-    try:
-        # Build environment with context
-        env = os.environ.copy()
-        if org:
-            env['ACE_ORG_ID'] = org
-        if project:
-            env['ACE_PROJECT_ID'] = project
-
-        result = subprocess.run(
-            [CLI_CMD, 'cache', 'recall', '--session', session_id, '--json'],
-            capture_output=True,
-            timeout=5,  # Fast recall, should be <10ms
-            env=env
-        )
-
-        if result.returncode != 0:
-            # Session not found or expired - this is non-fatal
-            return None
-
-        return json.loads(result.stdout)
-
-    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
-        return None
 
 
 def check_auth_status(warn_threshold_hours: float = 2.0) -> Optional[str]:

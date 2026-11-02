@@ -64,6 +64,7 @@ ace/
 │   ├── ace_before_task_wrapper.sh
 │   ├── ace_posttooluse_wrapper.sh
 │   ├── ace_posttooluse_domain_inject.sh
+│   ├── ace_pretooluse_agent_stash.sh
 │   ├── ace_posttoolusefailure_wrapper.sh
 │   ├── ace_sessionstart_compact.sh
 │   ├── ace_permission_denied_wrapper.sh
@@ -324,9 +325,10 @@ test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "hooks.json: EXISTS"
 1. `SessionStart` → `ace_install_cli.sh` (startup|clear; plus async `--update-check`)
 2. `SessionStart` (compact) → `ace_sessionstart_compact.sh`
 3. `UserPromptSubmit` → `ace_before_task_wrapper.sh`
-4. `PostToolUse` (async) → `ace_posttooluse_wrapper.sh --log`
+4. `PreToolUse` (Agent) → `ace_pretooluse_agent_stash.sh` (SubagentStart query stash)
+4b. `PostToolBatch` (async) → `ace_posttooluse_wrapper.sh --batch`
 5. `PostToolUse` (Read|Glob|Grep) → `ace_posttooluse_domain_inject.sh`
-6. `PostToolUseFailure` (Bash, async) → `ace_posttoolusefailure_wrapper.sh`
+6. `PostToolUseFailure` (*, async) → `ace_posttoolusefailure_wrapper.sh`
 7. `SubagentStart` → `ace_subagent_start_wrapper.sh`
 8. `Stop` (async) → `ace_stop_wrapper.sh`
 9. `SubagentStop` (async) → `ace_subagent_stop_wrapper.sh`
@@ -347,6 +349,7 @@ Expected Hook Scripts:
 - ace_before_task_wrapper.sh (retrieves patterns before tasks)
 - ace_posttooluse_wrapper.sh (captures tool use after each tool call)
 - ace_posttooluse_domain_inject.sh (domain injection on Read/Glob/Grep)
+- ace_pretooluse_agent_stash.sh (PreToolUse Agent prompt stash)
 - ace_posttoolusefailure_wrapper.sh (failed Bash calls into the learn trajectory)
 - ace_sessionstart_compact.sh (re-inject patterns after compaction)
 - ace_permission_denied_wrapper.sh (permission denied redaction)
@@ -573,7 +576,8 @@ Organization: org_34fYIlitYk4nyFuTvtsAzA6uUJF
 Registered Hooks:
 • SessionStart → ace_install_cli.sh
 • UserPromptSubmit → ace_before_task_wrapper.sh
-• PostToolUse → ace_posttooluse_wrapper.sh --log
+• PreToolUse (Agent) → ace_pretooluse_agent_stash.sh
+• PostToolBatch → ace_posttooluse_wrapper.sh --batch
 • PostToolUse (Read|Glob|Grep) → ace_posttooluse_domain_inject.sh
 • PostToolUseFailure → ace_posttoolusefailure_wrapper.sh
 • SessionStart (compact) → ace_sessionstart_compact.sh
