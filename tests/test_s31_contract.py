@@ -156,5 +156,24 @@ def test_permission_denied_trace_carries_conversation_id_and_a_normalized_varian
     from test_permission_denied_v8 import _mod as _pd_mod
     t = _pd_mod()._build_trace({"session_id": "pd-31", "tool_name": "Bash", "tool_input": {"command": "ls"}})
     assert t["conversation_id"] == "pd-31"
-    assert t["render_variant"] == "budget"
+    assert "render_variant" not in t  # no stored variant -> omitted
     assert "applied_log_ids" not in t
+
+
+# ── used check reads the FULL handback report (mod parity, USED_MESSAGE_CAP) ────────────
+
+def test_pattern_quoted_after_char_4000_of_a_long_handback_is_credited(box):
+    from test_r3d_hook_behavior import _handback_transcript
+    report = "filler. " * 700 + CONTENT_A  # quote starts well past char 4000
+    assert report.index(CONTENT_A) > 4000
+    sid, agent = "s31-hb", "a31"
+    box.write_state(sid, agent, user_prompt="refactor the parser module", pattern_ids=[A, B], retrieval_id="ret-31",
+                    retrieval_log_ids={A: 7, B: 8}, pattern_contents={A: CONTENT_A, B: CONTENT_B})
+    box.seed_tools(sid, WORK, agent_id=agent)
+    ev = box.subagent_event(sid, agent, agent_type="Explore", last_assistant_message="done")
+    ev["agent_transcript_path"] = _handback_transcript(box, agent, report)()
+    p = box.run_after_task(ev, ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
+    assert p.returncode == 0, p.stderr
+    (learn,) = box.cli_calls("learn")
+    assert learn["trace"]["applied_log_ids"] == [7]
+    assert len(learn["trace"]["result"]["summary"]) == 4000

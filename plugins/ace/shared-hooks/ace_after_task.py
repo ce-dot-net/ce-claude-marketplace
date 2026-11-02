@@ -706,6 +706,9 @@ def _delegated_running(bg) -> bool:
         isinstance(b, dict) and b.get('type') in ('subagent', 'workflow') and b.get('status') == 'running' for b in bg)
 
 
+from patterns_used_state import USED_MESSAGE_CAP  # noqa: E402  (mod parity: used check reads the full report)
+
+
 def handback_summary(path, cap=4000):
     """§16 P1: the LAST `SubagentHandback` tool_use `message` of a subagent transcript (CC >= 2.1.271), else None.
     Bounded tail read: the handback is the final act of the agent."""
@@ -989,10 +992,10 @@ def main():
             _render_variant = None
         # §31: applied_log_ids = only the injected patterns ACTUALLY USED (id or a >= 40-char verbatim content
         # fragment in the final message / handback report), for every variant. Order follows playbook_used.
-        _handback = handback_summary(agent_transcript_path) if hook_event_name == 'SubagentStop' and agent_transcript_path else None
+        _handback_full = handback_summary(agent_transcript_path, cap=USED_MESSAGE_CAP) if hook_event_name == 'SubagentStop' and agent_transcript_path else None
         try:
             from patterns_used_state import used_pattern_ids
-            _used = used_pattern_ids(playbook_used, _contents, "\n".join(x for x in (_handback, last_assistant_message) if x))
+            _used = used_pattern_ids(playbook_used, _contents, "\n".join(x for x in (_handback_full, last_assistant_message) if x))
         except Exception:
             _used = []  # false positives are worse than misses
         applied_log_ids = [retrieval_log_map[pid] for pid in _used if pid in retrieval_log_map]
@@ -1055,7 +1058,7 @@ def main():
             "result": {
                 "success": not has_errors,
                 "output": f"Executed {len(tools)} tool calls",
-                "summary": _handback
+                "summary": (_handback_full[:4000] if _handback_full else None)
                            or (last_assistant_message[:2000] if last_assistant_message else None),  # v5.5.0: CC 2.1.51+
             },
             "playbook_used": playbook_used,
