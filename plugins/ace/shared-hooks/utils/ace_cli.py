@@ -203,7 +203,14 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
     buffer); the file is always removed. Returns (parsed_json_or_None, ms).
     """
     t0 = time.monotonic()
-    fd, path = tempfile.mkstemp(prefix='ace-trace-', suffix='.json')
+    try:  # plugin-data tmp (S10), so a SIGKILLed learn leaves nothing in the system tmp
+        import plugin_data_dir
+        _tmp = plugin_data_dir.data_root() / 'tmp'
+        _tmp.mkdir(parents=True, exist_ok=True)
+        _tmp = str(_tmp)
+    except Exception:
+        _tmp = None
+    fd, path = tempfile.mkstemp(prefix='ace-trace-', suffix='.json', dir=_tmp)
     try:
         with os.fdopen(fd, 'w') as f:
             json.dump(trace, f, default=str)

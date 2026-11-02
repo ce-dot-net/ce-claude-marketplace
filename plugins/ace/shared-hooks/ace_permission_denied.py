@@ -27,6 +27,7 @@ from pathlib import Path
 from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "utils"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "utils"))
 
 
 DEBOUNCE_SECONDS = 60
@@ -315,35 +316,40 @@ def _build_trace(event: dict) -> dict:
 
 
 def _send_to_cli(trace: dict) -> bool:
-    """Pipe trace JSON to `ace-cli learn --stdin`. Returns success."""
-    try:
-        proc = subprocess.Popen(
-            ["ace-cli", "learn", "--stdin", "--quiet"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        try:
-            proc.communicate(input=json.dumps(trace).encode("utf-8"), timeout=10)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-            proc.communicate()
-            return False
-        return proc.returncode == 0
-    except (FileNotFoundError, OSError):
+    """Send the trace through the shared ace_cli.run_learn (P-18 single timeout source, errors logged).
+    No ACE project -> nothing sent (ace-cli would attribute it to its global default project)."""
+    if not _PROJECT_ID:
         return False
+    try:
+        from ace_cli import run_learn
+        from ace_context import get_context
+        ctx = get_context() or {}
+        res, _ms = run_learn(trace, org=ctx.get("org"), project=_PROJECT_ID, timeout=60,
+                             hook_event_name="PermissionDenied")
+        return res is not None
+    except Exception as e:
+        _log_err(e)
+        return False
+
+
+def _log_err(e):
+    try:
+        from ace_relevance_logger import log_error
+        log_error("PermissionDenied", "ace_permission_denied.main", error=e)
+    except Exception:
+        pass
 
 
 def main() -> int:
     from ace_env import client_id, resolve_ids
-    from plugin_data_dir import disabled_flag
+    from plugin_data_dir import is_disabled
     event = _read_event()
     if not event:
         return 0
     global _PROJECT_ID
     session_id, project_id = resolve_ids(event)
     _PROJECT_ID = project_id
-    if disabled_flag(project_id, session_id).exists():  # written by SessionStart (DESIGN §4)
+    if is_disabled(project_id, session_id):  # session or project flag (P-26)
         return 0
     os.environ["ACE_CLIENT_ID"] = client_id()  # was _ace_env.sh in the v7 shim
     tool_name = event.get("tool_name", "")
@@ -367,5 +373,6 @@ if __name__ == "__main__":
     # Always exit 0 — hook must never block CC operation.
     try:
         sys.exit(main())
-    except Exception:
+    except Exception as _e:
+        _log_err(_e)
         sys.exit(0)

@@ -18,7 +18,8 @@ Per-project metrics: `.claude/data/logs/ace-relevance.jsonl` (what the statuslin
 1. `/ace:ace-doctor` - is ace-cli installed and logged in (`/ace:ace-login`)?
 2. Look for `"search_skipped"` rows in `ace-relevance.jsonl`: trivial prompts (below `ACE_MIN_PROMPT_CHARS`) and
    machine prompts such as `<task-notification>` skip the search on purpose.
-3. A `disabled.flag` in the plugin data root turns ACE hooks off; remove it to re-enable.
+3. A `disabled.flag` turns ACE hooks off: `<plugin-data>/projects/<project>/disabled.flag` (whole project) or
+   `<plugin-data>/projects/<project>/sessions/<session>/disabled.flag` (one session; SessionStart writes it when ace-cli is missing/outdated). Remove it to re-enable.
 4. `tail ace-hook-errors.log` in the plugin data root.
 
 ## "database is locked" / hooks timing out

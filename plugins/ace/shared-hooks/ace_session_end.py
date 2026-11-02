@@ -28,6 +28,14 @@ def main():
                 return 0
         except OSError:
             pass
+    # Stop may be starting right now (async; takes its lock only after python startup) and has not
+    # consumed state yet: keep the dir if anything in it is fresh; the P-13 sweep cleans up later.
+    try:
+        for e in os.scandir(str(d)):
+            if time.time() - e.stat().st_mtime < 60:
+                return 0
+    except OSError:
+        pass
     shutil.rmtree(str(d), ignore_errors=True)
     return 0
 
@@ -35,6 +43,10 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except Exception:
-        pass
+    except Exception as e:
+        try:
+            from ace_relevance_logger import log_error
+            log_error('SessionEnd', 'ace_session_end.main', error=e)
+        except Exception:
+            pass
     sys.exit(0)

@@ -5,8 +5,8 @@ p3 PROVEN: the identical `prompt_id` (cc_hooks_reference.md:733) arrives on UPS 
 PreToolUse -> SubagentStart -> every subagent hook -> SubagentStop -> Stop -> SessionEnd;
 background subagents keep the spawning prompt_id. So:
 - UPS: task_session_id = prompt_id (else uuid4); `--pin-session <prompt_id>`; state tsid = prompt_id.
-- SubagentStart: pin + state tsid = prompt_id (the task that spawned it).
-- domain-shift: pin keyed by prompt_id — no uuid minting when prompt_id is present, and a
+- SubagentStart (DESIGN §12, overrides G2): fresh uuid4 per agent, parent prompt_id only as parent_task_id.
+- domain-shift (main agent): pin keyed by prompt_id; inside a subagent: that subagent's own id — no uuid minting when prompt_id is present, and a
   stale tsid left in the state by an earlier prompt does not win over the current prompt_id.
 Hooks run through their shims (HookEnv: fake ace-cli on PATH, tmp CLAUDE_PLUGIN_DATA).
 """
@@ -68,14 +68,33 @@ def _transcript(env, subagent_type="Explore", prompt="find every API endpoint in
     return t
 
 
-def test_subagent_start_pins_spawning_prompt_id(env):
+def _sstart(env, agent_id, prompt_id=PROMPT_ID):
     ev = {"session_id": SID, "cwd": str(env.proj), "hook_event_name": "SubagentStart",
-          "transcript_path": str(_transcript(env)), "prompt_id": PROMPT_ID,
-          "agent_id": "agent-a1", "agent_type": "Explore"}
-    proc = env.run("ace_subagent_start_wrapper.sh", ev)
+          "transcript_path": str(_transcript(env)), "agent_id": agent_id, "agent_type": "Explore"}
+    if prompt_id:
+        ev["prompt_id"] = prompt_id
+    return env.run("ace_subagent_start_wrapper.sh", ev)
+
+
+def test_subagent_start_pin_is_fresh_uuid4_not_prompt_id(env):
+    """§12: a subagent is its own ACE session; the parent prompt_id is only parent_task_id."""
+    proc = _sstart(env, "agent-a1")
     assert proc.returncode == 0, proc.stderr
-    assert _pins(env) == [PROMPT_ID], "SubagentStart must pin the spawning prompt_id (G2)"
-    assert env.read_state(SID, "agent-a1")["task_session_id"] == PROMPT_ID
+    pins = _pins(env)
+    assert len(pins) == 1 and pins[0] != PROMPT_ID and uuid.UUID(pins[0]).version == 4
+    st = env.read_state(SID, "agent-a1")
+    assert st["task_session_id"] == pins[0]
+    assert st["parent_task_id"] == PROMPT_ID
+    rows = [r for r in env.relevance_rows() if r.get("hook") == "SubagentStart"]
+    assert rows and rows[-1].get("parent_task_id") == PROMPT_ID
+
+
+def test_two_concurrent_agents_get_different_ids(env):
+    _sstart(env, "agent-c1")
+    _sstart(env, "agent-c2")
+    pins = _pins(env)
+    assert len(pins) == 2 and pins[0] != pins[1] and PROMPT_ID not in pins
+    assert env.read_state(SID, "agent-c1")["task_session_id"] != env.read_state(SID, "agent-c2")["task_session_id"]
 
 
 def test_subagent_start_without_prompt_id_pins_uuid4(env):
@@ -117,11 +136,18 @@ def test_domain_shift_prompt_id_beats_stale_state_tsid(env):
     assert _pins(env) == [PROMPT_ID]
 
 
-def test_domain_shift_in_subagent_pins_prompt_id(env):
-    """G2: subagent hooks carry the spawning prompt_id -> same anchor as its SubagentStart."""
-    env.write_state(SID, "agent-ds", task_session_id=PROMPT_ID)
+def test_domain_shift_in_subagent_uses_subagent_id_not_prompt_id(env):
+    """§12: inside a subagent the pin is the subagent's own id from SubagentStart."""
+    env.write_state(SID, "agent-ds", task_session_id="sub-own-id")
     _read(env, agent_id="agent-ds")
-    assert _pins(env) == [PROMPT_ID]
+    assert _pins(env) == ["sub-own-id"]
+    assert env.read_state(SID, "agent-ds")["task_session_id"] == "sub-own-id"
+
+
+def test_domain_shift_in_subagent_without_state_mints_uuid4(env):
+    _read(env, agent_id="agent-ds2")
+    pins = _pins(env)
+    assert len(pins) == 1 and pins[0] != PROMPT_ID and uuid.UUID(pins[0]).version == 4
 
 
 def test_domain_shift_without_prompt_id_reuses_state_tsid(env):

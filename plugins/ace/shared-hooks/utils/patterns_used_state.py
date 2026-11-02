@@ -182,7 +182,7 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
                          retrieval_id=None, retrieval_log_ids=None,
                          task_session_id=None, project_id=None,
                          user_prompt=None, rendered_context=None,
-                         hook_event_name=None, reset=False):
+                         hook_event_name=None, reset=False, parent_task_id=None):
     """Append+dedupe valid pattern IDs to the per-agent file; return the full list.
 
     F-080: optional params retrieval_id (str|None) and retrieval_log_ids (dict|None).
@@ -203,7 +203,7 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
     ids = [p for p in (pattern_ids or []) if isinstance(p, str) and is_valid_pattern_id(p)]
     has_retrieval = retrieval_id is not None or bool(retrieval_log_ids)
     has_task_session = task_session_id is not None
-    has_extra = bool(user_prompt or rendered_context or hook_event_name)
+    has_extra = bool(user_prompt or rendered_context or hook_event_name or parent_task_id)
     if not ids and not has_retrieval and not has_task_session and not has_extra:
         return []
     sf = state_file_path(session_id, agent_id, state_dir, project_id)
@@ -236,7 +236,8 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
         prior = prior_raw if isinstance(prior_raw, dict) else {}
         for key, val, cap in (('user_prompt', user_prompt, USER_PROMPT_MAX),
                               ('rendered_context', rendered_context, RENDERED_CONTEXT_MAX),
-                              ('hook_event_name', hook_event_name, None)):
+                              ('hook_event_name', hook_event_name, None),
+                              ('parent_task_id', parent_task_id, None)):
             # None = not supplied (keep prior); '' is an explicit "set" (control arm clears
             # a stale rendered_context so WP-D never re-injects it).
             val = val if val is not None else prior.get(key)

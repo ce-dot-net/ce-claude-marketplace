@@ -487,6 +487,12 @@ def skip_learning(reason, event=None, agent_id=None, session_id=None, working_di
     if event:
         hook = event.get('hook_event_name', 'Stop')
         sid = event.get('session_id', '')
+        try:  # a skipped learn leaves a reason row (distinguishes "skipped" from "Stop never ran")
+            if reason != "No project context found":
+                from ace_relevance_logger import log_event
+                log_event('learn_skipped', reason=str(reason)[:200], hook=hook, session_id=sid)
+        except Exception:
+            pass
         aid = agent_id or event.get('agent_id') or None
         try:
             if hook == 'Stop':
@@ -645,9 +651,16 @@ def dispatch_learn(job, session_id):
                 Path(job['lock']).touch()
             except OSError:
                 pass
-            subprocess.Popen([sys.executable, os.path.abspath(__file__), '--learn-from', str(f)],
-                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                             start_new_session=True)
+            try:
+                subprocess.Popen([sys.executable, os.path.abspath(__file__), '--learn-from', str(f)],
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
+            except Exception:
+                try:
+                    f.unlink()  # no child will consume the job file
+                except OSError:
+                    pass
+                raise
             return
         except Exception as e:
             log_hook_exception('AfterTask.dispatch', e)
@@ -720,8 +733,8 @@ def main():
         if not context:
             skip_learning("No project context found", event)
             sys.exit(0)
-        if plugin_data_dir.disabled_flag(context['project'], session_id).exists():
-            sys.exit(0)  # set by SessionStart when the CLI is unusable
+        if plugin_data_dir.is_disabled(context['project'], session_id):
+            sys.exit(0)  # session flag (CLI unusable) or project flag (P-26)
 
         # Handle SubagentStop: use agent's transcript. transcript_path is the MAIN session's
         # (cc_hooks_reference.md:2591); a degenerate event without agent_transcript_path must
@@ -854,6 +867,11 @@ def main():
             pass  # non-fatal
         # Read task_session_id before load_playbook_used unlinks the state file.
         task_session_id = None if no_agent_state else load_task_session_id(session_id, agent_id, hook_event_name)
+        if not task_session_id and not no_agent_state and hook_event_name != 'SubagentStop':
+            task_session_id = event.get('prompt_id') or None  # failed/skipped UPS search: keep correlation
+        _parent_task_id = None
+        if hook_event_name == 'SubagentStop' and not no_agent_state:
+            _parent_task_id = load_state(session_id, agent_id, hook_event_name).get('parent_task_id')
 
         # Load pattern IDs for reinforcement learning (per-agent scope in v6.4.0).
         # Delegated to patterns_used_state.load_playbook_used (single source of
@@ -965,6 +983,8 @@ def main():
         # else: omit — server leaves session_id NULL, no false cross-task correlation
         if agent_id:
             trace["agent_id"] = agent_id
+        if _parent_task_id:
+            trace["parent_task_id"] = _parent_task_id  # §12: parent prompt_id, never the pin
         # F-080: Enrich trace with retrieval provenance (omit keys when absent/empty).
         if retrieval_id:
             trace["retrieval_id"] = retrieval_id

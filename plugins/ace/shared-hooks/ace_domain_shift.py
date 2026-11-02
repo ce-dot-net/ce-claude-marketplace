@@ -60,8 +60,10 @@ def _context(domain: str, stripped: dict) -> str:
     while True:
         ctx = '<ace-patterns-domain-shift domain="%s">%s</ace-patterns-domain-shift>' % (
             attr, json.dumps(stripped))
-        if len(ctx) <= _CAP or not stripped.get('similar_patterns'):
-            return ctx[:_CAP]
+        if len(ctx) <= _CAP:
+            return ctx
+        if not stripped.get('similar_patterns'):
+            return None  # never raw-truncate JSON (v7.1.11): inject nothing
         stripped['similar_patterns'] = stripped['similar_patterns'][:-1]
         stripped['count'] = len(stripped['similar_patterns'])
 
@@ -108,60 +110,95 @@ def main() -> None:
             last = ''
         if matched == last:
             return
-
-        query = re.sub(r'\.[^.]*$', '', os.path.basename(file_path.rstrip('/')))
-        if not query:
-            return  # no usable query
-
-        # G2: the event prompt_id is the anchor (a stale state tsid must not win); without one,
-        # reuse the state tsid, else mint a uuid4.
-        tsid = (event.get('prompt_id') or
-                load_task_session_id(sid, agent_id or None, 'SubagentStop' if agent_id else 'Stop',
-                                     project_id=project) or task_session_id_for(None))
-        result, _ms = run_search(query, org=org, project=project, session_id=tsid, top_k=8,
-                                 timeout=17, hook_event_name='PostToolUse')
-        ok = isinstance(result, dict) and not result.get('error')
-        if ok:  # a failed/timed-out search must stay retryable (domain not marked visited)
+        # Claim the domain BEFORE searching: PostToolUse hooks of parallel tool calls run
+        # concurrently, so an O_EXCL claim file lets exactly one of them search (v7.1.14 wrote the
+        # marker first too). A stale claim (crashed hook) is taken over after 60 s.
+        claim = last_file.with_name('domain-claim-%s.lock' % plugin_data_dir._safe(agent_id or 'main'))
+        try:
+            os.close(os.open(str(claim), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600))
+        except FileExistsError:
             try:
-                last_file.write_text(matched)
+                if time.time() - claim.stat().st_mtime < 60:
+                    return
+                claim.touch()
+            except OSError:
+                return
+        except OSError:
+            return
+        try:
+            _search_and_inject(event, ctx, project, org, sid, agent_id, last_file, last, matched,
+                               file_path, t0)
+        finally:
+            try:
+                claim.unlink()
             except OSError:
                 pass
-        patterns = result.get('similar_patterns') if ok else None
-        stripped = strip_and_gate(result) if patterns else None
-        returned = len((stripped or {}).get('similar_patterns') or [])
-        additional = _context(matched, stripped) if returned else None  # trims `stripped` to the injected set
-        kept = (stripped or {}).get('similar_patterns') or []
-        kept_ids = [p.get('id') for p in kept if isinstance(p, dict) and p.get('id')]
-        # search_succeeded = the search itself worked (0 patterns is still a success); hook=PostToolUse (C5)
-        log_domain_shift(session_id=sid, from_domain=last, to_domain=matched, file_path=file_path,
-                         patterns_found=returned, search_succeeded=ok, project_id=project,
-                         hook='PostToolUse', patterns_injected=len(kept_ids),
-                         hook_ms=int((time.monotonic() - t0) * 1000), agent_id=agent_id or None)
-        if not additional:
-            return
-
-        # F-080 credit only what was actually injected (v7.1.11): match by id after the 10k trim.
-        keep = set(kept_ids)
-        rlog = {}
-        for p in patterns:
-            rlid = (p.get('match_factors') or {}).get('retrieval_log_id') if isinstance(p, dict) else None
-            if p.get('id') in keep and isinstance(rlid, int) and not isinstance(rlid, bool):
-                rlog[p['id']] = rlid
-        # Keep the task's FIRST retrieval_id (main UPS search): rlog ids merge, but overwriting
-        # the rid would attribute main-search log ids to the domain-shift retrieval.
-        try:
-            from patterns_used_state import _read_state_file, state_file_path
-            _sf = state_file_path(sid, agent_id or None, None, project)
-            has_rid = _sf.exists() and bool(_read_state_file(_sf)[1])
-        except Exception:
-            has_rid = False
-        append_patterns_used(sid, agent_id or None, kept_ids,
-                             retrieval_id=None if has_rid else (result.get('retrieval_id') or None),
-                             retrieval_log_ids=rlog, task_session_id=tsid, project_id=project)
-        print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PostToolUse", "additionalContext": additional}}))
     except Exception as e:
         log_error('PostToolUse', 'ace_domain_shift.main', error=e)  # DESIGN §3.1; exit 0, no stdout
+
+
+def _search_and_inject(event, ctx, project, org, sid, agent_id, last_file, last, matched,
+                       file_path, t0) -> None:
+    try:  # re-read under the claim: a concurrent hook may have finished since our first read
+        if last_file.read_text().strip().lower() == matched:
+            return
+    except OSError:
+        pass
+
+    query = re.sub(r'\.[^.]*$', '', os.path.basename(file_path.rstrip('/')))
+    if not query:
+        return  # no usable query
+
+    # G2/§12: main agent anchors on the event prompt_id; a subagent is its own session and
+    # uses ITS id from SubagentStart (uuid4 if missing), never the parent's prompt_id.
+    if agent_id:
+        tsid = (load_task_session_id(sid, agent_id, 'SubagentStop', project_id=project)
+                or task_session_id_for(None))
+    else:
+        tsid = event.get('prompt_id') or load_task_session_id(sid, None, 'Stop', project_id=project) \
+            or task_session_id_for(None)
+    result, _ms = run_search(query, org=org, project=project, session_id=tsid, top_k=8,
+                             timeout=17, hook_event_name='PostToolUse')
+    ok = isinstance(result, dict) and not result.get('error')
+    if ok:  # a failed/timed-out search must stay retryable (domain not marked visited)
+        try:
+            last_file.write_text(matched)
+        except OSError:
+            pass
+    patterns = result.get('similar_patterns') if ok else None
+    stripped = strip_and_gate(result) if patterns else None
+    returned = len((stripped or {}).get('similar_patterns') or [])
+    additional = _context(matched, stripped) if returned else None  # trims `stripped` to the injected set
+    kept = (stripped or {}).get('similar_patterns') or []
+    kept_ids = [p.get('id') for p in kept if isinstance(p, dict) and p.get('id')]
+    # search_succeeded = the search itself worked (0 patterns is still a success); hook=PostToolUse (C5)
+    log_domain_shift(session_id=sid, from_domain=last, to_domain=matched, file_path=file_path,
+                     patterns_found=returned, search_succeeded=ok, project_id=project,
+                     hook='PostToolUse', patterns_injected=len(kept_ids),
+                     hook_ms=int((time.monotonic() - t0) * 1000), agent_id=agent_id or None)
+    if not additional:
+        return
+
+    # F-080 credit only what was actually injected (v7.1.11): match by id after the 10k trim.
+    keep = set(kept_ids)
+    rlog = {}
+    for p in patterns:
+        rlid = (p.get('match_factors') or {}).get('retrieval_log_id') if isinstance(p, dict) else None
+        if p.get('id') in keep and isinstance(rlid, int) and not isinstance(rlid, bool):
+            rlog[p['id']] = rlid
+    # Keep the task's FIRST retrieval_id (main UPS search): rlog ids merge, but overwriting
+    # the rid would attribute main-search log ids to the domain-shift retrieval.
+    try:
+        from patterns_used_state import _read_state_file, state_file_path
+        _sf = state_file_path(sid, agent_id or None, None, project)
+        has_rid = _sf.exists() and bool(_read_state_file(_sf)[1])
+    except Exception:
+        has_rid = False
+    append_patterns_used(sid, agent_id or None, kept_ids,
+                         retrieval_id=None if has_rid else (result.get('retrieval_id') or None),
+                         retrieval_log_ids=rlog, task_session_id=tsid, project_id=project)
+    print(json.dumps({"hookSpecificOutput": {
+        "hookEventName": "PostToolUse", "additionalContext": additional}}))
 
 
 if __name__ == '__main__':

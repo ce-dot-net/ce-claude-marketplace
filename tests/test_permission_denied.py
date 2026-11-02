@@ -829,6 +829,7 @@ def test_session_end_keeps_dir_while_learn_lock_fresh(tmp_path, monkeypatch):
                    input=json.dumps({"session_id": "s9", "cwd": str(tmp_path)}).encode(), env=env)
     assert (d / "patterns-used-main.json").exists()
     (d / "learn-inflight-main.lock").unlink()
+    __import__("os").utime(str(d / "patterns-used-main.json"), (1, 1))  # old: nothing fresh left
     subprocess.run([sys.executable, str(HOOK_PATH.parent / "ace_session_end.py")],
                    input=json.dumps({"session_id": "s9", "cwd": str(tmp_path)}).encode(), env=env)
     assert not d.exists()

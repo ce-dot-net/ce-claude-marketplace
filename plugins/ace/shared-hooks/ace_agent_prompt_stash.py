@@ -41,9 +41,13 @@ def main() -> None:
         while len(json.dumps(data).encode('utf-8')) > _MAX and data["prompt"]:
             data["prompt"] = data["prompt"][:len(data["prompt"]) * 3 // 4 - 1]
         f = plugin_data_dir.agent_prompt_file(ctx['project'], sid, event['prompt_id'], stype)
-        if f.exists():  # sibling agents of one type in one prompt: key is ambiguous -> reader falls back
-            data = {"ambiguous": True, "subagent_type": stype}
-        f.write_text(json.dumps(data))
+        try:  # O_EXCL: of parallel same-type siblings only the first wins; the rest tombstone
+            fd = os.open(str(f), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+        except FileExistsError:  # key is ambiguous -> reader falls back to the transcript
+            f.write_text(json.dumps({"ambiguous": True, "subagent_type": stype}))
+        else:
+            with os.fdopen(fd, 'w') as fh:
+                fh.write(json.dumps(data))
     except Exception as e:
         try:
             from ace_relevance_logger import log_error
