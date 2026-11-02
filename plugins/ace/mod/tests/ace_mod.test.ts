@@ -28,7 +28,7 @@ const HUMAN = 'please fix the domain shift hook so it injects patterns when read
 const LOCKED = { exitCode: 1, stdout: '', stderr: 'SqliteError: database is locked' }
 const MIN = 60_000
 
-type SearchAnswer = { exitCode?: number; stdout?: string; stderr?: string; advanceMs?: number }
+type SearchAnswer = { exitCode?: number; stdout?: string; stderr?: string; advanceMs?: number; killed?: boolean }
 type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; env?: Record<string, string>; files?: Record<string, string> }
 type Run = { argv: string[]; stdin?: string; env?: Record<string, string>; timeoutMs?: number; files: Set<string> }
 
@@ -58,6 +58,8 @@ function host(on: any, o: Opts = {}) {
   on('fs.exists', (_$: any, e: any) => ({ value: files.has(e.path) || [...files.keys()].some(k => k.startsWith(e.path + '/')) }))
   on('fs.read', (_$: any, e: any) => { if (!files.has(e.path)) throw new Error('ENOENT: ' + e.path); return { value: files.get(e.path) } })
   on('fs.write', (_$: any, e: any) => { put(e.path, e.text); return { value: undefined } })
+  on('fs.list', (_$: any, e: any) => ({ value: [...files.keys()].filter(k => k.startsWith(e.path + '/') && !k.slice(e.path.length + 1).includes('/'))
+    .map(k => ({ name: k.slice(e.path.length + 1), kind: 'file', size: files.get(k)!.length, mtimeMs: mtime.get(k), isLink: false })) }))
   on('fs.stat', (_$: any, e: any) => {
     if (!files.has(e.path)) throw new Error('ENOENT: ' + e.path)
     return { value: { kind: 'file', size: files.get(e.path)!.length, mtimeMs: mtime.get(e.path), isLink: false } }
@@ -68,6 +70,7 @@ function host(on: any, o: Opts = {}) {
     if (argv[0] === 'ace-cli' && argv[1] === 'search') {
       const a = (o.search ?? dflt)(argv, init.stdin)
       now += a.advanceMs ?? 0
+      if (a.killed) throw new Error('ace: $.process.run(ace-cli) aborted: still running after timeoutMs')
       return res(a.exitCode ?? 0, a.stdout ?? '', a.stderr ?? '')
     }
     if (argv[0] === 'git' || argv[0].endsWith('/git')) return res(0, git(argv))
@@ -294,9 +297,22 @@ test('blocking budget <= 25 s: the unpinned retry only gets the time left; none 
   const retry = h.searches()[1]!
   expect(retry.timeoutMs! > 0 && retry.timeoutMs! <= 5_000).toBe(true)
   spent = 25_000
+  h.files.delete(`${ROOT}/pin-backoff`)  // the first submit's lock started the backoff; a backoff would skip the pin
   const r: any = await submit($, HUMAN + ' slow')
   expect(h.searches().length).toBe(3)
   expect(r.context === undefined || r.context.length === 0).toBe(true)
+})
+
+test('a pinned search stuck on the lock is killed at its share of the budget; the unpinned re-run still fits and injects', async ($, on) => {
+  const h = host(on, { search: (argv) => argv.includes('--pin-session') ? { killed: true, advanceMs: 15_000 } : { stdout: S8 } })
+  const r: any = await submit($)
+  const [pinned, retry] = h.searches()
+  expect(pinned!.timeoutMs! < 25000).toBe(true)
+  expect(retry!.argv.includes('--pin-session')).toBe(false)
+  expect(pinned!.timeoutMs! + retry!.timeoutMs! <= 25000).toBe(true)
+  expect(r.context[0]).toBe(G.full_main_8)
+  expect(h.files.has(`${ROOT}/pin-backoff`)).toBe(true)
+  expect(h.rows().find((x: any) => x.event === 'search')!.pin_failed).toBe(true)
 })
 
 test('render_cohort ACE_AB_CONTROL_PCT=100 → control: search + state, NO injection', async ($, on) => {
@@ -573,6 +589,15 @@ test('turn.complete subagent: learn with the SUBAGENT pin, parent_task_id, own l
   expect(t.effort_level).toBe('normal')
   expect(t.effort_weight).toBe(1)
   expect(L.files.has(`${SDIR}/learn-inflight-agent-1.lock`)).toBe(true)
+})
+
+test('an aborted subagent never learns (no outcome to credit): state reaped', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await spawn($, 'review the domain shift python port for parity bugs')
+  await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+  await $.turn.complete({ answer: 'x', durationMs: 1, isAborted: true, turnId: 'ta', reason: 'aborted', agentId: 'agent-1' } as any)
+  expect(h.learns().length).toBe(0)
+  expect(h.state('agent-1')).toBeUndefined()
 })
 
 test('a machine turn and a read-only task never learn', async ($, on) => {
