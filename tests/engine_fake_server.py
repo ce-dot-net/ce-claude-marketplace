@@ -5,6 +5,7 @@ Logs every request (method, path, headers with Authorization masked, JSON body) 
 JSON line to the log file. Answers /api/v1/config, /patterns/search, /traces,
 /traces/stream and /api/v1/auth/refresh like the real server. FAKE_MODE=401|500 makes
 the trace POSTs fail; FAKE_REFRESH=429|reuse fails the token refresh; FAKE_SEARCH=401 rejects searches; FAKE_GRAPH_DELAY=<s> stalls the graph edge refresh;
+FAKE_STATUS=401|403|404|500 fails GET /analytics (ace-cli status);
 FAKE_TRACE_502=<n> answers the first n trace POSTs 502 with Retry-After: 0 (the SDK retries at once). Usage: engine_fake_server.py <port|0> <log> [<portfile>]
 (port 0 = pick a free port and write it to <portfile>).
 """
@@ -55,6 +56,12 @@ class H(BaseHTTPRequestHandler):
 
     def do_GET(self):
         self._log(None)
+        if self.path.startswith("/analytics"):  # `ace-cli status` (8.1.0 context verify): FAKE_STATUS=ok|401|403|404|500
+            st = os.environ.get("FAKE_STATUS", "ok")
+            if st != "ok":
+                msg = {"401": "token expired", "403": "no access to project", "404": "project not found"}.get(st, "boom")
+                return self._send(int(st), {"detail": msg, "message": msg})
+            return self._send(200, {"total_patterns": 1, "by_section": {"strategies_and_hard_rules": 1}, "by_domain": {"hooks": 1}})
         if "graph" in self.path:
             time.sleep(float(os.environ.get("FAKE_GRAPH_DELAY", "0")))
             return self._send(200, {"edges": [], "patterns": []})

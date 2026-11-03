@@ -111,7 +111,7 @@ test('config_refused (.ace with apiToken): no CLI call at all, env does not take
   await start($)
   await tick()
   await submit($)
-  expect(h.runs.filter((r: any) => cliOf(r.argv)).length).toBe(0)
+  expect(h.runs.filter((r: any) => cliOf(r.argv) && cliOf(r.argv)![0] !== 'context').length).toBe(0)  // only the seam probe (offline)
   expect(h.band()?.state).toBe('config_refused')
   expect(h.env.ACE_PROJECT_ID).toBe(undefined)
 })
@@ -198,7 +198,7 @@ test('a fresh clone of a remembered remote binds via remote_map with no file', a
   expect(JSON.parse(h.env.ACE_CONTEXT!).source).toBe('remote_map')
 })
 
-test('the seam: ACE_CONTEXT_ENGINE=cli takes `ace-cli context --json`', async ($, on) => {
+test('the seam: ACE_CONTEXT_ENGINE=cli takes `ace-cli context --json` (explicit)', async ($, on) => {
   const h = host(on, { noSettings: true, env: { ACE_CONTEXT_ENGINE: 'cli' }, cli: a => a[0] === 'context'
     ? { stdout: JSON.stringify({ bound: true, orgId: 'org_c', projectId: 'prj_c', source: 'repo_file', path: '/proj/.ace/config.json' }) } : undefined })
   await start($)
@@ -213,4 +213,51 @@ test('no pending state on a plain ok session; a submit after start searches with
   expect(h.pending()).toBe(null)
   await submit($, HUMAN)
   expect(h.searches().length).toBe(1)
+})
+
+// ---- the seam, feature-detected (the prerelease CLI still says 4.3.4); shapes from the SDK's samples.md ----
+const SAMPLE_BOUND = '{\n  "bound": true,\n  "orgId": "org_x",\n  "projectId": "prj_x",\n  "source": "repo_file",\n  "path": "/proj/.ace/config.json",\n  "projectName": null,\n  "auth": {\n    "state": "not_logged_in",\n    "source": null\n  }\n}'
+const SAMPLE_REFUSED = '{\n  "bound": false,\n  "reason": "config_refused",\n  "source": "repo_file",\n  "path": "/proj/.ace/config.json",\n  "warnings": [\n    "repo_file_contains_secret"\n  ],\n  "projectName": null,\n  "auth": {\n    "state": "not_logged_in",\n    "source": null\n  }\n}'
+const SAMPLE_UNBOUND_ERR = '{"error":{"code":"unbound","status":null,"message":"No ACE project bound to this directory (see \\"tried\\" above). Run: ace-cli init"}}'
+const ctxRunsOf = (h: any) => h.runs.filter((r: any) => cliOf(r.argv)?.[0] === 'context')
+
+test('seam: a CLI that has `context` is used (exit 0, samples.md bound shape), whatever its version says', async ($, on) => {
+  const h = host(on, { noSettings: true, cli: a => a[0] === 'context' ? { stdout: SAMPLE_BOUND } : a[0] === '--version' ? { stdout: '4.3.4' } : undefined })
+  await start($)
+  await tick()
+  expect(h.env.ACE_PROJECT_ID).toBe('prj_x')
+  expect(JSON.parse(h.env.ACE_CONTEXT!)).toMatchObject({ source: 'repo_file', projectId: 'prj_x' })
+})
+
+test('seam: config_refused from the CLI comes from stdout JSON (exit 5, generic stderr ignored)', async ($, on) => {
+  const h = host(on, { cli: a => a[0] === 'context' ? { exitCode: 5, stdout: SAMPLE_REFUSED, stderr: SAMPLE_UNBOUND_ERR } : undefined })
+  await start($)
+  await tick()
+  expect(h.band()?.state).toBe('config_refused')
+  expect(h.env.ACE_PROJECT_ID).toBe(undefined)
+})
+
+test('seam: an old CLI ("unknown command") falls back to our resolver, and is not probed again for the same build', async ($, on) => {
+  const h = host(on, { cli: a => a[0] === 'context' ? { exitCode: 1, stderr: "error: unknown command 'context'" } : undefined })
+  await start($)
+  await tick()
+  expect(h.env.ACE_PROJECT_ID).toBe(PRJ)
+  expect(JSON.parse(h.files.get(`${ROOT}/cli-context-cap.json`)!)).toMatchObject({ has: false })
+  expect(ctxRunsOf(h).length).toBe(1)
+})
+
+test('seam: a known-old CLI build is skipped (cached), ACE_CONTEXT_ENGINE=resolver never probes', async ($, on) => {
+  const h = host(on, { env: { ACE_CONTEXT_ENGINE: 'resolver' } })
+  await start($)
+  await tick()
+  expect(ctxRunsOf(h).length).toBe(0)
+  expect(h.env.ACE_PROJECT_ID).toBe(PRJ)
+})
+
+test('seam: the CLI result still meets our id strictness (a metacharacter id is config_invalid)', async ($, on) => {
+  const bad = SAMPLE_BOUND.replace('"prj_x"', '"prj_x/../y"')
+  const h = host(on, { noSettings: true, cli: a => a[0] === 'context' ? { stdout: bad } : undefined })
+  await start($)
+  await tick()
+  expect(h.band()?.state).toBe('config_invalid')
 })

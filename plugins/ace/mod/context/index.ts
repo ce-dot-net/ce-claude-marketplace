@@ -13,9 +13,6 @@ export type Env = { HOME?: string, ACE_ORG_ID?: string, ACE_PROJECT_ID?: string,
 export { LINES, ADOPT_LINE }
 export const PROBLEM_STATES: State[] = ['unbound', 'not_logged_in', 'expired', 'project_not_found', 'no_access', 'server_error',
   'cli_missing', 'config_refused', 'config_invalid']
-// Seam: the SDK's `ace-cli context --json` (PR #211) replaces our resolver once the pinned CLI has it.
-// ponytail: a version gate on an unreleased number; set it to the real release when the pin moves.
-export const CONTEXT_CLI_MIN = '4.4.0'
 export const FILE_SOURCES = ['repo_file', 'settings_file'], ADOPT_SOURCES = ['settings_file', 'remote_map']
 const ORG_ID = /^org_[A-Za-z0-9_-]+$/, PRJ_ID = /^prj_[A-Za-z0-9_-]+$/
 
@@ -55,20 +52,27 @@ export function stripOwnExport(env: Env, root: string): Env {
   void root
   return out
 }
-export function semverGte(v: string | undefined, min: string) {
-  const a = String(v ?? '').split('.').map(Number), b = min.split('.').map(Number)
-  for (let i = 0; i < 3; i++) { if ((a[i] || 0) !== b[i]) return (a[i] || 0) > b[i] }
-  return true
+// The seam (8.1.0): the SDK's `ace-cli context --json` (PR #211) replaces our resolver once the CLI has it.
+// Feature-detected, never by version (the prerelease still reports 4.3.4): the probe IS the call, once per load
+// (resolveContextOnce caches the result). "unknown command" / a usage error / no JSON = old CLI -> our resolver.
+// Only stdout's JSON counts (with config_refused/config_invalid the CLI prints a generic unbound line on stderr).
+// ACE_CONTEXT_ENGINE=resolver forces ours, =cli insists on the CLI's (still our resolver when it has none).
+const ID = { org: /^org_[A-Za-z0-9_-]+$/, prj: /^prj_[A-Za-z0-9_-]+$/ }
+export function parseCliContext(stdout: string): Result | null {
+  let j: any
+  try { j = JSON.parse(String(stdout ?? '')) } catch { return null }
+  if (!j || typeof j !== 'object' || typeof j.bound !== 'boolean') return null
+  const { projectName: _n, auth: _a, ...r } = j
+  // our production strictness on top of the SDK's spec resolver: ids never carry path/argv metacharacters
+  if (r.bound && !(ID.org.test(String(r.orgId)) && ID.prj.test(String(r.projectId))))
+    return { bound: false, reason: 'config_invalid', source: r.source, path: r.path ?? null, message: 'id must look like org_/prj_' } as Result
+  return r as Result
 }
-async function pinnedCliVersion($: any): Promise<string | undefined> {
-  try { return JSON.parse(await $.fs.read(`${$.plugin.root}/node_modules/@ace-sdk/cli/package.json`) as string).version } catch { return undefined }
+// The CLI build the probe result belongs to: the plugin-local cli.js by size + mtime, else the global one.
+async function cliIdentity($: any): Promise<string> {
+  try { const st = await $.fs.stat(`${$.plugin.root}/node_modules/@ace-sdk/cli/dist/cli.js`); return `local:${st.size}:${st.mtimeMs}` } catch { return 'global' }
 }
-// The seam: ACE_CONTEXT_ENGINE=cli|resolver forces one; else the pinned CLI's version decides.
-export async function useCliContext($: any, env: Env) {
-  if (env.ACE_CONTEXT_ENGINE === 'resolver') return false
-  if (env.ACE_CONTEXT_ENGINE === 'cli') return true
-  return semverGte(await pinnedCliVersion($), CONTEXT_CLI_MIN)
-}
+export const CLI_CONTEXT_UNKNOWN = /unknown command|error: unknown|Usage: ace-cli|too many arguments/i
 
 export async function resolveContext($: any, cwd: string, envIn: Env, o: { dataRoot?: string, flags?: { org?: string, project?: string },
   cli?: (argv: string[], opts?: any) => Promise<any> } = {}): Promise<Ctx> {
@@ -77,12 +81,17 @@ export async function resolveContext($: any, cwd: string, envIn: Env, o: { dataR
   const root = logRoot(cwd, { gitRoot: g.root, mainRoot: g.mainRoot })
   const env = stripOwnExport(envIn, root)
   const base = { root, mainRoot: g.mainRoot, gitRoot: g.root }
-  if (o.cli && await useCliContext($, env)) {
-    const r = await o.cli(['context', '--json', ...(o.flags?.org ? ['--org', o.flags.org] : []), ...(o.flags?.project ? ['--project', o.flags.project] : [])], { cwd })
-    try {
-      const j = JSON.parse(String(r?.stdout ?? ''))
-      if (j && typeof j.bound === 'boolean') return { ...j, ...base, via: 'cli' }
-    } catch { /* fall through to our resolver */ }
+  const capPath = o.dataRoot ? `${o.dataRoot}/cli-context-cap.json` : null
+  const capKey = await cliIdentity($)
+  const cap = capPath ? await readJsonObj($, capPath) : {}
+  const known = cap.key === capKey ? cap.has : undefined  // an old CLI is probed once per CLI build, not per session
+  if (o.cli && env.ACE_CONTEXT_ENGINE !== 'resolver' && (known !== false || env.ACE_CONTEXT_ENGINE === 'cli')) {
+    const r = await o.cli(['context', '--json', ...(o.flags?.org ? ['--org', o.flags.org] : []), ...(o.flags?.project ? ['--project', o.flags.project] : [])],
+      { cwd, env: { ACE_ORG_ID: env.ACE_ORG_ID ?? '', ACE_PROJECT_ID: env.ACE_PROJECT_ID ?? '' }, timeoutMs: 10_000 })
+    const parsed = parseCliContext(r?.stdout)
+    const old = !parsed && CLI_CONTEXT_UNKNOWN.test(`${r?.stderr ?? ''}\n${r?.stdout ?? ''}`)
+    if (capPath && (parsed || old) && known !== !!parsed) await $.fs.write(capPath, JSON.stringify({ key: capKey, has: !!parsed })).catch(() => undefined)
+    if (parsed) return { ...parsed, ...base, via: 'cli' } as Ctx
   }
   const gc = await readJsonObj($, globalConfigPath(env))
   const remoteMap = { ...(o.dataRoot ? await readJsonObj($, machineMapPath(o.dataRoot)) : {}), ...(gc.projects && typeof gc.projects === 'object' ? gc.projects : {}) }
