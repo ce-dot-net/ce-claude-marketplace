@@ -5,7 +5,7 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [8.0.0]
+## [8.0.0] - 2026-11-03
 
 ### Headline
 Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topology. Requires: Claude Code >= 2.1.311; ace-cli 4.3.2 (@ace-sdk/core >= 3.5.0), pinned exactly in package.json and installed plugin-local; a global ace-cli >= the pin is the fallback and is marked untested. Windows not supported (macOS, Linux, WSL2).
