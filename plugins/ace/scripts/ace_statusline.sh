@@ -45,7 +45,7 @@ out = {
  "rl_7d_resets": get(j, "rate_limits", "seven_day", "resets_at") or "",
 }
 logs = os.path.join(out["cwd"], ".claude", "data", "logs") if out["cwd"] else ""
-# Task boundary: events since last "execution" event (Stop hook writes these)
+# Task boundary: events of this session since its last "execution" event (Stop hook writes these)
 try:
     events = []
     # bounded tail read (last 2MB) so refresh cost stays flat as the log grows
@@ -56,6 +56,9 @@ try:
         for line in lines:
             try: events.append(json.loads(line))
             except Exception: pass
+    sid = j.get("session_id")
+    # this session only (rows of a parallel session, its execution rows too, would leak in); no session_id -> all
+    events = [e for e in events if isinstance(e, dict) and (not sid or e.get("session_id") == sid)]
     last = max([i for i, e in enumerate(events) if isinstance(e, dict) and e.get("event") == "execution"] or [-1])
     cur = [e for e in events[last + 1:] if isinstance(e, dict)]
     s = [e for e in cur if e.get("event") == "search"]
