@@ -12,8 +12,10 @@ v5.4.18: Granular token expiration using token_expires_in (seconds).
 """
 
 import json
+import os
 import re
 import sys
+import time
 import uuid
 from pathlib import Path
 from typing import Dict, Any
@@ -23,7 +25,7 @@ sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 from validation import is_valid_pattern_id
-from patterns_used_state import append_patterns_used
+from patterns_used_state import append_patterns_used, eval_stats, injected_contents, task_session_id_for
 from ace_pattern_render import render_patterns, render_cohort, render_compact_all
 
 
@@ -51,9 +53,59 @@ def sanitize_response(obj: Any) -> Any:
     else:
         return obj
 
-from ace_cli import run_search, check_session_pinning_available, check_auth_status
+from ace_cli import run_search, check_auth_status
 from ace_context import get_context
-from ace_relevance_logger import log_search_metrics
+from ace_relevance_logger import log_search_metrics, log_search_skipped
+from machine_prompts import is_machine_prompt
+import plugin_data_dir
+
+# Machine-generated "prompts" (CC injects these as UserPromptSubmit turns): searching them is
+# pure noise (critic T1). One shared prefix list (utils/machine_prompts.py).
+_LEADING_REMINDER = re.compile(r'\A(?:\s*<system-reminder>.*?</system-reminder>)+\s*', re.DOTALL | re.IGNORECASE)
+
+
+def _skip_reason(prompt):
+    """Return a reason string when the prompt must not trigger a search, else None."""
+    stripped = prompt.strip()
+    # Leading injected <system-reminder> blocks are not the human's text: drop them all,
+    # then judge what is left (a reminder-only prompt becomes empty -> machine).
+    stripped = _LEADING_REMINDER.sub('', stripped).strip()
+    if not stripped and prompt.strip():
+        return 'machine_prompt'
+    if is_machine_prompt(stripped):
+        return 'machine_prompt'
+    try:
+        min_chars = int(os.environ.get('ACE_MIN_PROMPT_CHARS', '12'))
+    except ValueError:
+        min_chars = 12
+    if len(stripped) < min_chars:
+        return 'prompt_too_short'
+    return None
+
+
+def _log_skipped(event, reason, context):
+    if not (context or {}).get('project'):
+        return  # ACE not configured here: do not litter .claude/data/logs in unrelated repos
+    try:
+        log_search_skipped('UserPromptSubmit', reason, event.get('session_id'),
+                           (context or {}).get('project'))
+    except Exception:
+        pass
+
+
+def _title_for_guarded_mod(project, event):
+    """The mod searched, but a managed-settings guard filters its classic.UserPromptSubmit (no mod-classic marker):
+    set the title it computed (mod-title). Never over a custom /rename title, never while disabled."""
+    sid = event.get('session_id') or ''
+    if (event.get('session_title') or plugin_data_dir.is_disabled(project, sid) or not plugin_data_dir.is_mod_active(project, sid, plugin_data_dir.MOD_HANDOFF_S)
+            or plugin_data_dir.mod_owns_learn(project, sid, plugin_data_dir.MOD_HANDOFF_S)):
+        return
+    try:
+        title = (plugin_data_dir.session_dir(project, sid, create=False) / 'mod-title').read_text().strip()
+    except OSError:
+        return
+    if title:
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "sessionTitle": title[:200]}}))
 
 
 def build_session_title(pattern_list, pattern_count, agent_type, review_file=None):
@@ -155,6 +207,14 @@ def expand_abbreviations(prompt: str) -> str:
     return result.strip()
 
 
+def _num(v):
+    """int/float (not bool, finite) as-is, else 0."""
+    import math
+    if isinstance(v, bool) or not isinstance(v, (int, float)):
+        return 0
+    return v if math.isfinite(v) else 0
+
+
 def check_eval_request_and_review():
     """Fire-and-forget self-eval: read eval request, inject context, parse ACE_REVIEW.
 
@@ -171,16 +231,21 @@ def check_eval_request_and_review():
     if eval_request_file.exists():
         try:
             eval_data = json.loads(eval_request_file.read_text())
-            patterns_injected = eval_data.get('patterns_injected', 0)
-            avg_relevance = eval_data.get('avg_relevance', 0)
-            domains = eval_data.get('domains', 0)
-            tools_executed = eval_data.get('tools_executed', 0)
+            if not isinstance(eval_data, dict):
+                eval_data = {}
+            # §24: a repo-controlled file reaches the model's context: numbers only, anything else is 0.
+            patterns_injected = _num(eval_data.get('patterns_injected'))
+            avg_relevance = _num(eval_data.get('avg_relevance'))
+            domains = _num(eval_data.get('domains'))
+            tools_executed = _num(eval_data.get('tools_executed'))
 
             # Build additionalContext for silent eval injection
             # Frame for HUMAN DEVELOPER perspective — ask for ACE_REVIEW marker
+            # never "0% relevance" / "0 domains": an unknown number is left out
+            stats = (f"{avg_relevance}% relevance, " if avg_relevance else "") + (f"{domains} domains, " if domains else "")
             eval_context = (
                 f"<!-- ACE Self-Eval Request: Previous task used {patterns_injected} patterns "
-                f"({avg_relevance}% relevance, {domains} domains, {tools_executed} tools). "
+                f"({stats}{tools_executed} tools). "
                 f"As a human developer, how much time did these patterns save? "
                 f"Without ACE, a developer would search docs, explore codebases, ask colleagues, or trial-and-error. "
                 f"Rate from a HUMAN DEVELOPER perspective, not AI perspective. "
@@ -267,6 +332,23 @@ def _format_bullet_token(pattern):
     return f"+{pattern.get('helpful', 0)}"
 
 
+
+def status_line(injected, returned, cohort, injected_patterns):
+    """The visible per-prompt notice, one line (parity with the mod's statusLine in mod/core.ts)."""
+    if not returned:
+        return "ACE · no patterns for this prompt"
+    arm = "full" if cohort == "full" else "budget"
+    noun = "pattern" if returned == 1 else "patterns"
+    what = f"{injected} {noun}" if injected == returned else f"{injected} of {returned} {noun}"
+    counts = {}
+    for p in injected_patterns:
+        d = p.get("domain")
+        if d:
+            counts[str(d)] = counts.get(str(d), 0) + 1
+    doms = [d for d, _ in sorted(counts.items(), key=lambda kv: -kv[1])]
+    d = ", ".join(doms[:2]) + (f" +{len(doms) - 2}" if len(doms) > 2 else "")
+    return f"ACE · {what} · {arm}" + (f" · {d}" if d else "")
+
 def main():
     try:
         # Read hook event from stdin
@@ -275,6 +357,29 @@ def main():
 
         if not user_prompt:
             # No prompt, nothing to search
+            sys.exit(0)
+
+        t_start = time.monotonic()
+        # DESIGN §3.1: no `cd` in the shim - resolve .claude/settings.json from the hook cwd.
+        _cwd = event.get('cwd')
+        if _cwd and os.path.isdir(_cwd):
+            os.chdir(_cwd)
+
+        # P-26: session OR project disabled.flag stops everything BEFORE any state/log is written.
+        try:
+            _ctx = get_context()
+        except Exception:
+            _ctx = None
+        if _ctx and (plugin_data_dir.is_disabled(_ctx['project'], event.get('session_id') or '') or plugin_data_dir.is_mod_active(_ctx['project'], event.get('session_id') or '', plugin_data_dir.MOD_HANDOFF_S)):
+            _title_for_guarded_mod(_ctx['project'], event)
+            sys.exit(0)
+
+        _reason = _skip_reason(user_prompt)
+        if _ctx and _reason != 'machine_prompt' and not user_prompt.lstrip().startswith('/'):
+            import ace_feedback  # a human main prompt (short ones too) may reject the previous task
+            ace_feedback.on_human_prompt(_ctx['project'], event.get('session_id') or '', user_prompt)
+        if _reason == 'machine_prompt' or _reason == 'prompt_too_short':
+            _log_skipped(event, _reason, _ctx)
             sys.exit(0)
 
         # ── Fire-and-forget self-eval: inject eval request as additionalContext ──
@@ -289,24 +394,27 @@ def main():
             sys.exit(0)
 
         # Get project context from .claude/settings.json
-        context = get_context()
+        context = _ctx or get_context()
         if not context:
-            print("⚠️ [ACE] No project context found - skipping search")
-            sys.exit(0)
+            sys.exit(0)  # silent: /ace:ace-doctor reports a missing project context
 
         # Use Claude's session_id for state file consistency (Issue #16)
         # ace_after_task.py reads event.get('session_id') — we must use the same key
         session_id = event.get('session_id', str(uuid.uuid4()))
 
-        # Generate a fresh per-task session_id (task_session_id = uuid4).
+        # P-26: session OR project disabled.flag stops everything, before any state is written.
+        if plugin_data_dir.is_disabled(context['project'], session_id) or plugin_data_dir.is_mod_active(context['project'], session_id, plugin_data_dir.MOD_HANDOFF_S):
+            sys.exit(0)
+
+        # Per-task session_id = hook prompt_id (G2), else uuid4.
         # This is passed to ace-cli search --pin-session and stored in the state file
         # so ace_after_task can set trace["session_id"] = task_session_id, pinning
         # each task's retrieval rows + trajectory under one ID on the server.
         # The CC conversation session_id (above) remains the state-file KEY and is
         # used for ace-relevance.jsonl / ace-spawn-log.jsonl telemetry.
-        task_session_id = str(uuid.uuid4())
+        task_session_id = task_session_id_for(event)  # G2: prompt_id anchor, else uuid4
 
-        use_session_pinning = check_session_pinning_available()
+        use_session_pinning = True  # v8: always pin (no --version probe)
 
         # v6.0.0: Read agent_type natively from hook event (CC 2.1.69+)
         # agent_type identifies subagent type: "main", "refactorer", "coder", etc.
@@ -320,24 +428,21 @@ def main():
         # fails, or errors.  The later append_patterns_used call (inside `if pattern_ids:`)
         # will merge pattern_ids + retrieval_id into this same file via merge logic.
         try:
-            append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id)
+            if not agent_id:  # a Stop deferred for a running agent never got its notification: record the loss
+                _mark = plugin_data_dir.session_dir(context.get('project'), session_id, create=False) / 'learn-deferred'
+                if _mark.exists():
+                    from ace_relevance_logger import log_event
+                    log_event('learn_deferred_lost', reason='new_prompt', session_id=session_id)
+                    _mark.unlink()
+        except Exception:
+            pass
+        try:
+            append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id,
+                                 user_prompt=user_prompt, hook_event_name='UserPromptSubmit', reset=True)
         except Exception:
             pass  # non-fatal
 
-        # Store task_session_id for PreCompact hook (recall patterns after compaction).
-        # Must write task_session_id (not session_id) because run_search pins under
-        # task_session_id; recall_session in ace_after_task needs the same key.
-        if use_session_pinning and context['project']:
-            try:
-                session_file = Path(f"/tmp/ace-session-{context['project']}.txt")
-                session_file.write_text(task_session_id)
-            except Exception:
-                # Non-fatal: continue without session pinning
-                use_session_pinning = False
-
-        # v5.4.18: Granular token expiration check (warn if < 2 hours)
-        # Catches 48h standby scenario AND warns before complex tasks
-        auth_warning = check_auth_status(warn_threshold_hours=2.0)
+        auth_warning = None  # v8: auth check only in the failure branch (C2)
 
         # Minimal enhancement: Expand abbreviations for semantic clarity
         # (Server team: DO NOT add generic keywords - hurts embedding quality!)
@@ -346,11 +451,18 @@ def main():
         # Call ace-cli search --stdin with optional session pinning.
         # Pass task_session_id (not CC conversation session_id) so the server pins
         # retrieved patterns under this task's ID — each task gets its own pin bucket.
-        patterns_response = run_search(
+        # F-080: ALWAYS search with --pin-session for this task's tsid. A disk-cache hit would
+        # carry no retrieval_id / applied_log_ids and never pin the tsid, so a repeated prompt
+        # ("continue with the refactor") would lose its credit. (ace_search_cache is for the
+        # SubagentStart fan-out only.)
+        _cache_hit = False
+        patterns_response, _search_ms = run_search(
             query=search_query,
             org=context['org'],
             project=context['project'],
-            session_id=task_session_id if use_session_pinning else None,
+            session_id=task_session_id,
+            timeout=25,
+            hook_event_name='UserPromptSubmit',
         )
 
         # v5.3.5: Sanitize response to remove invalid Unicode surrogates
@@ -361,6 +473,9 @@ def main():
         # v5.4.21: Check for error responses from run_search()
         if not patterns_response:
             # Search failed - check if it's an auth error
+            # the 5 s whoami probe must fit the 30 s hook timeout after a slow (<=25 s) search
+            auth_warning = (check_auth_status(warn_threshold_hours=2.0)
+                            if time.monotonic() - t_start < 18 else None)
             if auth_warning:
                 # Auth issue detected - show auth warning instead of generic error
                 output = {"systemMessage": auth_warning}
@@ -380,7 +495,9 @@ def main():
             elif error_type == 'timeout':
                 output = {"systemMessage": f"⏱️ [ACE] {error_msg}"}
             elif error_type == 'cli_not_found':
-                output = {"systemMessage": f"❌ [ACE] {error_msg}"}
+                # SessionStart already said it once (§23); a message on every prompt is noise. Log only.
+                _log_skipped(event, 'cli_not_found', context)
+                sys.exit(0)
             else:
                 output = {"systemMessage": f"❌ [ACE] {error_msg}"}
 
@@ -390,29 +507,9 @@ def main():
         pattern_list = patterns_response.get('similar_patterns', [])
         original_pattern_list = list(pattern_list)  # Keep original for logging
 
-        # ── A/B cohort assignment (deterministic, per task_session_id) ──────────
-        # Dormant by default: ACE_AB_CONTROL_PCT=0 / ACE_AB_COMPACT_PCT=0 → budget.
-        # Domain-shift paths (PreToolUse/PostToolUse) are NOT affected.
-        _cohort = render_cohort(task_session_id)
-
-        # v5.4.2: Log relevance metrics for analysis (before render, use full list)
-        try:
-            domains = list(set(p.get('domain', 'unknown') for p in pattern_list if p.get('domain')))
-            log_search_metrics(
-                hook='UserPromptSubmit',
-                session_id=session_id,
-                user_prompt=user_prompt,
-                search_query=search_query,
-                patterns_returned=original_pattern_list,
-                patterns_injected=pattern_list,
-                domains=domains,
-                project_id=context.get('project'),
-                org_id=context.get('org'),
-                agent_type=agent_type,
-                render_cohort=_cohort,
-            )
-        except Exception:
-            pass  # Non-fatal: continue without logging
+        # ── A/B cohort (§28): bucket on the STABLE CC session_id (one arm per conversation), never the
+        # per-task pin. Default: the full arm, which this chain renders as budget. Domain-shift unaffected.
+        _cohort = render_cohort(session_id)
 
         # Capture top-3 patterns WITH match_factors BEFORE render so that
         # _format_bullet_token can use ucb_score for display.  render_patterns
@@ -440,8 +537,7 @@ def main():
 
         if context['project'] and domains_summary:
             try:
-                domains_file = Path(f"/tmp/ace-domains-{context['project']}.json")
-                domains_file.write_text(json.dumps(domains_summary))
+                plugin_data_dir.domains_file(context['project']).write_text(json.dumps(domains_summary))
             except Exception:
                 pass
 
@@ -455,12 +551,6 @@ def main():
             ace_context = None  # no additionalContext block
             _pattern_ids = []
             _retrieval_log_map = {}
-            try:
-                append_patterns_used(session_id, agent_id, [],
-                                     retrieval_id=_retrieval_id,
-                                     task_session_id=task_session_id)
-            except Exception:
-                pass
 
         elif _cohort == 'compact':
             # Compact arm: all patterns as compact one-liners, total ≤ 9500 chars.
@@ -469,14 +559,6 @@ def main():
                 tag='ace-patterns',
                 attrs=_tag_attrs,
             )
-            if _pattern_ids and context['project']:
-                try:
-                    append_patterns_used(session_id, agent_id, _pattern_ids,
-                                         retrieval_id=_retrieval_id,
-                                         retrieval_log_ids=_retrieval_log_map,
-                                         task_session_id=task_session_id)
-                except Exception:
-                    pass
 
         else:
             # Budget arm (default): existing budget-verbatim render (unchanged).
@@ -487,14 +569,8 @@ def main():
             )
             # CRITICAL: Save pattern IDs for reinforcement learning.
             # render_patterns returns only budget-limited injected ids (no gate drop).
-            if _pattern_ids and context['project']:
-                try:
-                    append_patterns_used(session_id, agent_id, _pattern_ids,
-                                         retrieval_id=_retrieval_id,
-                                         retrieval_log_ids=_retrieval_log_map,
-                                         task_session_id=task_session_id)
-                except Exception:
-                    pass
+
+        _rendered_for_state = ace_context  # pattern block only: compact re-inject must not replay the eval ask
 
         # Append fire-and-forget eval injection if present (from previous task's Stop hook).
         # CC hard-caps additionalContext at 10,000 chars; trim eval_injection (cosmetic) to fit.
@@ -505,39 +581,60 @@ def main():
             if _available_for_eval > 0:
                 ace_context = ace_context + "\n" + eval_injection[:_available_for_eval]
 
+        # CRITICAL: Save pattern IDs for reinforcement learning (+ C1 keys).
+        # Ids are the budget-limited injected ids; control arm saves the F-080 anchor only.
+        _inj = set(_pattern_ids or [])
+        try:
+            append_patterns_used(session_id, agent_id, _pattern_ids,
+                                 retrieval_id=_retrieval_id,
+                                 retrieval_log_ids=_retrieval_log_map,
+                                 task_session_id=task_session_id,
+                                 user_prompt=user_prompt,
+                                 rendered_context=_rendered_for_state if _rendered_for_state is not None else '',
+                                 hook_event_name='UserPromptSubmit', render_variant=_cohort,
+                                 pattern_contents=injected_contents(original_pattern_list, _pattern_ids),
+                                 eval_stats=eval_stats([p for p in original_pattern_list if p.get('id') in _inj],
+                                                       original_pattern_list))
+        except Exception as e:
+            from ace_relevance_logger import log_error
+            log_error('UserPromptSubmit', 'ace_before_task.state_write', session_id, context['project'], e)
+
+        # v5.4.2 / C5: log AFTER render with the real injected count + hook latency.
+        try:
+            domains = list(set(p.get('domain', 'unknown') for p in original_pattern_list if p.get('domain')))
+            _injected = set(_pattern_ids)
+            _injected_dicts = [p for p in original_pattern_list if p.get('id') in _injected]
+            log_search_metrics(
+                hook='UserPromptSubmit',
+                session_id=session_id,
+                user_prompt=user_prompt,
+                search_query=search_query,
+                patterns_returned=original_pattern_list,
+                patterns_injected=_injected_dicts,
+                domains=domains,
+                project_id=context.get('project'),
+                org_id=context.get('org'),
+                agent_type=agent_type,
+                render_cohort=_cohort,
+                hook_ms=int((time.monotonic() - t_start) * 1000),
+                cache_hit=_cache_hit,
+                task_session_id=task_session_id,
+            )
+        except Exception:
+            pass  # Non-fatal: continue without logging
+
         # Build user-visible message
         pattern_list = patterns_response.get('similar_patterns', [])
         pattern_count = len(pattern_list)
         domains_summary = patterns_response.get('domains_summary', {})
 
         if pattern_count > 0:
-            # Build summary with domain info
-            summary_lines = [f"✅ [ACE] Found {pattern_count} relevant bullets"]
-
-            # Show domain summary
-            abstract_domains = domains_summary.get('abstract', [])
-            if abstract_domains:
-                domains_str = ', '.join(abstract_domains[:3])
-                if len(abstract_domains) > 3:
-                    domains_str += f' (+{len(abstract_domains) - 3} more)'
-                summary_lines.append(f"   Domains: {domains_str}")
-
-            # Show top 3 bullets with domain tags (uses _display_top3 which retains
-            # match_factors so _format_bullet_token can fall back to ucb_score)
-            for bullet in _display_top3:
-                content = bullet.get('content', '')
-                if len(content) > 80:
-                    content = content[:77] + '...'
-                domain = bullet.get('domain', 'general')
-                token = _format_bullet_token(bullet)
-                summary_lines.append(f"   • [{domain}] {content} ({token})")
-
-            if pattern_count > 3:
-                summary_lines.append(f"   ... and {pattern_count - 3} more bullets")
-
-            user_message = "\n".join(summary_lines)
+            # One line, the same as the mod's status line: what the MODEL got, the arm, the top domains.
+            _ids = set(_pattern_ids or [])
+            user_message = status_line(len(_ids), pattern_count, _cohort,
+                                       [p for p in original_pattern_list if p.get('id') in _ids])
         else:
-            user_message = "ℹ️  [ACE] No patterns found for this query"
+            user_message = "ACE · no patterns for this prompt"
 
         # v5.4.13: Prepend auth warning if detected (still show patterns if found)
         if auth_warning and pattern_count > 0:
@@ -555,31 +652,25 @@ def main():
                 agent_type=agent_type,
             )
 
+            hso = {"hookEventName": "UserPromptSubmit"}
             if ace_context is not None:
-                # Budget or compact arm: inject additionalContext
-                output = {
-                    "systemMessage": user_message,
-                    "hookSpecificOutput": {
-                        "hookEventName": "UserPromptSubmit",
-                        "additionalContext": ace_context,
-                        "sessionTitle": session_title
-                    }
-                }
-            else:
-                # Control arm: no additionalContext — only systemMessage + sessionTitle
-                output = {
-                    "systemMessage": user_message,
-                    "hookSpecificOutput": {
-                        "hookEventName": "UserPromptSubmit",
-                        "sessionTitle": session_title
-                    }
-                }
+                # Budget or compact arm: inject additionalContext (control arm omits it)
+                hso["additionalContext"] = ace_context
+            # cc_hooks_reference.md ~1265/~1496: never clobber a custom /rename or --name title
+            if not event.get('session_title'):
+                hso["sessionTitle"] = session_title
+            output = {"systemMessage": user_message, "hookSpecificOutput": hso}
         print(json.dumps(output))
         sys.exit(0)
 
     except Exception as e:
         # Log error but don't block workflow
         print(f"[ERROR] ACE before-task hook failed: {e}", file=sys.stderr)
+        try:
+            from ace_relevance_logger import log_error
+            log_error('UserPromptSubmit', 'ace_before_task.main', error=e)
+        except Exception:
+            pass
         sys.exit(0)
 
 

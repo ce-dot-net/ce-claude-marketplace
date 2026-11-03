@@ -1,6 +1,7 @@
 ---
+disable-model-invocation: true
 description: Login to ACE using browser-based device code authentication
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(mkdir:*), Bash(cat:*), Bash(rm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(mkdir:*), Bash(cat:*), Bash(rm:*), Read
 ---
 
 # ACE Login
@@ -18,16 +19,16 @@ When user runs `/ace-login`, execute the device code authentication flow:
 set -euo pipefail
 
 # Check for ace-cli
-if ! command -v ace-cli >/dev/null 2>&1; then
-  echo "ace-cli not found"
+if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
+  echo "ACE CLI not found"
   echo ""
   echo "Installation required:"
-  echo "  npm install -g @ace-sdk/cli"
+  echo "  /ace:ace-install-cli"
   exit 1
 fi
 
-VERSION=$(ace-cli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-echo "ace-cli found (version: $VERSION)"
+VERSION=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+echo "ACE CLI found (version: $VERSION)"
 ```
 
 **If ace-cli not found**: Show installation instructions and exit.
@@ -92,7 +93,7 @@ The new format uses `auth.token` with user tokens from device code flow.
 ### Step 3: Check Current Authentication Status (New Config)
 
 ```bash
-AUTH_STATUS=$(ace-cli whoami --json 2>&1 || echo '{"authenticated": false}')
+AUTH_STATUS=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json 2>&1 || echo '{"authenticated": false}')
 AUTHENTICATED=$(echo "$AUTH_STATUS" | jq -r '.authenticated // false')
 TOKEN_STATUS=$(echo "$AUTH_STATUS" | jq -r '.token_status // empty')
 ```
@@ -106,7 +107,7 @@ Organizations: 3 available
 Session: Expires in 10 hours
 
 To switch accounts, logout first:
-  ace-cli logout
+  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli logout
 ```
 Exit here (no need to re-login).
 
@@ -117,7 +118,7 @@ Exit here (no need to re-login).
 ```bash
 echo "Starting device code authentication..."
 echo ""
-ace-cli login --no-browser
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli login --no-browser
 ```
 
 **Important**: The `ace-cli login --no-browser` command will:
@@ -145,7 +146,7 @@ The CLI will poll and complete automatically once the user authorizes.
 sleep 1
 
 # Verify login succeeded
-AUTH_STATUS=$(ace-cli whoami --json 2>&1)
+AUTH_STATUS=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json 2>&1)
 AUTHENTICATED=$(echo "$AUTH_STATUS" | jq -r '.authenticated // false')
 
 if [ "$AUTHENTICATED" = "true" ]; then
@@ -200,7 +201,7 @@ You're all set! ACE will now work with your tasks.
 #### Step 6a: Get Organizations
 
 ```bash
-ORGS_JSON=$(ace-cli orgs --json 2>&1)
+ORGS_JSON=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli orgs --json 2>&1)
 ORG_COUNT=$(echo "$ORGS_JSON" | jq -r '.count // 0')
 ```
 
@@ -220,7 +221,7 @@ fi
 #### Step 6b: Get Projects for Selected Org
 
 ```bash
-PROJECTS_JSON=$(ace-cli projects --org "$SELECTED_ORG_ID" --json 2>&1)
+PROJECTS_JSON=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli projects --org "$SELECTED_ORG_ID" --json 2>&1)
 PROJECT_COUNT=$(echo "$PROJECTS_JSON" | jq -r '.projects | length // 0')
 ```
 
@@ -329,7 +330,7 @@ Check your internet connection. The CLI polls every 5 seconds for up to 5 minute
 ### "Already authenticated" but ACE not working
 Your session may have expired (idle 48h+ or 7-day hard cap). Run:
 ```bash
-ace-cli whoami --json
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json
 ```
 Check these fields:
 - `token_status`: Shows time until expiration
@@ -347,7 +348,7 @@ After revoking, run `/ace-login` again.
 
 ### Logout and re-login
 ```bash
-ace-cli logout
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli logout
 /ace-login
 ```
 

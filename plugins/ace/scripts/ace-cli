@@ -1,0 +1,18 @@
+#!/usr/bin/env bash
+# The one entry point commands use (DESIGN §17/§23): plugin-local pinned CLI first, then a global ace-cli;
+# drops ace-cli's own "Update available ... npm install -g" stderr lines; stdout and exit code untouched.
+# the script's own location, not CLAUDE_PLUGIN_ROOT: another plugin's exported root must not hide the pinned CLI
+ROOT="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)"  # builtins only: PATH may hold nothing else
+JS="$ROOT/node_modules/@ace-sdk/cli/dist/cli.js"
+if [ -f "$JS" ] && command -v node >/dev/null 2>&1; then
+  RUN=(node "$JS")
+elif command -v ace-cli >/dev/null 2>&1; then
+  RUN=(ace-cli)
+else
+  echo "ACE: ace-cli not found. Run /ace:ace-install-cli" >&2
+  exit 127
+fi
+# stderr goes through a pure-bash filter (PATH may hold nothing else); fd 3 = the real stdout
+( "${RUN[@]}" "$@" 2>&1 1>&3 3>&- | while IFS= read -r l || [ -n "$l" ]; do
+    case "$l" in *'Update available: v'*|*'Run: npm install -g @ace-sdk'*) ;; *) printf '%s\n' "$l" >&2 ;; esac
+  done; exit "${PIPESTATUS[0]}" ) 3>&1

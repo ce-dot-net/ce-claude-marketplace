@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-ace_stop_wrapper.sh must early-exit with a 'skipped continuation stop'
-systemMessage when the hook event has stop_hook_active=true.
+v8: the Stop hook exits silently (no output, no work) in Python when the hook
+event has stop_hook_active=true.
 """
 import json
 import subprocess
@@ -25,12 +25,7 @@ def test_stop_hook_active_early_exit(tmp_path):
         timeout=10,
     )
     assert proc.returncode == 0, proc.stderr
-    out = proc.stdout.strip()
-    assert out, f"expected JSON on stdout, got nothing (stderr={proc.stderr!r})"
-    parsed = json.loads(out)
-    assert parsed.get("continue") is True
-    msg = parsed.get("systemMessage", "")
-    assert "continuation" in msg.lower() or "skipped" in msg.lower(), msg
+    assert proc.stdout.strip() == ""
 
 
 def test_stop_hook_active_false_does_not_early_exit(tmp_path, monkeypatch):

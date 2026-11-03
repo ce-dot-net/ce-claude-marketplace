@@ -40,12 +40,11 @@ def test_agent_id_conditionally_on_trace():
         "Trace must conditionally include agent_id when present"
 
 
-def test_parent_agent_id_conditionally_on_trace():
+def test_parent_agent_id_is_the_server_field_name():
+    # v8 §16 P3: the spawn-log read is gone; the parent prompt_id goes out as the server-declared
+    # `parent_agent_id` (state keeps `parent_task_id`), never as `parent_task_id` on the trace.
     src = _read()
-    assert 'parent_agent_id' in src, "parent_agent_id must be referenced"
-    assert ('if parent_agent_id:' in src and
-            ('trace["parent_agent_id"]' in src or "trace['parent_agent_id']" in src)), \
-        "Trace must conditionally include parent_agent_id when present"
+    assert 'trace["parent_agent_id"]' in src and 'trace["parent_task_id"]' not in src
 
 
 def test_agent_id_extracted_from_event():

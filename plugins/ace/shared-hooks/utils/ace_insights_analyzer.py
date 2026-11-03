@@ -2029,18 +2029,8 @@ def _load_relevance_log(path):
 
 
 def _resolve_relevance_path():
-    """Try ${CLAUDE_PLUGIN_DATA}/projects/<id>/ace-relevance.jsonl first, then .claude/data/logs/."""
-    import os as _os
+    """Project relevance log (.claude/data/logs/ace-relevance.jsonl) only (P-19)."""
     from pathlib import Path as _Path
-
-    if _os.environ.get("CLAUDE_PLUGIN_DATA"):
-        try:
-            from utils.plugin_data_dir import get_project_data_dir
-            p = get_project_data_dir(create=False) / "ace-relevance.jsonl"
-            if p.exists():
-                return p
-        except Exception:
-            pass
 
     legacy = _Path(".claude/data/logs/ace-relevance.jsonl")
     if legacy.exists():

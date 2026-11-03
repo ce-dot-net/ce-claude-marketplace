@@ -1,52 +1,129 @@
 #!/usr/bin/env python3
-"""ACE CLI Subprocess Wrapper - Calls ace-cli with --stdin pattern"""
+"""ACE CLI Subprocess Wrapper - Calls ace-cli with --stdin pattern
 
-import subprocess
+v8 (DESIGN §5 C2): run_search / run_learn are exactly ONE ace-cli spawn each.
+No --version probe, no whoami pre-check; both return (result_or_None, duration_ms).
+The search cache moved to ace_search_cache (disk) and is consulted by the hooks.
+
+v8 (DESIGN §14): when the ace_engine gate passes they spawn the in-process core engine
+instead, and fall back to the ace-cli path below.
+"""
+
 import json
 import os
+import re
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from datetime import datetime, timezone
 from pathlib import Path
-from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, Tuple
 
 
-# v6.0.0: Legacy CLI removed, ace-cli is the only supported command
-CLI_CMD = 'ace-cli'
+_utils_dir = str(Path(__file__).resolve().parent)
+if _utils_dir not in sys.path:
+    sys.path.insert(0, _utils_dir)
+import ace_engine  # noqa: E402
 
-# v6.6.5 / #26: Module-local cache instance created at import time.
-# Each invocation of importlib.util.module_from_spec + exec_module (used in tests)
-# creates a fresh module object and re-executes this block, so each isolated
-# module instance gets its own AceSearchCache object.  In production, a hook
-# process imports ace_cli once, so this is equivalent to a single shared cache.
-#
-# Import strategy: try bare name first (makes unittest.mock patch("ace_search_cache....")
-# observable here), then fall back to the utils-prefixed path.
-try:
-    import ace_search_cache as _ace_search_cache_mod  # type: ignore
-    _module_AceSearchCache = _ace_search_cache_mod.AceSearchCache
-except Exception:  # noqa: BLE001
+
+CLI_CMD = 'ace-cli'  # name of the global fallback; spawns go through _cmd()/cli_argv()
+_NOT_FOUND = "ace-cli not found. Run /ace:ace-install-cli"
+# ace-cli's own update notifier (4.2.2 dist/utils/version-checker.js): a pinned CLI says it whenever npm is ahead.
+_NOTIFIER = re.compile(r'Update available: v|Run: npm install -g @ace-sdk')
+
+
+# better-sqlite3 without a usable binary: never built, or built for another Node (ABI text)
+_SQLITE_UNUSABLE = re.compile(r'bindings file|different Node\.js version|NODE_MODULE_VERSION', re.I)
+
+
+def _plugin_root() -> Path:
+    """Where THIS code lives, never the environment: other plugins export their CLAUDE_PLUGIN_ROOT into the
+    shared env file (§16 P5), and a foreign root would hide the plugin-local CLI and the version floor.
+    The env root is honoured only when it is an ACE plugin root too (a copy, a symlinked checkout)."""
+    env = os.environ.get('CLAUDE_PLUGIN_ROOT')
+    if env and (Path(env) / 'shared-hooks' / 'utils' / 'ace_cli.py').is_file():
+        return Path(env)
+    return Path(__file__).resolve().parents[2]
+
+
+def _pin():
+    """The exact ace-cli version this plugin version was tested with (package.json, DESIGN §23)."""
     try:
-        from utils.ace_search_cache import AceSearchCache as _module_AceSearchCache  # type: ignore
-    except Exception:  # noqa: BLE001
-        _module_AceSearchCache = None  # type: ignore
+        v = json.loads((_plugin_root() / 'package.json').read_text())['dependencies']['@ace-sdk/cli']
+        return v if re.fullmatch(r'\d+\.\d+\.\d+', v) else None
+    except Exception:
+        return None
 
-try:
-    _module_cache = _module_AceSearchCache()  # fresh per module-exec  # type: ignore
-except Exception:  # noqa: BLE001
-    _module_cache = None  # type: ignore
+
+def _tup(v):
+    return tuple(int(x) for x in v.split('.'))
+
+
+def _global_below_pin(path) -> bool:
+    """True only when SessionStart's cli_version.json cache says this very binary is older than the pin.
+    No cache / unknown version = accepted (never spawn a probe here; never disable on unknown)."""
+    try:
+        pin, real = _pin(), os.path.realpath(path)
+        c = json.loads(_plugin_dir().cli_version_file().read_text())
+        return bool(pin and c.get('path') == real and c.get('mtime') == os.stat(real).st_mtime
+                    and c.get('version') and _tup(c['version']) < _tup(pin))
+    except Exception:
+        return False
+
+
+def global_cli():
+    """Path of an `ace-cli` on PATH, or None (the fallback; version floor is applied by _resolve)."""
+    return shutil.which('ace-cli')
+
+
+def _resolve():
+    """(argv prefix, source): plugin-local [node, cli.js] -> global [ace-cli] (>= pin) -> (None, None).
+    The ONE place that locates ace-cli. No spawn. Plugin-local is found next to this file."""
+    node = shutil.which('node')
+    if node:
+        js = _plugin_root() / 'node_modules' / '@ace-sdk' / 'cli' / 'dist' / 'cli.js'
+        if js.is_file():
+            return [node, str(js)], 'plugin-local'
+    g = global_cli()
+    if g and not _global_below_pin(g):
+        return ['ace-cli'], 'global'  # by name: the child resolves it on the same PATH
+    return None, None
+
+
+def cli_argv():
+    return _resolve()[0]
+
+
+def cli_source():
+    return _resolve()[1]
+
+
+def _cmd(*args):
+    argv = cli_argv()
+    if not argv:
+        raise FileNotFoundError('ace-cli')
+    return argv + list(args)
+
+
+def clean_stderr(text) -> str:
+    """Drop ace-cli's own 'Update available ... npm install -g' notifier lines (DESIGN §20.2)."""
+    return '\n'.join(l for l in (text or '').splitlines() if not _NOTIFIER.search(l)).strip()
+
+
+_AUTH_MSG = {"error": "not_authenticated", "message": "Not logged in. Run /ace-login first."}
 
 
 def _log_cli_error(location: str, returncode: int, stdout_sample: str, stderr_sample: str,
-                    query: str = None, project_id: str = None, extra: dict = None) -> None:
-    """v6.4.2: Log ace-cli failures to canonical telemetry stream.
-
-    Previously these failures returned None silently — plugin logged
-    patterns_returned=0 with no signal that the CLI actually failed.
-    """
+                    query: str = None, project_id: str = None, extra: dict = None,
+                    hook_event_name: str = "UserPromptSubmit") -> None:
+    """Log ace-cli failures to the canonical telemetry stream (UTC 'Z' timestamps)."""
     try:
         entry = {
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             "event": "error",
-            "hook": "UserPromptSubmit",
+            "hook": hook_event_name,
             "location": location,
             "project_id": project_id,
             "returncode": returncode,
@@ -56,205 +133,303 @@ def _log_cli_error(location: str, returncode: int, stdout_sample: str, stderr_sa
         }
         if extra:
             entry.update(extra)
-        log_path = Path('.claude/data/logs/ace-relevance.jsonl')
-        log_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(log_path, 'a') as f:
-            f.write(json.dumps(entry) + '\n')
+        import sys as _sys
+        _u = str(Path(__file__).resolve().parent)
+        if _u not in _sys.path:
+            _sys.path.insert(0, _u)
+        from ace_relevance_logger import ACERelevanceLogger
+        ACERelevanceLogger()._write_log(entry)  # shares the one rotation scheme
     except Exception:
         pass  # Logging must not fail the caller
 
 
-def run_search(query: str, org: str = None, project: str = None, session_id: str = None, task_intent: str = None) -> Optional[Dict[str, Any]]:
-    """
-    Call ace-cli search --stdin with optional session pinning
+def _text(b) -> str:
+    if not b:
+        return ''
+    return b.decode('utf-8', errors='replace') if isinstance(b, bytes) else b
 
-    Args:
-        query: Search query text
-        org: Organization ID (optional, passed via environment)
-        project: Project ID (optional, passed via environment)
-        session_id: Session ID to pin results to (optional, requires ace-cli v1.0.11+)
-        task_intent: Intent hint for search ranking (optional, e.g. 'explore', 'refactor',
-                     'routine', 'spec_strict'). Passed as --task-intent to ace-cli search.
-                     Included in cache key to prevent cross-intent cache bleed.
 
-    Returns:
-        Parsed JSON response or None on failure
-        v5.4.21: Returns {"error": ..., "message": ...} dict on auth failure
+def _env(org, project):
+    env = os.environ.copy()
+    if org:
+        env['ACE_ORG_ID'] = org
+    if project:
+        env['ACE_PROJECT_ID'] = project
+    if not env.get('ACE_CLIENT_ID'):  # X-ACE-Client attribution for every search/learn
+        try:
+            from ace_env import client_id, plugin_version
+            env['ACE_CLIENT_ID'] = client_id()
+            env.setdefault('ACE_PLUGIN_VERSION', plugin_version())
+        except Exception:
+            pass
+    return env
 
-    Response includes:
-        - similar_patterns: List of matching patterns
-        - domains_summary: {abstract: [...], concrete: [...]} (if available)
-        - count: Number of patterns returned
-        - threshold: Similarity threshold used
 
-    Note:
-        Context passed via environment variables (ACE_ORG_ID, ACE_PROJECT_ID).
-        CLI reads server config (search_top_k, constitution_threshold) automatically.
-        No need to pass --org, --project flags!
-
-    Session Pinning (v1.0.11+):
-        If session_id provided, patterns are pinned to session storage for 24h.
-        Enables fast recall after context compaction via recall_session().
-
-    v5.4.21 Changes:
-        Returns {"error": "not_authenticated", "message": "..."} on auth failure
-        instead of None, enabling better error messages to users.
-    """
-    # v6.5.0 Item #17: LRU cache for repeat queries within a single Python process
-    # (60s TTL, 100-entry capacity). Cache key includes (query, org, project,
-    # task_intent) so multi-project hooks and cross-intent calls segment correctly;
-    # session_id intentionally excluded so pinning doesn't fragment the cache.
-    # PR-review I1: variadic key — additional callers can pass --section as
-    # an extra discriminator without colliding with general searches.
-    # v6.6.5 / #26: Use module-local _module_cache / _module_AceSearchCache so each
-    # isolated module instance (tests) gets its own cache and doesn't share state.
-    _cache = None
-    _cache_key = None
+def _plugin_dir():
+    """Import plugin_data_dir (same utils dir) lazily; None if unavailable."""
     try:
-        if _module_cache is not None and _module_AceSearchCache is not None:
-            _cache = _module_cache
-            _cache_key = _module_AceSearchCache.make_key("search", query, org, project, task_intent)
-            _cached = _cache.get(_cache_key)
-            if _cached is not None:
-                return _cached
-    except Exception:  # noqa: BLE001 — cache must NEVER break the search path
-        _cache = None
-        _cache_key = None
+        import sys as _sys
+        _u = str(Path(__file__).resolve().parent)
+        if _u not in _sys.path:
+            _sys.path.insert(0, _u)
+        import plugin_data_dir
+        return plugin_data_dir
+    except Exception:
+        return None
 
+
+def _store_full_pct(resp) -> None:
+    """Server switches (render_full_pct, feedback_downvote): persist them from every search response (never raises)."""
+    pd = _plugin_dir()
+    if pd:
+        pd.store_server_switches(resp)
+
+
+def _pin_backoff_active() -> bool:
+    """True while <root>/pin-backoff is younger than ACE_PIN_BACKOFF_MIN (default 5; 30 before SDK 4.3.0's sessions.db index) min."""
     try:
-        # Build environment with context
-        env = os.environ.copy()
-        if org:
-            env['ACE_ORG_ID'] = org
-        if project:
-            env['ACE_PROJECT_ID'] = project
+        pdd = _plugin_dir()
+        mins = float(os.environ.get('ACE_PIN_BACKOFF_MIN') or 5)
+        return pdd is not None and (time.time() - pdd.pin_backoff_file().stat().st_mtime) < mins * 60
+    except Exception:
+        return False
 
-        # Build command with optional session pinning and task intent
-        cmd = [CLI_CMD, 'search', '--stdin', '--json']
-        if session_id:
-            cmd.extend(['--pin-session', session_id])
-        if task_intent:
-            cmd.extend(['--task-intent', task_intent])
 
-        result = subprocess.run(
-            cmd,
-            input=query.encode('utf-8'),
-            capture_output=True,
-            timeout=30,
-            env=env
-        )
+def _touch_backoff() -> None:
+    try:
+        _plugin_dir().pin_backoff_file().touch()
+    except Exception:
+        pass
 
+
+def _log_pin(session_id, hook_event_name, **fields) -> None:
+    """Best-effort relevance row for a pin failure/skip (DESIGN §11 A1)."""
+    try:
+        entry = {"timestamp": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+                 "event": "pin", "hook": hook_event_name, "session_id": session_id}
+        entry.update(fields)
+        import sys as _sys
+        _u = str(Path(__file__).resolve().parent)
+        if _u not in _sys.path:
+            _sys.path.insert(0, _u)
+        from ace_relevance_logger import ACERelevanceLogger
+        ACERelevanceLogger()._write_log(entry)
+    except Exception:
+        pass
+
+
+def _log_engine(engine, reason, hook_event_name, **fields) -> None:
+    """Best-effort relevance row: which engine this spawn used and why (DESIGN §14)."""
+    try:
+        entry = {"timestamp": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+                 "event": "engine", "engine": engine, "reason": reason, "hook": hook_event_name}
+        entry.update(fields)
+        from ace_relevance_logger import ACERelevanceLogger
+        ACERelevanceLogger()._write_log(entry)
+    except Exception:
+        pass
+
+
+def _failure_reason(result) -> str:
+    return "exit %s: %s" % (result.returncode, _text(result.stderr).strip()[:200])
+
+
+def _search_lib(node, query, org, project, session_id, top_k, timeout, hook_event_name):
+    """One engine spawn: (parsed_result, None) or (None, why_it_failed). A timeout propagates."""
+    argv, stdin = ace_engine.search_command(query, org=org, project=project, session_id=session_id,
+                                            top_k=top_k, node=node)
+    t0 = time.monotonic()
+    try:
+        result = subprocess.run(argv, input=stdin, capture_output=True, timeout=timeout, env=_env(org, project))
+    except subprocess.TimeoutExpired:
+        _log_engine("lib", "timeout", hook_event_name, ok=False, ms=_ms(t0))
+        raise
+    except OSError as e:
+        reason = "spawn failed: %s" % str(e)[:200]
+    else:
+        reason = _failure_reason(result)
+        if result.returncode == 0:
+            try:
+                parsed = json.loads(_text(result.stdout))
+                if isinstance(parsed, dict) and isinstance(parsed.get("similar_patterns"), list):
+                    _log_engine("lib", "ok", hook_event_name, ok=True, ms=_ms(t0))
+                    _store_full_pct(parsed)
+                    return parsed, None
+            except ValueError:
+                pass
+            reason = "unexpected output (no similar_patterns list)"
+    _log_engine("lib", reason, hook_event_name, ok=False, ms=_ms(t0))
+    return None, reason
+
+
+def _is_auth_failure(stderr: str, stdout: str) -> bool:
+    return (any(x in stderr.lower() for x in ['unauthorized', '401', 'not logged in', 'no api token', 'token_expired'])
+            or any(x in stdout.lower() for x in ['not logged in', 'no api token']))
+
+
+def _ms(t0: float) -> int:
+    return int((time.monotonic() - t0) * 1000)
+
+
+def run_search(query: str, *, org: str = None, project: str = None, session_id: str = None,
+               top_k: int = None, timeout: int = 25, pin: bool = True,
+               hook_event_name: str = "UserPromptSubmit") -> Tuple[Optional[Dict[str, Any]], int]:
+    """ONE engine spawn if the gate passes, else or on its failure ONE
+    `ace-cli search --stdin --json [--pin-session X] [--session-id X] [--top-k N]` spawn.
+
+    Returns (result_dict_or_None, duration_ms). Structured error dicts are kept:
+    {"error": "not_authenticated"|"timeout"|"cli_not_found", "message": ...}.
+    Context goes via ACE_ORG_ID / ACE_PROJECT_ID env. session_id pins the results
+    server-side unless pin=False or the pin-backoff is active; the CLI path always sends it as
+    --session-id (request field only, ace-cli >= 4.3.1) and the engine always as session_id (it never pins).
+    Failures are logged with the CALLER's hook_event_name.
+    """
+    t0 = time.monotonic()
+    t_cli = t0
+    want_pin = pin
+    pin = None
+    try:
+        node, reason = ace_engine.preflight()
+        if node:
+            parsed, reason = _search_lib(node, query, org, project, session_id, top_k, timeout,
+                                         hook_event_name)
+            if parsed is not None:
+                return parsed, _ms(t0)
+            t_cli = time.monotonic()
+            timeout -= t_cli - t0
+            if timeout < 2:  # A2: never overrun the hook budget with a fallback
+                _log_cli_error("ace_engine_failed_no_budget", -1, '', reason, query=query, project_id=project,
+                               hook_event_name=hook_event_name)
+                return None, _ms(t0)
+            reason = "lib failed: " + reason
+        _log_engine("cli", reason, hook_event_name)
+        pin = session_id if want_pin else None
+        if pin and _pin_backoff_active():  # sessions.db lock is sticky (p2): don't even try
+            pin = None
+            _log_pin(session_id, hook_event_name, pin_skipped="backoff")
+
+        def spawn(with_pin, to):
+            argv, stdin = ace_engine.search_command(query, session_id=session_id, pin=bool(with_pin and pin),
+                                                    top_k=top_k, cli=_cmd())
+            return subprocess.run(argv, input=stdin, capture_output=True, timeout=to, env=_env(org, project))
+
+        result = spawn(True, timeout)
+        stderr = clean_stderr(_text(result.stderr))
+        stdout = _text(result.stdout)
+        # A1: a pinned search that dies on the sessions.db lock (or prints nothing) is
+        # re-run ONCE without the pin; the pinned command itself is never re-run.
+        locked = 'database is locked' in stderr.lower()
+        if pin and (locked or (not stdout.strip() and not _is_auth_failure(stderr, stdout))):
+            _log_pin(session_id, hook_event_name, pin_failed=True)
+            if locked or _SQLITE_UNUSABLE.search(stderr):  # sticky lock, or `--ignore-scripts` without the
+                _touch_backoff()  # better-sqlite3 binary (until the SessionStart rebuild): don't pay 2 spawns per prompt
+            remaining = timeout - (time.monotonic() - t_cli)
+            if remaining >= 2:  # A2: never overrun the hook budget with a floored retry
+                result = spawn(False, remaining)
+                stderr = clean_stderr(_text(result.stderr))
+                stdout = _text(result.stdout)
         if result.returncode != 0:
-            # v5.4.21: Check if failure is due to auth
-            # CLI may output JSON error even on non-zero exit
-            stderr = result.stderr.decode('utf-8', errors='replace') if result.stderr else ''
-            stdout = result.stdout.decode('utf-8', errors='replace') if result.stdout else ''
-
-            # Check for auth-related errors
-            if any(x in stderr.lower() for x in ['unauthorized', '401', 'not logged in', 'no api token']):
-                return {"error": "not_authenticated", "message": "Not logged in. Run /ace-login first."}
-            if any(x in stdout.lower() for x in ['not logged in', 'no api token']):
-                return {"error": "not_authenticated", "message": "Not logged in. Run /ace-login first."}
-
-            # Other failures
-            _log_cli_error(
-                location="ace_cli_nonzero_exit",
-                returncode=result.returncode,
-                stdout_sample=stdout,
-                stderr_sample=stderr,
-                query=query,
-                project_id=project,
-            )
-            return None
+            if _is_auth_failure(stderr, stdout):
+                return dict(_AUTH_MSG), _ms(t0)
+            _log_cli_error("ace_cli_nonzero_exit", result.returncode, stdout, stderr,
+                           query=query, project_id=project, hook_event_name=hook_event_name)
+            return None, _ms(t0)
 
         try:
-            _parsed = json.loads(result.stdout)
-            # v6.5.0 Item #17: store result for 60s LRU reuse
-            if _cache is not None and _cache_key is not None:
-                try:
-                    _cache.put(_cache_key, _parsed)
-                except Exception:  # noqa: BLE001
-                    pass
-            return _parsed
+            parsed = json.loads(stdout)
         except json.JSONDecodeError as _je:
-            # v6.4.2: Previously silent — now visible in telemetry.
-            _stdout_txt = result.stdout.decode('utf-8', errors='replace') if result.stdout else ''
-            _stderr_txt = result.stderr.decode('utf-8', errors='replace') if result.stderr else ''
-            _log_cli_error(
-                location="ace_cli_json_parse_failed",
-                returncode=result.returncode,
-                stdout_sample=_stdout_txt,
-                stderr_sample=_stderr_txt,
-                query=query,
-                project_id=project,
-                extra={"parse_error": str(_je)[:200], "stdout_bytes": len(result.stdout) if result.stdout else 0},
-            )
-            return None
+            _log_cli_error("ace_cli_json_parse_failed", result.returncode, stdout, stderr,
+                           query=query, project_id=project, hook_event_name=hook_event_name,
+                           extra={"parse_error": str(_je)[:200],
+                                  "stdout_bytes": len(result.stdout) if result.stdout else 0})
+            return None, _ms(t0)
+        _store_full_pct(parsed)
+        return parsed, _ms(t0)
 
     except subprocess.TimeoutExpired:
-        _log_cli_error(
-            location="ace_cli_timeout",
-            returncode=-1,
-            stdout_sample='',
-            stderr_sample='',
-            query=query,
-            project_id=project,
-        )
-        return {"error": "timeout", "message": "Search timed out. Check your connection."}
+        if pin:  # a pinned spawn stuck on the lock: don't make every later call wait again
+            _touch_backoff()
+        _log_cli_error("ace_cli_timeout", -1, '', '', query=query, project_id=project,
+                       hook_event_name=hook_event_name)
+        return {"error": "timeout", "message": "Search timed out. Check your connection."}, _ms(t0)
     except FileNotFoundError:
-        return {"error": "cli_not_found", "message": "ace-cli not found. Run: npm install -g @ace-sdk/cli"}
+        return {"error": "cli_not_found",
+                "message": _NOT_FOUND}, _ms(t0)
 
 
-def recall_session(session_id: str, org: str = None, project: str = None) -> Optional[Dict[str, Any]]:
+def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_ids=None,
+              org: str = None, project: str = None, verbosity: str = 'detailed',
+              timeout: int = 300,
+              hook_event_name: str = "Stop") -> Tuple[Optional[Dict[str, Any]], int]:
+    """ONE engine or `ace-cli learn --transcript <tmpfile>` spawn (F-080 flags kept).
+
+    The engine falls back to ace-cli only when it exited 3 (nothing sent) or could not spawn.
+
+    The trace goes through a temp file (learn --stdin breaks above ~64KB pipe
+    buffer); the file is always removed. Returns (parsed_json_or_None, ms).
     """
-    Recall pinned patterns from session storage (v1.0.11+)
-
-    Args:
-        session_id: Session ID to recall
-        org: Organization ID (optional, passed via environment)
-        project: Project ID (optional, passed via environment)
-
-    Returns:
-        Recalled patterns as dict, or None on error
-
-    Note:
-        Session recall is FAST (~10ms) and does NOT make server calls.
-        Sessions expire after 24 hours (configurable TTL).
-        Non-fatal failure - returns None if session not found/expired.
-
-    Response format (same as run_search):
-        {
-            "similar_patterns": [...],
-            "count": N,
-            "threshold": 0.75,
-            "session_id": "uuid",
-            "pinned_at": timestamp,
-            "expires_at": timestamp
-        }
-    """
+    t0 = time.monotonic()
+    try:  # plugin-data tmp (S10), so a SIGKILLed learn leaves nothing in the system tmp
+        import plugin_data_dir
+        _tmp = str(plugin_data_dir.private_dir(plugin_data_dir.data_root() / 'tmp'))  # §24: traces hold prompts
+    except Exception as e:  # never the system tmp: the trace holds the prompt (hard rule, §24)
+        _log_engine("lib", "learn skipped: no private tmp dir: %s" % str(e)[:200], hook_event_name, ok=False, ms=_ms(t0))
+        return None, _ms(t0)
+    fd, path = tempfile.mkstemp(prefix='ace-trace-', suffix='.json', dir=_tmp)
     try:
-        # Build environment with context
-        env = os.environ.copy()
-        if org:
-            env['ACE_ORG_ID'] = org
-        if project:
-            env['ACE_PROJECT_ID'] = project
+        with os.fdopen(fd, 'w') as f:
+            json.dump(trace, f, default=str)
+        def spawn(node, to):
+            cmd = ace_engine.learn_command(path, retrieval_id=retrieval_id, applied_log_ids=applied_log_ids,
+                                           verbosity=verbosity, timeout=timeout, node=node, cli=None if node else _cmd())
+            return subprocess.run(cmd, text=True, capture_output=True, timeout=to, env=_env(org, project))
 
-        result = subprocess.run(
-            [CLI_CMD, 'cache', 'recall', '--session', session_id, '--json'],
-            capture_output=True,
-            timeout=5,  # Fast recall, should be <10ms
-            env=env
-        )
-
+        # A lock or server failure may occur after the server POST: retrying learn could
+        # duplicate the trace / double F-080 credit, so learn never retries once it may have sent.
+        result = None
+        node, reason = ace_engine.preflight()
+        if node:
+            try:
+                result = spawn(node, timeout)
+            except subprocess.TimeoutExpired:  # the POST may have been sent: log, but no fallback
+                _log_engine("lib", "timeout", hook_event_name, ok=False, ms=_ms(t0))
+                raise
+            except OSError as e:
+                reason = "lib failed: spawn failed: %s" % str(e)[:200]
+                _log_engine("lib", reason, hook_event_name, ok=False, ms=_ms(t0))
+            else:
+                ok = result.returncode == 0
+                _log_engine("lib", "ok" if ok else _failure_reason(result), hook_event_name, ok=ok, ms=_ms(t0))
+                if result.returncode == 3:
+                    reason = "lib failed: " + _failure_reason(result)
+                    result = None
+        if result is None:
+            _log_engine("cli", reason, hook_event_name)
+            result = spawn(None, timeout)
         if result.returncode != 0:
-            # Session not found or expired - this is non-fatal
-            return None
-
-        return json.loads(result.stdout)
-
-    except (subprocess.TimeoutExpired, json.JSONDecodeError, FileNotFoundError):
-        return None
+            _log_cli_error("ace_cli_learn_nonzero_exit", result.returncode, _text(result.stdout),
+                           clean_stderr(_text(result.stderr)), project_id=project, hook_event_name=hook_event_name)
+            return None, _ms(t0)
+        try:
+            return json.loads(result.stdout), _ms(t0)
+        except (json.JSONDecodeError, TypeError) as _je:
+            _log_cli_error("ace_cli_learn_json_parse_failed", result.returncode,
+                           _text(result.stdout), _text(result.stderr), project_id=project,
+                           hook_event_name=hook_event_name, extra={"parse_error": str(_je)[:200]})
+            return None, _ms(t0)
+    except subprocess.TimeoutExpired:
+        _log_cli_error("ace_cli_learn_timeout", -1, '', '', project_id=project,
+                       hook_event_name=hook_event_name)
+        return None, _ms(t0)
+    except FileNotFoundError:
+        _log_cli_error("ace_cli_learn_not_found", -1, '', '', project_id=project,
+                       hook_event_name=hook_event_name)
+        return None, _ms(t0)
+    finally:
+        try:
+            os.unlink(path)
+        except Exception:
+            pass
 
 
 def check_auth_status(warn_threshold_hours: float = 2.0) -> Optional[str]:
@@ -295,7 +470,7 @@ def check_auth_status(warn_threshold_hours: float = 2.0) -> Optional[str]:
     """
     try:
         result = subprocess.run(
-            [CLI_CMD, 'whoami', '--json'],
+            _cmd('whoami', '--json'),
             capture_output=True,
             text=True,
             timeout=5
@@ -374,102 +549,3 @@ def check_auth_status(warn_threshold_hours: float = 2.0) -> Optional[str]:
         pass  # Non-fatal
 
     return None
-
-
-def ensure_authenticated() -> tuple:
-    """
-    Pre-flight authentication check for ACE operations - v5.4.21
-
-    Returns:
-        Tuple of (is_authenticated: bool, error_message: Optional[str])
-        - (True, None) if authenticated
-        - (False, "error message") if not authenticated
-
-    Usage:
-        is_ok, error = ensure_authenticated()
-        if not is_ok:
-            # Handle auth failure - show error to user
-            return {"error": "not_authenticated", "message": error}
-
-    Note:
-        This is a SYNCHRONOUS check. Use at the start of slash commands
-        or utility functions to fail fast with a clear message.
-    """
-    try:
-        result = subprocess.run(
-            [CLI_CMD, 'whoami', '--json'],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-
-        # Parse stdout regardless of returncode (CLI returns JSON even on error)
-        if result.stdout:
-            try:
-                data = json.loads(result.stdout)
-                if data.get('authenticated', False):
-                    return (True, None)
-                else:
-                    message = data.get('message', 'Not logged in')
-                    return (False, f"❌ [ACE] {message}. Run /ace-login to authenticate.")
-            except json.JSONDecodeError:
-                pass
-
-        # CLI failed without valid JSON
-        return (False, "❌ [ACE] Authentication check failed. Run /ace-login to setup.")
-
-    except subprocess.TimeoutExpired:
-        return (False, "❌ [ACE] Authentication check timed out. Check your connection.")
-    except FileNotFoundError:
-        return (False, "❌ [ACE] ace-cli not found. Run: npm install -g @ace-sdk/cli")
-
-
-def check_session_pinning_available() -> bool:
-    """
-    Check if ace-cli CLI supports session pinning (v1.0.11+)
-
-    Returns:
-        True if session pinning available, False otherwise
-
-    Usage:
-        if check_session_pinning_available():
-            # Use session pinning
-            run_search(query, session_id=session_id)
-        else:
-            # Gracefully degrade
-            run_search(query)
-    """
-    try:
-        result = subprocess.run(
-            [CLI_CMD, '--version'],
-            capture_output=True,
-            timeout=5
-        )
-
-        if result.returncode != 0:
-            return False
-
-        version_str = result.stdout.decode('utf-8').strip()
-
-        # Parse version (e.g., "1.0.11" -> [1, 0, 11])
-        parts = version_str.split('.')
-        if len(parts) < 3:
-            return False
-
-        try:
-            major, minor, patch = map(int, parts[:3])
-        except ValueError:
-            return False
-
-        # Session pinning requires v1.0.11+
-        if major > 1:
-            return True
-        if major == 1 and minor > 0:
-            return True
-        if major == 1 and minor == 0 and patch >= 11:
-            return True
-
-        return False
-
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return False

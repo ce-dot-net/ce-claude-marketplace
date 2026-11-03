@@ -1,81 +1,103 @@
-"""
-Tests for Task 2: SessionEnd Cleanup Hook
+#!/usr/bin/env python3
+"""SessionEnd (v8, WP-A): delete THIS session's dir under plugin data — nothing else.
 
-CC SDK documents SessionEnd with reason field.
-ACE should clean up per-session temp files on session end.
-"""
+DESIGN §4: "SessionEnd deletes <root>/projects/<project_id>/sessions/<session_id>/ only."
+Hard 1.5 s budget for plugin hooks; plugin `timeout` does not raise it
+(cc_hooks_reference.md:3578-3586, critic V9/C4). Output is discarded (doc :3574).
+v7 swept /tmp/ace-* and .claude/data/logs/ace-patterns-used-* with a jq-parsed
+SESSION_ID (critic T21) — replaced by the §4 session dir.
 
+Rewritten from the v6 static-grep tests (which pinned the /tmp file names and an ERR
+trap the §3.1 shim no longer has).
+"""
 import json
-import os
-import stat
+import time
 
-PLUGIN_DIR = os.path.join(os.path.dirname(__file__), '..', 'plugins', 'ace')
-HOOKS_JSON = os.path.join(PLUGIN_DIR, 'hooks', 'hooks.json')
-WRAPPER = os.path.join(PLUGIN_DIR, 'scripts', 'ace_sessionend_wrapper.sh')
+from wpa_harness import Env, PROJECT_ID, SCRIPTS
 
-
-def _read(path):
-    with open(path) as f:
-        return f.read()
+SCRIPT = "ace_sessionend_wrapper.sh"
 
 
-class TestHooksJsonSessionEnd:
-    """hooks.json should have a SessionEnd event."""
-
-    def test_hooks_json_has_sessionend(self):
-        """SessionEnd event exists in hooks.json."""
-        hooks = json.loads(_read(HOOKS_JSON))
-        assert 'SessionEnd' in hooks['hooks'], \
-            "hooks.json missing SessionEnd event"
-
-    def test_sessionend_timeout_reasonable(self):
-        """SessionEnd timeout should be <= 5000ms (fast cleanup)."""
-        hooks = json.loads(_read(HOOKS_JSON))
-        session_end = hooks['hooks']['SessionEnd']
-        for entry in session_end:
-            for hook in entry.get('hooks', []):
-                timeout = hook.get('timeout', 0)
-                assert timeout <= 5000, \
-                    f"SessionEnd timeout {timeout}ms > 5000ms"
+def _ev(env, sid, cwd=None):
+    return {"session_id": sid, "hook_event_name": "SessionEnd", "reason": "other",
+            "cwd": str(cwd or env.project), "transcript_path": ""}
 
 
-class TestSessionEndWrapper:
-    """ace_sessionend_wrapper.sh should exist and be properly configured."""
+def _seed(env, sid):
+    d = env.session_dir(sid)
+    d.mkdir(parents=True)
+    (d / "patterns-used-main.json").write_text("{}")
+    (d / "domain-last-main.txt").write_text("python")
+    (d / "disabled.flag").write_text("x")
+    import os, time  # files younger than 60 s keep the dir (Stop may still be starting)
+    for f in d.iterdir():
+        os.utime(str(f), (time.time() - 300, time.time() - 300))
+    return d
 
-    def test_sessionend_wrapper_exists(self):
-        """Script file exists."""
-        assert os.path.isfile(WRAPPER), \
-            f"ace_sessionend_wrapper.sh not found at {WRAPPER}"
 
-    def test_sessionend_wrapper_executable(self):
-        """Script has execute permission."""
-        mode = os.stat(WRAPPER).st_mode
-        assert mode & stat.S_IXUSR, \
-            "ace_sessionend_wrapper.sh is not executable"
+def test_sessionend_deletes_own_session_dir(tmp_path):
+    """DESIGN §4: the session's dir (and everything in it) is removed."""
+    env = Env(tmp_path)
+    d = _seed(env, "s-end")
+    r = env.run(SCRIPT, _ev(env, "s-end"))
+    assert r.returncode == 0, r.stderr
+    assert not d.exists(), "own session dir must be deleted"
 
-    def test_sessionend_wrapper_no_exit_1(self):
-        """Script never exits with error (best-effort cleanup)."""
-        content = _read(WRAPPER)
-        # Should not have bare 'exit 1' — always exits 0
-        assert 'exit 1' not in content, \
-            "ace_sessionend_wrapper.sh has 'exit 1' — should always exit 0"
 
-    def test_sessionend_wrapper_has_err_trap(self):
-        """Script has error trap consistent with ACE pattern (with error logging)."""
-        content = _read(WRAPPER)
-        assert "trap 'echo" in content and "ERR" in content, \
-            "ace_sessionend_wrapper.sh missing ERR trap"
+def test_sessionend_keeps_other_sessions_and_project_state(tmp_path):
+    """Only <sid>/ goes: sibling sessions, domains.json and the project's relevance log stay."""
+    env = Env(tmp_path)
+    _seed(env, "s-end")
+    other = _seed(env, "s-other")
+    domains = env.data / "projects" / PROJECT_ID / "domains.json"
+    domains.write_text("[]")
+    rel = env.project / ".claude" / "data" / "logs" / "ace-relevance.jsonl"
+    rel.parent.mkdir(parents=True)
+    rel.write_text("{}\n")
+    env.run(SCRIPT, _ev(env, "s-end"))
+    assert other.exists() and domains.exists() and rel.exists()
 
-    def test_sessionend_only_cleans_session_keyed_files(self):
-        """Script cleans session-keyed files only, NOT project-keyed shared state."""
-        content = _read(WRAPPER)
-        # Session-keyed files (per-task) should be cleaned
-        assert 'ace-disabled-${SESSION_ID}' in content, \
-            "ace_sessionend_wrapper.sh doesn't clean session-keyed disabled flag"
-        assert 'ace-patterns-precompact-${SESSION_ID}' in content, \
-            "ace_sessionend_wrapper.sh doesn't clean session-keyed precompact patterns"
-        # Project-keyed files are cross-task shared state — must NOT be cleaned
-        assert 'ace-session-${PROJECT_ID}' not in content, \
-            "ace_sessionend_wrapper.sh should NOT clean project-keyed ace-session file"
-        assert 'ace-domains-${PROJECT_ID}' not in content, \
-            "ace_sessionend_wrapper.sh should NOT clean project-keyed ace-domains file"
+
+def test_sessionend_resolves_project_from_hook_cwd(tmp_path):
+    """DESIGN §3.1: no `cd` in shims, Python uses the hook JSON `cwd` (CC may run the
+    hook from another dir, doc :402)."""
+    env = Env(tmp_path)
+    d = _seed(env, "s-cwd")
+    elsewhere = tmp_path / "elsewhere"
+    elsewhere.mkdir()
+    r = env.run(SCRIPT, _ev(env, "s-cwd"), cwd=elsewhere)
+    assert r.returncode == 0, r.stderr
+    assert not d.exists(), "project must be resolved from event cwd, not process cwd"
+
+
+def test_sessionend_unsafe_session_id_cannot_escape(tmp_path):
+    """Hook-supplied ids are untrusted: '../s-victim' must not delete a sibling session."""
+    env = Env(tmp_path)
+    victim = _seed(env, "s-victim")
+    r = env.run(SCRIPT, _ev(env, "../s-victim"))
+    assert r.returncode == 0
+    assert victim.exists()
+
+
+def test_sessionend_missing_session_id_is_noop(tmp_path):
+    env = Env(tmp_path)
+    d = _seed(env, "default")
+    r = env.run(SCRIPT, {"hook_event_name": "SessionEnd", "cwd": str(env.project)})
+    assert r.returncode == 0
+    assert d.exists(), "no session_id -> nothing deleted (never fall back to 'default')"
+
+
+def test_sessionend_fits_plugin_budget(tmp_path):
+    """cc_hooks_reference.md:3578-3586: plugin SessionEnd hooks have a hard 1.5 s budget."""
+    env = Env(tmp_path)
+    _seed(env, "s-fast")
+    t0 = time.monotonic()
+    env.run(SCRIPT, _ev(env, "s-fast"))
+    assert time.monotonic() - t0 < 1.5
+
+
+def test_sessionend_hooks_json_has_no_timeout():
+    """cc_hooks_reference.md:3584: a plugin hook's SessionEnd timeout cannot raise the 1.5 s budget."""
+    hooks = json.loads((SCRIPTS.parent / "hooks" / "hooks.json").read_text())["hooks"]
+    timeouts = [h.get("timeout") for g in hooks["SessionEnd"] for h in g["hooks"]]
+    assert timeouts == [None]

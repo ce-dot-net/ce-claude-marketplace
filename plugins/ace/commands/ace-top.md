@@ -1,7 +1,8 @@
 ---
+disable-model-invocation: true
 model: claude-haiku-4-5
 description: Get highest-rated ACE patterns by reward score
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Top Patterns
@@ -20,8 +21,8 @@ When the user runs `/ace-top [section] [limit] [min_reward]`, use ace-cli:
 #!/usr/bin/env bash
 set -euo pipefail
 
-if ! command -v ace-cli >/dev/null 2>&1; then
-  echo "❌ ace-cli not found - Install: npm install -g @ace-sdk/cli"
+if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
+  echo "❌ ACE CLI not found - Install: /ace:ace-install-cli"
   exit 1
 fi
 
@@ -56,9 +57,9 @@ echo "🏆 Fetching top-rated patterns..."
 
 # Execute command
 if [ -n "$ORG_ID" ]; then
-  ace-cli --org "$ORG_ID" --project "$PROJECT_ID" top $CMD_ARGS
+  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --org "$ORG_ID" --project "$PROJECT_ID" top $CMD_ARGS
 else
-  ace-cli --project "$PROJECT_ID" top $CMD_ARGS
+  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --project "$PROJECT_ID" top $CMD_ARGS
 fi
 
 if [ $? -eq 0 ]; then

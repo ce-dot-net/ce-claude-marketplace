@@ -19,12 +19,16 @@ Best-effort: any failure is swallowed silently. Hook MUST NOT block CC turns.
 from __future__ import annotations
 
 import json
+import re
 import os
 import subprocess
 import sys
 import time
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "utils"))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "utils"))
 
 
 DEBOUNCE_SECONDS = 60
@@ -48,7 +52,8 @@ _INFRA_MARKERS: tuple[str, ...] = (
 _TOOL_NAMING_MARKER = "is temporarily unavailable, so auto mode cannot determine the safety"
 
 
-_TAIL_BYTES = 32768  # FIX 2: seek-based read; never loads full transcript into memory
+_TAIL_BYTES = 262144  # FIX 2: seek-based read; 256 KB since §16 P9 (2.1.300+ records api-request lines after the denial)
+_API_REQUEST = re.compile(r'"type"\s*:\s*"api-request')
 
 
 def _read_transcript_tail(path, max_entries: int = 12) -> list:
@@ -75,6 +80,7 @@ def _read_transcript_tail(path, max_entries: int = 12) -> list:
         # Drop a possibly-partial first line when we didn't read from byte 0
         if start > 0 and lines:
             lines = lines[1:]
+        lines = [l for l in lines if not _API_REQUEST.search(l[:80])]  # P9: bulky, never a tool_result
     except (OSError, ValueError):
         return []
     candidate_lines = lines[-max_entries:] if len(lines) > max_entries else lines
@@ -135,6 +141,11 @@ def _extract_tool_result_texts(entry: dict) -> list[str]:
 def _is_classifier_infra_denial(event) -> bool:
     """Return True iff the PermissionDenied was caused by a classifier infra abort.
 
+    v8: the documented `reason` field wins when present (cc_hooks_reference.md:2414/2435):
+    "Classifier unavailable" or "Auto mode could not evaluate this action..." = infra abort;
+    a "[Rule Name]" verdict is a genuine deny. The transcript tail is read ONLY when `reason`
+    is absent (older CC builds, v7.1.14 behaviour below).
+
     FIX 3: scans the tail NEWEST→OLDEST and takes the FIRST entry that has
     tool_result text (= the current denial's result).  Only THAT text is checked —
     older tool_results are ignored to prevent cross-event contamination.
@@ -152,6 +163,11 @@ def _is_classifier_infra_denial(event) -> bool:
     try:
         if not isinstance(event, dict):
             return False
+        reason = event.get("reason")
+        if isinstance(reason, str) and reason.strip():
+            low = reason.lower()
+            return ("classifier unavailable" in low
+                    or any(m in low for m in _INFRA_MARKERS))
         transcript_path = event.get("transcript_path")
         if not transcript_path:
             return False
@@ -189,15 +205,20 @@ def _read_event() -> dict:
         return {}
 
 
+_PROJECT_ID = None  # set by main() from the hook cwd; keeps the 2-arg debounce helpers stable
+
+
 def _debounce_dir(session_id: str) -> Path:
-    """Per-session subdir for debounce timestamps. Uses /tmp until #2 migration completes."""
-    # Phase 1 placeholder; Phase 4 will migrate to ${CLAUDE_PLUGIN_DATA}/projects/<id>/sessions/<sid>/
-    base = Path(f"/tmp/ace-denials-{session_id or 'default'}")
+    """Per-session debounce dir under plugin data (DESIGN §4), never /tmp."""
+    from plugin_data_dir import session_dir
+    # Own subdir: the sweep in _record_debounce must never touch the shared session
+    # dir (patterns-used-*.json, disabled.flag, locks, tools.db live there).
+    d = session_dir(_PROJECT_ID, session_id or "default") / "permission-denied"
     try:
-        base.mkdir(parents=True, exist_ok=True)
+        d.mkdir(parents=True, exist_ok=True)
     except OSError:
         pass
-    return base
+    return d
 
 
 def _is_debounced(tool_name: str, session_id: str) -> bool:
@@ -225,7 +246,7 @@ def _record_debounce(tool_name: str, session_id: str) -> None:
         pass
 
     # PR-review I5: opportunistic cleanup of siblings older than 10× TTL.
-    # /tmp/ace-denials-<sid>/ would otherwise grow unbounded on long-running
+    # the session dir would otherwise grow unbounded on long-running
     # CC sessions that never restart (web/Linear variants).
     try:
         cutoff = time.time() - (DEBOUNCE_SECONDS * 10)
@@ -260,6 +281,18 @@ def _structural_fingerprint(tool_name: str, tool_input) -> str:
     return f"input_keys={keys}"
 
 
+def _render_variant(session_id):
+    """§31: the variant stored at render time ('budget'|'full'); without one, the conversation's arm (server request)."""
+    try:
+        from patterns_used_state import load_state
+        from ace_pattern_render import trace_render_variant
+        import plugin_data_dir
+        stored = load_state(session_id, None, 'Stop', project_id=_PROJECT_ID).get('render_variant')
+        return trace_render_variant(stored, session_id, mod=plugin_data_dir.is_mod_active(_PROJECT_ID, session_id))
+    except Exception:
+        return None
+
+
 def _build_trace(event: dict) -> dict:
     """Build ExecutionTrace shape per SDK-team guidance."""
     tool_name = event.get("tool_name", "unknown")
@@ -281,7 +314,7 @@ def _build_trace(event: dict) -> dict:
         "result": f"denied: {reason}",
     }]
 
-    return {
+    trace = {
         "task": task,
         "trajectory": trajectory,
         "result": {
@@ -289,52 +322,70 @@ def _build_trace(event: dict) -> dict:
             "output": f"denied: {reason}",
         },
         "playbook_used": [],
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
         "agent_type": "permission_gate",
         "session_id": session_id,
         # Domain tag — client-side classification; server respects this for searchPatterns
         "domains": ["permission-boundary"],
     }
+    if session_id:  # §31: the stable CC session id; never send ''
+        trace["conversation_id"] = str(session_id)[:512]
+    variant = _render_variant(session_id)
+    if variant:  # §31: omitted when unknown
+        trace["render_variant"] = variant
+    return trace
 
 
 def _send_to_cli(trace: dict) -> bool:
-    """Pipe trace JSON to `ace-cli learn --stdin`. Returns success."""
+    """Send the trace through the shared ace_cli.run_learn (P-18 single timeout source, errors logged).
+    No ACE project -> nothing sent (ace-cli would attribute it to its global default project)."""
+    if not _PROJECT_ID:
+        return False
     try:
-        proc = subprocess.Popen(
-            ["ace-cli", "learn", "--stdin", "--quiet"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        proc.communicate(input=json.dumps(trace).encode("utf-8"), timeout=10)
-        return proc.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+        from ace_cli import run_learn
+        from ace_context import get_context
+        ctx = get_context() or {}
+        res, _ms = run_learn(trace, org=ctx.get("org"), project=_PROJECT_ID, timeout=60,
+                             hook_event_name="PermissionDenied")
+        return res is not None
+    except Exception as e:
+        _log_err(e)
         return False
 
 
+def _log_err(e):
+    try:
+        from ace_relevance_logger import log_error
+        log_error("PermissionDenied", "ace_permission_denied.main", error=e)
+    except Exception:
+        pass
+
+
 def main() -> int:
+    from ace_env import client_id, resolve_ids
+    from plugin_data_dir import is_disabled
     event = _read_event()
     if not event:
         return 0
-
+    global _PROJECT_ID
+    session_id, project_id = resolve_ids(event)
+    _PROJECT_ID = project_id
+    if is_disabled(project_id, session_id):  # session or project flag (P-26)
+        return 0
+    os.environ["ACE_CLIENT_ID"] = client_id()  # was _ace_env.sh in the v7 shim
     tool_name = event.get("tool_name", "")
-    session_id = event.get("session_id", "")
 
     # FIX 4: debounce check runs BEFORE the transcript read so that bursts of
     # genuine denies for the same tool do NOT re-read (potentially large) transcripts.
     if _is_debounced(tool_name, session_id):
         return 0
 
-    # Guard: classifier infra-abort (e.g. LLM overloaded) fires PermissionDenied
-    # with NO denial reason in the event itself, but leaves a marker in the
-    # transcript.  Do NOT learn these — they are infrastructure noise, not
-    # genuine permission-boundary verdicts.  Infra path returns WITHOUT recording
-    # debounce (infra aborts are not genuine boundary signals).
+    # Classifier infra-abort: not a genuine permission-boundary verdict -> do NOT learn.
+    # Infra path returns WITHOUT recording debounce.
     if _is_classifier_infra_denial(event):
         return 0
 
-    trace = _build_trace(event)
-    _send_to_cli(trace)  # silently fire-and-forget on any error
+    _send_to_cli(_build_trace(event))  # silently fire-and-forget on any error
     _record_debounce(tool_name, session_id)
     return 0
 
@@ -343,5 +394,6 @@ if __name__ == "__main__":
     # Always exit 0 — hook must never block CC operation.
     try:
         sys.exit(main())
-    except Exception:
+    except Exception as _e:
+        _log_err(_e)
         sys.exit(0)

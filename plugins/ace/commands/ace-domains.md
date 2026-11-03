@@ -1,8 +1,9 @@
 ---
+disable-model-invocation: true
 model: claude-haiku-4-5
 description: List available pattern domains for filtering
 argument-hint: "[--min-patterns N]"
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # List Available Domains
@@ -27,9 +28,9 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# CLI detection: ace-cli (preferred) or ce-ace (fallback)
-if ! command -v ace-cli >/dev/null 2>&1; then
-  echo "ace-cli not found - Install: npm install -g @ace-sdk/cli"
+# CLI detection: ace-cli
+if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
+  echo "ACE CLI not found - Install: /ace:ace-install-cli"
   exit 1
 fi
 
@@ -44,7 +45,7 @@ export ACE_ORG_ID="${ACE_ORG_ID:-}"
 export ACE_PROJECT_ID="${ACE_PROJECT_ID:-}"
 
 # Build command with optional min-patterns filter
-CMD="ace-cli domains --json"
+CMD="${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli domains --json"
 if [ -n "$MIN_PATTERNS" ]; then
   CMD="$CMD --min-patterns $MIN_PATTERNS"
 fi
@@ -71,7 +72,7 @@ fi
 
 # Verify we got valid JSON
 if ! echo "$DOMAINS_OUTPUT" | jq empty 2>/dev/null; then
-  echo "Invalid response from ace-cli (not valid JSON)"
+  echo "Invalid response from ACE CLI (not valid JSON)"
   echo ""
   echo "Response:"
   echo "$DOMAINS_OUTPUT"
@@ -136,14 +137,14 @@ Without knowing domain names, `--allowed-domains` is unusable:
 
 ```
 # Before: guessing domain names
-ace-cli search "auth" --allowed-domains "typescript"
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "auth" --allowed-domains "typescript"
 Result: 0 patterns (wrong domain name!)
 
 # After: using discovered domain names
 /ace-domains
 → "typescript-development-practices"
 
-ace-cli search "auth" --allowed-domains "typescript-development-practices"
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "auth" --allowed-domains "typescript-development-practices"
 Result: Filtered patterns! ✓
 ```
 

@@ -251,8 +251,7 @@ def _run_main_with_response(mod, fake_response, event=None):
         }
 
     # Mock run_search → returns our fake_response directly
-    mock_run_search = mock.MagicMock(return_value=fake_response)
-    mock_check_pinning = mock.MagicMock(return_value=False)
+    mock_run_search = mock.MagicMock(return_value=(fake_response, 0))
     mock_check_auth = mock.MagicMock(return_value=None)   # no warning
     mock_get_context = mock.MagicMock(return_value={"project": "test-proj", "org": "test-org"})
     mock_log_metrics = mock.MagicMock()
@@ -260,7 +259,6 @@ def _run_main_with_response(mod, fake_response, event=None):
     mock_eval_check = mock.MagicMock(return_value=None)
 
     mod.run_search = mock_run_search
-    mod.check_session_pinning_available = mock_check_pinning
     mod.check_auth_status = mock_check_auth
     mod.get_context = mock_get_context
     mod.log_search_metrics = mock_log_metrics
@@ -337,7 +335,9 @@ class TestDisplayTop3Integration:
         output = _run_main_with_response(mod, fake_response)
 
         user_message = output.get("systemMessage") or ""
-        assert "↑0.94" in user_message, (
+        # v8: the notice is ONE status line (what the model got), no per-bullet tokens any more
+        assert user_message.startswith("ACE · ") and "\n" not in user_message, user_message
+        assert "↑0.94" not in user_message, (
             f"Expected '↑0.94' (ucb path) in summary but got: {user_message!r}\n"
             "This means match_factors were stripped BEFORE the summary was built — "
             "_display_top3 is not being captured pre-strip, or the summary loop "

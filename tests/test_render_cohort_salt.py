@@ -283,179 +283,30 @@ class TestRenderVariantAceAfterTaskSource:
         )
 
     def test_render_variant_stamping_is_hot_path_safe(self):
-        """The render_variant stamping must be wrapped in try/except so a failure
-        in render_cohort never breaks the learn trace.
-
-        RED: fails if no try/except guards the stamping.
-        GREEN: passes once the try/except block is present near the stamping.
-        """
-        # Check that try/except appears near the render_variant line
+        """DESIGN §28: the variant lookup is guarded so a failure never breaks the learn trace, and a failure
+        still stamps a value (never omitted)."""
         lines = self._source.splitlines()
-        rv_line_idx = None
-        for i, line in enumerate(lines):
-            if 'render_variant' in line and 'trace[' in line:
-                rv_line_idx = i
-                break
+        idx = next(i for i, l in enumerate(lines) if "_trace_render_variant(" in l and "=" in l)
+        window = "\n".join(lines[max(0, idx - 3): idx + 4])
+        assert "try:" in window and "except" in window and "_render_variant = " in window, window
 
-        assert rv_line_idx is not None, (
-            "trace['render_variant'] stamping line not found in ace_after_task.py"
-        )
-
-        # Look for try/except in the surrounding 10 lines
-        window = lines[max(0, rv_line_idx - 5): rv_line_idx + 5]
-        window_text = "\n".join(window)
-        assert "try:" in window_text and "except" in window_text, (
-            f"trace['render_variant'] stamping must be wrapped in try/except; "
-            f"surrounding lines:\n{window_text}"
-        )
-
-    def test_render_variant_inside_task_session_id_guard(self):
-        """The render_variant stamping must be inside 'if task_session_id:' so it is
-        only set when session_id is present (omit when absent).
-        """
+    def test_render_variant_not_gated_on_task_session_id(self):
+        """DESIGN §28 supersedes MUST-FIX 2's guard: render_variant goes on EVERY trace, pin or not."""
         lines = self._source.splitlines()
-        rv_line_idx = None
-        for i, line in enumerate(lines):
-            if 'render_variant' in line and 'trace[' in line:
-                rv_line_idx = i
-                break
-
-        assert rv_line_idx is not None, (
-            "trace['render_variant'] stamping line not found in ace_after_task.py"
-        )
-
-        # Look for 'if task_session_id' in the preceding ~10 lines
-        window = lines[max(0, rv_line_idx - 10): rv_line_idx + 1]
-        window_text = "\n".join(window)
-        assert "task_session_id" in window_text and "if" in window_text, (
-            f"trace['render_variant'] must be inside an 'if task_session_id:' guard; "
-            f"surrounding lines:\n{window_text}"
-        )
+        idx = next(i for i, l in enumerate(lines) if 'trace["render_variant"]' in l)
+        assert not lines[idx].startswith(" " * 16), "must sit at trace-build level, not inside `if task_session_id:`"
 
 
 class TestRenderVariantTraceDirectUnit:
-    """Direct unit test: verify that a trace dict built with task_session_id carries
-    render_variant stamped correctly, using the exact logic from ace_after_task.py.
+    """§31 trace_render_variant(stored): the stored (actually rendered) variant, normalized to budget|full;
+    anything else (incl. none) is unknown -> None, the key is omitted. Hook level: test_s31_contract.py."""
 
-    These tests validate the stamping block in isolation — independent of the full
-    main() execution path which has many skip conditions.
+    def test_stored_server_labels_pass(self):
+        from ace_pattern_render import trace_render_variant
+        assert [trace_render_variant(v, "any") for v in ("full", "budget")] == ["full", "budget"]
 
-    RED: fails because trace dict doesn't have 'render_variant'.
-    GREEN: passes once the stamping block is in place.
-    """
-
-    def test_trace_render_variant_present_with_task_session_id(self, monkeypatch):
-        """Simulate the trace dict construction: when task_session_id is set,
-        trace['render_variant'] must be set to render_cohort(task_session_id).
-
-        This is the exact logic that must be in ace_after_task.py:
-            if task_session_id:
-                trace['session_id'] = task_session_id
-                try:
-                    trace['render_variant'] = render_cohort(task_session_id)
-                except Exception:
-                    pass
-
-        RED: the test verifies the field is present, which the current code doesn't add.
-        """
-        monkeypatch.delenv("ACE_AB_CONTROL_PCT", raising=False)
-        monkeypatch.delenv("ACE_AB_COMPACT_PCT", raising=False)
-
-        from ace_pattern_render import render_cohort
-
-        task_session_id = str(uuid.uuid4())
-        trace = {}
-
-        # Replicate the stamping block that MUST exist in ace_after_task.py
-        if task_session_id:
-            trace["session_id"] = task_session_id
-            try:
-                trace["render_variant"] = render_cohort(task_session_id)
-            except Exception:
-                pass
-
-        # Verify the field is present
-        assert "render_variant" in trace, (
-            f"trace must have 'render_variant' when task_session_id is set; "
-            f"got keys: {list(trace.keys())}"
-        )
-        assert trace["render_variant"] in ("control", "compact", "budget"), (
-            f"trace['render_variant'] must be a valid cohort; got {trace['render_variant']!r}"
-        )
-
-    def test_trace_render_variant_absent_without_task_session_id(self):
-        """When task_session_id is absent/None, trace must NOT have 'render_variant'."""
-        from ace_pattern_render import render_cohort
-
-        task_session_id = None
-        trace = {}
-
-        # Replicate the conditional stamping logic
-        if task_session_id:
-            trace["session_id"] = task_session_id
-            try:
-                trace["render_variant"] = render_cohort(task_session_id)
-            except Exception:
-                pass
-        # else: omit both fields
-
-        assert "render_variant" not in trace, (
-            f"trace must NOT have 'render_variant' when task_session_id is absent; "
-            f"got keys: {list(trace.keys())}"
-        )
-
-    def test_render_variant_failure_does_not_break_trace(self, monkeypatch):
-        """A render_cohort() failure must not break trace building (hot-path-safe).
-
-        The try/except around render_cohort() ensures a bug in that function
-        never breaks the learn trace.
-        """
-        from ace_pattern_render import render_cohort as _real_rc
-
-        task_session_id = str(uuid.uuid4())
-        trace = {}
-
-        # Simulate a failure in render_cohort
-        def broken_render_cohort(sid):
-            raise RuntimeError("simulated failure in render_cohort")
-
-        # Replicate the SAFE stamping block
-        if task_session_id:
-            trace["session_id"] = task_session_id
-            try:
-                trace["render_variant"] = broken_render_cohort(task_session_id)
-            except Exception:
-                pass  # must not propagate
-
-        # trace is still intact — session_id is set, render_variant is absent (not broken)
-        assert "session_id" in trace, "session_id must still be set after render_cohort failure"
-        assert "render_variant" not in trace, (
-            "render_variant must be absent (not raised) after render_cohort failure"
-        )
-
-    def test_render_variant_matches_render_cohort_exactly(self, monkeypatch):
-        """trace['render_variant'] must be exactly equal to render_cohort(task_session_id).
-
-        This confirms the recomputed value at Stop time matches injection time
-        (same session_id + same env → deterministic).
-        """
+    def test_everything_else_is_unknown(self, monkeypatch):
         monkeypatch.setenv("ACE_AB_CONTROL_PCT", "20")
-        monkeypatch.setenv("ACE_AB_COMPACT_PCT", "20")
-
-        from ace_pattern_render import render_cohort
-
-        for _ in range(20):
-            task_session_id = str(uuid.uuid4())
-            trace = {}
-            if task_session_id:
-                trace["session_id"] = task_session_id
-                try:
-                    trace["render_variant"] = render_cohort(task_session_id)
-                except Exception:
-                    pass
-
-            expected = render_cohort(task_session_id)
-            assert trace.get("render_variant") == expected, (
-                f"render_variant must equal render_cohort({task_session_id!r})="
-                f"{expected!r}; got {trace.get('render_variant')!r}"
-            )
+        from ace_pattern_render import trace_render_variant
+        for v in (None, "bogus", "control", "compact"):
+            assert trace_render_variant(v, "sid") is None

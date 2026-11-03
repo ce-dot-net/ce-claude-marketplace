@@ -19,8 +19,10 @@ UTIL = REPO_ROOT / "plugins" / "ace" / "shared-hooks" / "utils" / "patterns_used
 def test_util_owns_per_agent_naming():
     """The single source of truth defines the per-agent file name + suffix rule."""
     src = UTIL.read_text()
-    assert 'ace-patterns-used-{session_id}-{agent_suffix}' in src, \
-        "util must define the per-agent state file name"
+    assert 'patterns-used-{agent_suffix}.json' in src, \
+        "util must define the per-agent state file name (v8: inside the session dir)"
+    assert 'ace-patterns-used-' not in src, \
+        "v8: legacy .claude/data/logs/ace-patterns-used-* naming is gone (DESIGN §4)"
     assert "agent_suffix = agent_id if agent_id else 'main'" in src or \
            'agent_suffix = agent_id if agent_id else "main"' in src, \
         "agent_suffix must default to 'main' when no agent_id"

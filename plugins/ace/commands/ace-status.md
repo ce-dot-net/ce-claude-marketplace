@@ -2,7 +2,7 @@
 model: claude-haiku-4-5
 description: Show ACE playbook statistics and learning status
 argument-hint:
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(curl:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Status
@@ -22,13 +22,13 @@ First, run this bash script to check authentication:
 # ACE Pre-flight Auth Check (v5.4.21)
 
 # Check ace-cli is available
-if ! command -v ace-cli >/dev/null 2>&1; then
+if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
   echo "ACE_STATUS=cli_not_found"
   exit 0
 fi
 
 # Check authentication status
-AUTH_JSON=$(ace-cli whoami --json 2>/dev/null || echo '{"authenticated":false}')
+AUTH_JSON=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json 2>/dev/null || echo '{"authenticated":false}')
 IS_AUTH=$(echo "$AUTH_JSON" | jq -r '.authenticated // false')
 
 if [ "$IS_AUTH" != "true" ]; then
@@ -44,7 +44,7 @@ Based on the output:
 
 - **If `ACE_STATUS=cli_not_found`**: Tell the user to install ace-cli:
   ```
-  ❌ ace-cli not found. Install: npm install -g @ace-sdk/cli
+  ❌ ace-cli not found. Install: /ace:ace-install-cli
   ```
 
 - **If `ACE_STATUS=not_authenticated`**: Use the **AskUserQuestion** tool to ask the user:
@@ -68,17 +68,7 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-# Version check: Query npm registry directly (Issue #8 - CLI version check broken)
-INSTALLED_VERSION=$(ace-cli --version 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1 || echo "unknown")
-LATEST_VERSION=$(curl -s "https://registry.npmjs.org/@ace-sdk/cli/latest" 2>/dev/null | jq -r '.version // "unknown"' || echo "unknown")
-
-if [ "$INSTALLED_VERSION" != "unknown" ] && [ "$LATEST_VERSION" != "unknown" ]; then
-  if [ "$INSTALLED_VERSION" != "$LATEST_VERSION" ]; then
-    echo "💡 Update available: ace-cli v$INSTALLED_VERSION → v$LATEST_VERSION"
-    echo "   Run: npm install -g @ace-sdk/cli@latest"
-    echo ""
-  fi
-fi
+# The ACE CLI version is pinned by this plugin version (package.json); updates arrive with the plugin.
 
 # Optional: Export environment variables if available from .claude/settings.json
 # ace-cli will use these if provided, otherwise fallback to global config
@@ -87,7 +77,7 @@ export ACE_PROJECT_ID="${ACE_PROJECT_ID:-}"
 
 # Run ace-cli status and capture output
 # Filter out CLI update notifications (💡 lines) that break JSON parsing
-RAW_OUTPUT=$(ace-cli status --json 2>&1)
+RAW_OUTPUT=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli status --json 2>&1)
 EXIT_CODE=$?
 STATUS_OUTPUT=$(echo "$RAW_OUTPUT" | grep -v '^💡' | grep -v '^$')
 
@@ -107,7 +97,7 @@ fi
 
 # Verify we got valid JSON
 if ! echo "$STATUS_OUTPUT" | jq empty 2>/dev/null; then
-  echo "❌ Invalid response from ace-cli (not valid JSON)"
+  echo "❌ Invalid response from ACE CLI (not valid JSON)"
   echo ""
   echo "Response:"
   echo "$STATUS_OUTPUT"

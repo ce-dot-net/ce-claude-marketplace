@@ -5,6 +5,94 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.0.0] - 2026-11-03
+
+### Headline
+Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topology. Requires: Claude Code >= 2.1.311; ace-cli 4.3.2 (@ace-sdk/core >= 3.5.0), pinned exactly in package.json and installed plugin-local; a global ace-cli >= the pin is the fallback and is marked untested. Windows not supported (macOS, Linux, WSL2).
+
+### Changed
+- State moved from `/tmp` and `~/.claude/logs` to `$CLAUDE_PLUGIN_DATA` (default `~/.claude/plugins/data/ace-ce-dot-net-marketplace`).
+- Hook scripts are thin shims; one `ace-cli` spawn per search (no `--version`/`whoami` probes); hook timeouts in seconds.
+- New hooks: `PostToolUseFailure` (failed Bash calls feed learning), `SessionStart` compact re-injection.
+- Removed hooks: the domain-shift `PreToolUse` path, `PreCompact`, `PermissionRequest`. `PreToolUse` returns only with matcher `Agent` (prompt stash).
+- Round 2: `PostToolBatch` (async, one event per parallel batch) replaces the per-tool `PostToolUse` accumulator; `PostToolUseFailure` matcher is `*`.
+- Main agent: `prompt_id` is the task anchor and `--pin-session` value (uuid fallback). Every subagent is its own ACE session: SubagentStart mints a fresh uuid4 (parent `prompt_id` kept only as `parent_task_id`); the `Agent` PreToolUse hook stashes the subagent prompt in `agent-prompts/` so SubagentStart no longer scans the transcript.
+- Stop/SubagentStop are sync hooks (timeout 15, print nothing) that only dispatch a detached, SIGHUP-safe learn process, so learning survives `claude -p` teardown (async hooks are killed there); `ACE_ASYNC_LEARNING` is removed (always async, `ACE_LEARN_INLINE=1` for tests). All async hooks print nothing.
+- A failed session pin is dropped with a pin-backoff (`ACE_PIN_BACKOFF_MIN`, default 5 min); new `ACE_MIN_PROMPT_CHARS` skips searches for trivial prompts.
+- `/ace:ace-doctor` flags `~/.ace-cache/sessions.db` over 100 MB and recent `database is locked` errors; new `/ace:ace-cleanup --legacy` (dry run, `--yes`, `--sessions-db`) removes v7 leftovers.
+- Measured blocking hook time per session: 7.1.14 60-111 s vs v8 2.3-3.3 s; UserPromptSubmit alone 27-37 s before.
+- 18 user-only commands set `disable-model-invocation: true` (all except ace-search, ace-learn, ace-patterns, ace-status).
+- `/ace:ace-doctor` checks Claude Code >= 2.1.311, the CLI source/version, the OS and runtimes and the plugin-data layout; plugin root comes from `installed_plugins.json`.
+- Statusline uses one Python call instead of 13 `jq` spawns (refresh the user copy with `/ace:ace-statusline-setup update`).
+- Docs: ARCHITECTURE.md updated, new `docs/technical/ADR-001-language.md`, `docs/RELEASE_GATE_v8.md`; stale v1/v3 docs deleted.
+
+- Round 3a: subagent learn uses SubagentStart's stored query first (transcript fallback skips `<system-reminder>` blocks); Write/Edit are traced as Success; a timed-out `ace-cli --version` probe no longer disables ACE (logged as `version_unknown`); `ace-cli learn` runs with `--no-stream` so server 401/500 surface; dead `ensure_authenticated` removed; Python hooks early-exit while the mod's `mod-active` marker is fresh (15 s for the hooks right after a mod write, 120 s for the hooks after a tool).
+- Info for server/SDK teams: since ace-cli 4.3.0 the CLI sends `X-ACE-Client` from `ACE_CLIENT_ID` (else `cli`); the plugin exports `ACE_CLIENT_ID=claude-code-plugin/<version>` to every ace-cli spawn, so both paths say `claude-code-plugin/<version>` (older CLIs hard-coded `cli`).
+
+- Round 3d, CLI delivery (plugin and ace-cli go hand in hand): `package.json` pins `@ace-sdk/cli` to one exact version and `package-lock.json` is committed; Claude Code installs it into `${CLAUDE_PLUGIN_ROOT}/node_modules` on plugin install/update. No self-managed installer, no version range, no runtime `npm install`, no daily `npm view` in the hooks. Resolution: plugin-local pin, then a global ace-cli that is not older than the pin (doctor marks a different one "untested"), else one message naming `/ace:ace-install-cli`. A missing CLI never writes `disabled.flag`: ACE starts working by itself once the CLI appears. `/ace:ace-install-cli` is now a short repair command (report source and version, `claude plugin update`, then `npm ci --ignore-scripts`). Commands call `scripts/ace-cli` (plugin-local first, hides ace-cli's own "Update available ... npm install -g" notifier). Because Claude Code installs with `--ignore-scripts`, an async SessionStart row probes the sqlite binding with `node -e` on every startup and runs `npm rebuild better-sqlite3` only when it fails to load (otherwise `--pin-session` fails and the graph cache stays empty); a missing sqlite binary suspends pins like the sticky lock.
+- Repo tooling: `tests/test_cli_contract.py` runs the pinned CLI against a fake server and checks every flag and JSON field the plugin uses; `.github/workflows/ace-cli-watch.yml` opens one PR (pin bump + lock regen + suite) when npm has a newer version; the release-manager treats a pin bump as a plugin version bump.
+- Claude Code floor is 2.1.311 (SubagentStop double-fire fix). SessionStart compares `CLAUDE_CODE_VERSION`: below the floor it prints one message and ACE pauses itself for the session.
+- SubagentStop summary is the last `SubagentHandback` message of the agent transcript (cap 4,000 chars), else `last_assistant_message`.
+- Stop defers while delegated work of the task still runs (`background_tasks` with a running `subagent` or `workflow`; monitors and shells do not count): nothing is learned, state and tool rows are kept, a `learn_deferred` row is logged, and the next Stop learns the whole task with the original prompt.
+- The trace carries `parent_agent_id` (the server-declared name; the local state keeps `parent_task_id`); `agent_transcript_path` is never sent.
+- Forks (`agent_type` `fork`) inherit the parent's injected block: they get their own session state but no second search or injection (`ACE_SUBAGENT_INJECT_FORKS=1` restores the search). Workflow agents resolve their query from their own transcript, then the parent task's prompt, then the parent-transcript scan (`query_source` is logged).
+- Domain-shift searches pass no `--pin-session` (the server never credits those rows). `CLAUDE_PLUGIN_DATA` is only accepted when its directory name starts with `ace` (other plugins export theirs into the shared env file). Small fixes: `token_expired` is an auth failure, the PermissionDenied transcript tail reads 256 KB and skips `api-request` lines, the startup row shows a status message, `date -d` is gone from the statusline (portability lint test).
+
+- Round 3b, mod: on Claude Code mods (>= 2.1.287) an in-process mod (`mod/register.ts`) handles prompt.submit, agent.spawn, tool.call and turn.complete. Coexistence is per duty: while its `mod-active` marker is fresh (15 s; 120 s for the domain shift) the Python search/inject hooks (UserPromptSubmit, Agent stash, SubagentStart, domain shift) step aside; while `mod-classic` (written by the mod's `classic.*` hooks) is fresh the Python tool accumulator and Stop/SubagentStop step aside too. On Team/Enterprise and managed-settings seats the built-in guard (`sec-default@builtin`) does NOT skip the mod: it filters the mod's `classic.*` hooks. There the mod still searches and injects, and the Python chain takes over the classic duties: tool accumulation, the Stop/SubagentStop learn (with the background-task deferral and effort) and the session title (left by the mod in `mod-title`). The mod mirrors the Python chain: fresh pin per subagent, forks without a second search, Stop deferral, SubagentHandback summary, no domain-shift pin, same state files.
+- Round 3c, engine: search and learn run in-process on the installed `@ace-sdk/core` (`engine/*.js`, plugin-local core first) when its version/export gate passes, else through ace-cli unchanged (`ACE_ENGINE=cli` forces it). Learn falls back only when the engine sent nothing. Both chains use the same engine and CLI resolution.
+- Render contract (server contract, DESIGN §31): the render is a 50/50 split per conversation: `budget` (top-N verbatim, <= 9,500 chars, both chains) or `full`. The `full` render (the mod only: ALL server patterns, cut by whole patterns to 95,000 chars, `truncated_for_cap` in the relevance row) is reached only through the split `ACE_RENDER_FULL_PCT` (default 50; 0 turns full off): bucket = sha256("render:" + conversation id) % 100, one arm per conversation (Claude Code session id; subagents inherit it), no conversation id -> budget. Cost of `full`: about 2.1-2.3x input tokens and 2.5x USD per task against budget; within a conversation the mod injects only patterns not yet injected since the last compaction (a compaction starts over), so later prompts cost less. The Python chain (10K hook cap) never renders full. Rollout: 8.0.0 ships the 50/50 split directly (AOP-1333 and AOP-1334 on prod since server v5.15.6; release verified against v5.15.14); the ACE server can switch the share without a plugin release through the search response field `render_full_pct` (0-100, stored in `<plugin data>/render-full-pct.json`, used for 7 days; the env `ACE_RENDER_FULL_PCT` still wins).
+- Trace contract (§31): `render_variant` is `budget` or `full` (stripped, lowercase) and is omitted when unknown (nothing rendered, control/compact arms, older state), never defaulted. `conversation_id` = the Claude Code session id (<= 512 chars) on every trace incl. subagents and PermissionDenied. `applied_log_ids` = only the injected patterns ACTUALLY USED, for every variant (behavior change vs 7.1.x, where budget sent all injected ids): a pattern counts as used when its id appears in the final assistant message or the SubagentHandback report, or when >= 2 distinctive tokens of its content (backticked spans, command + subcommand, paths, CLI flags, identifiers with `_` `.` `::` or camelCase; tokens shared by > 30% of the injected patterns do not count) appear in that agent's own tool-call inputs (Bash commands, file paths, Grep/Glob patterns, Edit targets); else nothing is sent. The execution row logs `used_ids_count` and `used_source`. `session_id` (per-task pin), `retrieval_id` and `playbook_used` (all injected ids) are unchanged.
+- Self-eval (mod): after a dispatched main learn the mod asks Haiku (`$.model.complete`, effort low, 15 s, not blocking the turn) for `ACE_REVIEW: N% | Xm saved | reason` (written to `ace-review-result.json` for the statusline/title) and `ACE_USED: <ids>` (whitelisted against the injected set, joined with the tool-token evidence); the learn waits for it and falls back to the token evidence on error/timeout. `ACE_SELF_EVAL=0` turns it off. While the mod runs, no HTML-comment self-eval request is injected into the next prompt; the Python chain keeps that request (with the task's real relevance and domain count) when the mod is not active.
+- UX: one end-of-task line `ACE · learning sent · N% · ~Xm saved` (unknown parts left out) when a main learn was dispatched (mod: beneath the answer via turn.complete `{ text }`; Python: the sync Stop's systemMessage). `ACE · restored N patterns after compaction` when the Python SessionStart(compact) re-injected. In the mod the patterns survive a compaction as the system prompt section `ace:patterns` (session.compact + prompt.compose); the Python re-inject steps aside then.
+- Security: the self-eval request fields are numbers only; writes under `<cwd>/.claude/data/logs` refuse symlinked directories or targets; files holding prompts and traces are 0600 in 0700 directories; the relevance log is created 0600 and its size rotation (`ace-relevance.1-3.jsonl`, same chain in both chains) drops the row instead of moving the log when a rotation slot is a symlink or directory; a learn whose private temp dir cannot be created is skipped (never the system temp dir). The unused `ace_event_logger.py` is removed.
+- Info for server/SDK teams: requests through the engine carry `X-ACE-Client: claude-code-plugin/<version>`; render_cohort bucket values differ from 7.1.x (CC session id instead of the task id).
+
+### Accepted losses
+- Successful tool calls carry no `duration_ms` (PostToolBatch has none; only `PostToolUseFailure` rows do).
+- Exec-form hooks run the `.sh` shims directly: macOS/Linux/WSL2 only. Windows is not supported (a regression against the shell form; real support later).
+- `PermissionDenied` learn runs inside the async hook and can be cut by `claude -p` teardown.
+- PreToolUse domain-shift systemMessage notices are gone (the domain-shift injection itself stays on PostToolUse).
+- Startup `whoami` auth warnings are gone; `/ace:ace-doctor` shows them instead.
+- Bash-error troubleshooting injection is replaced by accumulator-only PostToolUseFailure learning.
+- A new human prompt that arrives before the `<task-notification>` of a deferred Stop resets the main state: that deferred task is not learned.
+- Trace timestamps are now UTC.
+- `applied_log_ids` credits only patterns with evidence (the id in the final message, or >= 2 distinctive tokens in the task's tool-call inputs): a pattern that shaped the work without leaving such a trace is not credited (false positives are worse than misses).
+- Legacy `~/.ace/config.json` apiToken warnings are gone.
+- `/rewind` undo is not reflected in accumulator rows.
+- Deny-rule denials are not learned (PermissionDenied fires only in auto mode; they appear only in PostToolBatch tool_response).
+
+## [7.1.14]
+
+- PermissionDenied hook skips Claude Code auto-mode classifier infra-aborts (transcript-tail detection, bounded seek-read, tool-name correlation).
+
+## [7.1.13]
+
+- Salt the A/B render-cohort hash (orthogonal to the server serve-A/B), add render_variant stamp, repair the v7.1.12 description.
+
+## [7.1.12]
+
+- Dormant-by-default A/B render cohort (control / budget-verbatim / compact-all, env-gated, deterministic by session_id).
+
+## [7.1.11]
+
+- Budget-verbatim injection render: top-N by bandit_rank within 9,500 chars so patterns fit the 10K additionalContext cap and reach the model.
+
+## [7.1.10]
+
+- Fix domain-shift hook emitting invalid JSON (sed replaced by `jq -n`); Claude Code was silently dropping injections containing quotes or unicode.
+
+## [7.1.9]
+
+- Drop the domain-shift `--allowed-domains` filter; cross-domain patterns now surface (server-confirmed domain_match anti-predicts relevance).
+
+## [7.1.8]
+
+- Server-blessed injection render: bandit_rank ordering, no client hard-drop, tiered output (-78% tokens).
+
+## [7.1.7]
+
+- `/ace:ace-graph` polish: hide isolated nodes by default, with a toggle.
+
 ## [7.1.6] - 2026-06-18
 
 ### Headline
