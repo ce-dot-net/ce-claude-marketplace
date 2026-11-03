@@ -175,6 +175,6 @@ def shim_violations(script_path, entry):
         problems.append("uses cd")
     if not re.search(r"exec\s+\"?\$PY\"?\s+\"?\$ROOT/shared-hooks/%s" % re.escape(entry), code):
         problems.append("does not `exec \"$PY\" \"$ROOT/shared-hooks/%s\"`" % entry)
-    if "python_path" not in code:
-        problems.append("does not read the cached python_path (DESIGN §3.1)")
+    if "scripts/ace-python" not in code:  # 8.1.0: the picker reads the cached python_path, Python >= 3.10
+        problems.append("does not take its python from scripts/ace-python (DESIGN §3.1, 8.1.0)")
     return problems

@@ -13,13 +13,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # 3.9 = stock macOS /usr/bin/python3 (DESIGN §0 floor); 3.12 = current.
-        # ubuntu-latest (26.04) has no 3.9 build in setup-python, so the 3.9 Linux leg runs on 22.04.
-        include:
-          - {os: ubuntu-latest, python: "3.12"}
-          - {os: ubuntu-22.04, python: "3.9"}
-          - {os: macos-latest, python: "3.9"}
-          - {os: macos-latest, python: "3.12"}
+        # 8.1.0: the Python hook chain supports >= 3.10 (the floor) up to the latest stable (3.15).
+        os: [ubuntu-latest, macos-latest]
+        python: ["3.10", "3.15"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
@@ -29,26 +25,31 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020  # v4.4.0
         with:
           node-version: "22"  # the mod test harness needs --experimental-strip-types (node >= 22.6)
-      - name: Install pytest (the plugin itself is stdlib-only)
-        run: python -m pip install --upgrade pip pytest
+      - name: Install pytest + rstest (the plugin itself is stdlib-only; rstest is the pinned parallel runner)
+        run: python -m pip install --upgrade pip pytest rstest==0.10.0
+      - name: The hook code compiles on the floor (3.10 job)
+        if: matrix.python == '3.10'
+        run: python -m py_compile $(find plugins/ace/shared-hooks plugins/ace/utils -name '*.py')
       # The hermetic suites run BEFORE the plugin dependencies exist: with plugins/ace/node_modules present the
       # hooks under test would resolve the real plugin-local CLI instead of the fake one.
       - name: Unit + integration suite (hermetic, fake ace-cli via tests/conftest.py)
-        run: python -m pytest tests -q -p no:cacheprovider
+        run: rstest tests -q -p no:cacheprovider
       - name: Plugin-local tests
-        run: python -m pytest plugins/ace/tests -q -p no:cacheprovider
+        run: rstest plugins/ace/tests -q -p no:cacheprovider
       - name: Hook e2e (v8 target behavior)
         env:
           ACE_E2E: "1"
-        run: python -m pytest tests/e2e -q -p no:cacheprovider
+        run: rstest tests/e2e -q -p no:cacheprovider
       - name: Pinned ace-cli (what Claude Code installs on plugin install/update)
         working-directory: plugins/ace
         run: |
           npm ci --ignore-scripts
           npm rebuild better-sqlite3
       - name: CLI contract test (every flag and field the plugin uses, against the pinned CLI)
-        run: python -m pytest tests/test_cli_contract.py -q -p no:cacheprovider
+        run: rstest tests/test_cli_contract.py -q -p no:cacheprovider
       - name: claude plugin validate --strict (Claude Code floor)
         run: |
           npm i -g @anthropic-ai/claude-code@2.1.311
           claude plugin validate plugins/ace --strict
+      - name: Mod tests (claude plugin test)
+        run: claude plugin test plugins/ace

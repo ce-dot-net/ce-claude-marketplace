@@ -4,7 +4,5 @@
 #   ace-context --shell      eval-able exports of ACE_ORG_ID / ACE_PROJECT_ID (exit 5 + one line on stderr when not bound)
 #   ace-context --verify     plus `state` from one `ace-cli status` call;  --line: only the problem line
 ROOT="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)"
-PY=""; [ -r "${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/ace-ce-dot-net-marketplace}/python_path" ] && read -r PY < "${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/ace-ce-dot-net-marketplace}/python_path"
-[ -x "$PY" ] || PY="$(command -v python3)"
-[ -n "$PY" ] || { echo "ACE: python3 not found" >&2; exit 1; }
+. "$ROOT/scripts/ace-python"; PY="$(ace_python)" || { echo "ACE: Python >= 3.10 needed (the fallback hooks and this entrypoint)" >&2; exit 1; }
 exec "$PY" "$ROOT/shared-hooks/utils/ace_project_context.py" "$@"

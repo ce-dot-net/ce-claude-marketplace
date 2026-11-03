@@ -41,7 +41,8 @@ def test_step3_renders_root_cause_only_when_present(tmp_path):
     w.write_text("#!/bin/sh\necho \"$*\" > %s/argv\ncat <<'EOF'\n%s\nEOF\n" % (tmp_path, json.dumps(RESP)))
     w.chmod(0o755)
     real = Path(__file__).resolve().parents[1] / "plugins/ace"
-    shutil.copy(real / "scripts/ace-context", root / "scripts/ace-context")  # the one core, as installed
+    for n in ("ace-context", "ace-python"):  # the one core, as installed
+        shutil.copy(real / "scripts" / n, root / "scripts" / n)
     (root / "shared-hooks").symlink_to(real / "shared-hooks")
     cwd = tmp_path / "repo"
     (cwd / ".claude").mkdir(parents=True)
