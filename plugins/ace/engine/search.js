@@ -16,6 +16,17 @@ const { AceClient, createContext } = loadCoreOrExit();
   const ctx = await createContext({ org: input.org, project: input.project });
   // Default cacheDir on purpose: the graph sqlite feeds result.expanded (CLI parity) and /ace:ace-graph.
   const client = new AceClient(ctx, { customHeaders: clientHeaders() });
+  // The core rebuilds the search result from a fixed field list and drops the server switches
+  // (render_full_pct, feedback_downvote). Capture the raw /patterns/search body; consume-only, no core change.
+  const switches = {};
+  const rawRequest = typeof client.request === 'function' ? client.request.bind(client) : null;
+  if (rawRequest) client.request = async (endpoint, method, body) => {
+    const r = await rawRequest(endpoint, method, body);
+    if (typeof endpoint === 'string' && endpoint.startsWith('/patterns/search') && r && typeof r === 'object') {
+      for (const k of ['render_full_pct', 'feedback_downvote']) if (k in r) switches[k] = r[k];
+    }
+    return r;
+  };
   const config = await client.getConfig();
   const threshold = config?.search_threshold ?? config?.constitution_threshold;
   if (threshold === undefined) throw new Error('server gave no search_threshold');
@@ -28,7 +39,7 @@ const { AceClient, createContext } = loadCoreOrExit();
     session_id: input.session_id,
     expandNeighbors: true,
   });
-  process.stdout.write(JSON.stringify(result) + '\n');
+  process.stdout.write(JSON.stringify({ ...result, ...switches }) + '\n');
   // The core's hourly graph-edge refresh finishes in the background, like in ace-cli, but a stalled
   // one must not hold the caller until its timeout discards the result printed above.
   setTimeout(() => process.exit(0), 3000).unref();
