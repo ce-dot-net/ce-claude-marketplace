@@ -5,6 +5,7 @@ import SPEC from './fixtures/project_context_cases.ts'
 import EXTRA from './fixtures/project_context_extra.ts'
 import { resolve, normPath } from '../context/resolve.ts'
 import type { Reader } from '../context/resolve.ts'
+import { fsReader } from '../context/index.ts'
 
 const ROOT = '/r'
 const sub = (v: unknown) => (typeof v === 'string' ? v.replaceAll('$ROOT', ROOT) : v)
@@ -77,3 +78,10 @@ for (const c of (EXTRA as any[]).map((x: any) => ({ strict: true, ...x }))) {
     expect(await runCase(c)).toEqual(c.expect)
   })
 }
+
+// fsReader refuses a non-regular file (a FIFO or device would block the read), as ace_project_context.read_file does
+test('fsReader throws for a non-regular file and reads a regular one', async () => {
+  const fake = (kind: string) => ({ fs: { exists: async () => true, stat: async () => ({ kind, size: 0, isLink: false }), read: async () => '{}' } })
+  await expect(fsReader(fake('other'))('/r/.ace/config.json')).rejects.toThrow('not a regular file')
+  expect(await fsReader(fake('file'))('/r/.ace/config.json')).toBe('{}')
+})

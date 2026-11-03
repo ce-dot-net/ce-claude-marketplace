@@ -22,6 +22,7 @@ export function fsReader($: any): Reader {
   return async (p: string) => {
     if (!await $.fs.exists(p).catch(() => false)) return null
     const st = await $.fs.stat(p).catch(() => null)
+    if (st && st.kind !== 'file') throw new Error(`not a regular file: ${p}`)  // a FIFO or device would block the read
     if (typeof st?.size === 'number' && st.size > MAX_REPO_FILE) throw new FileTooLarge(`larger than ${MAX_REPO_FILE} bytes: ${p}`)
     return await $.fs.read(p) as string
   }
