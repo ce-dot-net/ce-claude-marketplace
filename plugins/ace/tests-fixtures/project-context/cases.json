@@ -522,6 +522,54 @@
   }
  },
  {
+  "name": "flag project + refused repo_file (apiToken): bound source flag, file contributes nothing, warning",
+  "layout": {
+   "main/.git/config": "[core]\n\trepositoryformatversion = 0\n",
+   "main/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"proj_a\", \"apiToken\": \"ace_user_secret\"}",
+   "main/.claude/settings.json": "{\"env\": {\"ACE_ORG_ID\": \"org_s\", \"ACE_PROJECT_ID\": \"proj_s\"}}"
+  },
+  "cwd": "main",
+  "env": {},
+  "flags": {
+   "project": "proj_f"
+  },
+  "globalConfig": null,
+  "expect": {
+   "bound": true,
+   "orgId": "org_s",
+   "projectId": "proj_f",
+   "source": "flag",
+   "path": null,
+   "warnings": [
+    "repo_file_contains_secret"
+   ]
+  }
+ },
+ {
+  "name": "flag project + malformed repo_file: bound source flag, org from next valid source, warning",
+  "layout": {
+   "main/.git/config": "[core]\n\trepositoryformatversion = 0\n",
+   "main/.ace/config.json": "{not json",
+   "main/.claude/settings.json": "{\"env\": {\"ACE_ORG_ID\": \"org_s\", \"ACE_PROJECT_ID\": \"proj_s\"}}"
+  },
+  "cwd": "main",
+  "env": {},
+  "flags": {
+   "project": "proj_f"
+  },
+  "globalConfig": null,
+  "expect": {
+   "bound": true,
+   "orgId": "org_s",
+   "projectId": "proj_f",
+   "source": "flag",
+   "path": null,
+   "warnings": [
+    "config_invalid"
+   ]
+  }
+ },
+ {
   "name": "settings_file only (non-git dir)",
   "layout": {
    "plain/.claude/settings.json": "{\"env\": {\"ACE_ORG_ID\": \"org_s\", \"ACE_PROJECT_ID\": \"proj_s\"}}"
