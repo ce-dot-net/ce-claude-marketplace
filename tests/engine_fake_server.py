@@ -4,17 +4,20 @@
 Logs every request (method, path, headers with Authorization masked, JSON body) as one
 JSON line to the log file. Answers /api/v1/config, /patterns/search, /traces,
 /traces/stream and /api/v1/auth/refresh like the real server. FAKE_MODE=401|500 makes
-the trace POSTs fail; FAKE_REFRESH=429|reuse fails the token refresh; FAKE_SEARCH=401 rejects searches; FAKE_GRAPH_DELAY=<s> stalls the graph edge refresh. Usage: engine_fake_server.py <port|0> <log> [<portfile>]
+the trace POSTs fail; FAKE_REFRESH=429|reuse fails the token refresh; FAKE_SEARCH=401 rejects searches; FAKE_GRAPH_DELAY=<s> stalls the graph edge refresh;
+FAKE_TRACE_502=<n> answers the first n trace POSTs 502 with Retry-After: 0 (the SDK retries at once). Usage: engine_fake_server.py <port|0> <log> [<portfile>]
 (port 0 = pick a free port and write it to <portfile>).
 """
 import json
 import os
 import sys
+import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 MODE = os.environ.get("FAKE_MODE", "ok")
 LOG = sys.argv[2]
+_502 = {"left": int(os.environ.get("FAKE_TRACE_502") or 0), "lock": threading.Lock()}
 
 PATTERN = {"id": "ctx-fake-0001", "content": "use jq -n --arg for hook JSON", "section": "strategies",
            "domain": "hooks", "confidence": 0.9, "helpful": 3, "harmful": 0,
@@ -76,6 +79,16 @@ class H(BaseHTTPRequestHandler):
                 return self.wfile.write(b)
             if MODE == "500":
                 return self._send(500, {"message": "boom"})
+            with _502["lock"]:
+                gateway = _502["left"] > 0
+                _502["left"] -= gateway
+            if gateway:  # a restarting server behind the gateway
+                b = b"<html>502 Bad Gateway</html>"
+                self.send_response(502)
+                self.send_header("Retry-After", "0")
+                self.send_header("Content-Length", str(len(b)))
+                self.end_headers()
+                return self.wfile.write(b)
             return self._send(200, TRACE_OK)
         if self.path.startswith("/patterns/search"):
             if os.environ.get("FAKE_SEARCH") == "401":  # the token family was revoked server-side

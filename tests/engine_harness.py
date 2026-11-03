@@ -233,11 +233,11 @@ def ace_config(xdg: Path, server_url="http://127.0.0.1:1"):
 
 
 class FakeServer:
-    def __init__(self, root: Path, mode="ok"):
+    def __init__(self, root: Path, mode="ok", **env):
         self.log = root / "requests.jsonl"
         portfile = root / "port"
         self.proc = subprocess.Popen([sys.executable, str(FAKE_SERVER), "0", str(self.log), str(portfile)],
-                                     env=dict(os.environ, FAKE_MODE=mode))
+                                     env=dict(os.environ, FAKE_MODE=mode, **env))
         for _ in range(100):
             if portfile.exists() and portfile.read_text().strip():
                 break

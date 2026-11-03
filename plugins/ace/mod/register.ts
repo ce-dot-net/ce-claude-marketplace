@@ -475,7 +475,9 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
       ? [...learnArgv(traceFile, state.retrieval_id ?? undefined, applied, verbosity, ['node', engLearn]), FALLBACK_ON_3, ...cliLearn]
       : cliLearn
     const argv = detachedLearnArgv({ learnArgv: learnCmd,
-      trace: traceFile, lock, log, rowOk: pyDumps(await row(true)), rowFail: pyDumps(await row(false)), errLog: `${s.root}/logs/ace-hook-errors.log`, python })
+      trace: traceFile, lock, log, rowOk: pyDumps(await row(true)), rowFail: pyDumps(await row(false)), errLog: `${s.root}/logs/ace-hook-errors.log`, python,
+      retryRow: pyDumps({ event: 'learn_retry', hook, session_id: s.sessionId, conversation_id: s.sessionId, task_session_id: tsid ?? null,
+        agent_id: agentId ?? null, source: 'mod' }), cwd: s.cwd })
     const spawned = await run($, argv, { env: aceEnv(s), timeoutMs: LAUNCHER_MS })
     if (!spawned || spawned.exitCode !== 0) {  // no child will clean up, or write the metrics row
       await rm($, lock, traceFile)

@@ -77,8 +77,17 @@ fi
 
 # Call ace-cli search - CLI reads org/project from env vars automatically
 # Threshold comes from server config (ace-cli tune show) - don't override!
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "$*"
+# --json: the CLI's human formatter never prints root_cause. The wrapper filters only stderr, so stdout stays JSON.
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "$*" --json | jq -r '
+  (.similar_patterns // []) | to_entries[] | .value as $p |
+  "\(.key + 1). \($p.content)",
+  "   domain: \($p.domain // "-") | section: \($p.section // "-") | reward: \($p.cumulative_v15_reward // 0) | bandit_rank: \($p.bandit_rank // $p.match_factors.bandit_rank // "-")",
+  (($p.evidence // []) | if length > 0 then "   evidence: " + (map(tostring) | join(" | ")) else empty end),
+  (if (($p.root_cause // "") | tostring | length) > 0 then "   root cause: \($p.root_cause)" else empty end),
+  ""'
 ```
+
+Show the user this list as is (one block per pattern; `root cause` only appears when the pattern has one).
 
 ### Parameters
 
@@ -94,11 +103,11 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "$*"
 - **--blocked-domains**: Blacklist domains (comma-separated, v5.3.0+)
   - Example: `--blocked-domains test,debug` excludes patterns from those domains
   - Cannot use with `--allowed-domains` (mutually exclusive)
-- **--json**: Return JSON format for programmatic use
+- The search always runs with `--json` (Step 3 renders it); a raw `--json` dump is only for scripting
 
 **Note**: To limit number of results, use `jq` for filtering:
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "query" --json | jq '.patterns[:5]'  # First 5 results
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "query" --json | jq '.similar_patterns[:5]'  # First 5 results
 ```
 The `--limit` flag is not supported by ace-cli. Use `--top-k` via server config (`/ace-tune`) instead.
 
@@ -106,15 +115,15 @@ The `--limit` flag is not supported by ace-cli. Use `--top-k` via server config 
 
 ```bash
 /ace-search JWT authentication best practices
-→ Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "JWT authentication best practices"
+→ Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "JWT authentication best practices" --json
 → Uses: Server config threshold (e.g., 0.45)
 
 /ace-search async test failures debugging
-→ Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "async test failures debugging"
+→ Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "async test failures debugging" --json
 
 # Override threshold if needed:
 /ace-search "JWT auth" --threshold 0.7
-→ Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "JWT auth" --threshold 0.7
+→ Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "JWT auth" --threshold 0.7 --json
 
 # Domain filtering (v5.3.0+):
 /ace-search caching patterns --allowed-domains cache,performance
@@ -142,34 +151,9 @@ For those cases, use `/ace-patterns` instead.
 
 ## Output Format
 
-The tool returns JSON with matching patterns and metadata (v3.8.0+):
-
-```json
-{
-  "patterns": [
-    {
-      "content": "Pattern description with context",
-      "helpful": 8,
-      "harmful": 0,
-      "confidence": 0.92,
-      "section": "strategies_and_hard_rules",
-      "similarity": 0.87
-    }
-  ],
-  "query": "your search query",
-  "count": 10,
-  "metadata": {
-    "tokens_in_response": 2400,
-    "tokens_saved_vs_full_playbook": 27600,
-    "efficiency_gain": "92%",
-    "full_playbook_size": 30000
-  }
-}
-```
-
-Patterns are sorted by semantic similarity to your query.
-
-**Metadata field** (v3.8.0+): Provides token efficiency metrics. Omitted if `include_metadata=false`.
+`ace-cli search --json` returns `similar_patterns` (server order: `bandit_rank`), `count` and `retrieval_id`.
+Step 3 prints per pattern: content, domain, section, reward (`cumulative_v15_reward`), `bandit_rank`, evidence,
+and `root_cause` when it is not empty.
 
 ## Performance Impact
 

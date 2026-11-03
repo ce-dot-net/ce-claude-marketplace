@@ -405,3 +405,80 @@ def test_mod_private_write_is_0600_in_a_0700_dir(tmp_path):
     assert stat.S_IMODE(target.stat().st_mode) == 0o600
     assert stat.S_IMODE(target.parent.stat().st_mode) == 0o700
     assert [p.name for p in target.parent.iterdir()] == ["patterns-used-main.json"]
+
+
+# ---------- v8.0.1: the detached learn's retry lines become learn_retry rows (run for real) ----------
+
+KEY = "0b7e6c1a-2f3d-4e5f-8a9b-0c1d2e3f4a5b"
+RETRY_BASE = {"event": "learn_retry", "hook": "Stop", "session_id": "cc-1", "conversation_id": "cc-1",
+              "task_session_id": "tsid-1", "agent_id": None, "source": "mod"}
+
+
+def _retry_line(n, wrap=False):
+    line = "[ace] trace retry attempt=%d/4 reason=502 idempotency_key=%s at=2026-11-03T10:00:0%dZ" % (n, KEY, n)
+    return json.dumps({"level": "warn", "message": line}) if wrap else line
+
+
+def _run_retry_launcher(tmp_path, engine, cli=None, cwd=None):
+    """engine/cli = (rc, [stderr lines]); the fake learners print a JSON result on stdout like the real ones."""
+    fake_dir = tmp_path / "bin"
+    fake_dir.mkdir()
+    learn = []
+    for name, spec in (("fake-engine", engine), ("ace-cli", cli or (0, []))):
+        f = fake_dir / name
+        f.write_text("#!/bin/sh\necho '{\"success\": true}'\n" + "".join("echo %s >&2\n" % shlex_quote(l) for l in spec[1])
+                     + "exit %d\n" % spec[0])
+        f.chmod(0o755)
+    trace = tmp_path / "ace-trace-x.json"
+    trace.write_text("{}")
+    lock = tmp_path / "learn-inflight-main.lock"
+    lock.write_text("")
+    cwd = cwd or (tmp_path / "repo")
+    cwd.mkdir(exist_ok=True)
+    log = cwd / ".claude" / "data" / "logs" / "ace-relevance.jsonl"
+    learn = [str(fake_dir / "fake-engine"), "--json", "--ace-fallback-on-3--", str(fake_dir / "ace-cli"), "learn", "--json"]
+    argv = _launcher_argv({"learnArgv": learn, "trace": str(trace), "lock": str(lock), "log": str(log),
+                           "rowOk": '{"ok": 1}', "rowFail": '{"ok": 0}', "retryRow": json.dumps(RETRY_BASE), "cwd": str(cwd)})
+    subprocess.run(argv, timeout=10, check=True)
+    deadline = time.monotonic() + 8
+    while time.monotonic() < deadline and lock.exists():
+        time.sleep(0.1)
+    assert not lock.exists()
+    return log
+
+
+def shlex_quote(s):
+    import shlex
+    return shlex.quote(s)
+
+
+@pytest.mark.skipif(not NODE, reason="node not installed")
+@pytest.mark.parametrize("rc,sent", [(0, True), (1, False)])
+def test_detached_learn_writes_one_learn_retry_row_per_retry_line(tmp_path, rc, sent):
+    log = _run_retry_launcher(tmp_path, (rc, [_retry_line(2), _retry_line(3)]))
+    rows = [json.loads(l) for l in log.read_text().splitlines()]
+    assert rows[-1] == ({"ok": 1} if sent else {"ok": 0}), "the execution row stays, last"
+    retry = [r for r in rows if r.get("event") == "learn_retry"]
+    assert [r["attempt"] for r in retry] == [2, 3]
+    for r in retry:
+        assert {k: r[k] for k in RETRY_BASE} == RETRY_BASE
+        assert r["max_attempts"] == 4 and r["reason"] == "502" and r["idempotency_key"] == KEY
+        assert r["at"] == "2026-11-03T10:00:0%dZ" % r["attempt"] and r["engine"] == "lib" and r["learning_sent"] is sent
+        assert r["timestamp"].endswith("Z")
+
+
+@pytest.mark.skipif(not NODE, reason="node not installed")
+def test_detached_learn_retry_rows_name_the_cli_after_an_engine_exit_3(tmp_path):
+    log = _run_retry_launcher(tmp_path, (3, []), cli=(0, [_retry_line(2, wrap=True)]))
+    retry = [json.loads(l) for l in log.read_text().splitlines() if "learn_retry" in l]
+    assert [(r["attempt"], r["engine"], r["learning_sent"]) for r in retry] == [(2, "cli", True)]
+
+
+@pytest.mark.skipif(not NODE, reason="node not installed")
+def test_detached_learn_retry_rows_refuse_a_symlinked_log_dir(tmp_path):
+    cwd, outside = tmp_path / "repo", tmp_path / "outside"
+    outside.mkdir()
+    (cwd / ".claude" / "data").mkdir(parents=True)
+    (cwd / ".claude" / "data" / "logs").symlink_to(outside)
+    _run_retry_launcher(tmp_path, (0, [_retry_line(2)]), cwd=cwd)
+    assert list(outside.iterdir()) == []
