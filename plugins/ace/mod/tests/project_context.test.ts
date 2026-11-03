@@ -1,4 +1,4 @@
-// Conformance: context/resolve.ts vs the SDK spec fixtures (63 cases) plus our extra probes. In-memory layout, no `$`.
+// Conformance: context/resolve.ts vs the SDK spec fixtures (65 cases) plus our extra probes. In-memory layout, no `$`.
 // Fixtures: ../../tests-fixtures/project-context/ (see its README). Mirror runner: tests/test_project_context_spec.py.
 import { expect, test } from 'claude-code/testing'
 import SPEC from './fixtures/project_context_cases.ts'
@@ -26,11 +26,11 @@ function reader(layout: Record<string, string | null>, unreadable: string[] = []
   }
 }
 
-function runCase(c: any): any {
+async function runCase(c: any): Promise<any> {
   const gc = c.globalConfig ?? {}
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(c.env)) env[k] = sub(v) as string
-  const res: any = resolve(`${ROOT}/${c.cwd}`, env, {
+  const res: any = await resolve(`${ROOT}/${c.cwd}`, env, {
     flags: c.flags, remoteMap: gc.projects, organizations: gc.auth?.organizations,
     defaultOrgId: gc.default_org_id, globalProjectId: gc.projectId,
     read: reader(c.layout, c.unreadable),
@@ -44,13 +44,13 @@ function runCase(c: any): any {
   return res
 }
 
-test('project-context fixtures: 63 spec cases plus the plugin extras are loaded', () => {
-  expect((SPEC as any[]).length).toBe(63)
+test('project-context fixtures: 65 spec cases plus the plugin extras are loaded', () => {
+  expect((SPEC as any[]).length).toBe(65)
   expect((EXTRA as any[]).length >= 4).toBe(true)
 })
 
 for (const c of [...(SPEC as any[]), ...(EXTRA as any[])]) {
-  test(`project-context: ${c.name}`, () => {
-    expect(runCase(c)).toEqual(c.expect)
+  test(`project-context: ${c.name}`, async () => {
+    expect(await runCase(c)).toEqual(c.expect)
   })
 }

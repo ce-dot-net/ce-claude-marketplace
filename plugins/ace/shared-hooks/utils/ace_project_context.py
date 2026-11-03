@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ACE project binding resolver (plugin 8.1.0).
 
-Contract: ACE SDK clients repo, spec/project-context.md @ fbcbe1b (AOP-1361). Mirror: mod/context/resolve.ts.
+Contract: ACE SDK clients repo, spec/project-context.md @ 9c049a0 (AOP-1361). Mirror: mod/context/resolve.ts.
 Pure: no git spawn, no network, no os.getcwd(). All file access goes through `read(path)`:
   returns the text, None when the path does not exist, raises when it is a directory or unreadable.
 
@@ -157,28 +157,35 @@ def _settings_entry(text, path):
             'prj': _id(env.get('ACE_PROJECT_ID'), 'settings_file', path)}
 
 
-def _search(source, rel, dirs, main_root, home, read, tried, parse):
-    """Spec 1.1/7: first existing file in the walk ends it; main checkout only if no projectId yet."""
+def _search(source, rel, dirs, main_root, home, read, tried, parse, warnings, lenient):
+    """Spec 1.1/7: first existing file in the walk ends it; main checkout only if no projectId yet.
+    lenient (a --project flag): a refused/invalid file contributes nothing and only warns (spec 9c049a0)."""
     found = []
-    for d in dirs:
-        path = os.path.join(d, rel)
+
+    def probe(path):
         tried.append({'source': source, 'path': path, 'key': None})
         try:
-            text = read(path)
-        except Exception as e:
-            raise _Refused('config_invalid', source, path, f'{type(e).__name__}: {e}')
-        if text is not None:
+            try:
+                text = read(path)
+            except Exception as e:
+                raise _Refused('config_invalid', source, path, f'{type(e).__name__}: {e}')
+            if text is None:
+                return False
             found.append(parse(text, path))
+        except _Refused as r:
+            if not lenient:
+                raise
+            w = 'repo_file_contains_secret' if r.result['reason'] == 'config_refused' else 'config_invalid'
+            if w not in warnings:
+                warnings.append(w)
+            found.append({'source': source, 'path': path, 'org': None, 'prj': None})
+        return True
+
+    for d in dirs:
+        if probe(os.path.join(d, rel)):
             break
     if main_root and main_root != home and not (found and found[0]['prj']):
-        path = os.path.join(main_root, rel)
-        tried.append({'source': source, 'path': path, 'key': None})
-        try:
-            text = read(path)
-        except Exception as e:
-            raise _Refused('config_invalid', source, path, f'{type(e).__name__}: {e}')
-        if text is not None:
-            found.append(parse(text, path))
+        probe(os.path.join(main_root, rel))
     return found
 
 
@@ -215,10 +222,11 @@ def _resolve(cwd, env, flags, remote_map, organizations, read, default_org_id, g
 
     tried = []
     entries = [{'source': 'flag', 'path': None, 'org': flags.get('org') or None, 'prj': flags.get('project') or None}]
+    lenient = bool(flags.get('project'))
     entries += _search('repo_file', os.path.join('.ace', 'config.json'), dirs, main_root, home, read, tried,
-                       _repo_entry)
+                       _repo_entry, warnings, lenient)
     entries += _search('settings_file', os.path.join('.claude', 'settings.json'), dirs, main_root, home, read,
-                       tried, _settings_entry)
+                       tried, _settings_entry, warnings, lenient)
     entries.append({'source': 'env', 'path': None,
                     'org': env.get('ACE_ORG_ID') or None, 'prj': env.get('ACE_PROJECT_ID') or None})
     tried.append({'source': 'env', 'path': None, 'key': None})
@@ -258,3 +266,464 @@ def _resolve(cwd, env, flags, remote_map, organizations, read, default_org_id, g
                      'source': org_from['source'], 'path': org_from['path'], 'warnings': ['org_not_member']})
 
     return done({'bound': True, 'orgId': org, 'projectId': win['prj'], 'source': win['source'], 'path': win['path']})
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# The one core for the Python chain (8.1.0). Every hook, scripts/ace-context and the markdown commands go
+# through context()/get_context(); nothing else reads settings.json or ACE_* binding env. Mirror: mod/context/.
+# ═══════════════════════════════════════════════════════════════════════════
+import subprocess
+import sys
+import time
+
+CONTEXT_ENV = 'ACE_CONTEXT'   # the mod's export: {"root","source","path","orgId","projectId","at"} (ms epoch)
+MOD_FRESH_S = 900             # the mod re-exports at every marker refresh (60 s); older = the mod is gone
+FILE_SOURCES = ('repo_file', 'settings_file')
+ADOPT_SOURCES = ('settings_file', 'remote_map')
+PROBLEM_STATES = ('unbound', 'not_logged_in', 'expired', 'project_not_found', 'no_access', 'server_error',
+                  'cli_missing', 'config_refused', 'config_invalid')
+ADOPT_LINE = ('ACE: Bindung als .ace/config.json gespeichert. Bitte committen, dann gilt sie in jedem Clone '
+              'und auf jeder Maschine.')
+# One line per problem state; the mod shows the same words (mod/context/lines.ts, parity-tested).
+LINES = {
+    'unbound': 'ACE ▼ Repo nicht verbunden: /ace:ace-configure',
+    'not_logged_in': 'ACE ▼ nicht angemeldet: /ace:ace-login',
+    'expired': 'ACE ▼ Anmeldung abgelaufen: /ace:ace-login',
+    'project_not_found': 'ACE ▼ Projekt nicht gefunden: /ace:ace-configure',
+    'no_access': 'ACE ▼ kein Zugriff auf das Projekt: /ace:ace-configure',
+    'server_error': 'ACE ▼ Server nicht erreichbar',
+    'cli_missing': 'ACE ▼ ace-cli fehlt: /ace:ace-install-cli',
+    'config_refused': 'ACE ▼ .ace/config.json enthält apiToken/serverUrl und wird ignoriert: /ace:ace-configure',
+    'config_invalid': 'ACE ▼ Bindungsdatei ist kein gültiges JSON: /ace:ace-doctor',
+}
+
+
+def _env_map(env):
+    return dict(os.environ if env is None else env)
+
+
+def global_config_path(env=None):
+    env = _env_map(env)
+    if env.get('ACE_CONFIG_PATH'):
+        return env['ACE_CONFIG_PATH']
+    base = env.get('XDG_CONFIG_HOME') or os.path.join(env.get('HOME') or os.path.expanduser('~'), '.config')
+    return os.path.join(base, 'ace', 'config.json')
+
+
+def load_global(env=None):
+    """The ace-cli global config, read-only. {} when missing or broken (the CLI reports that itself)."""
+    try:
+        with open(global_config_path(env), encoding='utf-8') as f:
+            d = json.load(f)
+        return d if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def _data_root():
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import plugin_data_dir
+    return plugin_data_dir.data_root()
+
+
+def machine_map_path():
+    return os.path.join(str(_data_root()), 'remote-map.json')
+
+
+def load_machine_map():
+    try:
+        with open(machine_map_path(), encoding='utf-8') as f:
+            d = json.load(f)
+        return {k: v for k, v in d.items() if isinstance(v, dict)} if isinstance(d, dict) else {}
+    except Exception:
+        return {}
+
+
+def repo_roots(cwd, read=read_file):
+    """(git root or None, main checkout root or None) from files only."""
+    root, main_root, _ = _git(os.path.normpath(cwd), read)
+    return root, main_root
+
+
+def log_root(cwd=None):
+    """Where logs and per-repo state live: the main checkout of a worktree, else the git root, else cwd."""
+    cwd = os.path.abspath(cwd or os.getcwd())
+    root, main_root = repo_roots(cwd)
+    return main_root or root or cwd
+
+
+def logs_dir(cwd=None):
+    return os.path.join(log_root(cwd), '.claude', 'data', 'logs')
+
+
+def remote_key(cwd, read=read_file):
+    _, _, cfg = _git(os.path.normpath(cwd), read)
+    return normalize_remote(origin_url(_quiet(read, cfg))) if cfg else None
+
+
+def _mod_export(env):
+    try:
+        m = json.loads(env.get(CONTEXT_ENV) or '')
+        return m if isinstance(m, dict) else None
+    except ValueError:
+        return None
+
+
+_CACHE = {}
+
+
+def context(cwd=None, env=None, flags=None, now=None):
+    """The resolver result for `cwd` plus `root` (log root) and `via` ('mod' | 'resolver').
+
+    A fresh mod export for the same root is taken as is. A stale or foreign one never leaks: its ACE_ORG_ID /
+    ACE_PROJECT_ID (the mod's own values) are dropped before the resolver sees the env."""
+    env = _env_map(env)
+    cwd = os.path.abspath(cwd or os.getcwd())
+    root = log_root(cwd)
+    key = (cwd, json.dumps(flags or {}, sort_keys=True),
+           tuple(env.get(k) for k in (CONTEXT_ENV, 'ACE_ORG_ID', 'ACE_PROJECT_ID', 'ACE_CONFIG_PATH', 'HOME')))
+    if now is None and key in _CACHE:
+        return dict(_CACHE[key])
+    t = time.time() if now is None else now
+    m = _mod_export(env)
+    if m and not flags and m.get('root') == root and m.get('projectId') and m.get('projectId') == env.get('ACE_PROJECT_ID') \
+            and isinstance(m.get('at'), (int, float)) and t - m['at'] / 1000.0 < MOD_FRESH_S:
+        r = {'bound': True, 'orgId': m.get('orgId'), 'projectId': m['projectId'], 'source': m.get('source'),
+             'path': m.get('path'), 'root': root, 'via': 'mod'}
+    else:
+        if m and env.get('ACE_PROJECT_ID') == m.get('projectId'):
+            env.pop('ACE_PROJECT_ID', None)
+            if env.get('ACE_ORG_ID') == m.get('orgId'):
+                env.pop('ACE_ORG_ID', None)
+        gc = load_global(env)
+        remote = dict(load_machine_map())
+        if isinstance(gc.get('projects'), dict):
+            remote.update(gc['projects'])  # the CLI's own map wins over ours
+        auth = gc.get('auth') if isinstance(gc.get('auth'), dict) else {}
+        orgs = auth.get('organizations') if isinstance(auth.get('organizations'), list) else None
+        r = resolve(cwd, env, flags=flags, remote_map=remote, organizations=orgs,
+                    default_org_id=gc.get('default_org_id') or gc.get('defaultOrgId'),
+                    global_project_id=gc.get('projectId'))
+        r['root'] = root
+        r['via'] = 'resolver'
+    if now is None:
+        _CACHE[key] = dict(r)
+    return r
+
+
+def get_context(base_dir=None):
+    """{'org', 'project', 'source', 'path', 'root'} when bound, else None. The hooks' only binding lookup."""
+    r = context(base_dir)
+    if not r.get('bound'):
+        return None
+    return {'org': r['orgId'], 'project': r['projectId'], 'source': r['source'], 'path': r['path'], 'root': r['root']}
+
+
+def local_state(r):
+    """State without the network: None when bound (verify decides), else the problem state."""
+    if r.get('bound'):
+        return None
+    return {'config_refused': 'config_refused', 'config_invalid': 'config_invalid'}.get(r.get('reason'), 'unbound')
+
+
+def cli_ids(r):
+    """--org/--project for every CLI spawn: the CLI must never pick its own binding (4.3.4 reads settings.json)."""
+    out = []
+    if r and r.get('orgId'):
+        out += ['--org', r['orgId']]
+    if r and r.get('projectId'):
+        out += ['--project', r['projectId']]
+    return out
+
+
+_HTTP = re.compile(r'Server error \((\d{3})\)')
+_CODES = {3: 'not_logged_in', 4: 'expired', 5: 'unbound', 6: 'project_not_found', 7: 'no_access',
+          8: 'server_error', 9: 'not_logged_in'}
+_NAMES = {'not_logged_in': 'not_logged_in', 'token_expired': 'expired', 'unbound': 'unbound',
+          'project_not_found': 'project_not_found', 'no_access': 'no_access', 'server_error': 'server_error',
+          'device_limit_exceeded': 'not_logged_in'}
+
+
+def classify(exit_code, stderr, spawn_error=False, timeout=False):
+    """ace-cli exit code + stderr -> state. stdout is never read (pattern text may say anything)."""
+    if spawn_error:
+        return 'cli_missing'
+    if timeout:
+        return 'server_error'
+    if exit_code == 0:
+        return 'ok'
+    err = stderr or ''
+    if exit_code in _CODES:
+        return _CODES[exit_code]
+    for line in err.splitlines():  # the new CLI: {"error":{"code","status","message"}}
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        code = e.get('error', {}).get('code') if isinstance(e, dict) and isinstance(e.get('error'), dict) else None
+        if code in _NAMES:
+            return _NAMES[code]
+    if re.search(r'Cannot find module|MODULE_NOT_FOUND|ace-cli not found', err):
+        return 'cli_missing'
+    if re.search(r'No API token found|Please login first|Not logged in|not_logged_in', err, re.I):
+        return 'not_logged_in'
+    m = _HTTP.search(err)
+    code = int(m.group(1)) if m else 0
+    return {401: 'expired', 403: 'no_access', 404: 'project_not_found'}.get(code, 'server_error')
+
+
+def verify(r, timeout=20):
+    """One `status --json` with explicit --org/--project -> state (or the local state when not bound)."""
+    st = local_state(r)
+    if st:
+        return st
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import ace_cli
+    try:
+        argv = ace_cli._cmd(*cli_ids(r), 'status', '--json')
+    except FileNotFoundError:
+        return 'cli_missing'
+    env = dict(os.environ)
+    env['ACE_ORG_ID'], env['ACE_PROJECT_ID'] = r['orgId'], r['projectId']
+    try:
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, env=env, cwd=r.get('root') or None)
+    except FileNotFoundError:
+        return 'cli_missing'
+    except subprocess.TimeoutExpired:
+        return 'server_error'
+    return classify(p.returncode, p.stderr)
+
+
+def remember(r, cwd, now=None):
+    """Per-machine remote map: a file-bound repo teaches its origin, so a fresh clone binds by itself."""
+    if not r.get('bound') or r.get('source') not in FILE_SOURCES:
+        return False
+    key = remote_key(cwd)
+    if not key:
+        return False
+    m = load_machine_map()
+    entry = {'orgId': r['orgId'], 'projectId': r['projectId']}
+    if {k: m.get(key, {}).get(k) for k in entry} == entry:
+        return False
+    m[key] = dict(entry, at=int(time.time() if now is None else now))
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import plugin_data_dir
+    plugin_data_dir.private_write(machine_map_path(), json.dumps(m, indent=2, sort_keys=True) + '\n')
+    return True
+
+
+def fix_gitignore(text):
+    """(new text, changed): a bare `.ace/` rule becomes `.ace/*` (a dir rule blocks the negation), then
+    `!.ace/config.json` is added. Same semantics as `ace-cli init --fix-gitignore`."""
+    lines = (text or '').splitlines()
+    out, changed = [], False
+    for line in lines:
+        s = line.strip()
+        if s in ('.ace', '.ace/', '/.ace', '/.ace/', '.ace/**', '/.ace/**'):
+            new = ('/' if s.startswith('/') else '') + '.ace/*'
+            changed |= new != line
+            out.append(new)
+        else:
+            out.append(line)
+    if not any(l.strip() in ('!.ace/config.json', '!/.ace/config.json') for l in out):
+        if not any(l.strip() in ('.ace/*', '/.ace/*') for l in out):
+            out.append('.ace/*')
+        out.append('!.ace/config.json')
+        changed = True
+    return ('\n'.join(out) + '\n') if changed else (text or ''), changed
+
+
+def _git_rc(root, *args):
+    try:
+        return subprocess.run(['git', '-C', root, *args], capture_output=True, text=True, timeout=5).returncode
+    except Exception:
+        return -1
+
+
+def ignored(main):
+    return _git_rc(main, 'check-ignore', '-q', '.ace/config.json') == 0
+
+
+def untracked(main):
+    return _git_rc(main, 'ls-files', '--error-unmatch', '.ace/config.json') != 0
+
+
+def write_binding(main, org, project):
+    """Write <main>/.ace/config.json {orgId, projectId} (never anything else) and un-ignore it."""
+    if not (ORG_ID.match(org or '') and PRJ_ID.match(project or '')):
+        raise ValueError('ids must look like org_... / prj_...')
+    d = os.path.join(main, '.ace')
+    os.makedirs(d, exist_ok=True)
+    path = os.path.join(d, 'config.json')
+    tmp = path + '.tmp'
+    with open(tmp, 'w', encoding='utf-8') as f:
+        f.write(json.dumps({'orgId': org, 'projectId': project}, indent=2) + '\n')
+    os.replace(tmp, path)
+    gi = 'ok'
+    if ignored(main):
+        gpath = os.path.join(main, '.gitignore')
+        new, changed = fix_gitignore(read_file(gpath) or '')
+        if changed:
+            with open(gpath, 'w', encoding='utf-8') as f:
+                f.write(new)
+        gi = 'still_ignored' if ignored(main) else 'fixed'
+    return {'path': path, 'gitignore': gi}
+
+
+ORG_ID = re.compile(r'^org_[A-Za-z0-9_-]+$')
+PRJ_ID = re.compile(r'^prj_[A-Za-z0-9_-]+$')
+
+
+def adopt(r, cwd, env=None):
+    """Automatic adoption: a legacy settings_file or remote_map binding becomes a tracked .ace/config.json in the
+    main checkout. Only in git, only if the file is missing, never for flag/env, opt-out ACE_AUTO_ADOPT=0."""
+    env = _env_map(env)
+    if env.get('ACE_AUTO_ADOPT') == '0' or not r.get('bound') or r.get('source') not in ADOPT_SOURCES:
+        return None
+    root, main_root = repo_roots(os.path.abspath(cwd))
+    main = main_root or root
+    if not main or os.path.exists(os.path.join(main, '.ace', 'config.json')):
+        return None
+    try:
+        return write_binding(main, r['orgId'], r['projectId'])
+    except (OSError, ValueError):
+        return None
+
+
+def context_row(r, state, hook, now_iso=None):
+    from datetime import datetime, timezone
+    row = {'timestamp': now_iso or datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+           'event': 'context', 'hook': hook, 'state': state, 'source': r.get('source'), 'path': r.get('path'),
+           'reason': None if r.get('bound') else r.get('reason'), 'org_id': r.get('orgId'),
+           'project_id': r.get('projectId'), 'root': r.get('root'), 'via': r.get('via'), 'chain': 'python'}
+    if r.get('warnings'):
+        row['warnings'] = r['warnings']
+    return row
+
+
+def log_context(r, state, hook='UserPromptSubmit'):
+    """One `context` row in <log root>/.claude/data/logs. An unbound unrelated repo gets no new log dir."""
+    d = os.path.join(r.get('root') or log_root(), '.claude', 'data', 'logs')
+    if state == 'unbound' and not os.path.isdir(d):
+        return False
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    from ace_relevance_logger import ACERelevanceLogger
+    ACERelevanceLogger(d)._write_log(context_row(r, state, hook))
+    return True
+
+
+def _state_path(sid, project):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import plugin_data_dir
+    return plugin_data_dir.session_dir(project, sid) / 'context.json'
+
+
+def _load(p):
+    try:
+        return json.loads(p.read_text())
+    except Exception:
+        return None
+
+
+def _save(p, d):
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import plugin_data_dir
+    plugin_data_dir.private_write(p, json.dumps(d))
+
+
+def session_notice(sid, cwd=None, env=None, spawn_verify=True):
+    """The Python chain's once-per-session context step (first UserPromptSubmit while the mod is not running):
+    resolve, remember, adopt, log once, verify in the background; returns at most one line to show, once."""
+    cwd = os.path.abspath(cwd or os.getcwd())
+    r = context(cwd, env)
+    p = _state_path(sid, r.get('projectId'))
+    st = _load(p)
+    if st is None:
+        st = {'state': local_state(r), 'shown': False, 'adopted': None, 'adopt_shown': False}
+        remember(r, cwd)
+        a = adopt(r, cwd, env)
+        if a:
+            st['adopted'] = a['path']
+        _save(p, st)
+        if st['state']:
+            log_context(r, st['state'])
+        elif spawn_verify:
+            try:
+                subprocess.Popen([sys.executable, os.path.abspath(__file__), '--verify-session', sid, '--cwd', cwd],
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
+            except OSError:
+                pass
+    line = None
+    if st.get('state') in PROBLEM_STATES and not st.get('shown'):
+        line, st['shown'] = LINES[st['state']], True
+    elif st.get('adopted') and not st.get('adopt_shown') and untracked(os.path.dirname(os.path.dirname(st['adopted']))):
+        line, st['adopt_shown'] = ADOPT_LINE, True
+    if line:
+        _save(p, st)
+    return line
+
+
+def verify_session(sid, cwd):
+    """The detached half of session_notice: status once, the state for the next prompt, the one log row."""
+    r = context(cwd)
+    p = _state_path(sid, r.get('projectId'))
+    st = _load(p) or {'shown': False, 'adopted': None, 'adopt_shown': False}
+    st['state'] = None if (s := verify(r)) == 'ok' else s
+    _save(p, st)
+    log_context(r, s)
+    return s
+
+
+def _shell(r):
+    import shlex
+    if not r.get('bound'):
+        return ''
+    return ''.join('export %s=%s\n' % (k, shlex.quote(str(v or ''))) for k, v in (
+        ('ACE_ORG_ID', r['orgId']), ('ACE_PROJECT_ID', r['projectId']), ('ACE_CONTEXT_SOURCE', r['source']),
+        ('ACE_CONTEXT_ROOT', r['root'])))
+
+
+def main(argv=None):
+    """scripts/ace-context: the markdown commands' only binding lookup.
+      ace-context [--cwd DIR] [--json]   the result as JSON (exit 0 bound, 5 not)
+      ace-context --shell                export lines for eval (nothing printed when not bound; exit 5)
+      ace-context --verify               plus `state` from one status call
+      ace-context --line                 the one problem line, empty when ok
+    """
+    import argparse
+    ap = argparse.ArgumentParser(prog='ace-context')
+    ap.add_argument('--cwd')
+    ap.add_argument('--org')
+    ap.add_argument('--project')
+    g = ap.add_mutually_exclusive_group()
+    g.add_argument('--json', action='store_true')
+    g.add_argument('--shell', action='store_true')
+    g.add_argument('--line', action='store_true')
+    ap.add_argument('--verify', action='store_true')
+    ap.add_argument('--verify-session')
+    a = ap.parse_args(argv)
+    cwd = os.path.abspath(a.cwd or os.getcwd())
+    if a.verify_session:
+        verify_session(a.verify_session, cwd)
+        return 0
+    flags = {k: v for k, v in (('org', a.org), ('project', a.project)) if v} or None
+    r = context(cwd, flags=flags)
+    if a.verify or a.line:
+        r['state'] = verify(r)
+    else:
+        r['state'] = local_state(r) or 'bound'
+    if a.shell:
+        sys.stdout.write(_shell(r))
+        if not r.get('bound'):
+            sys.stderr.write(LINES[r['state']] + '\n')
+    elif a.line:
+        if r['state'] in LINES:
+            print(LINES[r['state']])
+    else:
+        print(json.dumps(r, indent=2))
+    return 0 if r.get('bound') else 5
+
+
+if __name__ == '__main__':
+    sys.exit(main())

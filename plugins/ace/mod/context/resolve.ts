@@ -1,12 +1,12 @@
 // ACE project binding resolver (plugin 8.1.0). Mirror of shared-hooks/utils/ace_project_context.py; same semantics.
-// Contract: ce-ace-clients spec/project-context.md @ fbcbe1b (AOP-1361). Pure: no `$`, no spawn, no network.
+// Contract: ce-ace-clients spec/project-context.md @ 9c049a0 (AOP-1361). Pure: no `$`, no spawn, no network.
 // All file access goes through the injected reader: text, null when missing, throws for a directory or unreadable.
 // Precedence: flag > repo_file (.ace/config.json walk-up to the git root, then the linked worktree's main checkout)
 // > settings_file (.claude/settings.json, same walk) > env > remote_map > unbound.
 // Refusals (spec; no fallback to lower sources; CLI exit 5): apiToken/serverUrl in a repo file -> config_refused with
 // warning repo_file_contains_secret; broken/unreadable JSON, a non-object or a non-string id -> config_invalid.
 
-export type Reader = (path: string) => string | null
+export type Reader = (path: string) => string | null | Promise<string | null>
 export type Source = 'flag' | 'repo_file' | 'settings_file' | 'env' | 'remote_map'
 export type Tried = { source: string, path: string | null, key: string | null }
 export type Result =
@@ -46,21 +46,21 @@ export function normPath(p: string): string {
 const join = (a: string, b: string) => normPath(b.startsWith('/') ? b : `${a}/${b}`)
 const dirname = (p: string) => normPath(p + '/..')
 
-function quiet(read: Reader, p: string): string | null {
-  try { return read(p) } catch { return null }
+async function quiet(read: Reader, p: string): Promise<string | null> {
+  try { return await read(p) } catch { return null }
 }
 
-function git(cwd: string, read: Reader): { root: string | null, mainRoot: string | null, config: string | null } {
+export async function git(cwd: string, read: Reader): Promise<{ root: string | null, mainRoot: string | null, config: string | null }> {
   let d = cwd
   for (;;) {
     const dotgit = join(d, '.git')
     let txt: string | null
-    try { txt = read(dotgit) } catch { return { root: d, mainRoot: null, config: join(dotgit, 'config') } }
+    try { txt = await read(dotgit) } catch { return { root: d, mainRoot: null, config: join(dotgit, 'config') } }
     if (txt !== null) {
       const m = /^\s*gitdir:\s*(.+?)\s*$/.exec(txt)
       if (!m) return { root: d, mainRoot: null, config: null }
       const gitdir = join(d, m[1])
-      const common = quiet(read, join(gitdir, 'commondir'))
+      const common = await quiet(read, join(gitdir, 'commondir'))
       if (common === null) return { root: d, mainRoot: null, config: join(gitdir, 'config') }   // submodule
       const cd = join(gitdir, common.trim())
       return { root: d, mainRoot: dirname(cd), config: join(cd, 'config') }
@@ -136,35 +136,44 @@ const settingsEntry: Parse = (text, path) => {
 }
 
 // Spec 1.1/7: the first existing file in the walk ends it; the main checkout is checked only without a projectId yet.
-function search(source: Source, rel: string, dirs: string[], mainRoot: string | null, home: string | null, read: Reader,
-  tried: Tried[], parse: Parse): Entry[] {
+// lenient (a --project flag): a refused/invalid file contributes nothing and only warns (spec 9c049a0).
+async function search(source: Source, rel: string, dirs: string[], mainRoot: string | null, home: string | null, read: Reader,
+  tried: Tried[], parse: Parse, warnings: string[], lenient: boolean): Promise<Entry[]> {
   const found: Entry[] = []
-  const probe = (path: string) => {
+  const probe = async (path: string) => {
     tried.push({ source, path, key: null })
-    let text: string | null
-    try { text = read(path) } catch (e) { throw invalid(source, path, String((e as Error)?.message ?? e)) }
-    if (text !== null) found.push(parse(text, path))
-    return text !== null
+    try {
+      let text: string | null
+      try { text = await read(path) } catch (e) { throw invalid(source, path, String((e as Error)?.message ?? e)) }
+      if (text === null) return false
+      found.push(parse(text, path))
+    } catch (e) {
+      if (!(e instanceof Refused) || !lenient) throw e
+      const w = e.result.reason === 'config_refused' ? 'repo_file_contains_secret' : 'config_invalid'
+      if (!warnings.includes(w)) warnings.push(w)
+      found.push({ source, path, org: null, prj: null })
+    }
+    return true
   }
-  for (const d of dirs) if (probe(join(d, rel))) break
-  if (mainRoot && mainRoot !== home && !(found[0]?.prj)) probe(join(mainRoot, rel))
+  for (const d of dirs) if (await probe(join(d, rel))) break
+  if (mainRoot && mainRoot !== home && !(found[0]?.prj)) await probe(join(mainRoot, rel))
   return found
 }
 
-export function resolve(cwd: string, env: Record<string, string | undefined>, opts: ResolveOpts): Result {
-  try { return resolveInner(normPath(cwd), env ?? {}, opts) } catch (e) {
+export async function resolve(cwd: string, env: Record<string, string | undefined>, opts: ResolveOpts): Promise<Result> {
+  try { return await resolveInner(normPath(cwd), env ?? {}, opts) } catch (e) {
     if (!(e instanceof Refused)) throw e
     if (opts.globalProjectId) e.result.warnings = ['global_project_id_ignored', ...(e.result.warnings ?? [])]
     return e.result
   }
 }
 
-function resolveInner(cwd: string, env: Record<string, string | undefined>, o: ResolveOpts): Result {
+async function resolveInner(cwd: string, env: Record<string, string | undefined>, o: ResolveOpts): Promise<Result> {
   const flags = o.flags ?? {}
   const read = o.read
   const warnings: string[] = o.globalProjectId ? ['global_project_id_ignored'] : []
   const home = env.HOME ? normPath(env.HOME) : null
-  const { root, mainRoot, config } = git(cwd, read)
+  const { root, mainRoot, config } = await git(cwd, read)
 
   const dirs: string[] = []
   for (let d = cwd; ; d = dirname(d)) {
@@ -174,11 +183,12 @@ function resolveInner(cwd: string, env: Record<string, string | undefined>, o: R
 
   const tried: Tried[] = []
   const entries: Entry[] = [{ source: 'flag', path: null, org: flags.org || null, prj: flags.project || null }]
-  entries.push(...search('repo_file', '.ace/config.json', dirs, mainRoot, home, read, tried, repoEntry))
-  entries.push(...search('settings_file', '.claude/settings.json', dirs, mainRoot, home, read, tried, settingsEntry))
+  const lenient = !!flags.project
+  entries.push(...await search('repo_file', '.ace/config.json', dirs, mainRoot, home, read, tried, repoEntry, warnings, lenient))
+  entries.push(...await search('settings_file', '.claude/settings.json', dirs, mainRoot, home, read, tried, settingsEntry, warnings, lenient))
   entries.push({ source: 'env', path: null, org: env.ACE_ORG_ID || null, prj: env.ACE_PROJECT_ID || null })
   tried.push({ source: 'env', path: null, key: null })
-  const key = config ? normalizeRemote(originUrl(quiet(read, config))) : null
+  const key = config ? normalizeRemote(originUrl(await quiet(read, config))) : null
   const hit = key ? o.remoteMap?.[key] : undefined
   if (hit && typeof hit === 'object') entries.push({ source: 'remote_map', path: null, org: hit.orgId || null, prj: hit.projectId || null })
   tried.push({ source: 'remote_map', path: null, key })
