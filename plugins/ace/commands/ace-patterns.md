@@ -2,7 +2,7 @@
 model: claude-haiku-4-5
 description: View ACE playbook organized by section (strategies, snippets, troubleshooting, APIs)
 argument-hint: "[section] [min-reward]"
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Playbook
@@ -27,8 +27,8 @@ The ACE framework defines 4 sections:
 set -euo pipefail
 
 # Check ace-cli available
-if ! command -v ace-cli >/dev/null 2>&1; then
-  echo "❌ ace-cli not found - Install: npm install -g @ace-sdk/cli"
+if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
+  echo "❌ ACE CLI not found - Install: /ace:ace-install-cli"
   exit 1
 fi
 
@@ -46,7 +46,7 @@ SECTION="${1:-}"  # Optional section filter
 MIN_REWARD="${2:-0}"  # Optional min reward score
 
 # Call ace-cli patterns - CLI reads org/project from env vars automatically
-ace-cli patterns \
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli patterns \
   ${SECTION:+--section "$SECTION"} \
   --min-reward "$MIN_REWARD"
 ```

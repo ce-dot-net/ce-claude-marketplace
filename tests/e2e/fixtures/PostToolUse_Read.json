@@ -1,0 +1,23 @@
+{
+  "session_id": "__SESSION__",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "__CWD__",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "__CWD__/src/auth/login.py"
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "__CWD__/src/auth/login.py",
+      "content": "def login(): pass\n",
+      "numLines": 1,
+      "startLine": 1,
+      "totalLines": 1
+    }
+  },
+  "tool_use_id": "toolu_01READ",
+  "duration_ms": 3
+}

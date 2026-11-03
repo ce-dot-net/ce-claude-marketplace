@@ -21,9 +21,20 @@ I specialize in complete, error-free plugin releases that prevent common mistake
 
 ## Important Context
 
-**ACE Plugin Architecture**: The ACE plugin now uses CLI-based architecture with the `ce-ace` CLI tool (npm package: @ce-dot-net/ce-ace-cli). No MCP server or subagents. This repo only handles Claude Code plugin releases.
+**ACE Plugin Architecture**: The ACE plugin uses a CLI-based architecture with the `ace-cli` tool (npm package: @ace-sdk/cli). No MCP server or subagents. This repo only handles Claude Code plugin releases.
 
 ## Release Checklist (I ALWAYS Follow This)
+
+### 0. Release Gate (BEFORE any version bump or tag)
+- [ ] Full suite green: `python3 -m pytest tests -q -p no:cacheprovider`
+- [ ] Hook e2e green: `ACE_E2E=1 python3 -m pytest tests/e2e -q`
+- [ ] Manifest valid: `claude plugin validate plugins/ace --strict` (0 hook warnings)
+- [ ] Mod suite green: `claude plugin test plugins/ace`
+- [ ] **8.0.0 rollout blocker:** the server team has confirmed AOP-1333 + AOP-1334 on prod (date + version). Without that, do not release.
+- [ ] Budget default: `ACE_RENDER_FULL_PCT` default 0 (full off) in `ace_pattern_render.render_arm` and `mod/core.ts renderCohort`; a fake-CLI trace that names no pattern carries no `--applied-log-ids` (tests/test_s31_contract.py)
+- [ ] Live checklist in `plugins/ace/docs/RELEASE_GATE_v8.md` completed (`--debug-file` session)
+- [ ] After the version bump, re-run the FULL suite again (`tests/test_v600_version_bump.py` guards the description)
+- [ ] Tag is `v{VERSION}` (git tag only; the plugin tag subcommand is not used)
 
 ### 1. Version Verification
 - [ ] Find ALL files with version numbers:
@@ -85,15 +96,8 @@ If anything shows as modified → ADD IT!
 # 1. Push commit first
 git push
 
-# 2. Tag AFTER commit is pushed
-# v6.5.0+: prefer `claude plugin tag` — it reads version from plugin.json
-# and refuses to tag on version mismatch (catches forgotten bumps).
-# Falls back to manual git tag if claude plugin tag is unavailable.
-if command -v claude >/dev/null 2>&1; then
-  claude plugin tag         # auto-reads plugin.json, validates, creates annotated tag
-else
-  git tag v{VERSION}
-fi
+# 2. Tag AFTER commit is pushed (manual annotated tag; verify plugin.json version first)
+git tag -a v{VERSION} -m "ACE Plugin v{VERSION}"
 git push --tags
 
 # 3. Create GitHub release
@@ -200,14 +204,14 @@ For this plugin specifically:
 - `plugins/ace/.claude-plugin/plugin.template.json` ⚠️ **MUST match plugin.json version!**
 - `.claude-plugin/marketplace.json`
 - All files in `plugins/ace/commands/` (if documentation updated)
-- `plugins/ace/CHANGELOG.md` (update with release notes)
+- `plugins/ace/CHANGELOG.md` (mandatory: update with release notes)
 
-**Files to IGNORE** (old/unused):
-- `plugins/ace/plugin.local.json` (dev only)
+**The 3 version manifests (all must carry the same version):**
+- `plugins/ace/.claude-plugin/plugin.json`
+- `plugins/ace/.claude-plugin/plugin.template.json`
+- `.claude-plugin/marketplace.json`
 
-**Note:** v6.5.0 removed the legacy production manifest (only `plugin.local.json` remains as
-the dev-only variant). The corresponding test uses an `os.path.exists()` guard so it skips
-cleanly when no longer present.
+`plugins/ace/CHANGELOG.md` is mandatory for every release: no release without a new entry.
 
 **Hardcoded versions to AUDIT before tag** (v6.5.0+: should be ZERO):
 ```bash
@@ -252,17 +256,19 @@ A release is successful when:
 - API redesign
 - **Example**: 3.2.14 → 4.0.0
 
-## Notes on ce-ace CLI
+## Notes on ace-cli
 
-The ACE CLI tool (@ce-dot-net/ce-ace-cli) is maintained separately:
-- **Repo**: ce-ace-cli (separate from this marketplace repo)
-- **Package**: npm @ce-dot-net/ce-ace-cli
-- **Current Version**: v1.0.3+ (includes tune command support)
+The ACE CLI (`ace-cli`, npm @ace-sdk/cli) is maintained separately and is off-limits here; hooks call it as a subprocess.
+Users get it with the plugin: `plugins/ace/package.json` pins the exact version and `package-lock.json` is committed; Claude Code
+installs both on plugin install/update. A global CLI is only a fallback (`/ace:ace-install-cli`).
 
-The ACE plugin uses CLI-based architecture with subprocess calls via hooks. Users install the CLI globally:
-```bash
-npm install -g @ce-dot-net/ce-ace-cli
-```
+### ace-cli pin bump (hand in hand)
+A pin bump is a plugin version bump. The `ace-cli-watch` workflow opens the PR (package.json + regenerated lock); before releasing:
+1. `cd plugins/ace && npm install --package-lock-only --ignore-scripts` (lock regen), commit `package-lock.json`.
+2. `npm ci --ignore-scripts && npm rebuild better-sqlite3`, then `python3 -m pytest tests/test_cli_contract.py` must pass.
+   A failure names the exact flag/field to adapt in the plugin.
+3. The `Requires:` text of all three manifests and the CHANGELOG comes from package.json (`ace-cli >= <pin>`), not from a constant.
+4. Bump the plugin version in the same release; re-run the full suite afterwards.
 
 ---
 

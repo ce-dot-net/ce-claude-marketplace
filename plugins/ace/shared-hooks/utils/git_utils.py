@@ -276,7 +276,7 @@ def detect_commits_in_session(tools: List) -> List[str]:
     """
     commits = []
 
-    for tool_name, tool_input_json, tool_response_json, _ in tools:
+    for tool_name, tool_input_json, tool_response_json, *_ in tools:  # accumulator rows are 8-tuples
         if tool_name != 'Bash':
             continue
 

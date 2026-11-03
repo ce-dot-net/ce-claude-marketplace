@@ -101,11 +101,10 @@ class TestWrapperVersionConstants:
     """
 
     def test_wrapper_version_constants_updated(self):
-        """Stop wrappers source _ace_env.sh for dynamic version loading."""
-        for wrapper_path in [STOP_WRAPPER, SUBAGENT_STOP_WRAPPER]:
-            content = _read(wrapper_path)
-            assert "_ace_env.sh" in content, \
-                f"{os.path.basename(wrapper_path)} does not source _ace_env.sh"
+        """v8: every ace-cli spawn goes through ace_cli._env, which sets ACE_CLIENT_ID from plugin.json."""
+        content = _read(os.path.join(PLUGIN_DIR, 'shared-hooks', 'utils', 'ace_env.py'))
+        content += _read(os.path.join(PLUGIN_DIR, 'shared-hooks', 'utils', 'ace_cli.py'))
+        assert "claude-code-plugin/" in content and "ACE_CLIENT_ID" in content
 
     def test_all_wrapper_versions_match(self):
         """No wrapper should hardcode ACE_PLUGIN_VERSION (except _ace_env.sh, the loader)."""
@@ -172,11 +171,3 @@ class TestDevPluginFiles:
             assert data['version'] == expected, \
                 f"plugin.PRODUCTION.json version is {data['version']}, expected {expected}"
 
-    def test_local_json_version(self):
-        """plugin.local.json version matches plugin.json."""
-        expected = _current_version()
-        local = os.path.join(PLUGIN_DIR, 'plugin.local.json')
-        if os.path.exists(local):
-            data = _read_json(local)
-            assert data['version'] == expected, \
-                f"plugin.local.json version is {data['version']}, expected {expected}"

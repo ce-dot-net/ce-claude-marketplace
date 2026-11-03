@@ -11,8 +11,8 @@ CHANGES BEING TESTED (none yet implemented in ace_after_task.py):
 2. applied_log_ids = [retrieval_log_map[pid] for pid in playbook_used if pid in retrieval_log_map]
 3. trace['retrieval_id'] set when retrieval_id present (omit key when absent/None)
 4. trace['applied_log_ids'] set when non-empty (omit key when empty)
-5. _learn_via_transcript cmd += ['--retrieval-id', ...] when retrieval_id set
-6. _learn_via_transcript cmd += ['--applied-log-ids', ','.join(...)] when applied_log_ids set
+5. run_learn cmd += ['--retrieval-id', ...] when retrieval_id set
+6. run_learn cmd += ['--applied-log-ids', ','.join(...)] when applied_log_ids set
 7. learn-response: cumulative_v15_reward_delta as PRIMARY reward display; helpful_delta fallback
 8. patterns_deduplicated key preferred over patterns_merged
 """
@@ -39,6 +39,7 @@ sys.path.insert(0, str(SHARED))
 sys.path.insert(0, str(PLUGIN_UTILS))
 
 import patterns_used_state as pus  # noqa: E402
+import ace_cli as real_ace_cli  # noqa: E402  (ace_after_task tests stub it; learn flags are tested on the real one)
 
 # Real-shaped IDs
 PID_A = "ctx-4338628010-5127"
@@ -267,14 +268,14 @@ class TestOmitWhenEmpty:
 
 
 # ---------------------------------------------------------------------------
-# 3. _learn_via_transcript subprocess cmd flags
+# 3. run_learn subprocess cmd flags
 # ---------------------------------------------------------------------------
 
 class TestLearnCmdHasRetrievalIdFlag:
     """--retrieval-id flag must appear in the ace-cli learn subprocess call when set."""
 
     def test_learn_cmd_has_retrieval_id_flag(self):
-        """_learn_via_transcript must append ['--retrieval-id', rid] to cmd when retrieval_id set."""
+        """run_learn must append ['--retrieval-id', rid] to cmd when retrieval_id set."""
         mod = _load_after_task_module()
 
         captured_cmds = []
@@ -292,9 +293,9 @@ class TestLearnCmdHasRetrievalIdFlag:
 
         with patch('subprocess.run', side_effect=fake_run):
             # The NEW signature must accept retrieval_id kwarg:
-            mod._learn_via_transcript(trace, retrieval_id=retrieval_id)
+            real_ace_cli.run_learn(trace, retrieval_id=retrieval_id)
 
-        assert len(captured_cmds) == 1, "_learn_via_transcript must call subprocess.run once"
+        assert len(captured_cmds) == 1, "run_learn must call subprocess.run once"
         cmd = captured_cmds[0]
         assert '--retrieval-id' in cmd, (
             f"--retrieval-id flag missing from subprocess cmd: {cmd}"
@@ -321,7 +322,7 @@ class TestLearnCmdHasRetrievalIdFlag:
         trace = {"task": "test", "trajectory": [], "result": {"success": True}}
 
         with patch('subprocess.run', side_effect=fake_run):
-            mod._learn_via_transcript(trace, retrieval_id=None)
+            real_ace_cli.run_learn(trace, retrieval_id=None)
 
         cmd = captured_cmds[0]
         assert '--retrieval-id' not in cmd, (
@@ -333,7 +334,7 @@ class TestLearnCmdHasAppliedLogIdsFlag:
     """--applied-log-ids flag must appear in the ace-cli learn subprocess call when set."""
 
     def test_learn_cmd_has_applied_log_ids_flag(self):
-        """_learn_via_transcript must append ['--applied-log-ids', '1,2'] when applied_log_ids=[1,2]."""
+        """run_learn must append ['--applied-log-ids', '1,2'] when applied_log_ids=[1,2]."""
         mod = _load_after_task_module()
 
         captured_cmds = []
@@ -350,7 +351,7 @@ class TestLearnCmdHasAppliedLogIdsFlag:
         applied_log_ids = [105735, 105736]
 
         with patch('subprocess.run', side_effect=fake_run):
-            mod._learn_via_transcript(trace, applied_log_ids=applied_log_ids)
+            real_ace_cli.run_learn(trace, applied_log_ids=applied_log_ids)
 
         assert len(captured_cmds) == 1
         cmd = captured_cmds[0]
@@ -379,7 +380,7 @@ class TestLearnCmdHasAppliedLogIdsFlag:
         trace = {"task": "test", "trajectory": [], "result": {"success": True}}
 
         with patch('subprocess.run', side_effect=fake_run):
-            mod._learn_via_transcript(trace, applied_log_ids=[])
+            real_ace_cli.run_learn(trace, applied_log_ids=[])
 
         cmd = captured_cmds[0]
         assert '--applied-log-ids' not in cmd, (
@@ -403,7 +404,7 @@ class TestLearnCmdHasAppliedLogIdsFlag:
         trace = {"task": "test", "trajectory": [], "result": {"success": True}}
 
         with patch('subprocess.run', side_effect=fake_run):
-            mod._learn_via_transcript(trace, applied_log_ids=[42])
+            real_ace_cli.run_learn(trace, applied_log_ids=[42])
 
         cmd = captured_cmds[0]
         ali_idx = cmd.index('--applied-log-ids')
@@ -619,14 +620,14 @@ class TestLoadRetrievalIdsReadOnly:
 
 
 # ---------------------------------------------------------------------------
-# 6. _learn_via_transcript signature accepts new kwargs without crashing
+# 6. run_learn signature accepts new kwargs without crashing
 # ---------------------------------------------------------------------------
 
 class TestLearnViaTranscriptNewKwargs:
-    """_learn_via_transcript must accept retrieval_id and applied_log_ids kwargs."""
+    """run_learn must accept retrieval_id and applied_log_ids kwargs."""
 
-    def test_learn_via_transcript_accepts_retrieval_id_kwarg(self):
-        """Calling _learn_via_transcript(trace, retrieval_id=...) must not raise TypeError."""
+    def testrun_learn_accepts_retrieval_id_kwarg(self):
+        """Calling run_learn(trace, retrieval_id=...) must not raise TypeError."""
         mod = _load_after_task_module()
 
         with patch('subprocess.run') as mock_run:
@@ -636,14 +637,14 @@ class TestLearnViaTranscriptNewKwargs:
 
             trace = {"task": "test"}
             try:
-                mod._learn_via_transcript(trace, retrieval_id=RETRIEVAL_ID)
+                real_ace_cli.run_learn(trace, retrieval_id=RETRIEVAL_ID)
             except TypeError as e:
                 pytest.fail(
-                    f"_learn_via_transcript must accept retrieval_id kwarg, got TypeError: {e}"
+                    f"run_learn must accept retrieval_id kwarg, got TypeError: {e}"
                 )
 
-    def test_learn_via_transcript_accepts_applied_log_ids_kwarg(self):
-        """Calling _learn_via_transcript(trace, applied_log_ids=...) must not raise TypeError."""
+    def testrun_learn_accepts_applied_log_ids_kwarg(self):
+        """Calling run_learn(trace, applied_log_ids=...) must not raise TypeError."""
         mod = _load_after_task_module()
 
         with patch('subprocess.run') as mock_run:
@@ -653,13 +654,13 @@ class TestLearnViaTranscriptNewKwargs:
 
             trace = {"task": "test"}
             try:
-                mod._learn_via_transcript(trace, applied_log_ids=[1, 2, 3])
+                real_ace_cli.run_learn(trace, applied_log_ids=[1, 2, 3])
             except TypeError as e:
                 pytest.fail(
-                    f"_learn_via_transcript must accept applied_log_ids kwarg, got TypeError: {e}"
+                    f"run_learn must accept applied_log_ids kwarg, got TypeError: {e}"
                 )
 
-    def test_learn_via_transcript_accepts_both_new_kwargs(self):
+    def testrun_learn_accepts_both_new_kwargs(self):
         """Calling with both new kwargs must not raise TypeError."""
         mod = _load_after_task_module()
 
@@ -670,12 +671,12 @@ class TestLearnViaTranscriptNewKwargs:
 
             trace = {"task": "test"}
             try:
-                mod._learn_via_transcript(
+                real_ace_cli.run_learn(
                     trace,
                     retrieval_id=RETRIEVAL_ID,
                     applied_log_ids=[105735, 105736],
                 )
             except TypeError as e:
                 pytest.fail(
-                    f"_learn_via_transcript must accept both new kwargs, got TypeError: {e}"
+                    f"run_learn must accept both new kwargs, got TypeError: {e}"
                 )

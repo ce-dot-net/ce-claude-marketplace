@@ -37,11 +37,13 @@ def _wrapper_basenames() -> list[str]:
     for event_entries in data["hooks"].values():
         for entry in event_entries:
             for hook in entry.get("hooks", []):
-                cmd = hook.get("command", "")
-                # strip path prefix and flags: take the filename portion only
-                script_file = cmd.split("/")[-1].split()[0]
-                if script_file.endswith(".sh"):
-                    scripts.add(script_file)
+                # shell form puts the script in `command`; exec form (DESIGN §9 G8) may put it
+                # in `args` (command = interpreter). Scan both.
+                for part in [hook.get("command", "")] + list(hook.get("args", [])):
+                    for tok in str(part).split():
+                        script_file = tok.split("/")[-1]
+                        if script_file.endswith((".sh", ".py")):
+                            scripts.add(script_file)
     return sorted(scripts)
 
 
@@ -127,16 +129,18 @@ class TestInstallPath:
 
 
 # ---------------------------------------------------------------------------
-# 5. Hook event completeness — all 10 events must be mentioned
+# 5. Hook event completeness — all v8 events must be mentioned
+#    (v8 DESIGN §3: PreToolUse/PreCompact/PermissionRequest removed,
+#     PostToolUseFailure added; see tests/test_ace_doctor_v8.py for absence checks)
 # ---------------------------------------------------------------------------
 
 EXPECTED_EVENTS = [
-    "PreToolUse",
-    "PreCompact",
+    "PostToolBatch",  # DESIGN §9 G4 (round 2)
     "SessionStart",
     "UserPromptSubmit",
     "PostToolUse",
-    "PermissionRequest",
+    "PostToolUseFailure",
+    "SubagentStart",
     "PermissionDenied",
     "Stop",
     "SessionEnd",
@@ -145,6 +149,13 @@ EXPECTED_EVENTS = [
 
 
 class TestHookEventsMentioned:
+
+    def test_every_hooks_json_event_mentioned(self):
+        """WP-I: derived from hooks.json, so round-2 events (PostToolBatch, PreToolUse Agent)
+        cannot be added without the doctor naming them."""
+        doc = _doc()
+        missing = [ev for ev in _hooks()["hooks"] if ev not in doc]
+        assert not missing, f"ace-doctor.md is missing hooks.json events: {missing}"
 
     def test_all_hook_events_mentioned(self):
         doc = _doc()
@@ -222,12 +233,10 @@ class TestVersionStrings:
             "now 4.0.1."
         )
 
-    def test_ace_cli_floor_is_4_1_2(self):
+    def test_ace_cli_floor_comes_from_package_json(self):
         doc = _doc()
-        # Must mention 4.1.2 as the minimum CLI version somewhere
-        assert "4.1.2" in doc, (
-            "ace-doctor.md does not mention ace-cli floor version 4.1.2."
-        )
+        # DESIGN §23: the exact pin in package.json is the single source of truth
+        assert "package.json" in doc, "ace-doctor.md must read the ace-cli pin from package.json."
 
 
 # ---------------------------------------------------------------------------

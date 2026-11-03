@@ -52,7 +52,6 @@ class TestLastAssistantMessage(unittest.TestCase):
                  tools
              )), \
              patch('ace_after_task.get_user_prompt_from_transcript', return_value="implement feature X"), \
-             patch('ace_after_task.recall_session', return_value=None), \
              patch('ace_after_task.log_execution_metrics'), \
              patch('ace_after_task.is_valid_pattern_id', return_value=True), \
              patch('ace_tool_accumulator.clear_session'), \
@@ -61,7 +60,7 @@ class TestLastAssistantMessage(unittest.TestCase):
              patch('builtins.print') as mock_print:
 
             # v6.6.3: the trace is sent via `ace-cli learn --transcript <tempfile>`
-            # (not --stdin), and _learn_via_transcript deletes that file right after
+            # (not --stdin), and run_learn deletes that file right after
             # the call returns — so capture its contents DURING the mocked call.
             captured = {}
 

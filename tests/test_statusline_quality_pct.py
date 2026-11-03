@@ -14,7 +14,7 @@ from pathlib import Path
 
 PLUGIN_ROOT = Path(__file__).parent.parent / 'plugins' / 'ace'
 SCRIPTS_DIR = PLUGIN_ROOT / 'scripts'
-STOP_WRAPPER = SCRIPTS_DIR / 'ace_stop_wrapper.sh'
+STOP_WRAPPER = SCRIPTS_DIR.parent / 'shared-hooks' / 'ace_after_task.py'  # v8: Stop logic lives in Python
 STATUSLINE = SCRIPTS_DIR / 'ace_statusline.sh'
 
 
@@ -51,16 +51,6 @@ class TestStopWrapperWritesQualityPct:
         assert len(jq_write_lines) == 0, (
             f"ace_stop_wrapper.sh still writes 'helpful_pct' via jq on line(s):\n"
             + '\n'.join(jq_write_lines)
-        )
-
-    def test_systemmessage_uses_quality_pct_read(self):
-        """The REVIEW_PCT read from review file must use quality_pct (with fallback)."""
-        content = STOP_WRAPPER.read_text()
-        # After the rename, reading the review file for the system message
-        # should reference quality_pct
-        assert '.quality_pct' in content, (
-            "ace_stop_wrapper.sh must read '.quality_pct' from review file "
-            "when building the systemMessage (was '.helpful_pct')"
         )
 
 

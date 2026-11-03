@@ -1,0 +1,13 @@
+{
+  "session_id": "__SESSION__",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "__CWD__",
+  "permission_mode": "default",
+  "hook_event_name": "SubagentStop",
+  "stop_hook_active": false,
+  "agent_id": "",
+  "agent_type": "",
+  "last_assistant_message": "",
+  "background_tasks": [],
+  "session_crons": []
+}

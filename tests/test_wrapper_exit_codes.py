@@ -1,89 +1,78 @@
 #!/usr/bin/env python3
-"""
-TDD RED tests for wrapper script exit code safety (v5.5.0).
+"""v8 shim contract (DESIGN §3.1) + DESIGN §3 deletions, WP-A.
 
-Ensures no ACE wrapper script can block user actions via exit 1.
-Per Claude Code hook protocol: exit 0 = continue, exit 1 = BLOCK.
-ACE hooks should NEVER block.
+Rewritten from the v5.5 test: the wrapper list named scripts DESIGN deletes
+(ace_after_task_wrapper.sh, ace_precompact_wrapper.sh) and required an ERR trap,
+which a §3.1 thin shim no longer has (Python catches everything).
+Shim contract checks cover only the WP-A-owned shims; WP-B/C/D own theirs.
 """
-
-import os
 import re
-import unittest
 from pathlib import Path
 
-SCRIPTS_DIR = Path(__file__).parent.parent / 'plugins' / 'ace' / 'scripts'
-WRAPPER_SCRIPTS = [
-    'ace_before_task_wrapper.sh',
-    'ace_after_task_wrapper.sh',
-    'ace_stop_wrapper.sh',
-    'ace_subagent_stop_wrapper.sh',
-    'ace_posttooluse_wrapper.sh',
-    'ace_precompact_wrapper.sh',
-    'ace_install_cli.sh',
+import pytest
+
+PLUGIN = Path(__file__).resolve().parent.parent / "plugins" / "ace"
+SCRIPTS = PLUGIN / "scripts"
+
+WPA_SHIMS = ["ace_install_cli.sh", "ace_sessionend_wrapper.sh", "ace_permission_denied_wrapper.sh"]
+
+# DESIGN §3 REMOVED + dead config (critic T25). PreToolUse/PreCompact wrappers are WP-D's
+# deletions and are asserted in its tests.
+DELETED = [
+    "scripts/ace_permission_request_wrapper.sh",
+    "shared-hooks/ace_permission_request.py",
+    "scripts/ace_cwdchanged_wrapper.sh",
+    "scripts/ace_postcompact_wrapper.sh",
+    "scripts/ace_after_task_wrapper.sh",
+    "scripts/ace_monitor_log_reaper.sh",
+    "scripts/ace_monitor_stale_reaper.sh",
+    ".claude-plugin/settings.json",
+    ".mcp.template.json",
+    "plugin.local.json",
 ]
 
 
-class TestWrapperExitCodes(unittest.TestCase):
-    """Ensure no wrapper script can block user actions."""
+def _code_lines(path):
+    return [l.strip() for l in path.read_text().splitlines()
+            if l.strip() and not l.strip().startswith("#")]
 
-    def test_no_exit_1_in_any_wrapper(self):
-        """No wrapper script should contain 'exit 1' - hooks must never block."""
-        violations = []
-        for script_name in WRAPPER_SCRIPTS:
-            script_path = SCRIPTS_DIR / script_name
-            if not script_path.exists():
-                continue
-            content = script_path.read_text()
-            # Find all exit 1 occurrences (not in comments)
-            for i, line in enumerate(content.splitlines(), 1):
-                stripped = line.strip()
-                if stripped.startswith('#'):
-                    continue
-                if re.search(r'\bexit\s+1\b', stripped):
-                    violations.append(f"{script_name}:{i}: {stripped}")
 
-        self.assertEqual(violations, [],
-            f"Found 'exit 1' in wrapper scripts (hooks must never block):\n" +
-            "\n".join(violations))
+def test_no_exit_1_in_any_script():
+    """Hooks never block: exit 1 is a non-blocking error in CC but ACE always exits 0."""
+    bad = ["%s: %s" % (p.name, l) for p in sorted(SCRIPTS.glob("ace_*.sh"))  # hook shims, not command helpers
+           for l in _code_lines(p) if re.search(r"\bexit\s+1\b", l)]
+    assert not bad, "\n".join(bad)
 
-    def test_err_trap_in_all_wrappers(self):
-        """All wrapper scripts should have ERR trap for safety."""
-        missing_trap = []
-        for script_name in WRAPPER_SCRIPTS:
-            script_path = SCRIPTS_DIR / script_name
-            if not script_path.exists():
-                continue
-            content = script_path.read_text()
-            if "ERR" not in content or ("trap" not in content):
-                missing_trap.append(script_name)
 
-        self.assertEqual(missing_trap, [],
-            f"Missing ERR trap in wrapper scripts:\n" +
-            "\n".join(missing_trap))
+@pytest.mark.parametrize("name", DELETED)
+def test_dead_file_deleted(name):
+    """DESIGN §3 REMOVED / critic T25: dead hooks, scripts and config are gone."""
+    assert not (PLUGIN / name).exists(), "%s must be deleted (DESIGN §3)" % name
 
-    def test_no_Euo_pipefail(self):
-        """Wrappers should use 'set -euo pipefail' not 'set -Eeuo pipefail'."""
-        violations = []
-        for script_name in WRAPPER_SCRIPTS:
-            script_path = SCRIPTS_DIR / script_name
-            if not script_path.exists():
-                continue
-            content = script_path.read_text()
-            if 'set -Eeuo pipefail' in content:
-                violations.append(script_name)
 
-        self.assertEqual(violations, [],
-            f"Found 'set -Eeuo pipefail' (should be 'set -euo pipefail'):\n" +
-            "\n".join(violations))
+@pytest.mark.parametrize("name", WPA_SHIMS)
+def test_wpa_shim_execs_python_with_cached_path(name):
+    """§3.1: read <data>/python_path, fall back to `command -v python3`, `exec` the hook."""
+    src = (SCRIPTS / name).read_text()
+    assert "python_path" in src, "%s must read the cached python_path" % name
+    assert re.search(r'^exec "\$PY" ', src, re.M), "%s must exec the python hook" % name
 
-    def test_all_wrapper_scripts_exist(self):
-        """All expected wrapper scripts should exist."""
-        missing = []
-        for script_name in WRAPPER_SCRIPTS:
-            script_path = SCRIPTS_DIR / script_name
-            if not script_path.exists():
-                missing.append(script_name)
 
-        self.assertEqual(missing, [],
-            f"Missing wrapper scripts:\n" + "\n".join(missing))
+@pytest.mark.parametrize("name", WPA_SHIMS)
+def test_wpa_shim_has_no_jq_cat_tmp_or_cd(name):
+    """§0/§3.1: never handle JSON in bash (no jq), stdin untouched (no cat), no /tmp state,
+    no `cd` except inside the ROOT fallback."""
+    bad = []
+    for l in _code_lines(SCRIPTS / name):
+        if re.search(r"\bjq\b|\bcat\b|/tmp\b", l):
+            bad.append(l)
+        if re.search(r"(^|[;&|]\s*)cd\s", l) and not l.startswith("ROOT="):
+            bad.append(l)
+    assert not bad, "%s violates the shim contract:\n%s" % (name, "\n".join(bad))
+
+
+@pytest.mark.parametrize("name", WPA_SHIMS)
+def test_wpa_shim_is_thin(name):
+    """§3.1 shim is ~6 code lines; logic lives in Python."""
+    n = len(_code_lines(SCRIPTS / name))
+    assert n <= 10, "%s has %d code lines; a thin shim has <= 10" % (name, n)

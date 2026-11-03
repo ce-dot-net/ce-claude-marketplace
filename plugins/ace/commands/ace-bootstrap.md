@@ -1,9 +1,10 @@
 ---
+disable-model-invocation: true
 description: Bootstrap ACE playbook from docs, git history, and/or current code
 argument-hint: "[--mode hybrid|both|local-files|git-history|docs-only] [--thoroughness light|medium|deep] [--commits N] [--days N]"
 context: fork
 effort: high
-allowed-tools: Bash(ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(find:*), Bash(wc:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(find:*), Bash(wc:*), Read
 ---
 
 # ACE Bootstrap
@@ -44,27 +45,27 @@ Command: generates dynamic report for user
 
 ## Usage
 
-Use `ace-cli bootstrap` to initialize your playbook from the codebase.
+Use `${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap` to initialize your playbook from the codebase.
 
 **Basic usage**:
 ```bash
 # CLI reads org/project from environment variables or config automatically
-ace-cli bootstrap --json
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --json
 ```
 
 **With options**:
 ```bash
 # Hybrid mode (recommended) - docs → git → files
-ace-cli bootstrap --json --mode hybrid --thoroughness deep
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --json --mode hybrid --thoroughness deep
 
 # Git history only
-ace-cli bootstrap --json --mode git-history --commit-limit 1000 --days-back 180
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --json --mode git-history --commit-limit 1000 --days-back 180
 
 # Local files only
-ace-cli bootstrap --json --mode local-files --max-files 5000
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --json --mode local-files --max-files 5000
 
 # Docs only
-ace-cli bootstrap --json --mode docs-only
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --json --mode docs-only
 ```
 
 **Parameters**:

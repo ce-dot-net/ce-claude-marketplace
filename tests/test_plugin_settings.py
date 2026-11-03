@@ -12,64 +12,40 @@ import unittest
 from pathlib import Path
 
 
-# Path to the plugin settings.json
-PLUGIN_DIR = Path(__file__).parent.parent / 'plugins' / 'ace' / '.claude-plugin'
-SETTINGS_FILE = PLUGIN_DIR / 'settings.json'
+REPO = Path(__file__).parent.parent
+SETTINGS_FILE = REPO / 'plugins' / 'ace' / '.claude-plugin' / 'settings.json'
+RELEASE_MANAGER = REPO / '.claude' / 'agents' / 'release-manager.md'
 
 
-class TestPluginSettings(unittest.TestCase):
-    """Test plugin settings.json for default permissions."""
+class TestPluginSettingsRemoved(unittest.TestCase):
+    """v8 (WP-A, critic T25): .claude-plugin/settings.json was dead config: only
+    `agent`/`subagentStatusLine` are honored in a plugin settings.json, so the
+    `Bash(ace-cli *)` allow-rules it carried never applied. Deleted.
+    (Replaces the v5.5 tests that pinned its existence.)"""
 
-    def test_settings_json_exists(self):
-        """File exists at .claude-plugin/settings.json."""
-        self.assertTrue(
-            SETTINGS_FILE.exists(),
-            f"settings.json should exist at {SETTINGS_FILE}"
-        )
+    def test_settings_json_deleted(self):
+        self.assertFalse(SETTINGS_FILE.exists(), f"{SETTINGS_FILE} must be deleted")
 
-    def test_settings_json_valid(self):
-        """Valid JSON with permissions.allow array."""
-        self.assertTrue(SETTINGS_FILE.exists(), "settings.json must exist")
-        content = SETTINGS_FILE.read_text()
-        data = json.loads(content)
 
-        self.assertIn("permissions", data, "Must have 'permissions' key")
-        self.assertIn("allow", data["permissions"], "Must have 'permissions.allow' array")
-        self.assertIsInstance(data["permissions"]["allow"], list, "'allow' must be a list")
-        self.assertGreater(len(data["permissions"]["allow"]), 0, "'allow' must not be empty")
+class TestReleaseManagerDoc(unittest.TestCase):
+    """DESIGN §6 WP-A: release-manager = 3 manifests, CHANGELOG mandatory, no
+    `claude plugin tag`, no plugin.local.json."""
 
-    def test_settings_json_covers_ace_cli(self):
-        """Contains Bash(ace-cli *) pattern."""
-        data = json.loads(SETTINGS_FILE.read_text())
-        allow = data["permissions"]["allow"]
-        self.assertIn("Bash(ace-cli *)", allow, "Must pre-approve ace-cli commands")
+    def setUp(self):
+        self.doc = RELEASE_MANAGER.read_text()
 
-    def test_settings_json_covers_uv_run(self):
-        """Contains Bash(uv run *) pattern."""
-        data = json.loads(SETTINGS_FILE.read_text())
-        allow = data["permissions"]["allow"]
-        self.assertIn("Bash(uv run *)", allow, "Must pre-approve uv run commands")
+    def test_no_plugin_local_json(self):
+        self.assertNotIn('plugin.local.json', self.doc)
 
-    def test_settings_json_covers_python3(self):
-        """Contains Bash(python3 -c *) pattern."""
-        data = json.loads(SETTINGS_FILE.read_text())
-        allow = data["permissions"]["allow"]
-        self.assertIn("Bash(python3 -c *)", allow, "Must pre-approve python3 -c commands")
+    def test_no_claude_plugin_tag(self):
+        self.assertNotIn('claude plugin tag', self.doc)
 
-    def test_settings_json_has_default_verbosity(self):
-        """Contains env.ACE_VERBOSITY set to 'detailed'."""
-        data = json.loads(SETTINGS_FILE.read_text())
-        self.assertIn("env", data, "Must have 'env' key")
-        self.assertEqual(
-            data["env"].get("ACE_VERBOSITY"), "detailed",
-            "ACE_VERBOSITY should default to 'detailed'"
-        )
+    def test_changelog_mandatory(self):
+        self.assertRegex(self.doc, r'(?i)CHANGELOG\.md[^\n]*\b(mandatory|must|required)\b')
 
-    def test_settings_json_no_hardcoded_org_or_project(self):
-        """Does NOT contain ACE_ORG_ID or ACE_PROJECT_ID (these come from ace-configure)."""
-        content = SETTINGS_FILE.read_text()
-        self.assertNotIn("ACE_ORG_ID", content, "Must NOT hardcode ACE_ORG_ID")
-        self.assertNotIn("ACE_PROJECT_ID", content, "Must NOT hardcode ACE_PROJECT_ID")
+    def test_three_manifests_listed(self):
+        for m in ('.claude-plugin/plugin.json', 'plugin.template.json', 'marketplace.json'):
+            self.assertIn(m, self.doc)
 
 
 class TestAceInsightsPermissions(unittest.TestCase):

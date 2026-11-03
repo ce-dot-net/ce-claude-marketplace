@@ -2,22 +2,22 @@
 """
 Single source of truth for the ACE patterns-used state file.
 
-State file naming: ace-patterns-used-{session_id}-{agent_suffix}.json
-where agent_suffix = agent_id (for subagents) or 'main' (for the main agent).
+v8 layout (DESIGN §4): <plugin-data>/projects/<project_id>/sessions/<session_id>/
+patterns-used-<agent>.json where agent = agent_id (subagents) or 'main'.
+Paths come ONLY from plugin_data_dir; an explicit state_dir stands for the
+session dir. Optional keys user_prompt / rendered_context / hook_event_name
+(contract C1) carry data from UPS/SubagentStart to Stop and SessionStart(compact).
 
 This module centralizes the read/write/cleanup logic that was previously
 duplicated inline in ace_before_task.py (writer) and ace_after_task.py (reader).
-The path anchors to $CLAUDE_PROJECT_DIR/.claude/data/logs when CC provides it
-(confirmed available to hooks since CC 2.1.141), so the writer (before_task /
-PreToolUse) and the reader (after_task) resolve the SAME ABSOLUTE path regardless
-of each hook process's cwd — robust to any mid-session cwd change. It falls back
-to the relative '.claude/data/logs' (resolved against the wrapper's cd-to-event.cwd)
-when CLAUDE_PROJECT_DIR is unset. All consumers go through _state_dir() so writer
-and reader stay consistent by construction.
 """
 import json
+import re
 import os
 import sys
+import tempfile
+import uuid
+from contextlib import contextmanager
 from pathlib import Path
 
 # ace_pattern_render is in the same utils directory
@@ -33,23 +33,48 @@ if str(_PLUGIN_UTILS) not in sys.path:
     sys.path.insert(0, str(_PLUGIN_UTILS))
 from validation import is_valid_pattern_id  # noqa: E402
 
-STATE_DIR_DEFAULT = '.claude/data/logs'
+import plugin_data_dir  # noqa: E402
+
+USER_PROMPT_MAX = 4000
+RENDERED_CONTEXT_MAX = 10000
+RENDERED_SIDECAR = 'rendered-main.txt'
 
 
-def _state_dir(state_dir=None):
+def task_session_id_for(event):
+    """G2: the hook input prompt_id is the task anchor (identical on UPS -> subagent hooks
+    -> Stop); headless / old CC without one -> fresh uuid4."""
+    pid = event.get('prompt_id') if isinstance(event, dict) else None
+    return pid if isinstance(pid, str) and pid else str(uuid.uuid4())
+
+
+def _project_id(project_id=None):
+    """kwarg, else ace_context.get_context()['project'], else 'default'."""
+    if project_id:
+        return project_id
+    try:
+        from ace_context import get_context
+        # Anchor to $CLAUDE_PROJECT_DIR (cwd-independent, v6.6.6 lesson): the
+        # session cwd can move to a subdir; the cwd-relative lookup would then
+        # resolve a different project id for writer vs reader.
+        ctx = get_context(os.environ.get('CLAUDE_PROJECT_DIR') or None)
+        if (not ctx or not ctx.get('project')) and os.environ.get('CLAUDE_PROJECT_DIR'):
+            ctx = get_context()
+        if ctx and ctx.get('project'):
+            return ctx['project']
+    except Exception:
+        pass
+    return 'default'
+
+
+def _state_dir(state_dir=None, session_id=None, project_id=None, create=False):
     if state_dir is not None:
         return Path(state_dir)
-    # v6.6.6: anchor to $CLAUDE_PROJECT_DIR (CC provides it to hooks since 2.1.141)
-    # so writer + reader hit the SAME absolute dir even if a hook's cwd differs.
-    proj = os.environ.get('CLAUDE_PROJECT_DIR')
-    if proj:
-        return Path(proj) / STATE_DIR_DEFAULT
-    return Path(STATE_DIR_DEFAULT)
+    return plugin_data_dir.session_dir(_project_id(project_id), session_id, create=create)
 
 
-def state_file_path(session_id, agent_id, state_dir=None):
+def state_file_path(session_id, agent_id, state_dir=None, project_id=None):
     agent_suffix = agent_id if agent_id else 'main'
-    return _state_dir(state_dir) / f'ace-patterns-used-{session_id}-{agent_suffix}.json'
+    return _state_dir(state_dir, session_id, project_id) / f'patterns-used-{agent_suffix}.json'
 
 
 def _filter_retrieval_log_ids(retrieval_log_ids):
@@ -61,6 +86,41 @@ def _filter_retrieval_log_ids(retrieval_log_ids):
         for pid, v in retrieval_log_ids.items()
         if not isinstance(v, bool) and isinstance(v, int)
     }
+
+
+@contextmanager
+def _locked(sf):
+    """Exclusive flock on a sibling .lock so concurrent appends don't lose data.
+    Best-effort: without fcntl/flock the atomic replace still prevents torn files."""
+    fh = None
+    try:
+        import fcntl
+        fh = open(str(sf) + '.lock', 'a')
+        fcntl.flock(fh, fcntl.LOCK_EX)
+    except Exception:
+        pass
+    try:
+        yield
+    finally:
+        if fh is not None:
+            try:
+                fh.close()  # releases the lock
+            except Exception:
+                pass
+
+
+def _atomic_write(sf, text):
+    fd, tmp = tempfile.mkstemp(dir=str(sf.parent), prefix='.pus-', suffix='.tmp')
+    try:
+        with os.fdopen(fd, 'w') as f:
+            f.write(text)
+        os.replace(tmp, sf)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def _read_state_file(sf):
@@ -77,7 +137,11 @@ def _read_state_file(sf):
     """
     if not sf.exists():
         return [], None, {}, None
-    raw = json.loads(sf.read_text())  # intentionally raises on bad JSON
+    return _parse_state(json.loads(sf.read_text()))  # intentionally raises on bad JSON
+
+
+def _parse_state(raw):
+    """(ids, retrieval_id, retrieval_log_ids, task_session_id) from parsed JSON."""
     if isinstance(raw, list):
         # Legacy bare-list format
         return raw, None, {}, None
@@ -90,9 +154,134 @@ def _read_state_file(sf):
     return [], None, {}, None
 
 
+def _rescue_rendered_context(f):
+    """Stop reaps patterns-used-main.json after every turn, but a manual /compact runs
+    BETWEEN turns (after Stop). Keep the last rendered_context in a sidecar that only
+    SessionEnd removes (with the session dir) so SessionStart(compact) can re-inject it."""
+    if f.name != 'patterns-used-main.json':
+        return
+    try:
+        rc = json.loads(f.read_text()).get('rendered_context')
+        if rc and isinstance(rc, str):
+            plugin_data_dir.private_write(f.parent / RENDERED_SIDECAR, rc[:RENDERED_CONTEXT_MAX])
+    except Exception:
+        pass
+
+
+def load_rendered_context(session_id, project_id=None, state_dir=None):
+    """Last main-agent rendered_context: live state first, else the post-Stop sidecar."""
+    rc = load_state(session_id, None, 'Stop', state_dir, project_id).get('rendered_context')
+    if rc and isinstance(rc, str):
+        return rc
+    try:
+        return (_state_dir(state_dir, session_id, project_id) / RENDERED_SIDECAR).read_text() or None
+    except Exception:
+        return None
+
+
+CONTENT_CAP = 600   # per injected pattern, for the "actually used" check (§31)
+USED_MESSAGE_CAP = 50000
+
+
+def _norm_ws(text):
+    return " ".join(str(text or "").split())
+
+
+# §31 / item H2: "actually used" = evidence in what the task DID, not in what the answer says.
+TOOL_INPUT_KEYS = ("command", "file_path", "path", "pattern", "glob", "notebook_path", "url")
+_TOKEN_STOP = {"and/or", "e.g.", "i.e.", "etc.", "n/a", "w/o", "http://", "https://", "true/false", "yes/no"}
+_STRIP = "`'\"()[]{}<>,;:!?*"
+
+
+def tool_haystack(tool_inputs):
+    """Lowercased text of the tool-call inputs (Bash commands, paths, Grep/Glob patterns, Edit targets); edit and
+    write bodies are not searched. Same as the mod's toolHaystack."""
+    parts = []
+    for ti in tool_inputs or []:
+        if isinstance(ti, dict):
+            parts += [ti[k] for k in TOOL_INPUT_KEYS if isinstance(ti.get(k), str) and ti[k]]
+    return "\n".join(parts).lower()
+
+
+def _qualifies(w):
+    if len(w) < 4 or w in _TOKEN_STOP:
+        return False
+    if "/" in w or "_" in w or "::" in w or re.search(r"[a-z][A-Z]", w):
+        return True
+    if re.fullmatch(r"--?[A-Za-z][A-Za-z0-9_-]*", w):
+        return True
+    return bool(re.search(r"[A-Za-z0-9_]\.[A-Za-z0-9_]", w))  # dotted identifier or a file name with an extension
+
+
+def distinctive_tokens(content):
+    """Lowercased distinctive tokens of a pattern: backticked spans (and their first two words: command +
+    subcommand), paths, CLI flags, identifiers with '_', '.', '::' or camelCase; length >= 4. Mod parity."""
+    text = str(content or "")[:CONTENT_CAP]
+    toks = set()
+    for span in re.findall(r"`([^`\n]+)`", text):
+        span = " ".join(span.split())
+        if len(span) >= 4:
+            toks.add(span.lower())
+        words = span.split(" ")
+        if len(words) >= 2 and len(words[0] + " " + words[1]) >= 4:
+            toks.add((words[0] + " " + words[1]).lower())
+    for w in text.split():
+        w = w.strip(_STRIP).rstrip(".")
+        if _qualifies(w):
+            toks.add(w.lower())
+    return {t for t in toks if t not in _TOKEN_STOP}
+
+
+APPLIED_LOG_IDS_CAP = 20  # server 5.15.8: more than 20 applied_log_ids in one trace = "all shown" (trace -> COLD)
+
+
+def used_pattern_ids(ids, contents, message, haystack=""):
+    """§31 / item H2: the injected ids ACTUALLY USED, in injected order. Used = its id appears in the final
+    message / report or the tool inputs, or >= 2 of its distinctive tokens appear in the tool-call inputs
+    (`haystack`, tool_haystack). A token in more than 30% of the injected patterns (and more than one) is too
+    generic and does not count. ponytail: substring match; word-boundary matching if false positives show up.
+    """
+    msg = _norm_ws(message)[:USED_MESSAGE_CAP]
+    hay = haystack or ""
+    ids = [p for p in ids or [] if isinstance(p, str) and p]
+    toks = {pid: distinctive_tokens((contents or {}).get(pid)) for pid in ids}
+    df = {}
+    for ts in toks.values():
+        for t in ts:
+            df[t] = df.get(t, 0) + 1
+    generic = {t for t, n in df.items() if n > 1 and n > 0.3 * len(ids)}
+    out = []
+    for pid in ids:
+        if pid in msg or pid.lower() in hay:
+            out.append(pid)
+        elif hay and sum(1 for t in toks[pid] - generic if t in hay) >= 2:
+            out.append(pid)
+    return out
+
+
+def injected_contents(patterns, ids):
+    """{id: content[:CONTENT_CAP]} for the injected ids (state key pattern_contents)."""
+    by_id = {p.get("id"): p.get("content") for p in patterns or [] if isinstance(p, dict)}
+    return {pid: str(by_id[pid])[:CONTENT_CAP] for pid in ids or [] if by_id.get(pid)}  # injected order (mod parity)
+
+
+def eval_stats(injected, returned):
+    """Self-eval numbers of a search (v7.1.14 ace_stop_wrapper.sh): mean confidence of the INJECTED
+    patterns x 100 (truncated, 0..100; a non-number counts 0) and the distinct domains of the RETURNED ones."""
+    import math
+    conf = [c if isinstance(c, (int, float)) and not isinstance(c, bool) and math.isfinite(c) else 0
+            for c in (p.get("confidence") if isinstance(p, dict) else None for p in injected or [])]
+    rel = int(sum(conf) / len(conf) * 100) if conf else 0
+    doms = {str(p["domain"]) for p in returned or [] if isinstance(p, dict) and p.get("domain")}
+    return {"avg_relevance": max(0, min(100, rel)), "domains": len(doms)}
+
+
 def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
                          retrieval_id=None, retrieval_log_ids=None,
-                         task_session_id=None):
+                         task_session_id=None, project_id=None,
+                         user_prompt=None, rendered_context=None,
+                         hook_event_name=None, reset=False, parent_task_id=None, query_source=None,
+                         render_variant=None, pattern_contents=None, eval_stats=None):
     """Append+dedupe valid pattern IDs to the per-agent file; return the full list.
 
     F-080: optional params retrieval_id (str|None) and retrieval_log_ids (dict|None).
@@ -104,44 +293,73 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
     Backward compat: existing bare-list files are read transparently.
     bool guard: retrieval_log_ids values that are bool are excluded even though
     bool is a subclass of int.
+    reset=True: a NEW task starts (UPS anchor write) - ignore whatever an interrupted earlier
+    task left on disk (Stop does not run on interrupt, cc_hooks_reference.md:2733) so its
+    ids/retrieval_id are never credited to this task.
     """
     if not session_id:
         return []
     ids = [p for p in (pattern_ids or []) if isinstance(p, str) and is_valid_pattern_id(p)]
     has_retrieval = retrieval_id is not None or bool(retrieval_log_ids)
     has_task_session = task_session_id is not None
-    if not ids and not has_retrieval and not has_task_session:
+    has_extra = bool(user_prompt or rendered_context or hook_event_name or parent_task_id or query_source
+                     or render_variant or pattern_contents or eval_stats)
+    if not ids and not has_retrieval and not has_task_session and not has_extra:
         return []
-    d = _state_dir(state_dir)
-    d.mkdir(parents=True, exist_ok=True)
-    sf = state_file_path(session_id, agent_id, state_dir)
-    try:
-        existing_ids, existing_rid, existing_rlog, existing_tsid = _read_state_file(sf)
-    except Exception:
-        existing_ids, existing_rid, existing_rlog, existing_tsid = [], None, {}, None
-    seen = set(existing_ids)
-    for pid in ids:
-        if pid not in seen:
-            existing_ids.append(pid)
-            seen.add(pid)
-    # Merge retrieval_log_ids (new entries win over existing for same key)
-    merged_rlog = dict(existing_rlog)
-    merged_rlog.update(_filter_retrieval_log_ids(retrieval_log_ids or {}))
-    # retrieval_id: use new value if provided, else keep existing
-    merged_rid = retrieval_id if retrieval_id is not None else existing_rid
-    # task_session_id: use new value if provided, else keep existing
-    merged_tsid = task_session_id if task_session_id is not None else existing_tsid
-    state = {
-        'pattern_ids': existing_ids,
-        'retrieval_id': merged_rid,
-        'retrieval_log_ids': merged_rlog,
-        'task_session_id': merged_tsid,
-    }
-    sf.write_text(json.dumps(state))
+    sf = state_file_path(session_id, agent_id, state_dir, project_id)
+    sf.parent.mkdir(parents=True, exist_ok=True)
+    with _locked(sf):
+        try:
+            prior_raw = json.loads(sf.read_text()) if (sf.exists() and not reset) else {}
+        except Exception:
+            prior_raw = {}
+        existing_ids, existing_rid, existing_rlog, existing_tsid = _parse_state(prior_raw)
+        seen = set(existing_ids)
+        for pid in ids:
+            if pid not in seen:
+                existing_ids.append(pid)
+                seen.add(pid)
+        # Merge retrieval_log_ids (new entries win over existing for same key)
+        merged_rlog = dict(existing_rlog)
+        merged_rlog.update(_filter_retrieval_log_ids(retrieval_log_ids or {}))
+        # retrieval_id: use new value if provided, else keep existing
+        merged_rid = retrieval_id if retrieval_id is not None else existing_rid
+        # task_session_id: use new value if provided, else keep existing
+        merged_tsid = task_session_id if task_session_id is not None else existing_tsid
+        state = {
+            'pattern_ids': existing_ids,
+            'retrieval_id': merged_rid,
+            'retrieval_log_ids': merged_rlog,
+            'task_session_id': merged_tsid,
+        }
+        # C1 optional keys: keep earlier values unless a new one is supplied.
+        prior = prior_raw if isinstance(prior_raw, dict) else {}
+        for key, val, cap in (('user_prompt', user_prompt, USER_PROMPT_MAX),
+                              ('rendered_context', rendered_context, RENDERED_CONTEXT_MAX),
+                              ('hook_event_name', hook_event_name, None),
+                              ('parent_task_id', parent_task_id, None),
+                              ('render_variant', render_variant, None),  # §28: what was actually rendered
+                              ('query_source', query_source, None)):
+            # None = not supplied (keep prior); '' is an explicit "set" (control arm clears
+            # a stale rendered_context so WP-D never re-injects it).
+            val = val if val is not None else prior.get(key)
+            if val is not None and (val or key == 'rendered_context'):
+                state[key] = val[:cap] if cap else val
+        # §31: contents of the injected patterns, for the "actually used" check at learn (new wins per id)
+        pc = dict(prior.get('pattern_contents') or {}) if isinstance(prior.get('pattern_contents'), dict) else {}
+        for pid, text in (pattern_contents or {}).items():
+            if isinstance(pid, str) and is_valid_pattern_id(pid) and isinstance(text, str) and text:
+                pc[pid] = text[:CONTENT_CAP]
+        if pc:
+            state['pattern_contents'] = pc
+        es = eval_stats if isinstance(eval_stats, dict) else prior.get('eval_stats')
+        if isinstance(es, dict):
+            state['eval_stats'] = es  # self-eval numbers of the task's search, read by Stop
+        _atomic_write(sf, json.dumps(state))
     return existing_ids
 
 
-def load_playbook_used(session_id, agent_id, hook_event_name='Stop', state_dir=None, on_error=None):
+def load_playbook_used(session_id, agent_id, hook_event_name='Stop', state_dir=None, on_error=None, project_id=None):
     """Load + reap the patterns-used state for a (sub)agent stop event.
 
     PER-AGENT-PURE attribution (authoritative): the CLIENT owns
@@ -164,9 +382,9 @@ def load_playbook_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
     if not session_id:
         return []
     if hook_event_name == 'SubagentStop':
-        files = [state_file_path(session_id, agent_id, state_dir)]
+        files = [state_file_path(session_id, agent_id, state_dir, project_id)]
     else:
-        files = [state_file_path(session_id, None, state_dir)]
+        files = [state_file_path(session_id, None, state_dir, project_id)]
     seen = set()
     result = []
     for f in files:
@@ -177,6 +395,7 @@ def load_playbook_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
                     if isinstance(pid, str) and is_valid_pattern_id(pid) and pid not in seen:
                         seen.add(pid)
                         result.append(pid)
+                _rescue_rendered_context(f)
                 f.unlink()
         except Exception as e:
             if on_error:
@@ -191,7 +410,7 @@ def load_playbook_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
     return result
 
 
-def reap_patterns_used(session_id, agent_id, hook_event_name='Stop', state_dir=None, on_error=None):
+def reap_patterns_used(session_id, agent_id, hook_event_name='Stop', state_dir=None, on_error=None, project_id=None):
     """Unlink (reap) the per-agent patterns-used state file WITHOUT reading it.
 
     v6.6.7: the learning-skip path in ace_after_task (no project context /
@@ -213,10 +432,11 @@ def reap_patterns_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
     if not session_id:
         return
     if hook_event_name == 'SubagentStop':
-        f = state_file_path(session_id, agent_id, state_dir)
+        f = state_file_path(session_id, agent_id, state_dir, project_id)
     else:
-        f = state_file_path(session_id, None, state_dir)
+        f = state_file_path(session_id, None, state_dir, project_id)
     try:
+        _rescue_rendered_context(f)
         f.unlink(missing_ok=True)
     except Exception as e:
         if on_error:
@@ -226,7 +446,7 @@ def reap_patterns_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
                 pass
 
 
-def load_retrieval_ids(session_id, agent_id, hook_event_name='Stop', state_dir=None):
+def load_retrieval_ids(session_id, agent_id, hook_event_name='Stop', state_dir=None, project_id=None):
     """Read the retrieval_log_ids map from the per-agent state file WITHOUT unlinking it.
 
     F-080: read-only companion to load_playbook_used.  Returns
@@ -239,9 +459,9 @@ def load_retrieval_ids(session_id, agent_id, hook_event_name='Stop', state_dir=N
     if not session_id:
         return {}
     if hook_event_name == 'SubagentStop':
-        sf = state_file_path(session_id, agent_id, state_dir)
+        sf = state_file_path(session_id, agent_id, state_dir, project_id)
     else:
-        sf = state_file_path(session_id, None, state_dir)
+        sf = state_file_path(session_id, None, state_dir, project_id)
     try:
         _ids, _rid, rlog, _tsid = _read_state_file(sf)
         return dict(rlog) if rlog else {}
@@ -249,7 +469,7 @@ def load_retrieval_ids(session_id, agent_id, hook_event_name='Stop', state_dir=N
         return {}
 
 
-def load_task_session_id(session_id, agent_id, hook_event_name='Stop', state_dir=None):
+def load_task_session_id(session_id, agent_id, hook_event_name='Stop', state_dir=None, project_id=None):
     """Read the task_session_id from the per-agent state file WITHOUT unlinking it.
 
     per-task session_id: read-only companion to load_retrieval_ids.
@@ -266,14 +486,30 @@ def load_task_session_id(session_id, agent_id, hook_event_name='Stop', state_dir
     if not session_id:
         return None
     if hook_event_name == 'SubagentStop':
-        sf = state_file_path(session_id, agent_id, state_dir)
+        sf = state_file_path(session_id, agent_id, state_dir, project_id)
     else:
-        sf = state_file_path(session_id, None, state_dir)
+        sf = state_file_path(session_id, None, state_dir, project_id)
     try:
         _ids, _rid, _rlog, tsid = _read_state_file(sf)
         return tsid or None
     except Exception:
         return None
+
+
+def load_state(session_id, agent_id, hook_event_name='Stop', state_dir=None, project_id=None):
+    """Read the whole state dict WITHOUT unlinking it ({} if missing/corrupt).
+
+    Readers of the C1 optional keys (user_prompt, rendered_context,
+    hook_event_name): Stop/SubagentStop, SessionStart(compact).
+    """
+    if not session_id:
+        return {}
+    aid = agent_id if hook_event_name == 'SubagentStop' else None
+    try:
+        raw = json.loads(state_file_path(session_id, aid, state_dir, project_id).read_text())
+        return raw if isinstance(raw, dict) else {}
+    except Exception:
+        return {}
 
 
 # ---------------------------------------------------------------------------

@@ -66,9 +66,15 @@ def _tool(name: str) -> tuple:
     return (name, "{}", "{}", f"tu_{name}", None)
 
 
-def test_has_substantial_work_rejects_read_only():
-    tools = [_tool("Read"), _tool("Grep"), _tool("Glob")]
+def test_has_substantial_work_rejects_a_short_read_only_task():
+    tools = [_tool("Read"), _tool("Grep")]
     assert has_substantial_work_from_accumulated(tools) is False
+
+
+def test_has_substantial_work_accepts_a_research_task_of_3_calls():
+    """v8: research/analysis tasks (>= 3 tool calls, any tool) carry learnings too."""
+    tools = [_tool("Read"), _tool("Grep"), _tool("WebFetch")]
+    assert has_substantial_work_from_accumulated(tools) is True
 
 
 def test_has_substantial_work_accepts_edit():
@@ -91,5 +97,21 @@ def test_has_substantial_work_accepts_mcp_prefix():
     assert has_substantial_work_from_accumulated(tools) is True
 
 
+def test_has_substantial_work_accepts_an_orchestrating_task():
+    """fix 3: a main task that delegates (Agent / Workflow / Task / Skill) with 1-2 own calls is substantial."""
+    for name in ("Agent", "Workflow", "Task", "Skill"):
+        assert has_substantial_work_from_accumulated([_tool(name)]) is True, name
+    assert has_substantial_work_from_accumulated([_tool("TaskList"), _tool("Read")]) is False
+
+
 def test_has_substantial_work_empty_list():
     assert has_substantial_work_from_accumulated([]) is False
+
+
+def test_trivial_filter_matches_the_commands_not_paths():
+    """A task naming plugins/ace/... or /opt/ace-tools is real work; /plugin and /ace-* themselves stay trivial."""
+    from ace_after_task import is_trivial_task
+    for work in ('fix the marker in plugins/ace/mod/register.ts', 'rename the folder /opt/ace-tools/bin in the docs'):
+        assert not is_trivial_task(work), work
+    for cmd in ('/plugin', 'please run /plugin install now', '/ace-status', 'run /ace-doctor for this project'):
+        assert is_trivial_task(cmd), cmd

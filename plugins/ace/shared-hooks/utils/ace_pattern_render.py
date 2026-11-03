@@ -66,6 +66,8 @@ _KEEP_FIELDS = frozenset({
 # Top-level response fields that are BLOAT and must be dropped from the
 # rendered JSON payload (save chars, no value to the model).
 _DROP_TOP_LEVEL = frozenset({'domains_summary', 'expanded', 'threshold'})
+# Allow-list (cli 4.3.0 passes every server field through): only these reach the model. Parity: mod KEEP_TOP.
+_KEEP_TOP_LEVEL = frozenset({'retrieval_id', 'count'})
 
 
 def _hoist_and_strip(pattern: Dict[str, Any]) -> Dict[str, Any]:
@@ -204,7 +206,7 @@ def render_patterns_dict(
     # Copy top-level fields, drop bloat fields
     output_response: Dict[str, Any] = {}
     for k, v in patterns_response.items():
-        if k in _DROP_TOP_LEVEL or k == 'similar_patterns':
+        if k not in _KEEP_TOP_LEVEL:
             continue
         output_response[k] = v
 
@@ -446,41 +448,71 @@ def _read_ab_pcts():
     return ctrl, compact
 
 
-def render_cohort(session_id: Optional[str]) -> str:
-    """Deterministically assign a session to a render cohort.
+def full_pct_source() -> Tuple[int, str]:
+    """The §31 full share and its source: env ACE_RENDER_FULL_PCT if set (invalid -> 0) > the server's
+    `render_full_pct` (render-full-pct.json, < 7 days) > default 50."""
+    raw = os.environ.get("ACE_RENDER_FULL_PCT")
+    if raw is not None:
+        try:
+            return max(int(raw), 0), "env"
+        except (TypeError, ValueError):
+            return 0, "env"
+    try:
+        import plugin_data_dir
+        server = plugin_data_dir.stored_render_full_pct()
+    except Exception:
+        server = None
+    return (server, "server") if server is not None else (50, "default")
 
-    Returns one of: 'control' | 'compact' | 'budget'.
 
-    Algorithm:
-      bucket = sha256(session_id)[:8 hex chars] % 100
-      if session_id is falsy → 'budget'  (never experiment without anchor)
-      if bucket < CONTROL_PCT            → 'control'
-      if bucket < CONTROL_PCT+COMPACT_PCT→ 'compact'
-      else                               → 'budget'
+def render_arm(session_id: Optional[str]) -> str:
+    """The A/B arm of a conversation (DESIGN §31), shared with the mod's renderCohort (parity test).
 
-    Env knobs are read fresh on every call so the server can enable/disable
-    the experiment without restarting the plugin process.
-
-    Default (no env or both 0) → 100% 'budget' (= current shipped behavior,
-    zero user degradation).
+    Arms in bucket order: control, compact, full (full_pct_source: env > server render_full_pct > 50), rest budget.
+    bucket = sha256("render:" + session_id)[:8 hex] % 100, where session_id is the STABLE Claude Code
+    session id = conversation_id (subagents share it), never the per-task pin. No id -> 'budget'.
     """
+    ctrl_pct, compact_pct = _read_ab_pcts()
+    full_pct = min(full_pct_source()[0], 100 - ctrl_pct - compact_pct)
     if not session_id:
         return "budget"
-
-    ctrl_pct, compact_pct = _read_ab_pcts()
-
-    # Both zero → dormant, all budget (fast-path)
-    if ctrl_pct == 0 and compact_pct == 0:
-        return "budget"
-
-    digest = hashlib.sha256(("render:" + session_id).encode()).hexdigest()
-    bucket = int(digest[:8], 16) % 100
-
+    bucket = int(hashlib.sha256(("render:" + session_id).encode()).hexdigest()[:8], 16) % 100
     if bucket < ctrl_pct:
         return "control"
     if bucket < ctrl_pct + compact_pct:
         return "compact"
+    if bucket < ctrl_pct + compact_pct + full_pct:
+        return "full"
     return "budget"
+
+
+def render_cohort(session_id: Optional[str]) -> str:
+    """What the PYTHON chain renders for this conversation: 'control' | 'compact' | 'budget'.
+
+    The Python chain has no full renderer (10K cap), so the full arm renders budget-verbatim and is labelled
+    'budget' (render_variant names what was actually rendered). Default env -> 'budget'.
+    """
+    arm = render_arm(session_id)
+    return "budget" if arm == "full" else arm
+
+
+RENDER_VARIANTS = ("control", "compact", "full", "budget")
+
+
+def normalize_render_variant(value) -> Optional[str]:
+    """§31: the trace label is 'budget' or 'full' (stripped, lowercase); anything else is unknown -> None (omit)."""
+    v = value.strip().lower() if isinstance(value, str) else None
+    return v if v in ("budget", "full") else None
+
+
+def trace_render_variant(stored: Optional[str], session_id: Optional[str] = None, mod: bool = False) -> Optional[str]:
+    """render_variant for a trace (§31): the variant stored at render time, normalized. Without one (no search
+    before this trace), the conversation's arm as the active chain renders it (server request 2026-11-02): the
+    mod renders the full arm as full, the Python chain as budget. control/compact or no conversation -> None (omit)."""
+    v = normalize_render_variant(stored)
+    if v or not session_id:
+        return v
+    return normalize_render_variant(render_arm(session_id) if mod else render_cohort(session_id))
 
 
 def render_compact_all(

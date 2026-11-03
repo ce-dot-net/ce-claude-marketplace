@@ -14,7 +14,7 @@ Three files change:
      - Capture retrieval_id + retrieval_log_map BEFORE useful_fields strip
      - Pass them through to append_patterns_used
 
-  3. plugins/ace/scripts/ace_pretooluse_wrapper.sh
+  3. plugins/ace/scripts/the removed v7 PreToolUse wrapper
      - __main__ CLI: accept --retrieval-id, extract match_factors.retrieval_log_id per pattern
 """
 import json
@@ -57,7 +57,7 @@ class TestLegacyListStillReadable:
 
     def test_legacy_list_load_playbook_used(self, tmp_path):
         """write a bare-list JSON, call load_playbook_used → returns IDs, no crash."""
-        sf = tmp_path / f"ace-patterns-used-{SESSION}-main.json"
+        sf = tmp_path / "patterns-used-main.json"
         sf.write_text(json.dumps([PID_A, PID_B]))
 
         result = pus.load_playbook_used(SESSION, None, hook_event_name='Stop', state_dir=str(tmp_path))
@@ -215,7 +215,7 @@ class TestLegacyLoadRetrievalIdsReturnsEmpty:
 
     def test_legacy_load_retrieval_ids_returns_empty(self, tmp_path):
         """Legacy file with bare list → load_retrieval_ids returns {}."""
-        sf = tmp_path / f"ace-patterns-used-{SESSION}-main.json"
+        sf = tmp_path / "patterns-used-main.json"
         sf.write_text(json.dumps([PID_A, PID_B]))
 
         result = pus.load_retrieval_ids(SESSION, None, hook_event_name='Stop', state_dir=str(tmp_path))
@@ -228,7 +228,7 @@ class TestLegacyLoadRetrievalIdsReturnsEmpty:
 
     def test_subagent_legacy_load_retrieval_ids_returns_empty(self, tmp_path):
         """Legacy subagent file → load_retrieval_ids returns {} for SubagentStop."""
-        sf = tmp_path / f"ace-patterns-used-{SESSION}-{AGENT_SUB}.json"
+        sf = tmp_path / f"patterns-used-{AGENT_SUB}.json"
         sf.write_text(json.dumps([PID_A]))
 
         result = pus.load_retrieval_ids(SESSION, AGENT_SUB, hook_event_name='SubagentStop', state_dir=str(tmp_path))
@@ -471,7 +471,7 @@ class TestRetrievalLogIdsNotInUsefulFields:
 
 
 # ---------------------------------------------------------------------------
-# 3. __main__ CLI — ace_pretooluse_wrapper.sh pipes search JSON to
+# 3. __main__ CLI — the removed v7 PreToolUse wrapper pipes search JSON to
 #    patterns_used_state.py; the CLI must handle --retrieval-id and extract
 #    match_factors.retrieval_log_id per pattern
 # ---------------------------------------------------------------------------

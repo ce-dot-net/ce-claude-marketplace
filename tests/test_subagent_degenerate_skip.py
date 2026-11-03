@@ -86,7 +86,7 @@ def _write_state(state_dir, agent_id, pattern_ids=None, task_session_id=None,
         SESSION,
         agent_id,
         pattern_ids or [PID_A],
-        state_dir=str(state_dir),
+        project_id="prj-1",
         task_session_id=task_session_id,
         retrieval_id=retrieval_id,
         retrieval_log_ids=retrieval_log_ids or {},
@@ -117,11 +117,13 @@ def _run_main(tmp_path, monkeypatch, event,
     Wire minimal mocks and run main(), returning (all_relevance_records, captured).
 
     captured["learn_calls"] is the list of (trace, kwargs) tuples if learn was called.
-    captured["learn_called"] is True if _learn_via_transcript was called at all.
+    captured["learn_called"] is True if run_learn was called at all.
     """
     state_dir = tmp_path / ".claude" / "data" / "logs"
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
+    monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
     monkeypatch.chdir(tmp_path)
 
     if write_state_under is not None:
@@ -164,7 +166,7 @@ def _run_main(tmp_path, monkeypatch, event,
         r.returncode = 1  # skip success branch (avoid stdout parsing)
         return r
 
-    monkeypatch.setattr(mod, "_learn_via_transcript", fake_learn)
+    monkeypatch.setattr(mod, "run_learn", lambda *a, _f=fake_learn, **k: (_f(*a, **k), (None, 0))[1])
     monkeypatch.setattr(mod, "get_git_context", lambda wd: None)
     monkeypatch.setattr(mod, "detect_commits_in_session", lambda t: [])
     monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
@@ -328,9 +330,9 @@ class TestStage2DegenerateSkip:
 
     def test_fully_degenerate_skip_no_learn_call(self, tmp_path, monkeypatch):
         """SubagentStop with empty agent_id, no recoverable transcript, no state,
-        no anchors, user_prompt = sentinel → _learn_via_transcript must NOT be called.
+        no anchors, user_prompt = sentinel → run_learn must NOT be called.
 
-        RED: current code always calls _learn_via_transcript (no degenerate skip guard).
+        RED: current code always calls run_learn (no degenerate skip guard).
         """
         # No transcript_uuid → recovery fails → agent_id stays empty → no state file
         event = _empty_agent_subagent_event(tmp_path, transcript_uuid=None)
@@ -340,7 +342,7 @@ class TestStage2DegenerateSkip:
             user_prompt_return=NO_PROMPT_SENTINEL,
         )
         assert not captured["learn_called"], (
-            "Fully degenerate SubagentStop must NOT call _learn_via_transcript; "
+            "Fully degenerate SubagentStop must NOT call run_learn; "
             "learn was called unexpectedly"
         )
 
@@ -396,13 +398,14 @@ class TestStage2DegenerateSkip:
         """
         event = _empty_agent_subagent_event(tmp_path, transcript_uuid=None)
         # Write a state file under 'None' agent (the '-main' suffix) to verify it gets reaped
-        state_dir = tmp_path / ".claude" / "data" / "logs"
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
+        monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
         pus.append_patterns_used(
             SESSION, None, [PID_A],
-            state_dir=str(state_dir),
+            project_id="prj-1",
             task_session_id=None,
         )
-        main_sf = pus.state_file_path(SESSION, None, state_dir=str(state_dir))
+        main_sf = pus.state_file_path(SESSION, None, project_id="prj-1")
         assert main_sf.exists(), "Precondition: state file must exist before test"
 
         records, captured = _run_main(
@@ -528,11 +531,11 @@ class TestPartialAnchorNotSkipped:
     def test_retrieval_id_only_not_skipped(self, tmp_path, monkeypatch):
         """retrieval_id present (no tsid, no applied_log_ids, sentinel prompt) → NOT skipped."""
         # Build state with retrieval_id but no task_session_id
-        state_dir = tmp_path / ".claude" / "data" / "logs"
-        state_dir.mkdir(parents=True, exist_ok=True)
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
+        monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
         pus.append_patterns_used(
             SESSION, WORK_UUID, [PID_A],
-            state_dir=str(state_dir),
+            project_id="prj-1",
             task_session_id=None,       # no tsid
             retrieval_id=RETRIEVAL_ID,  # but retrieval_id present
         )
@@ -567,6 +570,8 @@ class TestMainStopNotAffected:
         learn is called (or skipped for other reasons, but not the degenerate guard).
         """
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
+        monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
+        monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
         monkeypatch.chdir(tmp_path)
 
         transcript = tmp_path / "transcript.jsonl"
@@ -601,7 +606,7 @@ class TestMainStopNotAffected:
             r.returncode = 1
             return r
 
-        monkeypatch.setattr(mod, "_learn_via_transcript", fake_learn)
+        monkeypatch.setattr(mod, "run_learn", lambda *a, _f=fake_learn, **k: (_f(*a, **k), (None, 0))[1])
         monkeypatch.setattr(mod, "get_git_context", lambda wd: None)
         monkeypatch.setattr(mod, "detect_commits_in_session", lambda t: [])
         monkeypatch.setattr("sys.stdin", io.StringIO(json.dumps(event)))
@@ -624,3 +629,16 @@ class TestMainStopNotAffected:
         assert captured["learn_called"], (
             "Main Stop must NOT be suppressed by the SubagentStop degenerate-skip guard"
         )
+
+
+def test_degenerate_event_never_learns_the_main_transcript(tmp_path, monkeypatch):
+    """v8 integration: a degenerate SubagentStop (no agent_id/agent_type/agent_transcript_path)
+    carries only the MAIN transcript_path (cc_hooks_reference.md:2591); reading the main
+    prompt from it is the v7.1.4 -main fallback -> must Stage-2 skip, zero learn."""
+    event = _empty_agent_subagent_event(tmp_path, transcript_uuid=None)
+    event["agent_type"] = ""
+    event["transcript_path"] = str(tmp_path / "main-session.jsonl")
+    records, captured = _run_main(tmp_path, monkeypatch, event,
+                                  user_prompt_return="real main-session prompt")
+    assert not captured["learn_called"]
+    assert any(r.get("event") == "subagent_degenerate_skip" for r in records)
