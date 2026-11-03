@@ -371,9 +371,17 @@ _logger = None
 def get_relevance_logger() -> ACERelevanceLogger:
     """Get singleton relevance logger instance."""
     global _logger
-    if _logger is None:
-        _logger = ACERelevanceLogger()
+    if _logger is None or (_logger.base is not None and _logger.base != _current_root()):
+        _logger = ACERelevanceLogger()  # the hooks chdir to the event cwd: the log follows that repo's root
     return _logger
+
+
+def _current_root():
+    try:
+        from ace_project_context import log_root
+        return log_root()
+    except Exception:
+        return None
 
 
 def log_event(event, **fields) -> None:
