@@ -392,7 +392,7 @@ def test_before_task_wrapper_is_thin_shim():
     assert "jq" not in code
     assert "$(cat" not in code and "cat " not in code
     assert "cd " not in code.replace("$(cd \"$(dirname", "")  # ROOT fallback only
-    assert "python_path" in code
+    assert "scripts/ace-python" in code  # 8.1.0: the picker reads python_path
     assert "exec " in code and "ace_before_task.py" in code
 
 

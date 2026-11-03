@@ -453,6 +453,8 @@ if [ -d "${PLUGIN_ROOT}/shared-hooks" ]; then
 else
     echo "Python hooks: missing"
 fi
+# The fallback hooks need Python >= 3.10 (8.1.0)
+"${PLUGIN_ROOT}/scripts/ace-python" || echo "Python >= 3.10 needed for the fallback hooks; the mod chain is unaffected"
 ```
 
 **Expected Versions**:
