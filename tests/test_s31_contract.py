@@ -201,3 +201,32 @@ def test_pattern_named_after_char_4000_of_a_long_handback_is_credited(box):
     (learn,) = box.cli_calls("learn")
     assert learn["trace"]["applied_log_ids"] == [7]
     assert len(learn["trace"]["result"]["summary"]) == 4000
+
+
+def test_more_than_20_used_ids_are_capped_at_20(box):
+    """Server 5.15.8: > 20 applied_log_ids in one trace counts as 'all shown' (the trace falls to COLD)."""
+    ids = ["11c8834e-fcca-5c36-9897-%012d" % i for i in range(25)]
+    sid = "s31-cap"
+    box.write_state(sid, user_prompt="refactor the parser module", pattern_ids=ids, retrieval_id="ret-31",
+                    retrieval_log_ids={p: i + 1 for i, p in enumerate(ids)}, render_variant="budget")
+    box.seed_tools(sid, WORK)
+    p = box.run_after_task(box.stop_event(sid, last_assistant_message="used " + " ".join(ids)),
+                           ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
+    assert p.returncode == 0, p.stderr
+    (learn,) = box.cli_calls("learn")
+    assert learn["trace"]["applied_log_ids"] == list(range(1, 21))
+    assert flag_value(learn["argv"], "--applied-log-ids") == ",".join(str(i) for i in range(1, 21))
+    (row,) = box.relevance_rows("execution")
+    assert row["used_ids_capped"] is True and row["used_ids_count"] == 25
+
+
+def test_20_used_ids_are_not_marked_capped(box):
+    ids = ["11c8834e-fcca-5c36-9897-%012d" % i for i in range(20)]
+    box.write_state("s31-cap20", user_prompt="refactor the parser module", pattern_ids=ids, retrieval_id="ret-31",
+                    retrieval_log_ids={p: i + 1 for i, p in enumerate(ids)}, render_variant="budget")
+    box.seed_tools("s31-cap20", WORK)
+    p = box.run_after_task(box.stop_event("s31-cap20", last_assistant_message=" ".join(ids)),
+                           ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
+    assert p.returncode == 0, p.stderr
+    assert box.cli_calls("learn")[0]["trace"]["applied_log_ids"] == list(range(1, 21))
+    assert "used_ids_capped" not in box.relevance_rows("execution")[0]

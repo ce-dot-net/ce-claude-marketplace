@@ -13,6 +13,7 @@ const { AceClient, createContext } = loadCoreOrExit();
 const args = process.argv.slice(2);
 const opt = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : undefined; };
 let sent = false;
+const APPLIED_CAP = 20;
 
 (async () => {
   const trace = JSON.parse(fs.readFileSync(opt('--transcript'), 'utf8'));
@@ -20,6 +21,8 @@ let sent = false;
   const applied = (opt('--applied-log-ids') || '').split(',').map((s) => parseInt(s.trim(), 10)).filter((n) => !isNaN(n));
   if (applied.length) trace.applied_log_ids = applied;
   else if (!Array.isArray(trace.applied_log_ids)) trace.applied_log_ids = []; // server contract: [] when nothing was used
+  // server 5.15.8: more than 20 applied_log_ids in one trace count as "all shown" (the whole trace falls to COLD)
+  trace.applied_log_ids = trace.applied_log_ids.slice(0, APPLIED_CAP);
   const ctx = await createContext({});
   const client = new AceClient(ctx, { customHeaders: clientHeaders() });
   try {

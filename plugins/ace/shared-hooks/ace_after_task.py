@@ -802,7 +802,7 @@ def _delegated_running(bg) -> bool:
         isinstance(b, dict) and b.get('type') in ('subagent', 'workflow') and b.get('status') == 'running' for b in bg)
 
 
-from patterns_used_state import USED_MESSAGE_CAP  # noqa: E402  (mod parity: used check reads the full report)
+from patterns_used_state import APPLIED_LOG_IDS_CAP, USED_MESSAGE_CAP  # noqa: E402  (mod parity: used check reads the full report)
 
 
 def handback_summary(path, cap=4000):
@@ -1104,6 +1104,9 @@ def main():
         except Exception:
             _used = []  # false positives are worse than misses
         applied_log_ids = [retrieval_log_map[pid] for pid in _used if pid in retrieval_log_map]
+        # Server 5.15.8: more than 20 applied_log_ids in one trace count as "all shown" (the trace falls to COLD).
+        _capped = len(applied_log_ids) > APPLIED_LOG_IDS_CAP
+        applied_log_ids = applied_log_ids[:APPLIED_LOG_IDS_CAP]
         # Use retrieval_id read from state file (before load_playbook_used unlinked it).
         retrieval_id = _retrieval_id_from_state
 
@@ -1251,6 +1254,7 @@ def main():
                     "execution_time_seconds": time.time() - execution_start_time,
                     "project_id": context.get('project'), "agent_type": agent_type,
                     "used_ids_count": len(_used), "used_source": "tokens" if _used else "none",
+                    **({"used_ids_capped": True} if _capped else {}),
                 },
             }
         except Exception as e:

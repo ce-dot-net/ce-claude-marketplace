@@ -281,6 +281,7 @@ class ACERelevanceLogger:
         used_ids_count: Optional[int] = None,
         used_source: Optional[str] = None,
         hook: str = 'Stop',
+        used_ids_capped: bool = False,
     ) -> None:
         """
         Log task execution metrics for correlation with pattern usage.
@@ -307,6 +308,8 @@ class ACERelevanceLogger:
             entry['used_source'] = used_source or 'none'
             entry['used_ids_tokens'] = used_ids_count  # item 2: H2 is the Python chain's only source
             entry['used_ids_model'] = 0
+        if used_ids_capped:  # server 5.15.8: applied_log_ids were cut to 20
+            entry['used_ids_capped'] = True
 
         self._write_log(entry)
 

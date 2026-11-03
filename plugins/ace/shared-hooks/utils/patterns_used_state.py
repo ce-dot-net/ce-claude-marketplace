@@ -232,6 +232,9 @@ def distinctive_tokens(content):
     return {t for t in toks if t not in _TOKEN_STOP}
 
 
+APPLIED_LOG_IDS_CAP = 20  # server 5.15.8: more than 20 applied_log_ids in one trace = "all shown" (trace -> COLD)
+
+
 def used_pattern_ids(ids, contents, message, haystack=""):
     """§31 / item H2: the injected ids ACTUALLY USED, in injected order. Used = its id appears in the final
     message / report or the tool inputs, or >= 2 of its distinctive tokens appear in the tool-call inputs

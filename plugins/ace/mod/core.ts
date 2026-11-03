@@ -623,9 +623,12 @@ export function injectedContents(patterns: any[], ids: string[]): Record<string,
   for (const id of ids) { const c = byId.get(id); if (c) out[id] = cpSlice(String(c), CONTENT_CAP) }  // injected order (Python parity)
   return out
 }
-// §31: applied_log_ids = the USED ids that have a retrieval log id, for every variant.
-export function appliedLogIds(used: string[], rlog: Record<string, number>): number[] {
-  return used.filter(id => id in rlog).map(id => rlog[id])
+// §31: applied_log_ids = the USED ids that have a retrieval log id, for every variant. Server 5.15.8: more than 20 in
+// one trace count as "all shown" (the trace falls to COLD), so `used` comes ordered by evidence and is cut at 20.
+export const APPLIED_LOG_IDS_CAP = 20
+export function appliedLogIds(used: string[], rlog: Record<string, number>): { ids: number[]; capped: boolean } {
+  const all = used.filter(id => id in rlog).map(id => rlog[id])
+  return { ids: all.slice(0, APPLIED_LOG_IDS_CAP), capped: all.length > APPLIED_LOG_IDS_CAP }
 }
 // ace_pattern_render.render_arm (§31): arms in bucket order control, compact, full (ACE_RENDER_FULL_PCT, default 50,
 // invalid -> 0; register.cohortEnv fills it from the server file when the env is unset), rest budget. No conversation id -> budget.

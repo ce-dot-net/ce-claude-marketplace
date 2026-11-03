@@ -415,7 +415,8 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
     const source = m.size && tk.size ? 'both' : m.size ? 'model' : tk.size ? 'tokens' : 'none'
     // item 2: per-source counts (Haiku ids past the whitelist, H2 ids), for the server team
     const bySource = { used_ids_model: playbook.filter(id => m.has(id)).length, used_ids_tokens: playbook.filter(id => tk.has(id)).length }
-    const applied = appliedLogIds(used, rlog)  // §31: used only (this agent's own tools, report, self-eval)
+    // §31: used only (this agent's own tools, report, self-eval); for the 20-cap Haiku ids first, then H2 ids, injected order
+    const { ids: applied, capped } = appliedLogIds([...used.filter(id => m.has(id)), ...used.filter(id => !m.has(id))], rlog)
     let git: any
     try {
       git = await gitContext($, s.cwd)
@@ -431,7 +432,7 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
       project_id: s.project, agent_type: agentType, patterns_used_count: playbook.length, pattern_ids: playbook.slice(0, 20),
       tools_executed: recs.length, state_changing_tools: recs.filter(r => ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit'].some(x => r.tool.includes(x))).length,
       success, execution_time_seconds: Math.round((await $.clock.now() - t0) / 10) / 100, learning_sent: sent,
-      used_ids_count: used.length, used_source: source, ...bySource })
+      used_ids_count: used.length, used_source: source, ...bySource, ...(capped ? { used_ids_capped: true } : {}) })
     const log = `${s.logs}/ace-relevance.jsonl`
     const python = (await readText($, `${s.root}/python_path`))?.trim()
     const verbosity = await $.env.get('ACE_VERBOSITY') || 'detailed'
