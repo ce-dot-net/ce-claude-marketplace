@@ -1807,6 +1807,14 @@ test('rejection + previous evidenced ids + gate on -> feedback downvote on the n
   expect(h.trace(h.learns()[2]!).feedback).toBe(undefined)
 })
 
+test('rejection with a real (sub-second) clock: the stored seconds stamp is a float and must still read as fresh', async ($, on) => {
+  const { a, log } = st8a()
+  const h = host(on, { defaultArm: true, search: () => ({ stdout: S8 }), env: { ACE_FEEDBACK_DOWNVOTE: '1' } })
+  h.advance(1234)  // clock no longer on a whole second: `now / 1000` is a float, which pyLoads reads as a PyFloat
+  const t2 = await rejectFlow($, h, 'applied ' + a, () => submit($, 'das ist falsch'))
+  expect(t2.feedback).toEqual({ kind: 'downvote', applied_log_ids: [log] })
+})
+
 test('rejection: gate off (default) -> nothing; the server gate in a search response turns it on', async ($, on) => {
   const { a } = st8a()
   let gate: boolean | undefined

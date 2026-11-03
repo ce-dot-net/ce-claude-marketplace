@@ -3,6 +3,7 @@
 // mod-active marker is fresh. ace-cli is consumed as-is via $.process.run; state lives on disk in the Python formats.
 import type { Register } from 'claude-code'
 import {
+  num,
   pyLoads, pyDumps, sanitize, renderFull, renderBudget, renderCompact, renderDomainShift, renderCohort, renderPatternsDict,
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
@@ -327,7 +328,8 @@ async function onRejection($: any, s: Sess, text: string) {
   const matched = rejectionMatch(text)
   if (!matched) return
   const prev = await readJson($, `${s.sdir}/last-main-applied.json`)
-  const fresh = typeof prev?.at === 'number' && await $.clock.now() / 1000 - prev.at < REJECTION_PREV_MAX_AGE_S
+  const prevAt = num(prev?.at)  // a seconds float reads back as a PyFloat: compare its value
+  const fresh = prevAt !== undefined && await $.clock.now() / 1000 - prevAt < REJECTION_PREV_MAX_AGE_S
   const ids: number[] = fresh && Array.isArray(prev.applied_log_ids) ? prev.applied_log_ids.filter((x: unknown) => Number.isInteger(x)) : []
   const sent = ids.length > 0 && await downvoteEnabled($, s)
   if (sent) await writePrivate($, `${s.sdir}/pending-downvote.json`, JSON.stringify({ applied_log_ids: ids, at: await $.clock.now() / 1000 }))
@@ -339,7 +341,8 @@ async function takeDownvote($: any, s: Sess): Promise<number[] | undefined> {
   const f = `${s.sdir}/pending-downvote.json`, d = await readJson($, f)
   if (d === undefined) return undefined
   await rm($, f)
-  return Array.isArray(d?.applied_log_ids) && d.applied_log_ids.length && await $.clock.now() / 1000 - d.at < REJECTION_PREV_MAX_AGE_S ? d.applied_log_ids : undefined
+  const dAt = num(d?.at)
+  return Array.isArray(d?.applied_log_ids) && d.applied_log_ids.length && dAt !== undefined && await $.clock.now() / 1000 - dAt < REJECTION_PREV_MAX_AGE_S ? d.applied_log_ids : undefined
 }
 
 // §13.1 cohort arms; `rendered` = the ≤ 10K re-inject copy (C1). control: search + anchor, nothing injected.
