@@ -895,6 +895,25 @@ test('item D: a stale eval request is removed at the next prompt and never injec
   expect(h.files.has(EVAL_REQ)).toBe(false)
 })
 
+test('item 4: main tools seen but none recorded at learn time -> a tools_mismatch row (diagnostic only); none when they match', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h, [{ tool: 'Bash', command: 'ls' }, { tool: 'Bash', command: 'pwd' }, { tool: 'Bash', command: 'id' }])
+  // a machine turn completing in between wipes the main tool store (anchor null): the task's learn then sees 0 tools
+  await submit($, '<task-notification><task-id>x</task-id> done</task-notification>', 'task-notification')
+  await $.turn.start({ text: 'n', turnId: 'tm' } as any)
+  await $.turn.complete({ answer: 'n', durationMs: 1, isAborted: false, turnId: 'tm', reason: 'answer' } as any)
+  await done($)
+  const mm = h.rows().filter((r: any) => r.event === 'tools_mismatch')
+  expect(mm.length).toBe(1)
+  const { timestamp, ...rest } = mm[0]
+  expect(rest).toEqual({ event: 'tools_mismatch', hook: 'Stop', recorded: 0, seen: 3, source: 'mod' })
+  expect(h.rows().some((r: any) => r.event === 'learn_skipped' && r.tools === 0)).toBe(true)  // no behaviour change
+  await mainTask($, h)  // counter reset with the new task; recorded == seen
+  await done($)
+  expect(h.rows().filter((r: any) => r.event === 'tools_mismatch').length).toBe(1)
+  expect(h.learns().length).toBe(1)
+})
+
 test('item 2: learnLine = one line, unknown parts left out', async () => {
   expect(learnLine({ quality_pct: 80, time_saved: '5m' })).toBe('ACE · learning sent · 80% · ~5m saved')
   expect(learnLine({ quality_pct: 70, time_saved: '12 min' })).toBe('ACE · learning sent · 70% · ~12m saved')
