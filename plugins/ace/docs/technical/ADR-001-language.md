@@ -54,9 +54,9 @@ engine through `ace_engine.py --status`.
 `session_id` goes to the server for its retrieval-log stamp; the engine writes no local pin. The default `cacheDir` stays on, so
 the graph sqlite keeps feeding `result.expanded` (CLI parity) and `/ace:ace-graph`.
 
-**Attribution.** ace-cli hard-codes `X-ACE-Client: cli`, so `ACE_CLIENT_ID` never reaches the server through the CLI; the engine sets the
-header itself to `claude-code-plugin/<version>`, so it also shows which path served a request. Worth telling the server and SDK teams;
-no SDK change is requested.
+**Attribution.** The engine sets `X-ACE-Client: claude-code-plugin/<version>` itself; ace-cli >= 4.3.0 sends `ACE_CLIENT_ID`
+(else `cli`), and the plugin exports `ACE_CLIENT_ID=claude-code-plugin/<version>` to every spawn, so both paths read as the plugin
+(ace-cli < 4.3.0 hard-coded `cli`).
 
 **Numbers.** Search via the deep import: parity 100/100, 0.23-0.53 s CPU and 81-96 MB RSS vs 1.97 s and 237 MB for the ace-cli spawn.
 Wall time stays bounded by the server round trip. A plugin-local dependency installed with `npm ci --ignore-scripts` costs 6.2 s cold and 123 MB;

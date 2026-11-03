@@ -21,7 +21,7 @@
   `playbook_used` lists everything injected.
 - **CLI pin.** Claude Code installs the `@ace-sdk/cli` version pinned in `package.json` into the plugin directory. A
   global `ace-cli` at or above the pin is used only as a fallback and `/ace:ace-doctor` marks it untested. Requests
-  sent through `ace-cli` say `X-ACE-Client: cli`; requests through the in-process engine (`@ace-sdk/core`) say
+  through the in-process engine (`@ace-sdk/core`) and through `ace-cli` (>= 4.3.0, via `ACE_CLIENT_ID`) both say
   `X-ACE-Client: claude-code-plugin/<version>`.
 
 ## 🚀 Quick Start

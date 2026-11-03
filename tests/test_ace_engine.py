@@ -415,7 +415,7 @@ def test_adr_records_engine_decision_and_mod_interface():
               "$.process.run", "session_id", "top_k", "--no-stream", "exit 3"):
         assert s in text, "ADR-001 must document " + s
     assert "8.0.0" in text
-    assert "X-ACE-Client: cli" in text and "ACE_CLIENT_ID" in text, "r3a pins these"
+    assert "ace-cli >= 4.3.0" in text and "ACE_CLIENT_ID" in text, "CLI path attribution (4.3.0)"
     for s in ("Windows", "WSL2", "Volta", "asdf", "nvm", "core_too_new", "node_modules/@ace-sdk/core"):
         assert s in text, "ADR-001 must document " + s
     assert "v8.1 plan" not in text, "§14: in-process core is IN 8.0.0, not deferred to 8.1"

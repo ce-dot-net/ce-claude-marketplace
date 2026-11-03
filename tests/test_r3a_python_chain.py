@@ -258,16 +258,16 @@ def test_is_mod_active_sanitizes_ids(tmp_path, monkeypatch):
     assert "projects" in str(pdd.mod_active_marker("../../etc", "../x").resolve().relative_to(tmp_path / "ace-pd"))
 
 
-# ── §13.2 ACE_CLIENT_ID truth (m3 REFUTED P-8) ───────────────────────────────────────────
+# ── §13.2 ACE_CLIENT_ID truth (ace-cli 4.3.0 honours it; tests/test_cli_client_header.py proves it) ──
 
-def test_docs_state_ace_cli_hardcodes_client_header():
-    """ace-cli sends `X-ACE-Client: cli`; our ACE_CLIENT_ID never reaches the server via the CLI.
+def test_docs_state_ace_cli_sends_the_plugin_client_id():
+    """ace-cli >= 4.3.0 sends X-ACE-Client from ACE_CLIENT_ID (older: hard-coded `cli`).
     CHANGELOG 8.0.0 and ADR-001 must say so (info for the server/SDK teams)."""
     changelog = (PLUGIN / "CHANGELOG.md").read_text()
     v8 = changelog.split("## [8.0.0]", 1)[1].split("\n## [", 1)[0]
     adr = (PLUGIN / "docs" / "technical" / "ADR-001-language.md").read_text()
     for name, text in (("CHANGELOG 8.0.0", v8), ("ADR-001", adr)):
-        assert "X-ACE-Client: cli" in text, "%s must state ace-cli hard-codes X-ACE-Client: cli" % name
+        assert "4.3.0" in text and "claude-code-plugin/<version>" in text, name
         assert "ACE_CLIENT_ID" in text, name
 
 
