@@ -158,7 +158,8 @@ export async function turnStart($: HookArgs<'turn.start'>[0], L: Load, e: HookAr
           await rm($, pendingFile(s))
           await clearTools($, L, s, 'main')
           L.mainSeen = 0
-          anchor = pyLoads(pend.state).task_session_id
+          const tsid = pyLoads(pend.state)?.task_session_id
+          anchor = typeof tsid === 'string' && tsid ? tsid : null  // never store undefined: undefined means "this load never heard the turn"
         } else anchor = (s && (await readState($, s, 'main'))?.task_session_id) ?? null
       }
       L.turnAnchor.set(e.turnId, anchor)

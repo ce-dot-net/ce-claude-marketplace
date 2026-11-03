@@ -10,6 +10,10 @@ import { safeComponent as safe } from '../lib/state.ts'
 import { basenameQuery, domainNames, matchDomainToPath } from '../lib/text.ts'
 import { toolRec } from '../lib/trace.ts'
 
+// The subagent report tool. CC 2.1.316's typed tool table (claude-code-tools) has no entry for it (only the Agent
+// result's internal `handback` fields mention it), but it exists at runtime as `SubagentHandback({ message })`
+// for subagents: matched by name, the input read untyped.
+export const HANDBACK_TOOL = 'SubagentHandback'
 export async function lateInject($: any, L: Load, s: Sess, key: string): Promise<string | null> {
   const query = L.late.get(key)
   if (query === undefined) return null
@@ -80,7 +84,7 @@ export async function toolCall($: HookArgs<'tool.call'>[0], L: Load, e: HookArgs
   try {
     s = await ensure($, L)
     if (s) await recordTool($, L, s, key, toolRec(e.tool, e, r.result, !!r.isError, r.deny, t0, Date.now()))
-    if (e.tool === 'SubagentHandback' && key !== 'main' && typeof (e as any).message === 'string') L.handback.set(key, (e as any).message)
+    if ((e.tool as string) === HANDBACK_TOOL && key !== 'main' && typeof (e as any).message === 'string') L.handback.set(key, (e as any).message)
   } catch { /* accumulation never breaks a tool call */ }
   const contexts: string[] = []
   try {
