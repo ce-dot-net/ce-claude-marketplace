@@ -225,7 +225,7 @@ def test_real_cli_verify_states_against_the_fake_server(box, monkeypatch, mode, 
         monkeypatch.setenv('HOME', str(box / 'home'))
         import ace_cli
         monkeypatch.setattr(ace_cli, 'cli_argv', lambda: ['node', real_cli()])
-        assert apc.verify(apc.context(str(main))) == state
+        assert apc.verify(apc.context(str(main)), timeout=60) == state  # an old CLI refreshes and retries first
     finally:
         if proc:
             proc.kill()
