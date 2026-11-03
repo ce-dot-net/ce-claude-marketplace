@@ -165,6 +165,7 @@ def _search_and_inject(event, ctx, project, org, sid, agent_id, last_file, last,
     cache_hit = result is not None
     if not cache_hit:
         result, _ms = run_search(query, org=org, project=project, top_k=8,  # P8: no pin (server never credits these rows)
+                                 session_id=tsid, pin=False,  # CLI: --session-id only (task session stamp)
                                  timeout=17, hook_event_name='PostToolUse')
         ace_search_cache.reuse_put(project, 'domain', query, agent_id or 'main', result)
     ok = isinstance(result, dict) and not result.get('error')

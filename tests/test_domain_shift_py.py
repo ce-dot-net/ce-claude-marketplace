@@ -193,6 +193,7 @@ def test_domain_shift_reuses_task_session_id_without_pinning(env):
     calls = _search_calls(env)
     assert calls, "no search issued"
     assert "--pin-session" not in calls[0]["argv"]
+    assert flag_value(calls[0]["argv"], "--session-id") == "tsid-main-from-ups", "unpinned session stamp (cli 4.3.1)"
     assert env.read_state(SID)["task_session_id"] == "tsid-main-from-ups"
 
 
