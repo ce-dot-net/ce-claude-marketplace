@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [8.0.0]
 
 ### Headline
-Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topology. Requires: Claude Code >= 2.1.311; ace-cli 4.3.1 (@ace-sdk/core >= 3.2.2), pinned exactly in package.json and installed plugin-local; a global ace-cli >= the pin is the fallback and is marked untested. Windows not supported (macOS, Linux, WSL2).
+Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topology. Requires: Claude Code >= 2.1.311; ace-cli 4.3.2 (@ace-sdk/core >= 3.2.2), pinned exactly in package.json and installed plugin-local; a global ace-cli >= the pin is the fallback and is marked untested. Windows not supported (macOS, Linux, WSL2).
 
 ### Changed
 - State moved from `/tmp` and `~/.claude/logs` to `$CLAUDE_PLUGIN_DATA` (default `~/.claude/plugins/data/ace-ce-dot-net-marketplace`).
