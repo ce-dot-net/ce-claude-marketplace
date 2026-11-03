@@ -186,10 +186,10 @@ def _store_full_pct(resp) -> None:
 
 
 def _pin_backoff_active() -> bool:
-    """True while <root>/pin-backoff is younger than ACE_PIN_BACKOFF_MIN (default 30) min."""
+    """True while <root>/pin-backoff is younger than ACE_PIN_BACKOFF_MIN (default 5; 30 before SDK 4.3.0's sessions.db index) min."""
     try:
         pdd = _plugin_dir()
-        mins = float(os.environ.get('ACE_PIN_BACKOFF_MIN') or 30)
+        mins = float(os.environ.get('ACE_PIN_BACKOFF_MIN') or 5)
         return pdd is not None and (time.time() - pdd.pin_backoff_file().stat().st_mtime) < mins * 60
     except Exception:
         return False

@@ -151,10 +151,10 @@ def test_fresh_backoff_skips_pin_up_front(fake, monkeypatch):
 
 
 def test_expired_backoff_pins_again(fake):
-    """A1: an old backoff (> 30 min) no longer suppresses the pin (healthy path primary)."""
+    """A1: an old backoff (> 5 min, default since SDK 4.3.0) no longer suppresses the pin (healthy path primary)."""
     b = fake.pdd.pin_backoff_file()
     b.touch()
-    old = time.time() - 31 * 60
+    old = time.time() - 6 * 60
     os.utime(str(b), (old, old))
     fake.cli.run_search("q", session_id="tsid-3", hook_event_name="UserPromptSubmit")
     calls = _search(fake)

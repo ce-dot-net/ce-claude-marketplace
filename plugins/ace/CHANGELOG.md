@@ -18,7 +18,7 @@ Modernization: plugin-data state layout, single-spawn `ace-cli`, slim hook topol
 - Round 2: `PostToolBatch` (async, one event per parallel batch) replaces the per-tool `PostToolUse` accumulator; `PostToolUseFailure` matcher is `*`.
 - Main agent: `prompt_id` is the task anchor and `--pin-session` value (uuid fallback). Every subagent is its own ACE session: SubagentStart mints a fresh uuid4 (parent `prompt_id` kept only as `parent_task_id`); the `Agent` PreToolUse hook stashes the subagent prompt in `agent-prompts/` so SubagentStart no longer scans the transcript.
 - Stop/SubagentStop are sync hooks (timeout 15, print nothing) that only dispatch a detached, SIGHUP-safe learn process, so learning survives `claude -p` teardown (async hooks are killed there); `ACE_ASYNC_LEARNING` is removed (always async, `ACE_LEARN_INLINE=1` for tests). All async hooks print nothing.
-- A failed session pin is dropped with a pin-backoff (`ACE_PIN_BACKOFF_MIN`); new `ACE_MIN_PROMPT_CHARS` skips searches for trivial prompts.
+- A failed session pin is dropped with a pin-backoff (`ACE_PIN_BACKOFF_MIN`, default 5 min); new `ACE_MIN_PROMPT_CHARS` skips searches for trivial prompts.
 - `/ace:ace-doctor` flags `~/.ace-cache/sessions.db` over 100 MB and recent `database is locked` errors; new `/ace:ace-cleanup --legacy` (dry run, `--yes`, `--sessions-db`) removes v7 leftovers.
 - Measured blocking hook time per session: 7.1.14 60-111 s vs v8 2.3-3.3 s; UserPromptSubmit alone 27-37 s before.
 - 18 user-only commands set `disable-model-invocation: true` (all except ace-search, ace-learn, ace-patterns, ace-status).
