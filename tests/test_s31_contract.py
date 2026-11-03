@@ -134,6 +134,7 @@ def test_applied_log_ids_only_the_used_ones_for_every_variant(box, variant):
     t = learn["trace"]
     assert flag_value(learn["argv"], "--applied-log-ids") == "7" and t["applied_log_ids"] == [7]
     assert t["playbook_used"] == [A, B] and t["render_variant"] == variant
+    assert (t["used_ids_model"], t["used_ids_tokens"]) == (0, 1), "per-source counters in the trace itself"
     assert flag_value(learn["argv"], "--retrieval-id") == "ret-31"
     (row,) = box.relevance_rows("execution")
     assert row["used_ids_count"] == 1 and row["used_source"] == "tokens"
@@ -144,6 +145,7 @@ def test_nothing_used_sends_empty_applied_ids_in_the_trace(box):
     learn = _learn(box, box.stop_event("s31-b"), pattern_ids=[A, B], retrieval_id="ret-31",
                    retrieval_log_ids={A: 7, B: 8}, pattern_contents={A: CONTENT_A, B: CONTENT_B}, render_variant="budget")
     assert "--applied-log-ids" not in learn["argv"] and learn["trace"]["applied_log_ids"] == []
+    assert (learn["trace"]["used_ids_model"], learn["trace"]["used_ids_tokens"]) == (0, 0)
 
 
 def test_conversation_id_and_pin_on_the_main_trace(box):
