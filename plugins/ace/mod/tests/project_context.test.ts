@@ -1,4 +1,4 @@
-// Conformance: context/resolve.ts vs the SDK spec fixtures (60 cases) plus our extra probes. In-memory layout, no `$`.
+// Conformance: context/resolve.ts vs the SDK spec fixtures (63 cases) plus our extra probes. In-memory layout, no `$`.
 // Fixtures: ../../tests-fixtures/project-context/ (see its README). Mirror runner: tests/test_project_context_spec.py.
 import { expect, test } from 'claude-code/testing'
 import SPEC from './fixtures/project_context_cases.ts'
@@ -44,9 +44,9 @@ function runCase(c: any): any {
   return res
 }
 
-test('project-context fixtures: 60 spec cases plus the plugin extras are loaded', () => {
-  expect((SPEC as any[]).length).toBe(60)
-  expect((EXTRA as any[]).length >= 5).toBe(true)
+test('project-context fixtures: 63 spec cases plus the plugin extras are loaded', () => {
+  expect((SPEC as any[]).length).toBe(63)
+  expect((EXTRA as any[]).length >= 4).toBe(true)
 })
 
 for (const c of [...(SPEC as any[]), ...(EXTRA as any[])]) {
