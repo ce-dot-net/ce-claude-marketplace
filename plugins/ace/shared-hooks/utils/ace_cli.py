@@ -179,10 +179,10 @@ def _plugin_dir():
 
 
 def _store_full_pct(resp) -> None:
-    """§31 server kill switch: persist the response's render_full_pct (never raises)."""
+    """Server switches (render_full_pct, feedback_downvote): persist them from every search response (never raises)."""
     pd = _plugin_dir()
     if pd:
-        pd.store_render_full_pct(resp)
+        pd.store_server_switches(resp)
 
 
 def _pin_backoff_active() -> bool:

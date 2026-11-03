@@ -172,15 +172,37 @@ def _valid_pct(v) -> bool:
     return isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 100
 
 
-def store_render_full_pct(resp) -> None:
-    """Persist a valid top-level `render_full_pct` of a search response (latest wins). Never raises."""
+def feedback_downvote_file() -> Path:
+    """The server's rejection-downvote gate (search response `feedback_downvote`), {"on": bool, "at": <epoch>}."""
+    return data_root() / "feedback-downvote.json"
+
+
+def store_server_switches(resp) -> None:
+    """Persist the valid top-level server switches of a search response (latest wins; a missing or invalid field keeps
+    the stored value): `render_full_pct` (int 0-100) and `feedback_downvote` (bool). Never raises."""
+    import json, time
+    r = resp if isinstance(resp, dict) else {}
     try:
-        v = resp.get("render_full_pct") if isinstance(resp, dict) else None
-        if _valid_pct(v):
-            import json, time
-            private_write(render_full_pct_file(), json.dumps({"pct": v, "at": int(time.time())}))
+        if _valid_pct(r.get("render_full_pct")):
+            private_write(render_full_pct_file(), json.dumps({"pct": r["render_full_pct"], "at": int(time.time())}))
     except Exception:
         pass
+    try:
+        if isinstance(r.get("feedback_downvote"), bool):
+            private_write(feedback_downvote_file(), json.dumps({"on": r["feedback_downvote"], "at": int(time.time())}))
+    except Exception:
+        pass
+
+
+def stored_feedback_downvote() -> bool:
+    """The stored server gate when younger than 7 days, else False (default off)."""
+    try:
+        import json, time
+        d = json.loads(feedback_downvote_file().read_text())
+        at = d.get("at")
+        return d.get("on") is True and isinstance(at, (int, float)) and time.time() - at < RENDER_FULL_PCT_MAX_AGE
+    except Exception:
+        return False
 
 
 def stored_render_full_pct() -> Optional[int]:

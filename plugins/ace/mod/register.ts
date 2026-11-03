@@ -7,7 +7,7 @@ import {
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
   detachedLearnArgv, FALLBACK_ON_3, reuseKey, reuseEnabled, REUSE_TTL_MS, parseAceReview, parseDiffStat, evalStats, learnLine, selfEvalPrompt, parseUsedIds, searchRow, searchSummary, searchErrorLine, statusLine, topDomains, sessionTitle,
-  subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, serverFullPct, storedFullPct, RENDER_FULL_PCT_FILE, appliedLogIds, usedPatternIds, injectedContents, type StateUpdate, type ToolRec, type Cohort,
+  subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, serverFullPct, storedFullPct, RENDER_FULL_PCT_FILE, rejectionMatch, REJECTION_PREV_MAX_AGE_S, FEEDBACK_DOWNVOTE_FILE, serverDownvote, storedDownvote, appliedLogIds, usedPatternIds, injectedContents, type StateUpdate, type ToolRec, type Cohort,
 } from './core.ts'
 
 const SEARCH_MS = 25000, DOMAIN_MS = 17000 // §11 A2: blocking budget per search, retry included
@@ -310,11 +310,36 @@ async function cohortEnv($: any, s: Sess) {
   }
   return { ACE_AB_CONTROL_PCT: await $.env.get('ACE_AB_CONTROL_PCT'), ACE_AB_COMPACT_PCT: await $.env.get('ACE_AB_COMPACT_PCT'), ACE_RENDER_FULL_PCT: full }
 }
-// Every real search persists a valid render_full_pct (latest wins); a reuse-cache hit is older and never does.
+// Every real search persists the valid server switches (latest wins; missing/invalid keeps the stored value):
+// render_full_pct and feedback_downvote. A reuse-cache hit is older and never does.
 async function storeFullPct($: any, s: Sess, resp: any) {
-  const pct = serverFullPct(resp)
-  if (pct === undefined) return
-  try { await writePrivate($, `${s.root}/${RENDER_FULL_PCT_FILE}`, JSON.stringify({ pct, at: Math.floor(await $.clock.now() / 1000) })) } catch { /* keep the old value */ }
+  const pct = serverFullPct(resp), down = serverDownvote(resp), at = Math.floor(await $.clock.now() / 1000)
+  try { if (pct !== undefined) await writePrivate($, `${s.root}/${RENDER_FULL_PCT_FILE}`, JSON.stringify({ pct, at })) } catch { /* keep the old value */ }
+  try { if (down !== undefined) await writePrivate($, `${s.root}/${FEEDBACK_DOWNVOTE_FILE}`, JSON.stringify({ on: down, at })) } catch { /* keep the old value */ }
+}
+async function downvoteEnabled($: any, s: Sess): Promise<boolean> {
+  const env = await $.env.get('ACE_FEEDBACK_DOWNVOTE')
+  if (env === '1' || env === '0') return env === '1'
+  return storedDownvote(await readText($, `${s.root}/${FEEDBACK_DOWNVOTE_FILE}`), await $.clock.now())
+}
+// ace_feedback.on_human_prompt: a rejection of the previous main task -> a pending downvote with its evidenced ids.
+async function onRejection($: any, s: Sess, text: string) {
+  const matched = rejectionMatch(text)
+  if (!matched) return
+  const prev = await readJson($, `${s.sdir}/last-main-applied.json`)
+  const fresh = typeof prev?.at === 'number' && await $.clock.now() / 1000 - prev.at < REJECTION_PREV_MAX_AGE_S
+  const ids: number[] = fresh && Array.isArray(prev.applied_log_ids) ? prev.applied_log_ids.filter((x: unknown) => Number.isInteger(x)) : []
+  const sent = ids.length > 0 && await downvoteEnabled($, s)
+  if (sent) await writePrivate($, `${s.sdir}/pending-downvote.json`, JSON.stringify({ applied_log_ids: ids, at: await $.clock.now() / 1000 }))
+  await relLog($, s, { timestamp: await nowIso($), event: 'rejection_detected', matched, downvote_sent: sent,
+    prev_task: String(prev?.task_session_id ?? '').slice(0, 8) || null, session_id: s.sessionId, source: 'mod' })
+}
+// At the next main trace: the pending downvote's ids, consumed once.
+async function takeDownvote($: any, s: Sess): Promise<number[] | undefined> {
+  const f = `${s.sdir}/pending-downvote.json`, d = await readJson($, f)
+  if (d === undefined) return undefined
+  await rm($, f)
+  return Array.isArray(d?.applied_log_ids) && d.applied_log_ids.length && await $.clock.now() / 1000 - d.at < REJECTION_PREV_MAX_AGE_S ? d.applied_log_ids : undefined
 }
 
 // §13.1 cohort arms; `rendered` = the ≤ 10K re-inject copy (C1). control: search + anchor, nothing injected.
@@ -416,7 +441,10 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
     // item 2: per-source counts (Haiku ids past the whitelist, H2 ids), for the server team
     const bySource = { used_ids_model: playbook.filter(id => m.has(id)).length, used_ids_tokens: playbook.filter(id => tk.has(id)).length }
     // §31: used only (this agent's own tools, report, self-eval); for the 20-cap Haiku ids first, then H2 ids, injected order
+    const downvote = key === 'main' ? await takeDownvote($, s) : undefined
     const { ids: applied, capped } = appliedLogIds([...used.filter(id => m.has(id)), ...used.filter(id => !m.has(id))], rlog)
+    // the record a later rejection downvotes ([] too: rejecting a task without evidenced ids sends nothing)
+    if (key === 'main') await writePrivate($, `${s.sdir}/last-main-applied.json`, JSON.stringify({ task_session_id: tsid ?? null, applied_log_ids: applied, at: await $.clock.now() / 1000 })).catch(() => {})
     let git: any
     try {
       git = await gitContext($, s.cwd)
@@ -424,7 +452,7 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
       if (git && commits.length) git.session_commits = commits
     } catch { /* git context is optional */ }
     const { trace, success } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
-      tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied, usedIds: bySource,
+      tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied, usedIds: bySource, downvote,
       nowIso: await nowIso($), renderVariant: variant, conversationId: s.sessionId, effort, git, summaryCap })
     const traceFile = `${s.root}/tmp/ace-trace-${uuid()}.json`
     await writePrivate($, traceFile, pyDumps(trace))
@@ -503,6 +531,8 @@ async function onPrompt($: any, L: Load, e: any): Promise<any> {
   const reason = e.origin && MACHINE_ORIGINS.has(e.origin.kind) ? 'machine_prompt'
     : e.isMeta ? 'machine_prompt' : e.command && isNoTaskCommand(e.command.name) ? 'ace_command'
     : skipReason(text, s.minChars, s.extraPrefixes)
+  if (!midTurn && !e.command && (reason === null || reason === 'prompt_too_short') && !(await disabled($, s)))
+    try { await onRejection($, s, text) } catch { /* never break the prompt */ }
   if (reason) {
     // §16 P2: the <task-notification> of a deferred task continues that task (its turn's tools join its learn)
     if (!midTurn) L.pendingMain = reason === 'machine_prompt' ? await deferredAnchor($, L, s) : null

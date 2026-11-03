@@ -1194,6 +1194,15 @@ def main():
         trace["applied_log_ids"] = applied_log_ids  # server contract: [] when nothing was used, never omitted
         trace["used_ids_model"] = 0  # per-source counters for the server (the Python chain has no Haiku source)
         trace["used_ids_tokens"] = len(_used)
+        if hook_event_name == 'Stop':  # rejection downvote: the previous main task's evidenced ids, consumed once
+            try:
+                import ace_feedback
+                _down = ace_feedback.take_pending_downvote(context['project'], session_id)
+                if _down:
+                    trace["feedback"] = {"kind": "downvote", "applied_log_ids": _down}
+                ace_feedback.record_main_applied(context['project'], session_id, task_session_id, applied_log_ids)
+            except Exception:
+                pass
 
         # v6.5.0 Item #9: effort level signal (CC 2.1.133+ provides this in hook input).
         # Plugin-side weight mapping per SDK-team guidance (Q4):

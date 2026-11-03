@@ -18,7 +18,8 @@ import S8 from './fixtures/search_8.ts'
 import SEDGE from './fixtures/search_edge.ts'
 import G from './fixtures/golden.ts'
 import USED_CASES from './fixtures/used_cases.ts'
-import { statusLine, hasSubstantialWork, traceVariant, toolRec, renderCohort, serverFullPct, storedFullPct } from '../core.ts'
+import REJECTION_CASES from './fixtures/rejection_cases.ts'
+import { statusLine, hasSubstantialWork, traceVariant, toolRec, renderCohort, serverFullPct, storedFullPct, rejectionMatch } from '../core.ts'
 import { pyLoads, PRIVATE_WRITE_SH, evalStats, evalInjection, learnLine, usedPatternIds, toolHaystack } from '../core.ts'
 
 const HOME = '/home/u', CWD = '/proj', SID = 'sess-1', PRJ = 'prj_t'
@@ -1775,6 +1776,80 @@ test('render_full_pct: a stale (> 7 days) server file falls back to the default 
   await submit($)
   expect(h.rows().find((x: any) => x.event === 'search')!.render_cohort).toBe('budget')  // sess-1 = 66 >= 50
   expect(h.files.get(FULL_PCT)).toBe(stale)
+})
+
+// ---------- user rejection -> downvote on the next main trace (ace_feedback.py parity) ----------
+test('rejection phrases: the shared fixture cases (parity with ace_feedback.rejection_match)', async () => {
+  for (const c of REJECTION_CASES as any[]) expect([c.text, rejectionMatch(c.text)]).toEqual([c.text, c.match])
+})
+
+async function rejectFlow($: any, h: any, prevAnswer: string, reply: () => Promise<unknown>) {
+  await mainTask($, h)
+  await done($, prevAnswer)
+  await reply()
+  await mainTask($, h)
+  await done($, 'did something else')
+  return h.trace(h.learns()[1]!)
+}
+const st8a = () => { const st8 = JSON.parse(G.state_main_8), a = Object.keys(st8.retrieval_log_ids)[0]; return { a, log: st8.retrieval_log_ids[a] } }
+
+test('rejection + previous evidenced ids + gate on -> feedback downvote on the next main trace, once', async ($, on) => {
+  const { a, log } = st8a()
+  const h = host(on, { defaultArm: true, search: () => ({ stdout: S8 }), env: { ACE_FEEDBACK_DOWNVOTE: '1' } })
+  const t2 = await rejectFlow($, h, 'applied ' + a, () => submit($, 'falsch'))
+  expect(t2.feedback).toEqual({ kind: 'downvote', applied_log_ids: [log] })
+  expect(h.trace(h.learns()[0]!).feedback).toBe(undefined)
+  const row = h.rows().find((x: any) => x.event === 'rejection_detected')!
+  expect([row.matched, row.downvote_sent, row.prev_task?.length]).toEqual(['falsch', true, 8])
+  expect(JSON.stringify(row).includes(HUMAN)).toBe(false)
+  await mainTask($, h)
+  await done($, 'third')
+  expect(h.trace(h.learns()[2]!).feedback).toBe(undefined)
+})
+
+test('rejection: gate off (default) -> nothing; the server gate in a search response turns it on', async ($, on) => {
+  const { a } = st8a()
+  let gate: boolean | undefined
+  const h = host(on, { defaultArm: true, search: () => { const o = JSON.parse(S8); if (gate !== undefined) o.feedback_downvote = gate; return { stdout: JSON.stringify(o) } } })
+  expect((await rejectFlow($, h, 'applied ' + a, () => submit($, "that's wrong"))).feedback).toBe(undefined)
+  expect(h.rows().find((x: any) => x.event === 'rejection_detected')!.downvote_sent).toBe(false)
+  gate = true
+  await mainTask($, h)  // this search stores the gate
+  await done($, 'applied ' + a)
+  gate = undefined      // missing field keeps it
+  await submit($, 'das ist falsch')
+  await mainTask($, h)
+  await done($, 'x')
+  expect(h.trace(h.learns()[3]!).feedback?.kind).toBe('downvote')
+})
+
+test('rejection: no previous evidenced ids, a negated phrase, a machine prompt or a slash command -> nothing', async ($, on) => {
+  const { a } = st8a()
+  const h = host(on, { defaultArm: true, search: () => ({ stdout: S8 }), env: { ACE_FEEDBACK_DOWNVOTE: '1' } })
+  expect((await rejectFlow($, h, 'done', () => submit($, 'falsch'))).feedback).toBe(undefined)
+  expect(h.rows().filter((x: any) => x.event === 'rejection_detected').map((x: any) => x.downvote_sent)).toEqual([false])
+  for (const reply of [() => submit($, 'das ist nicht falsch, mach weiter'), () => submit($, 'falsch', 'task-notification'),
+    () => $.prompt.submit({ text: '/review falsch', wait: false, origin: { kind: 'composer' }, command: { name: 'review', args: 'falsch' } } as any)]) {
+    const n = h.learns().length
+    await mainTask($, h)
+    await done($, 'applied ' + a)
+    await reply()
+    await mainTask($, h)
+    await done($, 'x')
+    expect(h.trace(h.learns()[n + 1]!).feedback).toBe(undefined)
+  }
+  expect(h.rows().filter((x: any) => x.event === 'rejection_detected').length).toBe(1)
+})
+
+test('rejection: a previous-task record older than 6 h is ignored', async ($, on) => {
+  const { a } = st8a()
+  const h = host(on, { defaultArm: true, search: () => ({ stdout: S8 }), env: { ACE_FEEDBACK_DOWNVOTE: '1' } })
+  const t2 = await rejectFlow($, h, 'applied ' + a, async () => {
+    const f = `${SDIR}/last-main-applied.json`, rec = JSON.parse(h.files.get(f)!)
+    h.put(f, JSON.stringify({ ...rec, at: rec.at - 7 * 3600 }))
+    await submit($, 'falsch')
+  })
+  expect(t2.feedback).toBe(undefined)
 })
 
 test('trace label without a search: the conversation arm (server request); a stored label wins', async () => {
