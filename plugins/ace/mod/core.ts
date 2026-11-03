@@ -896,24 +896,44 @@ export function learnArgv(traceFile: string, retrievalId?: string, appliedLogIds
   return a
 }
 
+// §24: files holding prompts, tool records or traces: umask 077 (file 0600), the dir chmod 700, atomic create+rename.
+// $1 = target path, stdin = content.
+export const PRIVATE_WRITE_SH = 'umask 077; d=$(dirname "$1"); mkdir -p "$d" && chmod 700 "$d" && t="$d/.w$$.tmp" && cat > "$t" && mv -f "$t" "$1"'
+// O_APPEND through the shell: safe beside the Python hooks writing the same jsonl; size rotation as ace_relevance_logger.
+// §24: <cwd>/.claude/data/logs is repo-controlled: a symlinked component or target is refused (row dropped).
+// $1 = log file, $2 = cwd, stdin = rows.
+export const APPEND_SH = 'umask 077; for p in "$2/.claude" "$2/.claude/data" "$(dirname "$1")" "$1"; do [ -L "$p" ] && exit 0; done; '
+  + 'mkdir -p "$(dirname "$1")" || exit 0; [ -L "$1" ] && exit 0; '
+  + 'if [ "$(wc -c <"$1" 2>/dev/null || echo 0)" -gt 52428800 ]; then b="${1%.jsonl}"; '
+  // same chain as ace_relevance_logger (.1-.3): a repo-planted symlink or directory in the chain drops the row, nothing is moved
+  + 'for i in 1 2 3; do if [ -L "$b.$i.jsonl" ] || [ -d "$b.$i.jsonl" ]; then exit 0; fi; done; '
+  + 'mv -f "$b.2.jsonl" "$b.3.jsonl" 2>/dev/null; mv -f "$b.1.jsonl" "$b.2.jsonl" 2>/dev/null; mv -f "$1" "$b.1.jsonl"; fi; cat >> "$1"'
+
+// ace_cli._RETRY_LINE: the SDK's retry line, bare (engine logger) or inside ace-cli --json's {"message": ...}
+export const RETRY_RE = String.raw`\[ace\] trace retry attempt=(\d+)/(\d+) reason=(.*?) idempotency_key=([^\s"\\]+) at=([^\s"\\]+)`
+
 // The launcher starts the child in its own session (setsid) and returns at once, so neither the hook's return nor
 // the session group's SIGHUP/SIGKILL at `claude -p` teardown reaches the learn. The child owns the metrics row and
 // all cleanup, lock last (session.end keeps the dir while the lock is fresh). Python: already a hard plugin dependency.
 // Engine learn: exit 3 = nothing was sent, so ONLY then the CLI argv after the separator runs (ace_cli.run_learn).
 export const FALLBACK_ON_3 = '--ace-fallback-on-3--'
-const LEARN_CHILD = `import os,subprocess,sys
-trace,lock,log,ok,fail,errlog=sys.argv[1:7]
-cmds=sys.argv[7:]
+// v8.0.1: every '[ace] trace retry ...' line the learn printed (core >= 3.7.0, engine and ace-cli alike) becomes a
+// learn_retry row (retry = the base row JSON), appended with the execution row through APPEND_SH when cwd is known.
+const LEARN_CHILD = `import json,os,re,subprocess,sys,time
+trace,lock,log,ok,fail,errlog,retry,cwd=sys.argv[1:9]
+cmds=sys.argv[9:]
 fb=[]
 if '${FALLBACK_ON_3}' in cmds:
     k=cmds.index('${FALLBACK_ON_3}')
     cmds,fb=cmds[:k],cmds[k+1:]
 res=trace+'.result'
 code=1
+cut=None
 try:
     with open(res,'ab') as f:
         code=subprocess.run(cmds,stdin=subprocess.DEVNULL,stdout=f,stderr=subprocess.STDOUT,timeout=310).returncode
         if code==3 and fb:
+            cut=f.tell()
             code=subprocess.run(fb,stdin=subprocess.DEVNULL,stdout=f,stderr=subprocess.STDOUT,timeout=310).returncode
 except Exception as e:
     try:
@@ -921,11 +941,29 @@ except Exception as e:
             f.write(str(e))
     except OSError:
         pass
+rows=[]
+if retry:
+    try:
+        with open(res,'rb') as f:
+            out=f.read()
+        parts=[('lib' if fb else 'cli',out)] if cut is None else [('lib',out[:cut]),('cli',out[cut:])]
+        at=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())
+        for eng,text in parts:
+            for m in re.finditer(${JSON.stringify(RETRY_RE)},text.decode('utf-8','replace')):
+                rows.append(json.dumps(dict(json.loads(retry),timestamp=at,attempt=int(m.group(1)),max_attempts=int(m.group(2)),
+                    reason=m.group(3),idempotency_key=m.group(4),at=m.group(5),engine=eng,learning_sent=code==0)))
+    except (OSError,ValueError):
+        pass
+rows.append(ok if code==0 else fail)
+text=chr(10).join(rows)+chr(10)
 try:
-    os.makedirs(os.path.dirname(log),exist_ok=True)
-    with open(log,'a') as f:
-        f.write((ok if code==0 else fail)+chr(10))
-except OSError:
+    if cwd:
+        subprocess.run(['/bin/sh','-c',${JSON.stringify(APPEND_SH)},'sh',log,cwd],input=text.encode(),timeout=10)
+    else:
+        os.makedirs(os.path.dirname(log),exist_ok=True)
+        with open(log,'a') as f:
+            f.write(text)
+except Exception:
     pass
 if code!=0 and errlog:
     try:
@@ -945,22 +983,10 @@ subprocess.Popen([sys.executable,'-I','-c',${JSON.stringify(LEARN_CHILD)}]+sys.a
 `
 // ponytail: POSIX-shaped; on Windows the bare `ace-cli` (a .cmd shim) would need a shell. The Python chain covers
 // Windows until the mod is proven there (§13.1 m2: Windows untested).
-export function detachedLearnArgv(j: { learnArgv: string[]; trace: string; lock: string; log: string; rowOk: string; rowFail: string; errLog?: string; python?: string }): string[] {
-  return [j.python || 'python3', '-I', '-c', LEARN_LAUNCHER, j.trace, j.lock, j.log, j.rowOk, j.rowFail, j.errLog ?? '', ...j.learnArgv]
+export function detachedLearnArgv(j: { learnArgv: string[]; trace: string; lock: string; log: string; rowOk: string; rowFail: string; errLog?: string; python?: string
+  retryRow?: string; cwd?: string }): string[] {
+  return [j.python || 'python3', '-I', '-c', LEARN_LAUNCHER, j.trace, j.lock, j.log, j.rowOk, j.rowFail, j.errLog ?? '', j.retryRow ?? '', j.cwd ?? '', ...j.learnArgv]
 }
-
-// §24: files holding prompts, tool records or traces: umask 077 (file 0600), the dir chmod 700, atomic create+rename.
-// $1 = target path, stdin = content.
-export const PRIVATE_WRITE_SH = 'umask 077; d=$(dirname "$1"); mkdir -p "$d" && chmod 700 "$d" && t="$d/.w$$.tmp" && cat > "$t" && mv -f "$t" "$1"'
-// O_APPEND through the shell: safe beside the Python hooks writing the same jsonl; size rotation as ace_relevance_logger.
-// §24: <cwd>/.claude/data/logs is repo-controlled: a symlinked component or target is refused (row dropped).
-// $1 = log file, $2 = cwd, stdin = rows.
-export const APPEND_SH = 'umask 077; for p in "$2/.claude" "$2/.claude/data" "$(dirname "$1")" "$1"; do [ -L "$p" ] && exit 0; done; '
-  + 'mkdir -p "$(dirname "$1")" || exit 0; [ -L "$1" ] && exit 0; '
-  + 'if [ "$(wc -c <"$1" 2>/dev/null || echo 0)" -gt 52428800 ]; then b="${1%.jsonl}"; '
-  // same chain as ace_relevance_logger (.1-.3): a repo-planted symlink or directory in the chain drops the row, nothing is moved
-  + 'for i in 1 2 3; do if [ -L "$b.$i.jsonl" ] || [ -d "$b.$i.jsonl" ]; then exit 0; fi; done; '
-  + 'mv -f "$b.2.jsonl" "$b.3.jsonl" 2>/dev/null; mv -f "$b.1.jsonl" "$b.2.jsonl" 2>/dev/null; mv -f "$1" "$b.1.jsonl"; fi; cat >> "$1"'
 
 // ace_after_task._delegated_running (§16 P2): a running subagent/workflow of this task defers the main learn.
 // Monitors, shells, teammates, crons are long-lived and never defer.

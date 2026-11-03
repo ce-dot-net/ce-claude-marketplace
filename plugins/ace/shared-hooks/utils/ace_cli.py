@@ -357,6 +357,31 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
                 "message": _NOT_FOUND}, _ms(t0)
 
 
+# @ace-sdk/core >= 3.7.0: one stderr line per POST /traces retry (ace-cli --json wraps it in a JSON "message").
+_RETRY_LINE = re.compile(r'\[ace\] trace retry attempt=(\d+)/(\d+) reason=(.*?) idempotency_key=([^\s"\\]+) at=([^\s"\\]+)')
+
+
+def learn_retries(text, engine):
+    """The retry lines of one learn's stderr as learn_retry fields."""
+    if not isinstance(text, str):
+        return []
+    return [{"attempt": int(m.group(1)), "max_attempts": int(m.group(2)), "reason": m.group(3),
+             "idempotency_key": m.group(4), "at": m.group(5), "engine": engine} for m in _RETRY_LINE.finditer(text)]
+
+
+def _log_retries(retries, trace, hook_event_name, sent):
+    """One learn_retry relevance row per retry (symlink-safe writer); never raises."""
+    try:
+        from ace_relevance_logger import log_event
+        conv = trace.get('conversation_id') if isinstance(trace, dict) else None
+        tsid = trace.get('session_id') if isinstance(trace, dict) else None
+        for r in retries:
+            log_event('learn_retry', hook=hook_event_name, session_id=conv, conversation_id=conv,
+                      task_session_id=tsid, learning_sent=sent, **r)
+    except Exception:
+        pass
+
+
 def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_ids=None,
               org: str = None, project: str = None, verbosity: str = 'detailed',
               timeout: int = 300,
@@ -376,13 +401,16 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
         _log_engine("lib", "learn skipped: no private tmp dir: %s" % str(e)[:200], hook_event_name, ok=False, ms=_ms(t0))
         return None, _ms(t0)
     fd, path = tempfile.mkstemp(prefix='ace-trace-', suffix='.json', dir=_tmp)
+    retries, sent = [], False
     try:
         with os.fdopen(fd, 'w') as f:
             json.dump(trace, f, default=str)
         def spawn(node, to):
             cmd = ace_engine.learn_command(path, retrieval_id=retrieval_id, applied_log_ids=applied_log_ids,
                                            verbosity=verbosity, timeout=timeout, node=node, cli=None if node else _cmd())
-            return subprocess.run(cmd, text=True, capture_output=True, timeout=to, env=_env(org, project))
+            r = subprocess.run(cmd, text=True, capture_output=True, timeout=to, env=_env(org, project))
+            retries.extend(learn_retries(r.stderr, 'lib' if node else 'cli'))
+            return r
 
         # A lock or server failure may occur after the server POST: retrying learn could
         # duplicate the trace / double F-080 credit, so learn never retries once it may have sent.
@@ -411,7 +439,9 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
                            clean_stderr(_text(result.stderr)), project_id=project, hook_event_name=hook_event_name)
             return None, _ms(t0)
         try:
-            return json.loads(result.stdout), _ms(t0)
+            parsed = json.loads(result.stdout)
+            sent = True
+            return parsed, _ms(t0)
         except (json.JSONDecodeError, TypeError) as _je:
             _log_cli_error("ace_cli_learn_json_parse_failed", result.returncode,
                            _text(result.stdout), _text(result.stderr), project_id=project,
@@ -430,6 +460,7 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
             os.unlink(path)
         except Exception:
             pass
+        _log_retries(retries, trace, hook_event_name, sent)
 
 
 def check_auth_status(warn_threshold_hours: float = 2.0) -> Optional[str]:
