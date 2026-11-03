@@ -1,7 +1,7 @@
 """Shared on-disk contract between the v8 mod and the Python hooks (DESIGN §13.1, §4/C1, §12, §11 A3).
 
 - The mod's main-agent state output (fixture `state_main_8`, the exact bytes the mod must write;
-  plugins/ace/mod/tests/ace_mod.test.ts asserts the mod writes them) is readable by
+  plugins/ace/mod/tests/*.test.ts asserts the mod writes them) is readable by
   patterns_used_state.load_state / load_* and re-injected by the SessionStart compact hook.
 - The mod is registered in plugin.json beside the classic hooks, TypeScript only, no build step.
 - The mod's detached learn launcher survives SIGHUP of the session's process group, appends the
@@ -104,7 +104,7 @@ def test_sessionstart_compact_reinjects_the_mod_rendered_context(data_root, tmp_
 
 
 def test_sessionstart_compact_reinjects_the_mod_sidecar_after_its_learn(data_root, tmp_path):
-    """The mod reaps patterns-used-main.json at turn.complete and keeps rendered-main.txt (ace_mod.test.ts)."""
+    """The mod reaps patterns-used-main.json at turn.complete and keeps rendered-main.txt (mod tests/turn.test.ts)."""
     sdir = data_root / "projects" / PRJ / "sessions" / SID
     sdir.mkdir(parents=True)
     rc = json.loads(_mod_state_text())["rendered_context"]
