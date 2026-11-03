@@ -266,6 +266,14 @@ def test_run_search_uses_lib_engine(env, tmp_path):
 
 
 @needs_node
+def test_run_search_lib_unpinned_still_sends_task_session(env, tmp_path):
+    """Domain shift (pin=False): the engine stdin still carries session_id = the task session (server credits it)."""
+    e = env.use(E.make_prefix(tmp_path))
+    e.cli.run_search("notes", session_id="tsid-ds", top_k=8, pin=False, hook_event_name="PostToolUse")
+    assert e.core_ops("search")[0]["params"]["session_id"] == "tsid-ds"
+
+
+@needs_node
 def test_run_search_lib_never_touches_pin_store_or_backoff(env, tmp_path):
     e = env.use(E.make_prefix(tmp_path))
     e.cli.run_search("q", session_id="tsid-1", hook_event_name="SubagentStart")

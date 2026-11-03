@@ -1143,6 +1143,17 @@ test('engine present: the search runs in-process (node engine/search.js, JSON st
   expect(h.rows().find((x: any) => x.event === 'search')!.engine).toBe('lib')
 })
 
+test('engine present: a domain-shift search sends session_id = the task session in the engine stdin (no pin, no ace-cli)', async ($, on) => {
+  const got: any[] = []
+  const h = host(on, { files: { [`${PROOT}/engine/search.js`]: '' }, engine: (stdin) => { got.push(JSON.parse(stdin!)); return { stdout: S8 } } })
+  await submit($)
+  await $.tool.call({ tool: 'Read', file_path: '/proj/ace-cli/notes.md' } as any)
+  const ds = got.find(g => g.top_k === 8)!
+  expect(ds.query).toBe('notes')
+  expect(ds.session_id).toBe(h.state()!.task_session_id)
+  expect(h.searches().length).toBe(0)
+})
+
 test('engine gate fails (exit 3): the ace-cli path runs with the pin, within the budget left', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }), files: { [`${PROOT}/engine/search.js`]: '' },
     engine: () => ({ exitCode: 3, stderr: 'gate: core_missing', advanceMs: 1000 }) })
