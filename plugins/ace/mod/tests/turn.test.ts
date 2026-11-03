@@ -291,3 +291,19 @@ test('a task that names a path under plugins/ or /ace- is real work; the command
   await work('please run /plugin install now', 'd')
   expect(h.learns().length).toBe(2)
 })
+
+test('8.1.0 fix: a pending mid-turn state without a task_session_id anchors null (never undefined): no learn, no error row', async ($, on) => {
+  const h = host(on, { files: { [`${SDIR}/mod-pending-main.json`]: JSON.stringify({ text: HUMAN, state: '{}' }) } })
+  await $.turn.start({ text: HUMAN, turnId: 't9' } as any)
+  await $.tool.call({ tool: 'Edit', file_path: '/proj/x.py', old_string: 'a', new_string: 'b' } as any)
+  await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't9', reason: 'answer' } as any)
+  expect(h.learns().length).toBe(0)
+  expect(h.rows().some((r: any) => r.event === 'error')).toBe(false)
+})
+
+test('8.1.0: SubagentHandback is matched by name (not in the typed tool table); a non-string or main-agent message is ignored', async ($, on) => {
+  const h = host(on)
+  await $.tool.call({ tool: 'SubagentHandback', message: { not: 'a string' }, agentId: 'agent-9' } as any)
+  await $.tool.call({ tool: 'SubagentHandback', message: 'main never hands back' } as any)
+  expect(h.rows().some((r: any) => r.event === 'error')).toBe(false)
+})
