@@ -19,5 +19,6 @@
     "agentic",
     "autonomous",
     "cli-integration"
-  ]
+  ],
+  "types": "./mod/types/index.d.ts"
 }

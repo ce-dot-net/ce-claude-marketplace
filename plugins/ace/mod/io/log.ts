@@ -28,11 +28,11 @@ export function searchRow(a: { hook: string; sessionId: string; userPrompt: stri
 
 export async function nowIso($: any) { return new Date(await $.clock.now()).toISOString() } // UTC, trailing Z
 export function relLog($: any, s: Sess, obj: any) {
-  return run($, ['/bin/sh', '-c', APPEND_SH, 'sh', `${s.logs}/ace-relevance.jsonl`, s.cwd], { stdin: pyDumps(obj) + '\n' })
+  return run($, ['/bin/sh', '-c', APPEND_SH, 'sh', `${s.logs}/ace-relevance.jsonl`, s.logRoot], { stdin: pyDumps(obj) + '\n' })
 }
 // §24: never write through a symlinked .claude, .claude/data, .claude/data/logs or target (repo-controlled).
 export async function logsSafe($: any, s: Sess, name: string): Promise<boolean> {
-  for (const [dir, entry] of [[s.cwd, '.claude'], [`${s.cwd}/.claude`, 'data'], [`${s.cwd}/.claude/data`, 'logs'], [s.logs, name]]) {
+  for (const [dir, entry] of [[s.logRoot, '.claude'], [`${s.logRoot}/.claude`, 'data'], [`${s.logRoot}/.claude/data`, 'logs'], [s.logs, name]]) {
     const list: any[] = await $.fs.list(dir).catch(() => [])
     if (list.some(f => f.name === entry && f.isLink)) return false
   }

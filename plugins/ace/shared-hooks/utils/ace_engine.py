@@ -96,7 +96,7 @@ def learn_command(trace_path, *, retrieval_id=None, applied_log_ids=None, verbos
         argv += ['--retrieval-id', retrieval_id]
     if applied_log_ids:
         argv += ['--applied-log-ids', ','.join(str(x) for x in applied_log_ids)]
-    return argv + ([] if node else list(ids))
+    return argv + list(ids)
 
 
 if __name__ == '__main__':

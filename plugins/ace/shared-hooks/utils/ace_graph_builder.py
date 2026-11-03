@@ -12,6 +12,7 @@ Public API:
 
 import html as _html
 import json
+import sys
 import os
 import shutil
 import sqlite3
@@ -673,3 +674,40 @@ applyFilters();
     )
 
     return html
+
+
+def main(argv=None):
+    """`python3 ace_graph_builder.py --org O --project P [--server-url U] [--name N] [--min-weight W] [--max-edges M]`:
+    the graph of exactly this binding (ids from ace_project_context), written to ~/.claude/usage-data/ace-graph.html."""
+    import argparse
+    ap = argparse.ArgumentParser(prog="ace-graph")
+    ap.add_argument("--org", required=True)
+    ap.add_argument("--project", required=True)
+    ap.add_argument("--server-url")
+    ap.add_argument("--name")
+    ap.add_argument("--min-weight", type=int, default=1)
+    ap.add_argument("--max-edges", type=int, default=2000)
+    ap.add_argument("--cache-dir", default=str(Path.home() / ".ace-cache"))
+    ap.add_argument("--out", default=str(Path.home() / ".claude" / "usage-data" / "ace-graph.html"))
+    a = ap.parse_args(argv)
+    db = resolve_graph_db(a.org, a.project, a.cache_dir, a.server_url)
+    if db is None:
+        print("No ACE cache DB for %s / %s yet. The cache fills after a few searches." % (a.org, a.project))
+        return 0
+    g = load_graph(db, min_weight=a.min_weight, max_edges=a.max_edges)
+    out = Path(a.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(build_graph_html(g, project_name=a.name), encoding="utf-8")
+    meta = g["meta"]
+    hubs = sorted(g["nodes"], key=lambda n: n["degree"], reverse=True)[:5]
+    print("ACE Knowledge Graph: %s (%s)" % (a.name or a.project, a.project))
+    print("  Patterns : %s" % meta.get("total_patterns", len(g["nodes"])))
+    print("  Edges    : %s rendered (min_weight=%s)" % (meta.get("rendered_edges", len(g["edges"])), a.min_weight))
+    for n in hubs:
+        print("  hub      : %s (degree %s)" % (str(n.get("label") or n.get("id"))[:80], n.get("degree")))
+    print("  Report   : %s" % out)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

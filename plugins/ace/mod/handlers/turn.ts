@@ -1,7 +1,7 @@
 // turn.start / turn.complete: task anchors, the learn (Haiku self-eval, F-080 credit, detached launcher), abstain/reap.
 import { readText, rm, run, writePrivate, readJson } from '../io/fs.ts'
 import { logsSafe, nowIso, relLog } from '../io/log.ts'
-import { LAUNCHER_MS, aceEnv, cliHead, engineScript, gitContext } from '../io/spawn.ts'
+import { LAUNCHER_MS, aceEnv, cliHead, engineScript, gitContext, ids } from '../io/spawn.ts'
 import { type Load, type Sess, clearTools, cohortEnv, readState, stateFile, takeDownvote, takeTools, uuid, type HookArgs, classicFresh, clearDeferred, deferFile, disabled, enqueue, ensure, pendingFile, refreshMarker } from '../io/state.ts'
 import { traceVariant } from '../lib/cohort.ts'
 import { type ToolRec, appliedLogIds, parseAceReview, parseUsedIds, selfEvalPrompt, usedPatternIds } from '../lib/evidence.ts'
@@ -83,15 +83,15 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
     const log = `${s.logs}/ace-relevance.jsonl`
     const python = (await readText($, `${s.root}/python_path`))?.trim()
     const verbosity = await $.env.get('ACE_VERBOSITY') || 'detailed'
-    const cliLearn = learnArgv(traceFile, state.retrieval_id ?? undefined, applied, verbosity, [...await cliHead($), 'learn'])
+    const cliLearn = [...learnArgv(traceFile, state.retrieval_id ?? undefined, applied, verbosity, [...await cliHead($), 'learn']), ...ids(s)]
     const engLearn = await engineScript($, 'learn.js')
     const learnCmd = engLearn  // §14: the engine learns; ace-cli only when it exits 3 (nothing sent)
-      ? [...learnArgv(traceFile, state.retrieval_id ?? undefined, applied, verbosity, ['node', engLearn]), FALLBACK_ON_3, ...cliLearn]
+      ? [...learnArgv(traceFile, state.retrieval_id ?? undefined, applied, verbosity, ['node', engLearn]), ...ids(s), FALLBACK_ON_3, ...cliLearn]
       : cliLearn
     const argv = detachedLearnArgv({ learnArgv: learnCmd,
       trace: traceFile, lock, log, rowOk: pyDumps(await row(true)), rowFail: pyDumps(await row(false)), errLog: `${s.root}/logs/ace-hook-errors.log`, python,
       retryRow: pyDumps({ event: 'learn_retry', hook, session_id: s.sessionId, conversation_id: s.sessionId, task_session_id: tsid ?? null,
-        agent_id: agentId ?? null, source: 'mod' }), cwd: s.cwd })
+        agent_id: agentId ?? null, source: 'mod' }), cwd: s.logRoot })
     const spawned = await run($, argv, { env: aceEnv(s), timeoutMs: LAUNCHER_MS })
     if (!spawned || spawned.exitCode !== 0) {  // no child will clean up, or write the metrics row
       await rm($, lock, traceFile)
