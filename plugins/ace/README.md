@@ -17,11 +17,12 @@
   has AOP-1333 and AOP-1334 on prod); set `ACE_RENDER_FULL_PCT=0` to stay on budget only.
 - **What each learn trace carries:** `render_variant` (`budget` or `full`, omitted when unknown),
   `conversation_id` (the Claude Code session id; subagents share it), the per-task pin as `session_id`, and
-  `applied_log_ids` only for patterns the final answer recognizably used (named by id or quoted with >= 40 chars).
+  `applied_log_ids` only for patterns with evidence of use (at most 20): ids a Haiku review names (mod chain,
+  interactive sessions), or patterns whose distinctive tokens or id appear in the task's tool inputs.
   `playbook_used` lists everything injected.
 - **CLI pin.** Claude Code installs the `@ace-sdk/cli` version pinned in `package.json` into the plugin directory. A
   global `ace-cli` at or above the pin is used only as a fallback and `/ace:ace-doctor` marks it untested. Requests
-  through the in-process engine (`@ace-sdk/core`) and through `ace-cli` (>= 4.3.0, via `ACE_CLIENT_ID`) both say
+  through the in-process engine (`@ace-sdk/core`) and through the pinned `ace-cli` (4.3.2, via `ACE_CLIENT_ID`) both say
   `X-ACE-Client: claude-code-plugin/<version>`.
 
 ## 🚀 Quick Start

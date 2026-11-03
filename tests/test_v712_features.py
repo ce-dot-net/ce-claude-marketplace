@@ -76,7 +76,7 @@ class TestFloorBump:
             )
 
     def test_plugin_json_description_ace_sdk_core_3_2_2(self):
-        """plugin.json description Requires: line must mention @ace-sdk/core >= 3.2.2."""
+        """plugin.json description Requires: line names the core the cli 4.3.2 pin brings (>= 3.5.0, since v8)."""
         data = json.loads(PLUGIN_JSON.read_text())
         desc = data['description']
         # The active Requires: line must have 3.2.2
@@ -84,9 +84,9 @@ class TestFloorBump:
         assert requires_match is not None, (
             f"plugin.json description has no 'Requires: ... @ace-sdk/core >= ...' pattern; desc: {desc!r}"
         )
-        assert requires_match.group(1) == '3.2.2', (
+        assert requires_match.group(1) == '3.5.0', (
             f"plugin.json Requires: @ace-sdk/core floor is {requires_match.group(1)!r}; "
-            f"must be 3.2.2"
+            f"must be 3.5.0 (core of the pinned cli 4.3.2)"
         )
 
     def test_ace_doctor_md_no_stale_4_1_1_as_minimum(self):
