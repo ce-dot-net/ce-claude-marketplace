@@ -2,7 +2,7 @@
 // problem state (unbound -> Verbinden, login states -> Anmelden, not_found/no_access -> Anderes wählen,
 // config_refused -> Bereinigt neu schreiben, cli_missing -> installieren). Every action runs only on its press.
 import { startContext } from '../handlers/context.ts'
-import { type Ctx, writeBinding, WriteRefused } from '../context/index.ts'
+import { type Ctx, cliIds, repoWrite, writeBinding, WriteRefused } from '../context/index.ts'
 import { run } from '../io/fs.ts'
 import { cliRun, cap } from '../io/cli.ts'
 import { type Load } from '../io/state.ts'
@@ -46,11 +46,20 @@ export async function runPending($: any, L: Load, p: any) {
   if (p.kind === 'clean') return cleanRewrite($, L)
   if (p.kind === 'login') return startLogin($, L)
   if (p.kind === 'install') return install($, L)
+  if (p.kind === 'export') return exportTo($, L, p.path)
   const r = p.kind === 'exec' ? await run($, p.argv, { timeoutMs: 30_000 }) : await cliRun($, c, p.argv, { stdin: p.stdin, timeoutMs: 300_000, cwd: c?.root })
   const ok = r && r.exitCode === 0
   $.ui.toast(`ACE: ${p.label} ${ok ? 'erledigt' : `fehlgeschlagen (exit ${r?.exitCode})`}`)
   const out = String((ok ? r?.stdout : r?.stderr) ?? '').trim()
   if (out) $.ui.log(cap(out, 2000))
+}
+// export: stdout of `ace-cli export`, written inside the repo root through REPO_WRITE_SH (no symlink, never outside).
+export async function exportTo($: any, L: Load, rel: string) {
+  const c: any = L.ctx
+  const r = await cliRun($, c, ['export', ...cliIds(c)], { timeoutMs: 120_000, cwd: c.root })
+  if (r.exitCode !== 0) { $.ui.toast(`ACE: Export fehlgeschlagen (exit ${r.exitCode})`); return }
+  try { await repoWrite((argv, init) => run($, argv, init), c.root, rel, r.stdout) } catch (err) { $.ui.toast(`ACE: Export nicht geschrieben (${String((err as Error).message).slice(0, 120)})`); return }
+  $.ui.toast(`ACE: exportiert nach ${c.root}/${rel}`)
 }
 export async function startLogin($: any, L: Load) {
   $.ui.toast('ACE: Login im Browser bestätigen')

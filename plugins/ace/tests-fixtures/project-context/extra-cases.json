@@ -80,5 +80,80 @@
    "source": "repo_file",
    "path": "main/.ace/config.json"
   }
+ },
+ {
+  "name": "plugin strict: slash in projectId -> config_invalid",
+  "layout": {
+   "main/.git/config": "[core]\n",
+   "main/.ace/config.json": "{\"orgId\":\"org_a\",\"projectId\":\"prj_a/../../etc\"}"
+  },
+  "cwd": "main",
+  "env": {},
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "config_invalid",
+   "source": "repo_file",
+   "path": "main/.ace/config.json"
+  }
+ },
+ {
+  "name": "plugin strict: dotdot projectId -> config_invalid",
+  "layout": {
+   "main/.git/config": "[core]\n",
+   "main/.ace/config.json": "{\"orgId\":\"org_a\",\"projectId\":\"..\"}"
+  },
+  "cwd": "main",
+  "env": {},
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "config_invalid",
+   "source": "repo_file",
+   "path": "main/.ace/config.json"
+  }
+ },
+ {
+  "name": "plugin strict: space in orgId -> config_invalid",
+  "layout": {
+   "main/.git/config": "[core]\n",
+   "main/.ace/config.json": "{\"orgId\":\"org a\",\"projectId\":\"prj_a\"}"
+  },
+  "cwd": "main",
+  "env": {},
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "config_invalid",
+   "source": "repo_file",
+   "path": "main/.ace/config.json"
+  }
+ },
+ {
+  "name": "plugin strict: a malformed env id is dropped with a warning, the repo file still binds",
+  "layout": {
+   "main/.git/config": "[core]\n",
+   "main/.ace/config.json": "{\"orgId\":\"org_a\",\"projectId\":\"prj_a\"}"
+  },
+  "cwd": "main",
+  "env": {
+   "ACE_ORG_ID": "org_x",
+   "ACE_PROJECT_ID": "prj_x; rm -rf /"
+  },
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": true,
+   "orgId": "org_a",
+   "projectId": "prj_a",
+   "source": "repo_file",
+   "path": "main/.ace/config.json",
+   "warnings": [
+    "invalid_id_ignored"
+   ]
+  }
  }
 ]

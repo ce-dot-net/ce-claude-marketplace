@@ -16,7 +16,7 @@ from wpd_harness import HookEnv
 
 @pytest.fixture
 def env(tmp_path):
-    e = HookEnv(tmp_path, project_id="prj-s32-%s" % uuid.uuid4().hex[:8])
+    e = HookEnv(tmp_path, project_id="prj_s32-%s" % uuid.uuid4().hex[:8])
     e.write_domains({"auth:local": {"count": 3}, "database:local": {"count": 1}})
     e.set_search_response(RESPONSE)
     return e
@@ -106,7 +106,7 @@ def test_subagent_same_task_text_new_agent_reuses_and_keeps_the_cached_retrieval
     _subagent(monkeypatch, tmp_path, "agent-2", calls)
     assert len(calls) == 1
     from patterns_used_state import load_state
-    assert load_state("sess-abc123", "agent-2", "SubagentStop", project_id="prj-test-01")["retrieval_id"] == "ret-abc-001"
+    assert load_state("sess-abc123", "agent-2", "SubagentStop", project_id="prj_test-01")["retrieval_id"] == "ret-abc-001"
 
 
 def test_subagent_reuse_off_by_env(monkeypatch, tmp_path):

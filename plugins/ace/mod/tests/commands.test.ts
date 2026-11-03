@@ -150,3 +150,66 @@ test('a non-ACE command passes through untouched', async ($, on) => {
   await start($)
   expect((await $.command.run({ command: 'compact', args: '' })).text).toBe('core ran')
 })
+
+// ---- security review: no user-given path or id reaches the filesystem or argv unchecked ----
+for (const [arg, why] of [['../../etc/x', 'outside'], ['/etc/passwd', 'outside'], ['out/x.json', 'symlink'], ['/proj/../etc/x', 'outside']] as const) {
+  test(`export-patterns refuses ${arg} (${why}); nothing exported, nothing pending`, async ($, on) => {
+    const h = host(on, { links: [`${CWD}/out`] })
+    await start($)
+    const t = await run($, 'export-patterns', arg)
+    expect(t).toContain('export refused')
+    expect(t).toContain(why)
+    expect(h.pending()).toBe(null)
+    expect(cliRuns(h, 'export').length).toBe(0)
+  })
+}
+
+test('export-patterns: an inside path is a preview + confirm (overwrite named), nothing runs before the press', async ($, on) => {
+  const h = host(on, { files: { [`${CWD}/pb.json`]: '{}' } })
+  await start($)
+  const t = await run($, 'export-patterns', 'pb.json')
+  expect(t).toContain(`${CWD}/pb.json`)
+  expect(t).toContain('OVERWRITTEN')
+  expect(h.pending()).toMatchObject({ kind: 'export' })
+  expect(cliRuns(h, 'export').length).toBe(0)
+})
+
+test('import-patterns never reads a file outside the repo root', async ($, on) => {
+  const h = host(on, { files: { '/home/u/.ssh/id_rsa.json': '{"playbook":{}}' } })
+  await start($)
+  expect(await run($, 'import-patterns', '/home/u/.ssh/id_rsa.json')).toContain('import refused')
+  expect(await run($, 'import-patterns', '../../home/u/.ssh/id_rsa.json')).toContain('import refused')
+  expect(h.pending()).toBe(null)
+})
+
+for (const bad of ['prj_a/../../x', 'prj_a b', 'prj_..']) {
+  test(`configure refuses the id ${JSON.stringify(bad)}`, async ($, on) => {
+    const h = host(on, { env: { ACE_AUTO_ADOPT: '0' }, files: { [`${CWD}/.git/config`]: '[core]\n' } })
+    await start($)
+    const t = await run($, 'configure', `org_a ${bad}`)
+    expect(t.includes('ids must look like') || t.includes('Usage')).toBe(true)
+    expect(h.pending()).toBe(null)
+  })
+}
+
+test('tune and top refuse option-like or metacharacter values', async ($, on) => {
+  const h = host(on)
+  await start($)
+  expect(await run($, 'tune', 'search-top-k=--yes')).toContain('Usage')
+  expect(await run($, 'top', '5 --json')).toContain('Usage')
+  expect(await run($, 'patterns', '$(id)')).toContain('Usage')
+  expect(h.pending()).toBe(null)
+})
+
+test('learn passes the lesson as --task=/--output= (an option-like text can never become a flag)', async ($, on) => {
+  const h = host(on)
+  await start($)
+  await run($, 'learn', '--yes do it')
+  expect(h.pending().argv.slice(0, 3)).toEqual(['learn', '--task=--yes do it', '--output=--yes do it'])
+})
+
+test('cleanup refuses a symlinked logs dir', async ($, on) => {
+  host(on, { links: [`${CWD}/.claude/data`] })
+  await start($)
+  expect(await run($, 'cleanup')).toContain('cleanup refused')
+})

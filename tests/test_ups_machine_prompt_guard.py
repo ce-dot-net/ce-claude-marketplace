@@ -32,8 +32,8 @@ for p in (str(SHARED), str(UTILS), str(PLUGIN / "utils")):
 import plugin_data_dir  # noqa: E402
 import ace_relevance_logger  # noqa: E402
 
-PROJECT = "prj-wpb-test"
-ORG = "org-wpb-test"
+PROJECT = "prj_wpb-test"
+ORG = "org_wpb-test"
 CC_SESSION = "cc-sess-wpb-0001"
 HUMAN_PROMPT = "refactor the authentication middleware to use JSON web tokens"
 

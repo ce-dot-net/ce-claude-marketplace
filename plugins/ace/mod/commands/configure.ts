@@ -19,8 +19,10 @@ export async function configureCmd($: any, { c, args }: Kit): Promise<string> {
         s ? `Suggestion by name: ${s.name} (${s.projectId}) — [Verbinden] above the prompt` : 'No project matches the repo name.',
         list ? `\nProjects:\n${list}\n\n/ace:ace-configure <prj_...> binds one of them.` : ''].join('\n')
     }
+    if (want.length > 2) return 'Usage: /ace:ace-configure [org_...] prj_...'
     if (!main) return 'Not a git repo: there is no tracked file to write. Set ACE_ORG_ID / ACE_PROJECT_ID in the env instead.'
     const prj = want.find(w => w.startsWith('prj_')), org = want.find(w => w.startsWith('org_')) ?? projects.find(p => p.projectId === prj)?.orgId
+    if (prj && !/^prj_[A-Za-z0-9_-]+$/.test(prj) || org && !/^org_[A-Za-z0-9_-]+$/.test(org)) return 'ACE ▼ ids must look like org_... / prj_...'
     if (!prj || !org) return 'Usage: /ace:ace-configure [org_...] prj_...  (the project must be in /ace:ace-configure\'s list, or give the org)'
     return confirmBind($, main, org, prj, projects.find(p => p.projectId === prj)?.name ?? prj)
 }

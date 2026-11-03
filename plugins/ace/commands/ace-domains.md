@@ -3,7 +3,7 @@ disable-model-invocation: true
 model: claude-haiku-4-5
 description: List available pattern domains for filtering
 argument-hint: "[--min-patterns N]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # List Available Domains
@@ -40,12 +40,12 @@ if ! command -v jq >/dev/null 2>&1; then
   exit 1
 fi
 
-# Optional: Export environment variables if available from .claude/settings.json
-export ACE_ORG_ID="${ACE_ORG_ID:-}"
-export ACE_PROJECT_ID="${ACE_PROJECT_ID:-}"
+# 8.1.0: the one binding lookup (scripts/ace-context, the plugin core); never read binding files here
+CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1
+eval "$CTX"; ORG_ID="$ACE_ORG_ID"; PROJECT_ID="$ACE_PROJECT_ID"
 
 # Build command with optional min-patterns filter
-CMD="${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli domains --json"
+CMD="${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli domains --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --json"
 if [ -n "$MIN_PATTERNS" ]; then
   CMD="$CMD --min-patterns $MIN_PATTERNS"
 fi
@@ -137,14 +137,14 @@ Without knowing domain names, `--allowed-domains` is unusable:
 
 ```
 # Before: guessing domain names
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "auth" --allowed-domains "typescript"
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" "auth" --allowed-domains "typescript"
 Result: 0 patterns (wrong domain name!)
 
 # After: using discovered domain names
 /ace-domains
 → "typescript-development-practices"
 
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "auth" --allowed-domains "typescript-development-practices"
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" "auth" --allowed-domains "typescript-development-practices"
 Result: Filtered patterns! ✓
 ```
 

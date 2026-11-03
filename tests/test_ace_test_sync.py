@@ -474,36 +474,12 @@ class TestAceInsightsMdV15Instructions:
 
 
 class TestProjectIdEnvFirst:
-    """All 5 Part-3 commands must use .env.ACE_PROJECT_ID // .projectId (env-first)."""
-
-    def _project_id_jq_lines(self, path: Path) -> List[str]:
-        """Return lines that contain a jq PROJECT_ID extraction in this .md file."""
-        doc = _read(path)
-        lines = []
-        for line in doc.splitlines():
-            # Only lines where PROJECT_ID is being set via jq from settings.json
-            if "PROJECT_ID" in line and "jq" in line and ".projectId" in line:
-                lines.append(line.strip())
-        return lines
+    """8.1.0: the 5 Part-3 commands get the binding from the one core (scripts/ace-context), never a jq settings read."""
 
     def _assert_env_first(self, cmd_name: str, path: Path) -> None:
-        lines = self._project_id_jq_lines(path)
-        assert lines, (
-            f"{cmd_name}: No jq PROJECT_ID extraction line found — "
-            f"check the file still has a jq-based project-id read."
-        )
-        for line in lines:
-            # .env.ACE_PROJECT_ID must appear before .projectId on the same jq expression
-            env_pos = line.find(".env.ACE_PROJECT_ID")
-            legacy_pos = line.find(".projectId")
-            # If .env.ACE_PROJECT_ID is not present at all it's wrong too
-            assert env_pos != -1, (
-                f"{cmd_name}: jq line does not reference '.env.ACE_PROJECT_ID': {line!r}"
-            )
-            assert env_pos < legacy_pos, (
-                f"{cmd_name}: '.env.ACE_PROJECT_ID' must come BEFORE '.projectId' "
-                f"(env-first) but order is reversed in: {line!r}"
-            )
+        doc = _read(path)
+        assert "scripts/ace-context" in doc, f"{cmd_name}: must use scripts/ace-context"
+        assert not [l for l in doc.splitlines() if "jq" in l and "settings.json" in l], f"{cmd_name}: jq settings read left"
 
     def test_ace_clear_env_first(self):
         self._assert_env_first("ace-clear.md", PART3_COMMANDS["ace-clear.md"])

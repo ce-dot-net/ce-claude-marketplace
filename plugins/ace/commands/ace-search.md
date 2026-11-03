@@ -1,7 +1,7 @@
 ---
 model: claude-haiku-4-5
 description: Semantic search for ACE patterns using natural language query
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Semantic Search
@@ -65,12 +65,12 @@ Based on the output:
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Get context from .claude/settings.json and export as env vars
-export ACE_ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-export ACE_PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+# 8.1.0: the one binding lookup (scripts/ace-context, the plugin core); never read binding files here
+CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1
+eval "$CTX"; ORG_ID="$ACE_ORG_ID"; PROJECT_ID="$ACE_PROJECT_ID"
 
 if [ -z "$ACE_ORG_ID" ] || [ -z "$ACE_PROJECT_ID" ]; then
-  echo "❌ No .claude/settings.json found or missing orgId/projectId"
+  echo "❌ ACE is not bound here (see the line above)"
   echo "Run /ace-configure to set up ACE"
   exit 1
 fi
@@ -78,7 +78,7 @@ fi
 # Call ace-cli search - CLI reads org/project from env vars automatically
 # Threshold comes from server config (ace-cli tune show) - don't override!
 # --json: the CLI's human formatter never prints root_cause. The wrapper filters only stderr, so stdout stays JSON.
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "$*" --json | jq -r '
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" "$*" --json | jq -r '
   (.similar_patterns // []) | to_entries[] | .value as $p |
   "\(.key + 1). \($p.content)",
   "   domain: \($p.domain // "-") | section: \($p.section // "-") | reward: \($p.cumulative_v15_reward // 0) | bandit_rank: \($p.bandit_rank // $p.match_factors.bandit_rank // "-")",
@@ -107,7 +107,7 @@ Show the user this list as is (one block per pattern; `root cause` only appears 
 
 **Note**: To limit number of results, use `jq` for filtering:
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "query" --json | jq '.similar_patterns[:5]'  # First 5 results
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" "query" --json | jq '.similar_patterns[:5]'  # First 5 results
 ```
 The `--limit` flag is not supported by ace-cli. Use `--top-k` via server config (`/ace-tune`) instead.
 
@@ -115,15 +115,15 @@ The `--limit` flag is not supported by ace-cli. Use `--top-k` via server config 
 
 ```bash
 /ace-search JWT authentication best practices
-→ Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "JWT authentication best practices" --json
+→ Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" "JWT authentication best practices" --json
 → Uses: Server config threshold (e.g., 0.45)
 
 /ace-search async test failures debugging
-→ Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "async test failures debugging" --json
+→ Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" "async test failures debugging" --json
 
 # Override threshold if needed:
 /ace-search "JWT auth" --threshold 0.7
-→ Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search "JWT auth" --threshold 0.7 --json
+→ Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" "JWT auth" --threshold 0.7 --json
 
 # Domain filtering (v5.3.0+):
 /ace-search caching patterns --allowed-domains cache,performance

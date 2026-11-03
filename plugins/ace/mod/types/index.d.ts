@@ -13,7 +13,8 @@ export type AceBand = {
 export type AcePending = {
   label: string
   preview: string
-  kind: 'cli' | 'exec' | 'bind' | 'clean' | 'login' | 'install'
+  kind: 'cli' | 'exec' | 'bind' | 'clean' | 'login' | 'install' | 'export'
+  path?: string
   argv?: string[]
   stdin?: string
   orgId?: string

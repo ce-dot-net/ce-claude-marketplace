@@ -2,7 +2,7 @@
 disable-model-invocation: true
 model: claude-haiku-4-5
 description: Comprehensive ACE installation and health diagnostic
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(uname:*), Bash(bash:*), Bash(node:*), Bash(ls:*), Bash(test:*), Bash(claude:*), Bash(cat:*), Bash(tail:*), Bash(sort:*), Bash(python3:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(uname:*), Bash(bash:*), Bash(node:*), Bash(ls:*), Bash(test:*), Bash(claude:*), Bash(cat:*), Bash(tail:*), Bash(sort:*), Bash(python3:*), Read
 ---
 
 # ACE Doctor - Installation & Health Diagnostic
@@ -166,33 +166,21 @@ Recommended Actions:
 
 ### Check 3: Project Configuration
 
-**What to Check**:
+**What to Check** (the one core: `scripts/ace-context`, the same resolver every hook uses):
 ```bash
-# Get project root
-PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-
-# Check project settings
-test -f "$PROJECT_ROOT/.claude/settings.json" && echo "EXISTS" || echo "MISSING"
-
-# If exists, validate ACE_PROJECT_ID env var (written by ace-configure)
-jq -e '.env.ACE_PROJECT_ID' "$PROJECT_ROOT/.claude/settings.json"
-```
-
-**Expected**:
-```json
-{
-  "env": {
-    "ACE_ORG_ID": "org_xxxxx",
-    "ACE_PROJECT_ID": "prj_xxxxx",
-    "ACE_VERBOSITY": "normal"
-  }
-}
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --json; echo "exit: $?"
 ```
 
 **Report**:
-- ✅ Project config valid with ACE_PROJECT_ID set
-- ⚠️ Project config exists but ACE_PROJECT_ID missing
-- ❌ Project config missing
+- ✅ exit 0: bound. Show `projectId`, `orgId`, `source` (`repo_file` = tracked `.ace/config.json`, `settings_file` =
+  legacy `.claude/settings.json` env, `env`, `remote_map`) and `path`.
+- ⚠️ `source: settings_file`: legacy binding; it is adopted into `.ace/config.json` automatically (commit it).
+- ⚠️ `warnings` contains `global_project_id_ignored`: the global ace-cli config has a top-level `projectId`. It is
+  never used; bind each repo with `.ace/config.json` (/ace:ace-configure) and remove it from the global config.
+- ❌ exit 5, `reason: no_binding`: not bound; show the `tried` paths. Fix: /ace:ace-configure
+- ❌ `reason: config_refused` (`warnings: repo_file_contains_secret`): `.ace/config.json` holds `apiToken`/`serverUrl`.
+  Rewrite it with only `orgId`/`projectId` and revoke the token; it is in git history.
+- ❌ `reason: config_invalid`: the named file is not valid JSON.
 
 **Note**: ace-cli is used for all ACE operations.
 
@@ -266,12 +254,12 @@ Recommended Actions:
 ### Check 5: ACE Server Connectivity
 
 **What to Check** (one authenticated round trip through the same ace-cli the hooks use; org and project come from
-`.claude/settings.json`, the token from the device-code login):
+the one core, `scripts/ace-context`, the token from the device-code login):
 ```bash
-PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // .projectId // empty' .claude/settings.json)
-OUT=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli ${PROJECT_ID:+--project "$PROJECT_ID"} status --json 2>&1); RC=$?
-echo "exit: $RC"; printf '%s\n' "$OUT" | head -c 600
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --line; echo "exit: $?"
 ```
+(One `ace-cli status` with explicit `--org`/`--project`, classified by exit code and stderr; prints the one problem
+line, nothing when ok.)
 
 **Report** (exit code first, then the error text):
 - ✅ exit 0: server reachable, authenticated, project found (show the pattern count from the JSON if present)
@@ -688,7 +676,7 @@ Overall Health: 🟡 NEEDS ATTENTION (3 warnings)
 ⚠️  Warnings Found:
 
 [3] Project Configuration
-    Issue: ACE_PROJECT_ID missing in .claude/settings.json (env.ACE_PROJECT_ID)
+    Issue: not bound (scripts/ace-context exit 5, reason no_binding)
     Impact: Hooks cannot determine which project to use
     Fix: Run /ace:ace-configure
 

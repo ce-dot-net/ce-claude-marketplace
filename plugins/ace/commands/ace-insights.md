@@ -24,7 +24,8 @@ import json, sys, os
 from pathlib import Path
 
 hours = int(sys.argv[1]) if len(sys.argv) > 1 else 24
-log_path = Path('.claude/data/logs/ace-relevance.jsonl')
+import subprocess
+log_path = Path(subprocess.run([os.path.join('${CLAUDE_PLUGIN_ROOT}', 'scripts', 'ace-context'), '--logs'], capture_output=True, text=True).stdout.strip() or '.claude/data/logs') / 'ace-relevance.jsonl'  # 8.1.0: the repo root's log
 
 if not log_path.exists():
     print('No relevance metrics found yet.')
@@ -132,7 +133,8 @@ import json, sys, os, subprocess, platform
 from pathlib import Path
 
 hours = int(sys.argv[1]) if len(sys.argv) > 1 else 24
-log_path = Path('.claude/data/logs/ace-relevance.jsonl')
+import subprocess
+log_path = Path(subprocess.run([os.path.join('${CLAUDE_PLUGIN_ROOT}', 'scripts', 'ace-context'), '--logs'], capture_output=True, text=True).stdout.strip() or '.claude/data/logs') / 'ace-relevance.jsonl'  # 8.1.0: the repo root's log
 
 def _resolve_analyzer():
     import glob

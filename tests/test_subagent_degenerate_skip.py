@@ -86,7 +86,7 @@ def _write_state(state_dir, agent_id, pattern_ids=None, task_session_id=None,
         SESSION,
         agent_id,
         pattern_ids or [PID_A],
-        project_id="prj-1",
+        project_id="prj_1",
         task_session_id=task_session_id,
         retrieval_id=retrieval_id,
         retrieval_log_ids=retrieval_log_ids or {},
@@ -123,7 +123,7 @@ def _run_main(tmp_path, monkeypatch, event,
 
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
-    monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
+    monkeypatch.setenv("ACE_PROJECT_ID", "prj_1")
     monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
 
@@ -138,7 +138,7 @@ def _run_main(tmp_path, monkeypatch, event,
 
     mod = _load_after_task()
     monkeypatch.setattr(mod, "get_context",
-                        lambda: {"org": "org-1", "project": "prj-1"})
+                        lambda: {"org": "org_1", "project": "prj_1"})
     monkeypatch.setattr(mod, "build_trajectory_from_accumulated_tools",
                         lambda *a, **k: ([], [
                             ("Edit", "{}", "{}", "tu-01", None, None, None, None),
@@ -400,14 +400,14 @@ class TestStage2DegenerateSkip:
         event = _empty_agent_subagent_event(tmp_path, transcript_uuid=None)
         # Write a state file under 'None' agent (the '-main' suffix) to verify it gets reaped
         monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
-        monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
+        monkeypatch.setenv("ACE_PROJECT_ID", "prj_1")
         monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
         pus.append_patterns_used(
             SESSION, None, [PID_A],
-            project_id="prj-1",
+            project_id="prj_1",
             task_session_id=None,
         )
-        main_sf = pus.state_file_path(SESSION, None, project_id="prj-1")
+        main_sf = pus.state_file_path(SESSION, None, project_id="prj_1")
         assert main_sf.exists(), "Precondition: state file must exist before test"
 
         records, captured = _run_main(
@@ -534,11 +534,11 @@ class TestPartialAnchorNotSkipped:
         """retrieval_id present (no tsid, no applied_log_ids, sentinel prompt) → NOT skipped."""
         # Build state with retrieval_id but no task_session_id
         monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
-        monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
+        monkeypatch.setenv("ACE_PROJECT_ID", "prj_1")
         monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
         pus.append_patterns_used(
             SESSION, WORK_UUID, [PID_A],
-            project_id="prj-1",
+            project_id="prj_1",
             task_session_id=None,       # no tsid
             retrieval_id=RETRIEVAL_ID,  # but retrieval_id present
         )
@@ -574,7 +574,7 @@ class TestMainStopNotAffected:
         """
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
         monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
-        monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
+        monkeypatch.setenv("ACE_PROJECT_ID", "prj_1")
         monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
         monkeypatch.chdir(tmp_path)
 
@@ -591,7 +591,7 @@ class TestMainStopNotAffected:
 
         mod = _load_after_task()
         monkeypatch.setattr(mod, "get_context",
-                            lambda: {"org": "org-1", "project": "prj-1"})
+                            lambda: {"org": "org_1", "project": "prj_1"})
         monkeypatch.setattr(mod, "build_trajectory_from_accumulated_tools",
                             lambda *a, **k: ([], [
                                 ("Edit", "{}", "{}", "tu-01", None, None, None, None),
