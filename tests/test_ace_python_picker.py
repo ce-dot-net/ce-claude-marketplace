@@ -20,8 +20,12 @@ def run(tmp, path, cached=None):
     data.mkdir(exist_ok=True)
     if cached:
         (data / 'python_path').write_text(str(cached) + '\n')
-    env = {'PATH': '%s:/usr/bin:/bin' % path, 'HOME': str(tmp), 'CLAUDE_PLUGIN_DATA': str(data)}
-    return subprocess.run([str(PLUGIN / 'scripts/ace-python')], capture_output=True, text=True, env=env), data
+    tools = tmp / 'tools'  # only what the picker may call: no system python3.x can win the test
+    if not tools.exists():
+        tools.mkdir()
+        (tools / 'mkdir').symlink_to('/bin/mkdir')
+    env = {'PATH': '%s:%s' % (path, tools), 'HOME': str(tmp), 'CLAUDE_PLUGIN_DATA': str(data)}
+    return subprocess.run(['/bin/bash', str(PLUGIN / 'scripts/ace-python')], capture_output=True, text=True, env=env), data
 
 
 def test_newest_versioned_python_wins(tmp_path):
@@ -57,9 +61,9 @@ def test_a_shim_exits_0_silently_without_a_new_enough_python(tmp_path):
     b = tmp_path / 'bin'
     b.mkdir()
     fake_py(b, 'python3', 9)
-    env = {'PATH': '%s:/usr/bin:/bin' % b, 'HOME': str(tmp_path), 'CLAUDE_PLUGIN_DATA': str(tmp_path / 'd'),
+    env = {'PATH': str(b), 'HOME': str(tmp_path), 'CLAUDE_PLUGIN_DATA': str(tmp_path / 'd'),
            'CLAUDE_PLUGIN_ROOT': str(PLUGIN)}
-    p = subprocess.run([str(PLUGIN / 'scripts/ace_before_task_wrapper.sh')], input='{}', capture_output=True, text=True, env=env)
+    p = subprocess.run(['/bin/bash', str(PLUGIN / 'scripts/ace_before_task_wrapper.sh')], input='{}', capture_output=True, text=True, env=env)
     assert (p.returncode, p.stdout) == (0, '')
 
 
