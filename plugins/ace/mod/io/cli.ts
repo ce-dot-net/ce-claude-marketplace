@@ -5,8 +5,8 @@ import { cliHead } from './spawn.ts'
 export const OUT_CAP = 60_000  // probe 3: a command's output is capped at about 60 KB
 export type CliResult = { exitCode: number | null, stdout: string, stderr: string, spawnError?: boolean, timeout?: boolean }
 export async function cliRun($: any, c: { orgId?: string, projectId?: string } | null, argv: string[],
-  o: { stdin?: string, timeoutMs?: number, cwd?: string } = {}): Promise<CliResult> {
-  const env: Record<string, string> = {}
+  o: { stdin?: string, timeoutMs?: number, cwd?: string, env?: Record<string, string> } = {}): Promise<CliResult> {
+  const env: Record<string, string> = { ...(o.env ?? {}) }
   if (c?.orgId) env.ACE_ORG_ID = c.orgId
   if (c?.projectId) env.ACE_PROJECT_ID = c.projectId
   try {
