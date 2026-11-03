@@ -70,3 +70,9 @@ __pycache__/
 .agent/
 dummy_work.txt
 CLAUDE.md.ace-backup-*
+
+# local tool state, never tracked
+.claude/worktrees/
+.codex/
+.cursor/
+.playwright-cli/
