@@ -628,7 +628,7 @@ export function appliedLogIds(used: string[], rlog: Record<string, number>): num
   return used.filter(id => id in rlog).map(id => rlog[id])
 }
 // ace_pattern_render.render_arm (§31): arms in bucket order control, compact, full (ACE_RENDER_FULL_PCT, default 50,
-// invalid -> 0), rest budget. No conversation id -> budget.
+// invalid -> 0; register.cohortEnv fills it from the server file when the env is unset), rest budget. No conversation id -> budget.
 export function renderCohort(sid: string | undefined, env: Record<string, string | undefined>): Cohort {
   let ctrl = pyInt(env.ACE_AB_CONTROL_PCT, 0), comp = pyInt(env.ACE_AB_COMPACT_PCT, 0)
   if (ctrl === null || comp === null || ctrl < 0 || comp < 0 || Math.min(ctrl, 100) + Math.min(comp, 100) > 100) { ctrl = 0; comp = 0 }
@@ -639,6 +639,19 @@ export function renderCohort(sid: string | undefined, env: Record<string, string
   if (!sid) return 'budget'
   const b = parseInt(sha256Hex('render:' + sid).slice(0, 8), 16) % 100
   return b < ctrl ? 'control' : b < ctrl + comp ? 'compact' : b < ctrl + comp + full ? 'full' : 'budget'
+}
+
+// Server kill switch (plugin_data_dir.store_render_full_pct): a search response MAY carry a top-level integer
+// render_full_pct 0-100, persisted to <root>/render-full-pct.json {pct, at (epoch s)}; used while < 7 days old.
+export const RENDER_FULL_PCT_FILE = 'render-full-pct.json'
+const RENDER_FULL_PCT_MAX_AGE_S = 7 * 86400
+const validPct = (v: unknown): v is number => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 100
+export const serverFullPct = (resp: any): number | undefined => validPct(resp?.render_full_pct) ? resp.render_full_pct : undefined
+export function storedFullPct(text: string | undefined, nowMs: number): number | undefined {
+  try {
+    const d = JSON.parse(text as string)
+    return validPct(d?.pct) && typeof d.at === 'number' && nowMs / 1000 - d.at < RENDER_FULL_PCT_MAX_AGE_S ? d.pct : undefined
+  } catch { return undefined }
 }
 
 // ---------- plugin_data_dir ----------

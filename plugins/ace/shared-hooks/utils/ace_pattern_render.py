@@ -446,21 +446,32 @@ def _read_ab_pcts():
     return ctrl, compact
 
 
+def full_pct_source() -> Tuple[int, str]:
+    """The §31 full share and its source: env ACE_RENDER_FULL_PCT if set (invalid -> 0) > the server's
+    `render_full_pct` (render-full-pct.json, < 7 days) > default 50."""
+    raw = os.environ.get("ACE_RENDER_FULL_PCT")
+    if raw is not None:
+        try:
+            return max(int(raw), 0), "env"
+        except (TypeError, ValueError):
+            return 0, "env"
+    try:
+        import plugin_data_dir
+        server = plugin_data_dir.stored_render_full_pct()
+    except Exception:
+        server = None
+    return (server, "server") if server is not None else (50, "default")
+
+
 def render_arm(session_id: Optional[str]) -> str:
     """The A/B arm of a conversation (DESIGN §31), shared with the mod's renderCohort (parity test).
 
-    Arms in bucket order: control, compact, full (ACE_RENDER_FULL_PCT, default 50 = 50/50 split; set but invalid -> 0), rest budget.
+    Arms in bucket order: control, compact, full (full_pct_source: env > server render_full_pct > 50), rest budget.
     bucket = sha256("render:" + session_id)[:8 hex] % 100, where session_id is the STABLE Claude Code
     session id = conversation_id (subagents share it), never the per-task pin. No id -> 'budget'.
     """
     ctrl_pct, compact_pct = _read_ab_pcts()
-    try:
-        full_pct = int(os.environ.get("ACE_RENDER_FULL_PCT", "50"))
-    except (TypeError, ValueError):
-        full_pct = 0
-    if full_pct < 0:
-        full_pct = 0
-    full_pct = min(full_pct, 100 - ctrl_pct - compact_pct)
+    full_pct = min(full_pct_source()[0], 100 - ctrl_pct - compact_pct)
     if not session_id:
         return "budget"
     bucket = int(hashlib.sha256(("render:" + session_id).encode()).hexdigest()[:8], 16) % 100

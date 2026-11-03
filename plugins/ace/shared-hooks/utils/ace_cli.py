@@ -178,6 +178,13 @@ def _plugin_dir():
         return None
 
 
+def _store_full_pct(resp) -> None:
+    """§31 server kill switch: persist the response's render_full_pct (never raises)."""
+    pd = _plugin_dir()
+    if pd:
+        pd.store_render_full_pct(resp)
+
+
 def _pin_backoff_active() -> bool:
     """True while <root>/pin-backoff is younger than ACE_PIN_BACKOFF_MIN (default 30) min."""
     try:
@@ -246,6 +253,7 @@ def _search_lib(node, query, org, project, session_id, top_k, timeout, hook_even
                 parsed = json.loads(_text(result.stdout))
                 if isinstance(parsed, dict) and isinstance(parsed.get("similar_patterns"), list):
                     _log_engine("lib", "ok", hook_event_name, ok=True, ms=_ms(t0))
+                    _store_full_pct(parsed)
                     return parsed, None
             except ValueError:
                 pass
@@ -325,13 +333,15 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
             return None, _ms(t0)
 
         try:
-            return json.loads(stdout), _ms(t0)
+            parsed = json.loads(stdout)
         except json.JSONDecodeError as _je:
             _log_cli_error("ace_cli_json_parse_failed", result.returncode, stdout, stderr,
                            query=query, project_id=project, hook_event_name=hook_event_name,
                            extra={"parse_error": str(_je)[:200],
                                   "stdout_bytes": len(result.stdout) if result.stdout else 0})
             return None, _ms(t0)
+        _store_full_pct(parsed)
+        return parsed, _ms(t0)
 
     except subprocess.TimeoutExpired:
         if pin:  # a pinned spawn stuck on the lock: don't make every later call wait again

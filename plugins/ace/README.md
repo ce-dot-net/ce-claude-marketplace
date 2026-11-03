@@ -120,6 +120,7 @@ After completing work, run `/ace-learn`:
 ### Render knobs (environment)
 
 - `ACE_RENDER_FULL_PCT` (default 50, 0 = off): share of conversations the mod renders `full`; see the cost note above.
+  The ACE server can switch the share for everyone without a plugin release: a search response field `render_full_pct` (0-100, kept for 7 days in `render-full-pct.json`) applies when the env is unset.
 - `ACE_ENGINE=cli`: never use the in-process engine.
 
 ### Server Connection

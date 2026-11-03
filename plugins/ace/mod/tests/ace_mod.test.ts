@@ -18,7 +18,7 @@ import S8 from './fixtures/search_8.ts'
 import SEDGE from './fixtures/search_edge.ts'
 import G from './fixtures/golden.ts'
 import USED_CASES from './fixtures/used_cases.ts'
-import { statusLine, hasSubstantialWork, traceVariant, toolRec } from '../core.ts'
+import { statusLine, hasSubstantialWork, traceVariant, toolRec, renderCohort, serverFullPct, storedFullPct } from '../core.ts'
 import { pyLoads, PRIVATE_WRITE_SH, evalStats, evalInjection, learnLine, usedPatternIds, toolHaystack } from '../core.ts'
 
 const HOME = '/home/u', CWD = '/proj', SID = 'sess-1', PRJ = 'prj_t'
@@ -1695,6 +1695,58 @@ test('learn gate: a state-changing tool, or >= 3 tool calls of any kind (researc
   expect(hasSubstantialWork([])).toBe(false)
   for (const t of ['Agent', 'Workflow', 'Task', 'Skill']) expect(hasSubstantialWork([r(t)])).toBe(true)  // fix 3: orchestrating tasks
   expect(hasSubstantialWork([r('TaskList'), r('Read')])).toBe(false)
+})
+
+// ---------- server kill switch: search response render_full_pct (env > server file < 7 days > 50) ----------
+const FULL_PCT = `${ROOT}/render-full-pct.json`
+const withPct = (pct: unknown) => { const o = JSON.parse(S8); o.render_full_pct = pct; return JSON.stringify(o) }
+
+test('render_full_pct: only a top-level integer 0-100 counts; the stored value expires after 7 days', async () => {
+  for (const v of [0, 50, 100]) expect(serverFullPct({ render_full_pct: v })).toBe(v)
+  for (const v of [-1, 101, '0', 12.5, true, null, [0]]) expect(serverFullPct({ render_full_pct: v })).toBe(undefined)
+  expect(serverFullPct(pyLoads('{"render_full_pct": 50.0}'))).toBe(undefined)  // a float, as in Python
+  expect(serverFullPct(null)).toBe(undefined)
+  const now = 1_800_000_000_000
+  expect(storedFullPct(JSON.stringify({ pct: 0, at: now / 1000 - 6 * 86400 }), now)).toBe(0)
+  expect(storedFullPct(JSON.stringify({ pct: 0, at: now / 1000 - 8 * 86400 }), now)).toBe(undefined)
+  for (const t of [undefined, 'x', '[]', '{"pct": 200, "at": 1800000000}', '{"pct": 0}']) expect(storedFullPct(t, now)).toBe(undefined)
+  const full = Array.from({ length: 1000 }, (_, i) => `conv-${i}`).find(c => renderCohort(c, {}) === 'full')!
+  expect(renderCohort(full, { ACE_RENDER_FULL_PCT: '0' })).toBe('budget')
+})
+
+test('render_full_pct 0 in a search response -> the next arm of a full-bucket conversation is budget', async ($, on) => {
+  // sess-1 is bucket 66: full under a stored server share of 70
+  let pct: unknown = 70
+  const h = host(on, { defaultArm: true, search: () => ({ stdout: withPct(pct) }) })
+  await submit($)
+  expect(JSON.parse(h.files.get(FULL_PCT)!)).toEqual({ pct: 70, at: Math.floor(h.now() / 1000) })
+  pct = 0
+  await submit($)  // this search stores 0, the render after it is already budget
+  const arms = h.rows().filter((x: any) => x.event === 'search').map((x: any) => x.render_cohort)
+  expect(arms).toEqual(['full', 'budget'])
+  expect(JSON.parse(h.files.get(FULL_PCT)!).pct).toBe(0)
+  pct = undefined  // a missing field keeps the stored value
+  await submit($)
+  expect(JSON.parse(h.files.get(FULL_PCT)!).pct).toBe(0)
+  pct = 'off'  // an invalid value is ignored
+  await submit($)
+  expect(JSON.parse(h.files.get(FULL_PCT)!).pct).toBe(0)
+  expect(h.rows().filter((x: any) => x.event === 'search').map((x: any) => x.render_cohort)).toEqual(['full', 'budget', 'budget', 'budget'])
+})
+
+test('render_full_pct: env ACE_RENDER_FULL_PCT overrides the server value', async ($, on) => {
+  const h = host(on, { env: { ACE_RENDER_FULL_PCT: '100' }, search: () => ({ stdout: withPct(0) }) })
+  await submit($)
+  expect(h.rows().find((x: any) => x.event === 'search')!.render_cohort).toBe('full')
+  expect(traceVariant(undefined, SID, { ACE_RENDER_FULL_PCT: '0' })).toBe('budget')
+})
+
+test('render_full_pct: a stale (> 7 days) server file falls back to the default 50', async ($, on) => {
+  const stale = JSON.stringify({ pct: 70, at: Math.floor(1_800_000_000_000 / 1000) - 8 * 86400 })
+  const h = host(on, { defaultArm: true, files: { [FULL_PCT]: stale }, search: () => ({ stdout: S8 }) })
+  await submit($)
+  expect(h.rows().find((x: any) => x.event === 'search')!.render_cohort).toBe('budget')  // sess-1 = 66 >= 50
+  expect(h.files.get(FULL_PCT)).toBe(stale)
 })
 
 test('trace label without a search: the conversation arm (server request); a stored label wins', async () => {
