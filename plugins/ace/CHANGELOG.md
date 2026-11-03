@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Both chains parse the detached learn's stderr and append one `learn_retry` row per retry to `ace-relevance.jsonl` (hook, session_id, conversation_id, task_session_id, attempt, max_attempts, reason, idempotency_key, at, engine lib|cli, learning_sent). A learn that succeeds after retries still counts as sent.
 
 ### Fixed
+- `/ace:ace-search` runs `scripts/ace-cli search ... --json` and renders content, domain, section, reward, bandit_rank, evidence and a non-empty root_cause per pattern (the CLI's human formatter dropped root_cause).
 - Mod: the detached learn's execution row is appended through the symlink-safe writer (it was a plain append).
 
 ## [8.0.0] - 2026-11-03
