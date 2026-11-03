@@ -64,7 +64,6 @@ def run_case(case):
         default_org_id=gc.get('default_org_id'),
         global_project_id=gc.get('projectId'),
         read=_reader(case['layout'], case.get('unreadable', [])),
-        strict=case.get('strict', False),
     )
     if 'message' in res:
         assert isinstance(res['message'], str) and res['message']

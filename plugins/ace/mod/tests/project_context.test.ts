@@ -33,7 +33,7 @@ function runCase(c: any): any {
   const res: any = resolve(`${ROOT}/${c.cwd}`, env, {
     flags: c.flags, remoteMap: gc.projects, organizations: gc.auth?.organizations,
     defaultOrgId: gc.default_org_id, globalProjectId: gc.projectId,
-    read: reader(c.layout, c.unreadable), strict: c.strict ?? false,
+    read: reader(c.layout, c.unreadable),
   })
   if ('message' in res) {
     expect(typeof res.message === 'string' && res.message.length > 0).toBe(true)
