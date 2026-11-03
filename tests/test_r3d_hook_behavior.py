@@ -212,7 +212,7 @@ def test_hook_writes_nothing_into_a_foreign_data_dir(tmp_path):
 
 
 def test_sessionstart_env_file_gets_only_ace_vars(tmp_path):
-    b = Box3d(tmp_path, global_version="4.2.2")
+    b = Box3d(tmp_path, global_version="4.3.0")
     f = tmp_path / "env.sh"
     f.touch()
     b.session_start(CLAUDE_ENV_FILE=f)
@@ -224,7 +224,7 @@ def test_sessionstart_env_file_gets_only_ace_vars(tmp_path):
 
 @pytest.mark.parametrize("version", ["2.1.250", "2.1.99", "2.1.310", "2.0.999", "1.9.400"])
 def test_cc_below_floor_pauses_ace_with_one_message(tmp_path, version):
-    b = Box3d(tmp_path, global_version="4.2.2")
+    b = Box3d(tmp_path, global_version="4.3.0")
     p = b.session_start(sid="s-old-cc", CLAUDE_CODE_VERSION=version)
     assert p.returncode == 0, p.stderr
     msg = system_message(p)
@@ -233,7 +233,7 @@ def test_cc_below_floor_pauses_ace_with_one_message(tmp_path, version):
 
 
 def test_cc_below_floor_silences_the_other_hooks(tmp_path):
-    b = Box3d(tmp_path, global_version="4.2.2")
+    b = Box3d(tmp_path, global_version="4.3.0")
     b.session_start(sid="s-old-cc", CLAUDE_CODE_VERSION="2.1.250")
     p = b.ups(sid="s-old-cc", CLAUDE_CODE_VERSION="2.1.250")
     assert p.returncode == 0 and p.stdout == "" and b.cli_calls("search") == []
@@ -241,14 +241,14 @@ def test_cc_below_floor_silences_the_other_hooks(tmp_path):
 
 @pytest.mark.parametrize("version", ["2.1.311", "2.1.316", "2.1.1000", "2.2.0", "3.0.0"])
 def test_cc_at_or_above_floor_runs(tmp_path, version):
-    b = Box3d(tmp_path, global_version="4.2.2")
+    b = Box3d(tmp_path, global_version="4.3.0")
     p = b.session_start(CLAUDE_CODE_VERSION=version)
     assert "paused" not in system_message(p) and b.flags() == []
 
 
 @pytest.mark.parametrize("version", [None, "", "not-a-version"])
 def test_cc_version_unknown_never_disables(tmp_path, version):
-    b = Box3d(tmp_path, global_version="4.2.2")
+    b = Box3d(tmp_path, global_version="4.3.0")
     p = b.session_start(CLAUDE_CODE_VERSION=version)
     assert "paused" not in system_message(p) and b.flags() == []
 
