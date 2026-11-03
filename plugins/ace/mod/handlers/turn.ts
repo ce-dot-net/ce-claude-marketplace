@@ -1,14 +1,15 @@
 // turn.start / turn.complete: task anchors, the learn (Haiku self-eval, F-080 credit, detached launcher), abstain/reap.
-import { readText, rm, run, writePrivate } from '../io/fs.ts'
+import { readText, rm, run, writePrivate, readJson } from '../io/fs.ts'
 import { logsSafe, nowIso, relLog } from '../io/log.ts'
 import { LAUNCHER_MS, aceEnv, cliHead, engineScript, gitContext } from '../io/spawn.ts'
-import { type Load, type Sess, clearTools, cohortEnv, readState, stateFile, takeDownvote, takeTools, uuid } from '../io/state.ts'
+import { type Load, type Sess, clearTools, cohortEnv, readState, stateFile, takeDownvote, takeTools, uuid, type HookArgs, classicFresh, clearDeferred, deferFile, disabled, enqueue, ensure, pendingFile, refreshMarker } from '../io/state.ts'
 import { traceVariant } from '../lib/cohort.ts'
 import { type ToolRec, appliedLogIds, parseAceReview, parseUsedIds, selfEvalPrompt, usedPatternIds } from '../lib/evidence.ts'
-import { pyDumps } from '../lib/pyjson.ts'
+import { pyDumps, pyLoads } from '../lib/pyjson.ts'
 import { safeComponent as safe } from '../lib/state.ts'
 import { FALLBACK_ON_3, buildTrace, detachedLearnArgv, hasSubstantialWork, isTrivialTask, learnArgv } from '../lib/trace.ts'
 import { learnLine } from '../ui/status.ts'
+import { anchorRun, checkPlaceholder } from './agent.ts'
 
 // Reap a finished task's state; main keeps rendered-main.txt for the SessionStart compact re-inject (patterns_used_state).
 export async function reap($: any, L: Load, s: Sess, key: string, state: any) {
@@ -142,4 +143,85 @@ export async function selfEval($: any, s: Sess, task: string, answer: string, id
 export async function abstain($: any, L: Load, s: Sess, key: string, state: any, reason: string, hook: string) {
   await reap($, L, s, key, state)
   if (state) await relLog($, s, { timestamp: await nowIso($), event: 'learn_skipped', hook, session_id: s.sessionId, reason: `turn_${reason}`, agent_id: key === 'main' ? null : key, source: 'mod' })
+}
+
+export async function turnStart($: HookArgs<'turn.start'>[0], L: Load, e: HookArgs<'turn.start'>[1], next: HookArgs<'turn.start'>[2]) {
+  await refreshMarker($, L)
+  try {
+    if (e.agentId === undefined) {
+      let anchor: string | null | undefined = L.pendingMain
+      if (anchor === undefined) { // no prompt.submit bound: a prompt that waited for this turn, else what is on disk (hot reload)
+        const s = await ensure($, L)
+        const pend = s && await readJson($, pendingFile(s))
+        if (s && pend?.text && e.text.includes(String(pend.text).slice(0, 200))) {
+          await enqueue(L, stateFile(s, 'main'), () => writePrivate($, stateFile(s, 'main'), pend.state))
+          await rm($, pendingFile(s))
+          await clearTools($, L, s, 'main')
+          L.mainSeen = 0
+          anchor = pyLoads(pend.state).task_session_id
+        } else anchor = (s && (await readState($, s, 'main'))?.task_session_id) ?? null
+      }
+      L.turnAnchor.set(e.turnId, anchor)
+      L.pendingMain = undefined
+    } else {
+      const s = await ensure($, L)
+      const prompt = L.spawnPrompts.get(e.agentId)
+      if (s && prompt !== undefined) {
+        L.spawnPrompts.delete(e.agentId)
+        await checkPlaceholder($, L, s, e.agentId, prompt, e.text)
+      } else if (s && !(await readState($, s, e.agentId))) {
+        const type = L.agentTypes.get(e.agentId)
+        if (type === undefined) L.earlyStart.set(e.agentId, e.text)
+        else if (e.text && !(await disabled($, s))) {  // a teammate woken by a message: no agent.spawn, and its last run's state is reaped
+          const parent = await readState($, s, 'main')
+          await anchorRun($, L, s, e.agentId, e.text, undefined, type, parent?.task_session_id ?? undefined)
+        }
+      }
+    }
+  } catch { /* bookkeeping never breaks a turn */ }
+  return next(e)
+}
+
+export async function turnComplete($: HookArgs<'turn.complete'>[0], L: Load, e: HookArgs<'turn.complete'>[1], next: HookArgs<'turn.complete'>[2]) {
+  const res = await next(e)
+  let s: Sess | null = null
+  let line: string | undefined  // item 2: shown beneath the answer when this hook dispatched the main learn
+  try {
+    s = await ensure($, L)
+    if (!s) return res
+    if (!(await classicFresh($, s))) return res  // classic.* hooks are filtered on this seat: the Python Stop/SubagentStop learns
+    const agentId = (e as any).agentId as string | undefined
+    if (agentId === undefined) {
+      const review = parseAceReview(e.answer)
+      if (review && await logsSafe($, s, 'ace-review-result.json')) await $.fs.write(`${s.logs}/ace-review-result.json`, pyDumps(review))
+      const state = await readState($, s, 'main')
+      // undefined = this load never heard the turn start (reload): the task on disk is that turn's. null = machine turn.
+      const anchor = L.turnAnchor.has(e.turnId) ? L.turnAnchor.get(e.turnId) : state?.task_session_id
+      L.turnAnchor.delete(e.turnId)
+      const effort = L.stopEffort; L.stopEffort = undefined
+      const running = L.stopDefer; L.stopDefer = null
+      if (!anchor || (state && state.task_session_id !== anchor)) await clearTools($, L, s, 'main')
+      else if (e.reason !== 'answer' || e.isAborted) { await clearDeferred($, L, s); await abstain($, L, s, 'main', state, e.reason, 'Stop') }
+      else if (running && state) {  // §16 P2: state, tools and F-080 ids stay for the Stop after the notification
+        L.deferred = anchor
+        await $.fs.write(deferFile(s), anchor)
+        const types: Record<string, number> = {}
+        for (const t of running) types[t] = (types[t] ?? 0) + 1
+        await relLog($, s, { timestamp: await nowIso($), event: 'learn_deferred', hook: 'Stop', session_id: s.sessionId, types, task_session_id: anchor, source: 'mod' })
+      } else {
+        await clearDeferred($, L, s)
+        if ((await learn($, L, s, 'main', e.answer, 'Stop', effort)) === true) line = learnLine(review)
+      }
+    } else {
+      const effort = L.agentEffort.get(agentId)
+      const handback = L.handback.get(agentId)  // §16 P1: the delivered report, not the closing line
+      L.agentEffort.delete(agentId); L.earlyStart.delete(agentId); L.handback.delete(agentId)
+      if (e.reason !== 'answer' || e.isAborted) await abstain($, L, s, agentId, await readState($, s, agentId), e.reason, 'SubagentStop')
+      else await learn($, L, s, agentId, handback || e.answer, 'SubagentStop', effort, handback ? 4000 : 2000,
+        [handback, e.answer].filter(Boolean).join('\n'))  // §31: handback report + closing message, as ace_after_task
+    }
+  } catch (err) {
+    if (s) await relLog($, s, { timestamp: await nowIso($), event: 'error', hook: 'Stop', location: 'mod.turn.complete', error: String(err).slice(0, 300), source: 'mod' })
+  }
+  return line ? { ...res, text: line } : res
 }

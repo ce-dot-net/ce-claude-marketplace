@@ -1,5 +1,6 @@
 // Session state through `$`: Sess resolution, per-load state (Load), the mod-active/mod-classic markers, the
 // patterns-used / mod-tools / pending / deferral files (queued read-merge-write), cohort env and server switches.
+import type { EventName, Hook } from 'claude-code'
 import { readJson, readText, rm, writePrivate } from './fs.ts'
 import { FEEDBACK_DOWNVOTE_FILE, RENDER_FULL_PCT_FILE, serverDownvote, serverFullPct, storedDownvote, storedFullPct } from '../lib/cohort.ts'
 import { REJECTION_PREV_MAX_AGE_S, type ToolRec } from '../lib/evidence.ts'
@@ -180,4 +181,14 @@ export async function deferredAnchor($: any, L: Load, s: Sess): Promise<string |
 export async function clearDeferred($: any, L: Load, s: Sess) {
   L.deferred = undefined
   if (await $.fs.exists(deferFile(s))) await rm($, deferFile(s))
+}
+
+export type HookArgs<E extends EventName> = Parameters<Hook<E>>
+// Per-load state, fresh in each register (a reload starts over).
+export function newLoad(): Load {
+  return { sess: null, pendingMain: undefined, pendingTitle: undefined, stopEffort: undefined, domains: null,
+    turnAnchor: new Map(), tools: new Map(), spawnPrompts: new Map(), placeholders: new Set(), late: new Map(), agentTypes: new Map(),
+    earlyStart: new Map(), agentEffort: new Map(), lastClaim: new Map(), markerAt: 0, claims: new Set(), queues: new Map(),
+    stopDefer: null, deferred: undefined, handback: new Map(), reuseUsed: new Set(), compacted: false, mainSeen: 0,
+    interactive: true, pendingLearns: new Set() }
 }

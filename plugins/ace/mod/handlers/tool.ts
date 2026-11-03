@@ -3,11 +3,12 @@ import { logSubagentError, subagentRender } from './agent.ts'
 import { readJson, readText } from '../io/fs.ts'
 import { nowIso, relLog } from '../io/log.ts'
 import { DOMAIN_MS, hitResult, reuseGet, reuseStore, search } from '../io/spawn.ts'
-import { type Load, type Sess, disabled, ensure, readState, updateState, uuid } from '../io/state.ts'
+import { type Load, type Sess, disabled, ensure, readState, updateState, uuid, type HookArgs, recordTool, refreshMarker } from '../io/state.ts'
 import { injectedContents } from '../lib/evidence.ts'
 import { renderDomainShift } from '../lib/render.ts'
 import { safeComponent as safe } from '../lib/state.ts'
 import { basenameQuery, domainNames, matchDomainToPath } from '../lib/text.ts'
+import { toolRec } from '../lib/trace.ts'
 
 export async function lateInject($: any, L: Load, s: Sess, key: string): Promise<string | null> {
   const query = L.late.get(key)
@@ -66,4 +67,29 @@ export async function domainShift($: any, L: Load, e: any, key: string): Promise
       contents: injectedContents(rd.patterns, rd.ids) })
     return rd.context
   } finally { L.claims.delete(claim) }
+}
+
+export async function toolCall($: HookArgs<'tool.call'>[0], L: Load, e: HookArgs<'tool.call'>[1], next: HookArgs<'tool.call'>[2]) {
+  await refreshMarker($, L, true)  // handoff to the Python hook of this event
+  const t0 = Date.now()
+  const r: any = await next(e)
+  await refreshMarker($, L)  // the call itself can outlast the marker
+  const key = (e as any).agentId ?? 'main'
+  if (key === 'main') L.mainSeen++
+  let s: Sess | null = null
+  try {
+    s = await ensure($, L)
+    if (s) await recordTool($, L, s, key, toolRec(e.tool, e, r.result, !!r.isError, r.deny, t0, Date.now()))
+    if (e.tool === 'SubagentHandback' && key !== 'main' && typeof (e as any).message === 'string') L.handback.set(key, (e as any).message)
+  } catch { /* accumulation never breaks a tool call */ }
+  const contexts: string[] = []
+  try {
+    const late = s && !r.deny ? await lateInject($, L, s, key) : null
+    if (late) contexts.push(late)
+    if (!r.deny && !r.isError && ['Read', 'Glob', 'Grep'].includes(e.tool)) {
+      const shift = await domainShift($, L, e, key)
+      if (shift) contexts.push(shift)
+    }
+  } catch { /* injection never breaks a tool call */ }
+  return contexts.length ? { ...r, context: [...(r.context ?? []), ...contexts] } : r
 }
