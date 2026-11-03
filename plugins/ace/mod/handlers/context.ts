@@ -76,7 +76,7 @@ export async function startContext($: any, L: Load, cwd: string) {
 export async function logOnce($: any, L: Load, c: Ctx, state: State) {
   if (L.ctxLogged) return
   L.ctxLogged = true
-  await contextLog($, c, contextRow(c, state, await nowIso($)), state)
+  await contextLog($, c, contextRow(c, state, await nowIso($), 'session.start', await $.session.id()), state)
 }
 // The marker refresh re-exports ACE_CONTEXT so the Python chain keeps trusting it (MOD_FRESH_S 900 s).
 export async function reexport($: any, L: Load) {

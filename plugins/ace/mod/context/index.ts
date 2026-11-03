@@ -139,10 +139,10 @@ export async function exportEnv($: any, c: Ctx, now: number) {
     await $.env.set('ACE_ORG_ID', c.orgId)
     await $.env.set('ACE_PROJECT_ID', c.projectId)
     await $.env.set('ACE_CONTEXT', JSON.stringify({ root: c.root, source: c.source, path: c.path, orgId: c.orgId, projectId: c.projectId, at: now }))
-  } else {
+  } else {  // no ids, but the Python chain learns that the mod owns this root's notice and its one context row
     await $.env.set('ACE_ORG_ID', undefined)
     await $.env.set('ACE_PROJECT_ID', undefined)
-    await $.env.set('ACE_CONTEXT', undefined)
+    await $.env.set('ACE_CONTEXT', JSON.stringify({ root: c.root, bound: false, reason: (c as any).reason, at: now }))
   }
 }
 
@@ -227,8 +227,8 @@ export async function remember($: any, c: Ctx, cwd: string, dataRoot: string, wr
   await write(machineMapPath(dataRoot), JSON.stringify(m, null, 2) + '\n')
   return true
 }
-export function contextRow(c: Ctx, state: State, nowIso: string, hook = 'session.start') {
-  const row: any = { timestamp: nowIso, event: 'context', hook, state, source: (c as any).source ?? null, path: (c as any).path ?? null,
+export function contextRow(c: Ctx, state: State, nowIso: string, hook = 'session.start', sessionId?: string) {
+  const row: any = { timestamp: nowIso, event: 'context', hook, session_id: sessionId ?? null, state, source: (c as any).source ?? null, path: (c as any).path ?? null,
     reason: c.bound ? null : (c as any).reason, org_id: (c as any).orgId ?? null, project_id: (c as any).projectId ?? null,
     root: c.root, via: c.via, chain: 'mod' }
   if ((c as any).warnings?.length) row.warnings = (c as any).warnings

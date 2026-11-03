@@ -674,10 +674,10 @@ def adopt(r, cwd, env=None):
         return None
 
 
-def context_row(r, state, hook, now_iso=None):
+def context_row(r, state, hook, now_iso=None, sid=None):
     from datetime import datetime, timezone
     row = {'timestamp': now_iso or datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
-           'event': 'context', 'hook': hook, 'state': state, 'source': r.get('source'), 'path': r.get('path'),
+           'event': 'context', 'hook': hook, 'session_id': sid, 'state': state, 'source': r.get('source'), 'path': r.get('path'),
            'reason': None if r.get('bound') else r.get('reason'), 'org_id': r.get('orgId'),
            'project_id': r.get('projectId'), 'root': r.get('root'), 'via': r.get('via'), 'chain': 'python'}
     if r.get('warnings'):
@@ -685,14 +685,14 @@ def context_row(r, state, hook, now_iso=None):
     return row
 
 
-def log_context(r, state, hook='UserPromptSubmit'):
+def log_context(r, state, hook='UserPromptSubmit', sid=None):
     """One `context` row in <log root>/.claude/data/logs. An unbound unrelated repo gets no new log dir."""
     d = os.path.join(r.get('root') or log_root(), '.claude', 'data', 'logs')
     if state == 'unbound' and not os.path.isdir(d):
         return False
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     from ace_relevance_logger import ACERelevanceLogger
-    ACERelevanceLogger(d)._write_log(context_row(r, state, hook))
+    ACERelevanceLogger(d)._write_log(context_row(r, state, hook, sid=sid))
     return True
 
 
@@ -720,6 +720,11 @@ def session_notice(sid, cwd=None, env=None, spawn_verify=True, bound=None):
     resolve, remember, adopt, log once, verify in the background; returns at most one line to show, once.
     bound: the hook's own get_context() result, when it has one (one lookup per hook)."""
     cwd = os.path.abspath(cwd or os.getcwd())
+    e = _env_map(env)
+    m = _mod_export(e)
+    if m and m.get('bound') is False and m.get('root') == log_root(cwd) and isinstance(m.get('at'), (int, float)) \
+            and time.time() - m['at'] / 1000.0 < MOD_FRESH_S:
+        return None  # the mod resolved this root unbound: its band and its one context row, not ours
     r = context(cwd, env)
     if bound and not r.get('bound'):
         r = {'bound': True, 'orgId': bound.get('org'), 'projectId': bound.get('project'), 'source': bound.get('source'),
@@ -734,7 +739,7 @@ def session_notice(sid, cwd=None, env=None, spawn_verify=True, bound=None):
             st['adopted'] = a['path']
         _save(p, st)
         if st['state']:
-            log_context(r, st['state'])
+            log_context(r, st['state'], sid=sid)
         elif spawn_verify:
             try:
                 subprocess.Popen([sys.executable, os.path.abspath(__file__), '--verify-session', sid, '--cwd', cwd],
@@ -759,7 +764,7 @@ def verify_session(sid, cwd):
     st = _load(p) or {'shown': False, 'adopted': None, 'adopt_shown': False}
     st['state'] = None if (s := verify(r)) == 'ok' else s
     _save(p, st)
-    log_context(r, s)
+    log_context(r, s, sid=sid)
     return s
 
 

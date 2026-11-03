@@ -306,3 +306,13 @@ def test_adopt_ignores_a_preplanted_tmp(tmp_path):
 def test_safe_repo_write_refuses_traversal(tmp_path):
     with pytest.raises(apc.WriteRefused):
         apc.safe_repo_write(str(tmp_path), '../x', 'y')
+
+
+def test_a_fresh_unbound_mod_export_silences_the_python_notice_and_row(tmp_path):
+    main = mkrepo(tmp_path / 'r')
+    (main / '.claude/data/logs').mkdir(parents=True)
+    env = dict(os.environ, ACE_CONTEXT=json.dumps({'root': str(main), 'bound': False, 'reason': 'no_binding', 'at': time.time() * 1000}))
+    assert apc.session_notice('s9', str(main), env=env, spawn_verify=False) is None
+    assert not (main / '.claude/data/logs/ace-relevance.jsonl').exists()
+    stale = dict(env, ACE_CONTEXT=json.dumps({'root': str(main), 'bound': False, 'at': (time.time() - 3600) * 1000}))
+    assert apc.session_notice('s9', str(main), env=stale, spawn_verify=False) == apc.LINES['unbound']
