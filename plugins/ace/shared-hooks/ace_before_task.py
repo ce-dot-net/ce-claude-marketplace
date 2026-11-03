@@ -375,6 +375,9 @@ def main():
             sys.exit(0)
 
         _reason = _skip_reason(user_prompt)
+        if _ctx and _reason != 'machine_prompt' and not user_prompt.lstrip().startswith('/'):
+            import ace_feedback  # a human main prompt (short ones too) may reject the previous task
+            ace_feedback.on_human_prompt(_ctx['project'], event.get('session_id') or '', user_prompt)
         if _reason == 'machine_prompt' or _reason == 'prompt_too_short':
             _log_skipped(event, _reason, _ctx)
             sys.exit(0)

@@ -657,6 +657,37 @@ export function storedFullPct(text: string | undefined, nowMs: number): number |
   } catch { return undefined }
 }
 
+// User rejection as a downvote on the NEXT main task's trace (ace_feedback.py, same list: parity test). A human main
+// prompt <= 300 chars with a phrase as a whole word, not right after "nicht"/"not". The longest hit wins (ties: list order).
+export const REJECTION_PHRASES = ["falsch", "stimmt nicht", "geht nicht", "funktioniert nicht", "klappt nicht", "rückgängig",
+  "mach das rückgängig", "immer noch kaputt", "immer noch nicht", "nicht das was ich wollte", "das war nicht gemeint", "doch nicht",
+  "das ist falsch", "kaputt gemacht", "wrong", "that's wrong", "doesn't work", "does not work", "not working", "still broken",
+  "still not", "not what i asked", "that broke", "you broke"]
+export const REJECTION_PREV_MAX_AGE_S = 6 * 3600
+const isWordChar = (c: string) => /[\p{L}\p{N}_]/u.test(c)
+export function rejectionMatch(text: string | undefined): string | null {
+  const low = String(text ?? '').trim().toLowerCase().replace(/[\u2018\u2019]/g, "'")
+  if ([...low].length > 300) return null
+  let best: string | null = null
+  for (const phrase of REJECTION_PHRASES) {
+    for (let i = low.indexOf(phrase); i >= 0; i = low.indexOf(phrase, i + 1)) {
+      const j = i + phrase.length
+      if ((i > 0 && isWordChar(low[i - 1])) || (j < low.length && isWordChar(low[j]))) continue
+      const before = low.slice(0, i), words = before.split(/\s+/).filter(Boolean)
+      if (words.length && before !== before.trimEnd() && ['nicht', 'not'].includes(words[words.length - 1])) continue
+      if (best === null || phrase.length > best.length) best = phrase
+      break
+    }
+  }
+  return best
+}
+// Server gate for the downvote: search response feedback_downvote (bool), persisted {on, at}; < 7 days; default off.
+export const FEEDBACK_DOWNVOTE_FILE = 'feedback-downvote.json'
+export const serverDownvote = (resp: any): boolean | undefined => typeof resp?.feedback_downvote === 'boolean' ? resp.feedback_downvote : undefined
+export function storedDownvote(text: string | undefined, nowMs: number): boolean {
+  try { const d = JSON.parse(text as string); return d?.on === true && typeof d.at === 'number' && nowMs / 1000 - d.at < RENDER_FULL_PCT_MAX_AGE_S } catch { return false }
+}
+
 // ---------- plugin_data_dir ----------
 export const safeComponent = (c: string | undefined | null): string => {
   const s = String(c ?? '').replace(/[^A-Za-z0-9_.-]/g, '_')
@@ -817,6 +848,7 @@ export function buildTrace(a: {
   parentTaskId?: string; retrievalId?: string; appliedLogIds: number[]; nowIso: string; renderVariant?: string; effort: string; git?: any
   conversationId?: string
   usedIds?: { used_ids_model: number; used_ids_tokens: number }  // per-source counters (Haiku, H2), 0 when none
+  downvote?: number[]  // the previous main task's evidenced ids after a user rejection
   summaryCap?: number  // 2000 for the closing answer, 4000 for a SubagentHandback report (ace_after_task.handback_summary)
 }) {
   const success = !a.tools.some(t => t.failed)
@@ -838,6 +870,7 @@ export function buildTrace(a: {
   trace.applied_log_ids = a.appliedLogIds // server contract: [] when nothing was used, never omitted
   trace.used_ids_model = a.usedIds?.used_ids_model ?? 0
   trace.used_ids_tokens = a.usedIds?.used_ids_tokens ?? 0
+  if (a.downvote?.length) trace.feedback = { kind: 'downvote', applied_log_ids: a.downvote }  // never retrieval_id, never text
   trace.effort_level = a.effort
   trace.effort_weight = effortWeight(a.effort)
   if (a.git) trace.git = a.git
