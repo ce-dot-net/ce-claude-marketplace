@@ -1,7 +1,7 @@
 ---
 model: claude-haiku-4-5
 description: Semantic search for ACE patterns using natural language query
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(python3:*), Read
 ---
 
 # ACE Semantic Search
@@ -32,7 +32,7 @@ fi
 
 # Check authentication status
 AUTH_JSON=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json 2>/dev/null || echo '{"authenticated":false}')
-IS_AUTH=$(echo "$AUTH_JSON" | jq -r '.authenticated // false')
+IS_AUTH=$(printf '%s' "$AUTH_JSON" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get authenticated false)
 
 if [ "$IS_AUTH" != "true" ]; then
   echo "ACE_STATUS=not_authenticated"
@@ -78,13 +78,20 @@ fi
 # Call ace-cli search - CLI reads org/project from env vars automatically
 # Threshold comes from server config (ace-cli tune show) - don't override!
 # --json: the CLI's human formatter never prints root_cause. The wrapper filters only stderr, so stdout stays JSON.
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" "$*" --json | jq -r '
-  (.similar_patterns // []) | to_entries[] | .value as $p |
-  "\(.key + 1). \($p.content)",
-  "   domain: \($p.domain // "-") | section: \($p.section // "-") | reward: \($p.cumulative_v15_reward // 0) | bandit_rank: \($p.bandit_rank // $p.match_factors.bandit_rank // "-")",
-  (($p.evidence // []) | if length > 0 then "   evidence: " + (map(tostring) | join(" | ")) else empty end),
-  (if (($p.root_cause // "") | tostring | length) > 0 then "   root cause: \($p.root_cause)" else empty end),
-  ""'
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" "$*" --json | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+for i, p in enumerate(d.get("similar_patterns") or [], 1):
+    v = lambda k, dflt="-": dflt if p.get(k) is None else p[k]
+    rank = p.get("bandit_rank", (p.get("match_factors") or {}).get("bandit_rank", "-"))
+    print("%d. %s" % (i, p.get("content")))
+    print("   domain: %s | section: %s | reward: %s | bandit_rank: %s" % (v("domain"), v("section"), v("cumulative_v15_reward", 0), rank))
+    if p.get("evidence"):
+        print("   evidence: " + " | ".join(str(e) for e in p["evidence"]))
+    if str(p.get("root_cause") or ""):
+        print("   root cause: %s" % p["root_cause"])
+    print()
+'
 ```
 
 Show the user this list as is (one block per pattern; `root cause` only appears when the pattern has one).
@@ -105,11 +112,7 @@ Show the user this list as is (one block per pattern; `root cause` only appears 
   - Cannot use with `--allowed-domains` (mutually exclusive)
 - The search always runs with `--json` (Step 3 renders it); a raw `--json` dump is only for scripting
 
-**Note**: To limit number of results, use `jq` for filtering:
-```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" "query" --json | jq '.similar_patterns[:5]'  # First 5 results
-```
-The `--limit` flag is not supported by ace-cli. Use `--top-k` via server config (`/ace-tune`) instead.
+**Note**: The `--limit` flag is not supported by ace-cli. Use `--top-k` via server config (`/ace-tune`) instead.
 
 ### Example Usage
 

@@ -2,7 +2,7 @@
 disable-model-invocation: true
 description: Import ACE playbook from JSON file
 argument-hint: <file>
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Read
 ---
 
 # ACE Import Playbook
@@ -40,7 +40,7 @@ if [ ! -f "$IMPORT_FILE" ]; then
 fi
 
 # Validate JSON
-if ! jq empty "$IMPORT_FILE" 2>/dev/null; then
+if ! "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get . < "$IMPORT_FILE" >/dev/null 2>&1; then
   echo "❌ Invalid JSON in $IMPORT_FILE"
   exit 1
 fi

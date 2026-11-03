@@ -1034,6 +1034,55 @@ def _remove_shadow_cli(cwd, path):
         return 1
 
 
+def _json_path(doc, path):
+    """(found, value) for a dotted path; `#` = length, `.` = the document."""
+    if path in ('', '.'):
+        return True, doc
+    for seg in path.strip('.').split('.'):
+        if seg == '#' and isinstance(doc, (list, dict, str)):
+            doc = len(doc)
+        elif isinstance(doc, dict) and seg in doc:
+            doc = doc[seg]
+        elif isinstance(doc, list) and re.fullmatch(r'-?\d+', seg) and -len(doc) <= int(seg) < len(doc):
+            doc = doc[int(seg)]
+        else:
+            return False, None
+    return doc is not None, doc
+
+
+def _json_out(v):
+    return v if isinstance(v, str) else json.dumps(v)
+
+
+def _json_cli(argv):
+    """--get PATH [DEFAULT] / --rows PATH FIELDS on the JSON from stdin (no jq needed by any markdown command)."""
+    if len(argv) not in (2, 3):
+        sys.stderr.write('usage: ace-context --get PATH [DEFAULT] | --rows PATH F1,F2\n')
+        return 2
+    try:
+        doc = json.loads(sys.stdin.read())
+    except ValueError:
+        if argv[0] == '--get' and len(argv) == 3:  # a default covers a CLI error text as well
+            print(argv[2])
+            return 0
+        sys.stderr.write('ace-context: stdin is not JSON\n')
+        return 2
+    found, v = _json_path(doc, argv[1])
+    if argv[0] == '--rows':
+        fields = argv[2].split(',') if len(argv) == 3 else []
+        for item in (v if found and isinstance(v, list) else []):
+            print('|'.join('' if not f else _json_out(x) if ok else '' for f in fields
+                           for ok, x in [_json_path(item, f)]))
+        return 0
+    if found:
+        print(_json_out(v))
+        return 0
+    if len(argv) == 3:
+        print(argv[2])
+        return 0
+    return 1
+
+
 def main(argv=None):
     """scripts/ace-context: the markdown commands' only binding lookup.
       ace-context [--cwd DIR] [--json]   the result as JSON (exit 0 bound, 5 not)
@@ -1047,7 +1096,15 @@ def main(argv=None):
                                          --fix-gitignore, our writer when the CLI has none). Never settings.json.
       ace-context --remove-shadow PATH   delete the worktree-local .ace/config.json that overrides the main checkout's
                                          binding (only that file, symlink-safe; after the user confirmed).
+      ace-context --get PATH [DEFAULT]   one field of the JSON on stdin (the commands' jq replacement): PATH is dotted
+                                         keys / list indexes, `#` = length, `.` = the whole document. Strings raw,
+                                         the rest as JSON; absent or null -> DEFAULT, else exit 1. Not JSON: DEFAULT,
+                                         else exit 2.
+      ace-context --rows PATH F1,F2      one line per item of the list at PATH: its fields joined by `|`.
     """
+    argv = sys.argv[1:] if argv is None else argv
+    if argv[:1] in (['--get'], ['--rows']):
+        return _json_cli(argv)
     import argparse
     ap = argparse.ArgumentParser(prog='ace-context')
     ap.add_argument('--cwd')
