@@ -3,7 +3,7 @@
 import { readJson, rm, writePrivate } from '../io/fs.ts'
 import { nowIso, relLog, searchRow } from '../io/log.ts'
 import { SEARCH_MS, search } from '../io/spawn.ts'
-import { type Load, type Sess, clearDeferred, clearTools, cohortEnv, deferredAnchor, disabled, downvoteEnabled, ensure, pendingFile, readState, touchMarker, updateState, uuid } from '../io/state.ts'
+import { type Load, type Sess, clearDeferred, clearTools, cohortEnv, deferredAnchor, disabled, downvoteEnabled, ensure, pendingFile, readState, touchMarker, updateState, uuid, type HookArgs, refreshMarker } from '../io/state.ts'
 import { type Cohort, renderCohort } from '../lib/cohort.ts'
 import { REJECTION_PREV_MAX_AGE_S, evalStats, injectedContents, rejectionMatch } from '../lib/evidence.ts'
 import { num, pyDumps } from '../lib/pyjson.ts'
@@ -121,4 +121,17 @@ export async function onPrompt($: any, L: Load, e: any): Promise<any> {
   // a managed-settings guard filters classic.UserPromptSubmit: the Python UPS sets this title then (per-duty markers)
   if (L.pendingTitle) await $.fs.write(`${s.sdir}/mod-title`, L.pendingTitle)
   return withEval(r.context ? [r.context] : [])
+}
+
+export async function promptSubmit($: HookArgs<'prompt.submit'>[0], L: Load, e: HookArgs<'prompt.submit'>[1], next: HookArgs<'prompt.submit'>[2]) {
+  if (L.compacted) {
+    L.compacted = false
+    try { if (L.sess && await $.fs.exists(`${L.sess.sdir}/mod-compact`)) await rm($, `${L.sess.sdir}/mod-compact`) } catch { /* stale marker ages out */ }
+  }
+  let out: any = e
+  try { out = await onPrompt($, L, e) } catch (err) {
+    if (L.sess) await relLog($, L.sess, { timestamp: await nowIso($), event: 'error', hook: 'UserPromptSubmit', location: 'mod.prompt.submit', error: String(err).slice(0, 300), source: 'mod' })
+  }
+  await refreshMarker($, L, true)  // handoff: the Python UPS runs inside next(); a crashed mod never writes this (MOD_HANDOFF_S)
+  return next(out)
 }

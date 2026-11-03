@@ -3,7 +3,7 @@
 import { renderArm } from './prompt.ts'
 import { nowIso, relLog, searchRow } from '../io/log.ts'
 import { SEARCH_MS, hitResult, reuseGet, reuseStore, search } from '../io/spawn.ts'
-import { type Load, type Sess, readState, updateState, uuid } from '../io/state.ts'
+import { type Load, type Sess, readState, updateState, uuid, type HookArgs, disabled, ensure, refreshMarker } from '../io/state.ts'
 import { injectedContents } from '../lib/evidence.ts'
 import { type StateUpdate } from '../lib/state.ts'
 import { skipReason, subagentQuery } from '../lib/text.ts'
@@ -60,4 +60,50 @@ export async function beforeSpawn($: any, L: Load, s: Sess, e: any) {
   return { out: r.context ? { ...e, prompt: `${e.prompt}\n\n${r.context}` } : e,
     state: { ...state, ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort,
       contents: injectedContents(r.patterns, r.ids) } }
+}
+
+export async function agentSpawn($: HookArgs<'agent.spawn'>[0], L: Load, e: HookArgs<'agent.spawn'>[1], next: HookArgs<'agent.spawn'>[2]) {
+  await refreshMarker($, L, true)  // handoff to the Python hook of this event
+  let out: any = e, pending: any = null
+  try {
+    const s = await ensure($, L)
+    const forkSearch = String(await $.env.get('ACE_SUBAGENT_INJECT_FORKS') ?? '') === '1'
+    if (s && (!e.fork || !e.resume) && !(await disabled($, s))) {
+      if (e.fork && !forkSearch) {  // §16 P7: a fork inherits the parent context incl. the injected block
+        const parent = await readState($, s, e.parentAgentId ?? 'main')
+        pending = { out: e, state: { tsid: uuid(), userPrompt: subagentQuery(e.prompt), hook: 'SubagentStart',
+          parentTaskId: parent?.task_session_id ?? undefined, agentType: e.subagentType || 'fork' } }
+        await relLog($, s, { timestamp: await nowIso($), event: 'search_skipped', hook: 'SubagentStart', reason: 'fork_inherits_context', session_id: s.sessionId, project_id: s.project, source: 'mod' })
+      } else if (e.resume) {  // a rewrite of a resume is not applied. Same run with state: same task (§12). Reaped: a new one.
+        const key = e.resume.agentId
+        L.agentTypes.set(key, e.subagentType)
+        if (!(await readState($, s, key))) {
+          const parent = await readState($, s, e.parentAgentId ?? 'main')
+          await anchorRun($, L, s, key, e.prompt, e.description, e.subagentType, parent?.task_session_id ?? undefined)
+        }
+      } else {
+        pending = await beforeSpawn($, L, s, e)
+        out = pending.out
+      }
+    }
+  } catch { pending = null; out = e }
+  const res: any = await next(out)
+  try {
+    const s = L.sess
+    if (pending && s && res.agentId && !res.deny) {
+      // The docs do not order this against the agent's first events: merge, so nothing it already did is lost.
+      const key = res.agentId as string
+      // Persist BEFORE publishing the type: a turn.start that sees a known type but no state reads it as a woken
+      // teammate and re-anchors the run (second tsid, second search). Unknown type = earlyStart, harmless.
+      await updateState($, L, s, key, pending.state)
+      L.agentTypes.set(key, (e as any).subagentType)
+      const early = L.earlyStart.get(key)
+      L.earlyStart.delete(key)
+      if ((e as any).workflow) {
+        if (early === undefined) L.spawnPrompts.set(key, (e as any).prompt)
+        else await checkPlaceholder($, L, s, key, (e as any).prompt, early)
+      }
+    }
+  } catch { /* state failure: this subagent simply is not learned */ }
+  return res
 }
