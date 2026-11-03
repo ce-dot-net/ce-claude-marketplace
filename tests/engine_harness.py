@@ -86,8 +86,14 @@ class AceClient {
     if (mode() === 'garbage') { process.stdout.write('not json at all\n'); process.exit(0); }
     if (mode() === 'throw') throw new Error('Server error (500): boom');
     if (mode() === 'drift') return {};
+    // raw_*: the raw /patterns/search body carries switches; raw_new = core >= 3.4.0 passes them through.
+    if (mode() === 'raw_new' || mode() === 'raw_old') {
+      await this.request('/patterns/search', 'POST', p);
+      return mode() === 'raw_new' ? { ...RESP, feedback_downvote: true, render_full_pct: 0 } : RESP;
+    }
     return RESP;
   }
+  async request(endpoint) { log({ op: 'raw', endpoint }); return { ...RESP, feedback_downvote: false, render_full_pct: 9 }; }
   async storeExecutionTrace(t) {
     log({ op: 'learn', trace: t });
     if (mode() === 'hang') await new Promise(() => setInterval(() => {}, 1000));
