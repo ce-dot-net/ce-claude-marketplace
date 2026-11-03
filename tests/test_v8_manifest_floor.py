@@ -1,6 +1,6 @@
 """WP-E (v8.0.0) — manifest `Requires:` floor text.
 
-§16 P6 + §23: floor is Claude Code >= 2.1.311; the ace-cli floor is the pin in plugins/ace/package.json; @ace-sdk/core >= the core the pinned cli locks (3.5.0 since cli 4.3.2).
+§16 P6 + §23: floor is Claude Code >= 2.1.311; the ace-cli floor is the pin in plugins/ace/package.json; @ace-sdk/core >= the core the pinned cli locks (3.7.0 since cli 4.3.4).
 WP-E updates ONLY the floor text/description, NOT the version number (release-manager does).
 Supersedes tests/test_v712_features.py::TestFloorBump::test_plugin_json_description_cc_floor_2_1_163
 (merge agent: that 2.1.163 pin must be rewritten/removed).
@@ -65,3 +65,9 @@ def test_pin_is_at_least_4_3_2():
     """SDK asked for cli >= 4.3.2 (learn Idempotency-Key, search session_id validation; core ^3.5.0)."""
     pin = json.loads((REPO / "plugins" / "ace" / "package.json").read_text())["dependencies"]["@ace-sdk/cli"]
     assert tuple(map(int, pin.split("."))) >= (4, 3, 2)
+
+
+def test_pin_is_at_least_4_3_4():
+    """SDK 4.3.4 / core 3.7.0: learn retries POST /traces (4 attempts, same Idempotency-Key), one stderr line per retry."""
+    pin = json.loads((REPO / "plugins" / "ace" / "package.json").read_text())["dependencies"]["@ace-sdk/cli"]
+    assert tuple(map(int, pin.split("."))) >= (4, 3, 4)
