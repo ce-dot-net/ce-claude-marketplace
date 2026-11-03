@@ -160,6 +160,42 @@ def domains_file(project_id: Optional[str]) -> Path:
     return _file(project_dir(project_id, create=False) / "domains.json")
 
 
+RENDER_FULL_PCT_MAX_AGE = 7 * 86400
+
+
+def render_full_pct_file() -> Path:
+    """The server's §31 full share (search response `render_full_pct`), {"pct": N, "at": <epoch>}."""
+    return data_root() / "render-full-pct.json"
+
+
+def _valid_pct(v) -> bool:
+    return isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 100
+
+
+def store_render_full_pct(resp) -> None:
+    """Persist a valid top-level `render_full_pct` of a search response (latest wins). Never raises."""
+    try:
+        v = resp.get("render_full_pct") if isinstance(resp, dict) else None
+        if _valid_pct(v):
+            import json, time
+            private_write(render_full_pct_file(), json.dumps({"pct": v, "at": int(time.time())}))
+    except Exception:
+        pass
+
+
+def stored_render_full_pct() -> Optional[int]:
+    """The stored server share when valid and younger than 7 days, else None."""
+    try:
+        import json, time
+        d = json.loads(render_full_pct_file().read_text())
+        at = d.get("at")
+        if _valid_pct(d.get("pct")) and isinstance(at, (int, float)) and time.time() - at < RENDER_FULL_PCT_MAX_AGE:
+            return d["pct"]
+    except Exception:
+        pass
+    return None
+
+
 def disabled_flag(project_id: Optional[str], session_id: Optional[str]) -> Path:
     return _file(session_dir(project_id, session_id, create=False) / "disabled.flag")
 

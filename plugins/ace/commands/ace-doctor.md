@@ -48,11 +48,14 @@ test -f "$DATA/logs/ace-hook-errors.log" && tail -5 "$DATA/logs/ace-hook-errors.
 # (absent while mod-active is fresh = a managed-settings guard filters them: the Python hooks learn and set the title)
 S=$(ls -td "$DATA"/projects/*/sessions/* 2>/dev/null | head -1)
 for m in mod-active mod-classic; do test -f "$S/$m" && python3 -c 'import os,sys,time; print(sys.argv[1], "age_s=%d" % (time.time() - os.path.getmtime(sys.argv[2])))' "$m" "$S/$m" || echo "$m absent"; done
+# Full render share (§31) and its source: env ACE_RENDER_FULL_PCT > server render_full_pct (render-full-pct.json, < 7 days) > default 50
+CLAUDE_PLUGIN_DATA="$DATA" python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from ace_pattern_render import full_pct_source; print("render full share = %d%% (source: %s)" % full_pct_source())' "${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils"
 ```
 
 **Report**:
 - PASS: Claude Code >= 2.1.311, python_path present, ace-hook-errors.log empty or absent
 - WARN: Claude Code older than 2.1.311, or python_path missing (start a new session), or errors in ace-hook-errors.log
+- INFO: render full share = N% (source: env | server | default); server = the ACE server set `render_full_pct` in a search response (0 = full off for everyone)
 - INFO: chain = mod (mod-active younger than 15 s for UserPromptSubmit/Agent stash/SubagentStart/Stop/SubagentStop, 120 s for the hooks after a tool: domain shift, tool accumulation; `plugin_data_dir.MOD_HANDOFF_S` / `MOD_AFTER_TOOL_S`), Python (absent or older), or mod + Python learn (mod-active fresh, mod-classic absent or older: the managed-settings guard filters the mod's classic hooks)
 
 ---

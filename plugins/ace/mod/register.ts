@@ -7,7 +7,7 @@ import {
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
   detachedLearnArgv, FALLBACK_ON_3, reuseKey, reuseEnabled, REUSE_TTL_MS, parseAceReview, parseDiffStat, evalStats, learnLine, selfEvalPrompt, parseUsedIds, searchRow, searchSummary, searchErrorLine, statusLine, topDomains, sessionTitle,
-  subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, appliedLogIds, usedPatternIds, injectedContents, type StateUpdate, type ToolRec, type Cohort,
+  subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, serverFullPct, storedFullPct, RENDER_FULL_PCT_FILE, appliedLogIds, usedPatternIds, injectedContents, type StateUpdate, type ToolRec, type Cohort,
 } from './core.ts'
 
 const SEARCH_MS = 25000, DOMAIN_MS = 17000 // §11 A2: blocking budget per search, retry included
@@ -122,6 +122,7 @@ async function search($: any, s: Sess, query: string, pin: string | undefined, t
   if (eng) {
     const e = await engineSearch($, s, eng, query, pin, topK, budgetMs)
     const ms = await $.clock.now() - t0
+    if ('resp' in e) await storeFullPct($, s, e.resp)
     if ('resp' in e) return { resp: e.resp, error: undefined, ms, pinFailed: false, pinSkipped: undefined, pinMs: undefined, stderr: '', engine: 'lib', engineWhy: 'ok' }
     if ('timeout' in e) return { resp: null, error: 'timeout', ms, pinFailed: false, pinSkipped: undefined, pinMs: undefined, stderr: '', engine: 'lib', engineWhy: 'timeout' }
     engineWhy = 'lib failed: ' + e.why
@@ -161,6 +162,7 @@ async function search($: any, s: Sess, query: string, pin: string | undefined, t
   else if (r.exitCode !== 0) error = isAuthFailure(r.stderr + r.stdout) ? 'not_authenticated' : /timed? ?out/i.test(r.stderr) ? 'timeout' : 'nonzero_exit'
   else { try { resp = sanitize(pyLoads(r.stdout)) } catch { error = 'json_parse_failed' } }
   if (resp && resp.error) { error = String(resp.error); resp = null }
+  if (resp) await storeFullPct($, s, resp)
   // A kill alone may be a slow server. Only a re-run that then answers in less time than the pin was given points
   // at the pin. ponytail: server latency varies, so a false 30-min backoff is possible; a lock probe would need the sqlite path.
   if (killedPin && !r.threw && r.exitCode === 0) await $.fs.write(backoffPath, '')
@@ -299,16 +301,28 @@ function clearTools($: any, L: Load, s: Sess, key: string) {
   })
 }
 
-async function cohortEnv($: any) {
-  return { ACE_AB_CONTROL_PCT: await $.env.get('ACE_AB_CONTROL_PCT'), ACE_AB_COMPACT_PCT: await $.env.get('ACE_AB_COMPACT_PCT'), ACE_RENDER_FULL_PCT: await $.env.get('ACE_RENDER_FULL_PCT') }
+// Full share precedence (ace_pattern_render.full_pct_source): env if set > the server's render_full_pct (< 7 days) > 50.
+async function cohortEnv($: any, s: Sess) {
+  let full: string | undefined = await $.env.get('ACE_RENDER_FULL_PCT')
+  if (full === undefined) {
+    const server = storedFullPct(await readText($, `${s.root}/${RENDER_FULL_PCT_FILE}`), await $.clock.now())
+    if (server !== undefined) full = String(server)
+  }
+  return { ACE_AB_CONTROL_PCT: await $.env.get('ACE_AB_CONTROL_PCT'), ACE_AB_COMPACT_PCT: await $.env.get('ACE_AB_COMPACT_PCT'), ACE_RENDER_FULL_PCT: full }
+}
+// Every real search persists a valid render_full_pct (latest wins); a reuse-cache hit is older and never does.
+async function storeFullPct($: any, s: Sess, resp: any) {
+  const pct = serverFullPct(resp)
+  if (pct === undefined) return
+  try { await writePrivate($, `${s.root}/${RENDER_FULL_PCT_FILE}`, JSON.stringify({ pct, at: Math.floor(await $.clock.now() / 1000) })) } catch { /* keep the old value */ }
 }
 
 // §13.1 cohort arms; `rendered` = the ≤ 10K re-inject copy (C1). control: search + anchor, nothing injected.
 // §28: bucket on the STABLE CC session id (one arm per conversation; subagents share it), never the per-task pin.
 // §31 dedupe (main prompts only): under full, ids already injected in this conversation since the last compaction
 // (`seen`) are left out; nothing new -> nothing injected.
-async function renderArm($: any, resp: any, tag: string, attrs: string, sessionId: string, seen?: Set<string>) {
-  const cohort: Cohort = renderCohort(sessionId, await cohortEnv($))
+async function renderArm($: any, resp: any, tag: string, attrs: string, s: Sess, seen?: Set<string>) {
+  const cohort: Cohort = renderCohort(s.sessionId, await cohortEnv($, s))
   // item 3: the full arm's re-inject copy is the budget render (<= 9,500) of the WHOLE response, never the deduped subset
   const reinject = cohort === 'full' ? renderBudget(resp, tag, attrs).context as string : ''
   if (cohort === 'full' && seen?.size) {
@@ -385,7 +399,7 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   }
   const playbook: string[] = state.pattern_ids ?? []
   const rlog: Record<string, number> = state.retrieval_log_ids ?? {}
-  const variant = traceVariant(state.render_variant, s.sessionId, await cohortEnv($))  // §31: stored label, else the conversation arm
+  const variant = traceVariant(state.render_variant, s.sessionId, await cohortEnv($, s))  // §31: stored label, else the conversation arm
   const tokenUsed = usedPatternIds(playbook, state.pattern_contents ?? {}, usedText, recs.map(r => r.hay).filter(Boolean).join('\n'))
   const tsid: string | undefined = state.task_session_id ?? undefined
   const effort = effortEvent || await $.env.get('CLAUDE_EFFORT') || 'normal'
@@ -533,7 +547,7 @@ async function onPrompt($: any, L: Load, e: any): Promise<any> {
   const seenFile = `${s.sdir}/full-injected.json`  // §31; the SessionStart compact hook removes it
   const seenRaw = await readJson($, seenFile)
   const seen: string[] = Array.isArray(seenRaw) ? seenRaw.filter((x: unknown) => typeof x === 'string') : []
-  const r = await renderArm($, sr.resp, 'ace-patterns', 'agent-type="main"', s.sessionId, new Set(seen))
+  const r = await renderArm($, sr.resp, 'ace-patterns', 'agent-type="main"', s, new Set(seen))
   if (r.cohort === 'full' && r.ids.length) await writePrivate($, seenFile, JSON.stringify([...new Set([...seen, ...r.ids])]))
   await save({ ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, tsid, userPrompt: e.text, rendered: r.rendered, hook: 'UserPromptSubmit',
     renderVariant: r.cohort, contents: injectedContents(r.patterns, r.ids), evalStats: evalStats(r.patterns, sr.resp.similar_patterns || []) })
@@ -560,7 +574,7 @@ const logSubagentError = async ($: any, s: Sess, sr: any) => relLog($, s, { time
 
 async function subagentRender($: any, s: Sess, sr: any, query: string, agentType: string, tsid: string, t0: number, parent: string | undefined, extra: any) {
   const attr = `agent-type="${String(agentType).replace(/"/g, '&quot;')}"`
-  const r = await renderArm($, sr.resp, 'ace-patterns-subagent', attr, s.sessionId)
+  const r = await renderArm($, sr.resp, 'ace-patterns-subagent', attr, s)
   await relLog($, s, searchRow({ hook: 'SubagentStart', sessionId: s.sessionId, userPrompt: query, query, returned: sr.resp.similar_patterns || [], injected: r.patterns,
     projectId: s.project, orgId: s.org, agentType, cohort: r.cohort, hookMs: await $.clock.now() - t0, nowIso: await nowIso($),
     extra: { search_ms: sr.ms, pin_ms: sr.pinMs, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, truncated_for_cap: r.truncated || undefined, context_chars: r.context?.length ?? 0,
