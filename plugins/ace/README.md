@@ -2,6 +2,26 @@
 
 **Agentic Context Engineering** - Self-improving Claude Code plugin using automatic pattern learning.
 
+## What's new in 8.1.0 (unreleased)
+
+- **One binding core.** Every hook (both chains), every command and the statusline take org/project from one resolver
+  (`mod/context/`, `shared-hooks/utils/ace_project_context.py`, contract: the SDK spec `project-context`). Precedence:
+  `--org/--project` > tracked `.ace/config.json` (walk-up to the git root, then the main checkout of a worktree) >
+  legacy `.claude/settings.json` env (same walk) > `ACE_ORG_ID`/`ACE_PROJECT_ID` > the per-machine remote map >
+  unbound. There is never a default project. Every `ace-cli` call carries `--org/--project` explicitly.
+- **Zero steps for repos that are already bound:** worktrees and subfolders resolve via the main checkout; a legacy
+  binding is adopted into `.ace/config.json` at the main root automatically (never staged or committed; opt out
+  `ACE_AUTO_ADOPT=0`), and a file-bound remote teaches the per-machine remote map, so a fresh clone binds by itself.
+- **Status only on problems.** One background `ace-cli status` per session; nothing is shown when ok. On a problem:
+  `ACE ▼ <state>` in the status area and one band above the prompt with exactly one action (Verbinden, Anmelden,
+  Anderes wählen, Bereinigt neu schreiben, ace-cli installieren). A device login starts only on the button press.
+  The Python chain shows one line per session instead.
+- **Model-free commands.** Where mods run, every `/ace:ace-*` command is answered by the mod without the model;
+  writing commands show a preview and run only after the band's confirm button. The markdown commands are the
+  fallback and call the one entrypoint `scripts/ace-context`.
+- **Logs keyed to the repo root**, so subfolders and worktrees share one `.claude/data/logs/ace-relevance.jsonl`,
+  which gets one `context` row (source, path, state) per session.
+
 ## What's new in v8.0.0
 
 - **Two chains, one state.** On Claude Code >= 2.1.287 an in-process mod (`mod/register.ts`) searches, injects and
@@ -39,20 +59,21 @@ tested with, and a new CLI reaches you with the next plugin update. If the CLI i
 
 **Requirements:** Claude Code >= 2.1.311, Node.js (for the CLI), macOS, Linux or WSL2. Windows is not supported (use WSL2).
 
-**Statusline:** `~/.claude/ace_statusline.sh` is a user copy of the plugin script; refresh it after a plugin update with `/ace:ace-statusline-setup update`.
+**Statusline (deprecated in 8.1.0):** the mod shows problems itself (`ACE ▼` in the status area). `~/.claude/ace_statusline.sh` stays only for standalone installs (a user copy; it reads the repo-root log via the plugin core); refresh it with `/ace:ace-statusline-setup update`.
 
 ### 2. Enable Plugin
 
 The plugin is part of the ce-dot-net marketplace and auto-loads when you enable the marketplace in Claude Code.
 
-### 3. Configure
+### 3. Bind the repo
 
 ```bash
 # In Claude Code:
-/ace-configure
+/ace:ace-login       # device login (once per machine)
+/ace:ace-configure   # writes the tracked .ace/config.json {orgId, projectId} at the repo root
 ```
 
-Follow the interactive wizard to set up your ACE server connection.
+Commit `.ace/config.json`: every clone, worktree and subfolder is then bound. Details: `docs/guides/CONFIGURATION.md`.
 
 ### 4. Bootstrap (Optional)
 
@@ -72,18 +93,32 @@ per-task pin, and the patterns are injected as hidden context. When the task end
 
 ### Slash Commands
 
-**View Patterns:**
-- `/ace-search <query>` - Semantic search for patterns
-- `/ace-patterns [section]` - View full playbook
-- `/ace-status` - Show statistics
+Where mods run these are answered by the mod without the model (output capped at about 60 KB); writes need the
+confirm button. Elsewhere the markdown fallback runs.
 
-**Manage Patterns:**
-- `/ace-learn` - Capture learning interactively
-- `/ace-bootstrap` - Initialize from codebase
-- `/ace-clear` - Reset playbook
-
-**Configuration:**
-- `/ace-configure` - Setup wizard
+| Command | What it does |
+|---|---|
+| `/ace` | Overview: the binding, its state, every command |
+| `/ace:ace-search <query>` | Semantic search (query on stdin, never argv) |
+| `/ace:ace-patterns [section] [min-reward]` | The playbook by section |
+| `/ace:ace-top [limit] [section]` | Top-rated patterns |
+| `/ace:ace-status` | Playbook statistics and where the binding came from |
+| `/ace:ace-domains [min]` | Pattern domains |
+| `/ace:ace-export-patterns [file]` | Export the playbook to a file inside the repo (preview + confirm) |
+| `/ace:ace-import-patterns <file>` | Import a playbook JSON from inside the repo (preview + confirm) |
+| `/ace:ace-insights [hours]` | Recap of the relevance log |
+| `/ace:ace-graph [min-weight]` | Local knowledge graph of exactly this project |
+| `/ace:ace-doctor` | Binding (source, path, tried, warnings), CLI, login, server |
+| `/ace:ace-test` | Read-only round trip: version, status, one search |
+| `/ace:ace-cleanup [days]` | Delete rotated logs (preview + confirm) |
+| `/ace:ace-clear` | Clear the playbook (preview + confirm) |
+| `/ace:ace-delta <op> <json>` | Add/update/remove patterns (preview + confirm) |
+| `/ace:ace-learn <lesson>` | Send one lesson (preview + confirm) |
+| `/ace:ace-bootstrap [mode] [level]` | Build the playbook from the codebase (preview + confirm) |
+| `/ace:ace-tune [show \| key=value ...]` | Show or change server settings (writes: preview + confirm) |
+| `/ace:ace-configure [org_ prj_]` | Bind the repo: name-matched suggestion, `.gitignore` diff, confirm |
+| `/ace:ace-login` | Login state; the device login starts on the button press |
+| `/ace:ace-install-cli` | The pinned ace-cli; reinstall on the button press |
 
 ### The Playbook
 
@@ -124,27 +159,18 @@ After completing work, run `/ace-learn`:
   The ACE server can switch the share for everyone without a plugin release: a search response field `render_full_pct` (0-100, kept for 7 days in `render-full-pct.json`) applies when the env is unset.
 - `ACE_ENGINE=cli`: never use the in-process engine.
 
-### Server Connection
+### Binding (project context)
 
-The `/ace-configure` wizard sets up:
-- **Server URL** - ACE server endpoint
-- **API Token** - Your authentication token
-- **Organization ID** - Auto-fetched from server
-- **Project ID** - Selected from available projects
+The tracked `.ace/config.json` at the repo's main checkout root, nothing else in it:
 
-Config stored in: `~/.config/ace/config.json`
-
-### Project Context
-
-Each project needs `.claude/settings.json`:
 ```json
-{
-  "orgId": "org_xxxxx",
-  "projectId": "prj_xxxxx"
-}
+{"orgId": "org_xxxxx", "projectId": "prj_xxxxx"}
 ```
 
-Created automatically by `/ace-configure`.
+`.gitignore` must let it through: `.ace/*` plus `!.ace/config.json` (a bare `.ace/` rule blocks the negation;
+`/ace:ace-configure` and the auto-adoption fix it). A file with `apiToken`/`serverUrl` is refused. Login lives in the
+ace-cli global config (`~/.config/ace/config.json`, or `ACE_CONFIG_PATH`). Without a git repo (herdr, remote boxes)
+bind via `ACE_ORG_ID`/`ACE_PROJECT_ID`. Check any directory with `scripts/ace-context --json`.
 
 ## 🛠️ Troubleshooting
 
@@ -152,9 +178,9 @@ Created automatically by `/ace-configure`.
 
 Run `/ace:ace-install-cli` (it reports which CLI is used and repairs a missing install).
 
-### "No .claude/settings.json"
+### "ACE ▼ Repo nicht verbunden"
 
-Run `/ace-configure` to create project config.
+Run `/ace:ace-configure` (or press [Verbinden] in the band). `/ace:ace-doctor` lists every path that was tried.
 
 ### "ACE authentication failed"
 

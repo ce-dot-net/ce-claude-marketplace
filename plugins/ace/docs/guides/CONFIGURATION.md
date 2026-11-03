@@ -1,369 +1,101 @@
-# ACE Plugin Configuration Guide
+# ACE Plugin Configuration (8.1.0)
 
-**Version**: v5.1.19
-**Architecture**: Hooks + ace-cli (no MCP server)
+Two things are configured, in two places:
 
----
+| What | Where | Who writes it |
+|---|---|---|
+| Login (device-code token) | ace-cli global config `~/.config/ace/config.json` (`ACE_CONFIG_PATH` overrides) | `/ace:ace-login` (ace-cli) |
+| Binding: which org/project a repo is | tracked `.ace/config.json` at the repo's main checkout root | `/ace:ace-configure`, or the automatic adoption |
 
-## 🎯 Overview
-
-The ACE plugin uses **two configuration files**:
-
-1. **`~/.config/ace/config.json`** - Global ace-cli configuration (server URL, API token, org ID)
-2. **`.claude/settings.json`** - Per-project configuration (project ID)
-
-**No MCP configuration needed!** The plugin uses hooks + subprocess calls to `ace-cli`, not MCP tools.
-
----
-
-## 🚀 Quick Configuration
-
-### Interactive Wizard (Recommended)
-
-Run the configuration wizard in Claude Code:
-
-```bash
-/ace:ace-configure
-```
-
-**What it does:**
-
-1. Prompts for ACE server URL (or uses default)
-2. Requests your API token
-3. Auto-fetches your organization ID from server
-4. Lists available projects for selection
-5. Creates `~/.config/ace/config.json` (global)
-6. Creates `.claude/settings.json` (project-specific)
-
-**Done in 60 seconds!**
-
----
-
-## 📝 Manual Configuration
-
-If you prefer manual setup or need to troubleshoot:
-
-### Step 1: Global Configuration
-
-Create `~/.config/ace/config.json`:
+## The binding
 
 ```json
-{
-  "serverUrl": "https://ace-api.code-engine.app",
-  "apiToken": "ace_your_token_here",
-  "orgId": "org_your_org_id_here"
-}
+{"orgId": "org_xxxxx", "projectId": "prj_xxxxx"}
 ```
 
-**Fields:**
+Nothing else may be in it: a file with `apiToken`, `serverUrl` (or `api_token`, `server_url`) is refused
+(`config_refused`, warning `repo_file_contains_secret`) and nothing is sent; broken JSON is `config_invalid`. Ids must
+look like `org_...` / `prj_...`. Commit the file: every clone, worktree and subfolder is then bound.
 
-- `serverUrl` - Your ACE server endpoint (default: <https://ace-api.code-engine.app>)
-- `apiToken` - Your personal API token (get from ACE server dashboard)
-- `orgId` - Your organization ID (fetch via `/organizations` API endpoint)
+### Precedence (one core for every hook, command and the statusline)
 
-**Permissions:**
+1. `--org` / `--project` (what the commands pass to ace-cli)
+2. `.ace/config.json`, from the current directory up to the git root; in a linked worktree then the main checkout's
+3. `.claude/settings.json` `env.ACE_ORG_ID` / `env.ACE_PROJECT_ID`, same walk (legacy; adopted, see below)
+4. `ACE_ORG_ID` / `ACE_PROJECT_ID` in the environment
+5. the remote map: global config `projects`, then this machine's map (`<plugin data>/remote-map.json`), keyed by the
+   normalized `origin` URL
+6. unbound. There is never a default project; a top-level `projectId` in the global config is ignored and
+   `/ace:ace-doctor` warns about it (`global_project_id_ignored`).
+
+`$HOME/.ace/config.json` and `$HOME/.claude/settings.json` are never bindings. The org comes from `--org`, else the
+source that gave the project, else the first org found down the list, else the global `default_org_id`.
+
+Check any directory: `${CLAUDE_PLUGIN_ROOT}/scripts/ace-context --json` (exit 0 bound, 5 not; `tried` lists every
+path), `--verify` adds the state from one `ace-cli status` call.
+
+### .gitignore
+
+The file must not be ignored. The rule that works:
+
+```gitignore
+.ace/*
+!.ace/config.json
+```
+
+A bare `.ace/` (or `.ace`) rule ignores the directory, and git then never looks at the negation. `/ace:ace-configure`
+shows this diff and applies it only after you confirm; the automatic adoption applies it itself (same semantics as
+`ace-cli init --fix-gitignore`). Nothing is ever staged or committed by the plugin.
+
+### Automatic adoption and the remote map
+
+- A repo bound only by the legacy `.claude/settings.json` (or by the remote map) gets `.ace/config.json` written at the
+  main checkout root on the next session, once, if the file does not exist; one line says so while it is untracked.
+  Never for a flag or env binding, never outside git. Opt out: `ACE_AUTO_ADOPT=0`.
+- Every session bound by a file records `origin URL -> {orgId, projectId}` in this machine's remote map, so a fresh
+  clone of the same remote binds without a click.
+- Writes never follow a symlink out of the repo (`.ace`, the file and `.gitignore` are checked; a refusal is logged as
+  `write_refused` in the relevance log).
+
+### herdr, remote boxes, no git
+
+Outside a git repo only `<cwd>/.ace/config.json` counts (no walk-up). On a remote machine or in a herdr workspace bind
+through the environment of the Claude Code process:
 
 ```bash
-chmod 600 ~/.config/ace/config.json  # Protect token
+export ACE_ORG_ID=org_xxxxx
+export ACE_PROJECT_ID=prj_xxxxx
 ```
 
-### Step 2: Project Configuration
-
-Create `.claude/settings.json` in your project root:
-
-```json
-{
-  "orgId": "org_your_org_id_here",
-  "projectId": "prj_your_project_id_here"
-}
-```
-
-**Alternative format** (environment variables):
-
-```json
-{
-  "env": {
-    "ACE_ORG_ID": "org_xxxxx",
-    "ACE_PROJECT_ID": "prj_xxxxx"
-  }
-}
-```
-
-Both formats work! The plugin supports either.
-
-**Fields:**
-
-- `orgId` - Same as global config (for context resolution)
-- `projectId` - Specific project ID for this codebase
-
----
-
-## 🔐 Security Best Practices
-
-### Protect Your API Token
-
-**Never commit** `.config/ace/config.json` or tokens to version control!
-
-```bash
-# Add to .gitignore
-echo ".claude/settings.json" >> .gitignore
-echo "~/.config/ace/config.json" >> .gitignore
-```
-
-**File permissions:**
-
-```bash
-chmod 600 ~/.config/ace/config.json       # User read/write only
-chmod 644 .claude/settings.json           # Can be shared (no secrets)
-```
-
-### Environment Variables (Optional)
-
-For CI/CD or shared environments, use environment variables:
-
-```bash
-# Add to ~/.zshrc or ~/.bashrc
-export ACE_SERVER_URL="https://ace-api.code-engine.app"
-export ACE_API_TOKEN="ace_your_token_here"
-export ACE_ORG_ID="org_xxxxx"
-export ACE_PROJECT_ID="prj_xxxxx"
-```
-
-Then use env format in `.claude/settings.json`:
-
-```json
-{
-  "env": {
-    "ACE_ORG_ID": "org_xxxxx",
-    "ACE_PROJECT_ID": "prj_xxxxx"
-  }
-}
-```
-
----
-
-## 🔄 Configuration Hierarchy
-
-The ace-cli uses this priority order:
-
-1. **Environment variables** (highest priority)
-   - `ACE_SERVER_URL`
-   - `ACE_API_TOKEN`
-   - `ACE_ORG_ID`
-   - `ACE_PROJECT_ID`
-   - `ACE_MACHINE_PROMPT_PREFIXES` - comma-separated extra prompt prefixes (besides `<task-notification>` etc.) that count as machine prompts and skip search and learn, e.g. local daemon messages
-   - `ACE_MIN_PROMPT_CHARS` - prompts shorter than this skip the pattern search (hook-side)
-   - `ACE_PIN_BACKOFF_MIN` - minutes to back off pinning a task session after a pin failure (pin-backoff)
-   - Learning is always async (detached); there is no switch for it.
-
-2. **Global config** (`~/.config/ace/config.json`)
-   - `serverUrl`
-   - `apiToken`
-   - `orgId`
-
-3. **Project config** (`.claude/settings.json`)
-   - `projectId` (required per-project)
-   - `orgId` (fallback if not in global)
-
----
-
-## 🧪 Verify Configuration
-
-### Check Global Config
-
-```bash
-cat ~/.config/ace/config.json
-```
-
-**Expected output:**
-
-```json
-{
-  "serverUrl": "https://ace-api.code-engine.app",
-  "apiToken": "ace_abcd1234...",
-  "orgId": "org_xyz789..."
-}
-```
-
-### Check Project Config
-
-```bash
-cat .claude/settings.json
-```
-
-**Expected output:**
-
-```json
-{
-  "orgId": "org_xyz789...",
-  "projectId": "prj_abc123..."
-}
-```
-
-### Test Connection
-
-```bash
-# In Claude Code:
-/ace:ace-status
-```
-
-**Expected output:**
-
-```
-✅ Connected to ACE server
-Organization: org_xyz789
-Project: prj_abc123
-Patterns: 42 total
-- strategies_and_hard_rules: 15
-- useful_code_snippets: 12
-- troubleshooting_and_pitfalls: 8
-- apis_to_use: 7
-```
-
----
-
-## 🛠️ Troubleshooting
-
-### "ACE authentication failed"
-
-**Problem**: Invalid or expired token.
-
-**Solution:**
-
-```bash
-# Get new token from ACE server dashboard
-# Update config
-/ace:ace-configure
-
-# Or manually edit
-vim ~/.config/ace/config.json
-```
-
-### "Organization not found"
-
-**Problem**: Invalid `orgId` or no access to organization.
-
-**Solution:**
-
-```bash
-# Verify org ID from server
-curl -H "Authorization: Bearer ace_your_token" \
-  https://ace-api.code-engine.app/organizations
-
-# Update config with correct orgId
-/ace:ace-configure
-```
-
-### "Project not found"
-
-**Problem**: Invalid `projectId` or project doesn't exist.
-
-**Solution:**
-
-```bash
-# List available projects
-curl -H "Authorization: Bearer ace_your_token" \
-  https://ace-api.code-engine.app/organizations/org_xxx/projects
-
-# Update .claude/settings.json with correct projectId
-/ace:ace-configure
-```
-
-### "No .claude/settings.json"
-
-**Problem**: Project not configured yet.
-
-**Solution:**
-
-```bash
-# Run wizard to create settings.json
-/ace:ace-configure
-```
-
-### Hooks receive wrong org/project
-
-**Problem**: Configuration file not in expected location.
-
-**Solution:**
-
-```bash
-# Check file locations
-ls -la ~/.config/ace/config.json
-ls -la .claude/settings.json
-
-# Verify you're in correct project directory
-pwd
-
-# Re-run configuration
-/ace:ace-configure
-```
-
----
-
-## 📂 Configuration File Locations
-
-### Default Locations
-
-**Global config:**
-
-- macOS/Linux: `~/.config/ace/config.json`
-- Windows: `%USERPROFILE%\.config\ace\config.json`
-
-**Project config:**
-
-- All platforms: `<project-root>/.claude/settings.json`
-
-### Custom Locations (Advanced)
-
-Override via environment variables:
-
-```bash
-export ACE_CONFIG_PATH="/custom/path/to/config.json"
-export ACE_SETTINGS_PATH="/custom/path/to/settings.json"
-```
-
----
-
-## 🔄 Multi-Project Setup
-
-Working with multiple projects? Each gets its own `.claude/settings.json`:
-
-```bash
-# Project 1
-cd ~/projects/website
-cat .claude/settings.json
-# {"orgId": "org_xyz", "projectId": "prj_website"}
-
-# Project 2
-cd ~/projects/api
-cat .claude/settings.json
-# {"orgId": "org_xyz", "projectId": "prj_api"}
-
-# Project 3 (different org)
-cd ~/projects/client-work
-cat .claude/settings.json
-# {"orgId": "org_client", "projectId": "prj_client_app"}
-```
-
-**Global config** stays the same (your personal token), but each project gets its own playbook via `projectId`.
-
----
-
-## 🔧 Advanced Configuration
-
-### Custom Server URL
-
-Using a self-hosted ACE server?
-
-```json
-{
-  "serverUrl": "https://ace.your-company.com",
-  "apiToken": "ace_your_token",
-  "orgId": "org_your_org"
-}
-```
-
-### Timeout Settings
+The env loses to a tracked `.ace/config.json`, so a leaked foreign env never rebinds a repo. Where the mod runs it
+re-exports the resolved ids (and `ACE_CONTEXT`) to every process it starts.
+
+## States you can see
+
+Nothing is shown when everything is ok. Otherwise `ACE ▼ <state>` in the status area and one band above the prompt:
+
+| State | Means | The band's one action |
+|---|---|---|
+| `unbound` | no binding found | [Verbinden: <project matching the repo name>] or [Projekt wählen] |
+| `not_logged_in` / `expired` | no or expired login | [Anmelden] (device login, only on the press) |
+| `project_not_found` / `no_access` | the server refuses the project | [Anderes wählen] |
+| `config_refused` | `.ace/config.json` holds a secret | [Bereinigt neu schreiben] (then revoke the token) |
+| `config_invalid` | a binding file is not valid JSON or has bad ids | none: fix the file |
+| `cli_missing` | no ace-cli | [ace-cli installieren] |
+| `server_error` | server down or 5xx | none (shown in the status only) |
+
+The Python fallback chain shows the same words once per session as a single line.
+
+## Environment knobs
+
+- `ACE_AUTO_ADOPT=0`: no automatic `.ace/config.json`.
+- `ACE_CONTEXT_ENGINE=resolver|cli`: force the plugin's resolver, or the SDK's `ace-cli context --json` (the default
+  feature-detects the CLI).
+- `ACE_MIN_PROMPT_CHARS`: prompts shorter than this skip the pattern search (default 12).
+- `ACE_PIN_BACKOFF_MIN`: minutes to back off pinning a task session after a pin failure (default 5).
+- `ACE_RENDER_FULL_PCT`, `ACE_ENGINE=cli`: see the README.
+
+## Timeout settings
 
 `timeout` values in `hooks.json` are **seconds** (not milliseconds). To adjust, edit `plugins/ace/hooks/hooks.json`:
 
@@ -388,33 +120,3 @@ Using a self-hosted ACE server?
 
 ---
 
-## 📚 Next Steps
-
-After configuration:
-
-1. **Bootstrap playbook**:
-
-   ```bash
-   /ace:ace-bootstrap
-   ```
-
-2. **Test pattern retrieval**:
-
-   ```bash
-   /ace:ace-search authentication
-   ```
-
-3. **Start coding** - Hooks auto-trigger on implementation keywords!
-
----
-
-## 🔗 Related Documentation
-
-- **Installation Guide**: See `INSTALL.md`
-- **Troubleshooting Guide**: See `TROUBLESHOOTING.md`
-- **ACE SDK API**: <https://github.com/ce-dot-net/ace-sdk/blob/main/packages/server/docs/API.md>
-- **ACE SDK Docs**: <https://github.com/ce-dot-net/ace-sdk>
-
----
-
-**Questions?** File an issue on the [marketplace repository](https://github.com/ce-dot-net/ce-claude-marketplace/issues).
