@@ -1,0 +1,66 @@
+{
+ "codes": [
+  {
+   "exit": 0,
+   "code": "ok",
+   "status": null,
+   "when": "success"
+  },
+  {
+   "exit": 1,
+   "code": "generic",
+   "status": null,
+   "when": "any other error"
+  },
+  {
+   "exit": 3,
+   "code": "not_logged_in",
+   "status": null,
+   "when": "no token, org token, any 401 without X-ACE-Token-Expired: true (e.g. Invalid user token), device login ended with expired_token or access_denied"
+  },
+  {
+   "exit": 4,
+   "code": "token_expired",
+   "status": 401,
+   "when": "401 with X-ACE-Token-Expired: true"
+  },
+  {
+   "exit": 5,
+   "code": "unbound",
+   "status": null,
+   "when": "resolveProjectContext returned bound:false"
+  },
+  {
+   "exit": 6,
+   "code": "project_not_found",
+   "status": 404,
+   "when": "server 404 on project"
+  },
+  {
+   "exit": 7,
+   "code": "no_access",
+   "status": 403,
+   "when": "plain 403; subscription 403s (account_blocked, feature_not_available) keep their subscription error type and exit 1"
+  },
+  {
+   "exit": 8,
+   "code": "server_error",
+   "status": "5xx or null",
+   "when": "5xx or network failure"
+  },
+  {
+   "exit": 9,
+   "code": "device_limit_exceeded",
+   "status": null,
+   "when": "device poll returns HTTP 400 error=device_limit_exceeded (message = error_description; current/max optional) (ab Server-Unterstuetzung, planned server+ace-web change; forward-compatible)",
+   "since": "server support pending"
+  }
+ ],
+ "stderr_json_shape": {
+  "error": {
+   "code": "string",
+   "status": "number|null",
+   "message": "string"
+  }
+ }
+}
