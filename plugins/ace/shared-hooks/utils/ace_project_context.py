@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """ACE project binding resolver (plugin 8.1.0).
 
-Contract: ACE SDK clients repo, spec/project-context.md @ b42a020 (AOP-1361). Mirror: mod/context/resolve.ts.
+Contract: ACE SDK clients repo, spec/project-context.md @ fbcbe1b (AOP-1361). Mirror: mod/context/resolve.ts.
 Pure: no git spawn, no network, no os.getcwd(). All file access goes through `read(path)`:
   returns the text, None when the path does not exist, raises when it is a directory or unreadable.
 

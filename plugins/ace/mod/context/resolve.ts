@@ -1,5 +1,5 @@
 // ACE project binding resolver (plugin 8.1.0). Mirror of shared-hooks/utils/ace_project_context.py; same semantics.
-// Contract: ce-ace-clients spec/project-context.md @ b42a020 (AOP-1361). Pure: no `$`, no spawn, no network.
+// Contract: ce-ace-clients spec/project-context.md @ fbcbe1b (AOP-1361). Pure: no `$`, no spawn, no network.
 // All file access goes through the injected reader: text, null when missing, throws for a directory or unreadable.
 // Precedence: flag > repo_file (.ace/config.json walk-up to the git root, then the linked worktree's main checkout)
 // > settings_file (.claude/settings.json, same walk) > env > remote_map > unbound.

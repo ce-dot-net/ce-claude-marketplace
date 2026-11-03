@@ -1,4 +1,4 @@
-"""Conformance: ace_project_context.resolve vs the SDK spec fixtures (60 cases) plus our extra probes.
+"""Conformance: ace_project_context.resolve vs the SDK spec fixtures (63 cases) plus our extra probes.
 
 Fixtures: plugins/ace/tests-fixtures/project-context/ (see its README). In-memory layout, no real FS.
 Mirror runner: plugins/ace/mod/tests/project_context.test.ts.
@@ -76,8 +76,8 @@ def run_case(case):
 
 
 def test_fixture_counts():
-    assert len(SPEC) == 60
-    assert len(EXTRA) >= 5
+    assert len(SPEC) == 63
+    assert len(EXTRA) >= 4
 
 
 @pytest.mark.parametrize('case', SPEC + EXTRA, ids=[c['name'] for c in SPEC + EXTRA])

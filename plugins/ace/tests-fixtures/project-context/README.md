@@ -1,6 +1,4 @@
-cases.json and exit-codes.json are copied verbatim from ce-ace-clients branch feature/aop-1361-project-context, commit b42a020 (spec/fixtures/project-context/). Do not edit them; re-copy on a spec change.
-
-PENDING: the 3 secret cases in cases.json already carry the announced spec change (config_refused + warning repo_file_contains_secret; broken JSON -> config_invalid; no strict split). Re-copy verbatim once the SDK commit lands.
+cases.json and exit-codes.json are copied verbatim from ce-ace-clients branch feature/aop-1361-project-context, commit fbcbe1b (spec/fixtures/project-context/). Do not edit them; re-copy on a spec change.
 
 extra-cases.json is ours (plugin probes beyond the spec), same format plus: `unreadable` (layout paths whose read raises), and `$ROOT` substituted in layout values as in env. A `message` in a result must be a non-empty string and is dropped before comparing.
 

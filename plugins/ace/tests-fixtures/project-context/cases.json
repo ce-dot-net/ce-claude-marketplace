@@ -795,13 +795,16 @@
   }
  },
  {
-  "name": "repo_file with apiToken/serverUrl: secrets ignored + warning",
+  "name": "repo_file with apiToken/serverUrl: REFUSED, no fallback to lower sources",
   "layout": {
    "main/.git/config": "[core]\n\trepositoryformatversion = 0\n",
    "main/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"proj_a\", \"apiToken\": \"ace_user_secret\", \"serverUrl\": \"https://evil.example\"}"
   },
   "cwd": "main",
-  "env": {},
+  "env": {
+   "ACE_ORG_ID": "org_e",
+   "ACE_PROJECT_ID": "proj_e"
+  },
   "flags": {},
   "globalConfig": null,
   "expect": {
@@ -815,7 +818,7 @@
   }
  },
  {
-  "name": "repo_file with legacy api_token/server_url: warning",
+  "name": "repo_file with legacy api_token/server_url: REFUSED",
   "layout": {
    "main/.git/config": "[core]\n\trepositoryformatversion = 0\n",
    "main/.ace/config.json": "{\"org_id\":\"org_a\",\"project_id\":\"proj_a\",\"api_token\":\"x\",\"server_url\":\"y\"}"
@@ -832,6 +835,63 @@
    "warnings": [
     "repo_file_contains_secret"
    ]
+  }
+ },
+ {
+  "name": "malformed repo_file JSON: config_invalid, stops resolution",
+  "layout": {
+   "main/.git/config": "[core]\n\trepositoryformatversion = 0\n",
+   "main/.ace/config.json": "{not json"
+  },
+  "cwd": "main",
+  "env": {
+   "ACE_ORG_ID": "org_e",
+   "ACE_PROJECT_ID": "proj_e"
+  },
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "config_invalid",
+   "source": "repo_file",
+   "path": "main/.ace/config.json"
+  }
+ },
+ {
+  "name": "repo_file JSON is not an object: config_invalid",
+  "layout": {
+   "main/.git/config": "[core]\n\trepositoryformatversion = 0\n",
+   "main/.ace/config.json": "[\"org_a\",\"proj_a\"]"
+  },
+  "cwd": "main",
+  "env": {},
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "config_invalid",
+   "source": "repo_file",
+   "path": "main/.ace/config.json"
+  }
+ },
+ {
+  "name": "malformed settings_file JSON: config_invalid, stops resolution",
+  "layout": {
+   "main/.git/config": "[core]\n\trepositoryformatversion = 0\n",
+   "main/.claude/settings.json": "{oops"
+  },
+  "cwd": "main",
+  "env": {
+   "ACE_ORG_ID": "org_e",
+   "ACE_PROJECT_ID": "proj_e"
+  },
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "config_invalid",
+   "source": "settings_file",
+   "path": "main/.claude/settings.json"
   }
  },
  {
