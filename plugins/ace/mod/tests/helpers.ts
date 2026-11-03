@@ -12,7 +12,7 @@ import { renderPatternsDict } from '../lib/render.ts'
 import { traceVariant, renderCohort, serverFullPct, storedFullPct } from '../lib/cohort.ts'
 import { hasSubstantialWork, toolRec } from '../lib/trace.ts'
 import { rejectionMatch, evalStats, evalInjection, usedPatternIds, toolHaystack } from '../lib/evidence.ts'
-import { PRIVATE_WRITE_SH } from '../lib/sh.ts'
+import { PRIVATE_WRITE_SH, REPO_WRITE_SH } from '../lib/sh.ts'
 import { statusLine, learnLine } from '../ui/status.ts'
 
 // ACE v8.0.0 production mod - `claude plugin test plugins/ace` suite (DESIGN §13.1, §12, §9 G9, §4/C1).
@@ -48,7 +48,8 @@ export type SearchAnswer = { exitCode?: number; stdout?: string; stderr?: string
 export type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; env?: Record<string, string>; files?: Record<string, string>
   engine?: (stdin?: string) => SearchAnswer; links?: string[]; noClassic?: boolean; defaultArm?: boolean
   learnExit?: number; early?: (agentId: string) => Promise<unknown>; beforeWrite?: (path: string) => Promise<unknown>
-  selfEval?: boolean; model?: (req: any) => any; compact?: (files: Map<string, string>) => any }
+  selfEval?: boolean; model?: (req: any) => any; compact?: (files: Map<string, string>) => any
+  cli?: (args: string[], stdin?: string) => SearchAnswer | undefined; noSettings?: boolean; ignored?: boolean; root?: string; cwd?: string }
 export type Run = { argv: string[]; stdin?: string; env?: Record<string, string>; timeoutMs?: number; files: Set<string> }
 
 // In-memory engine: fs (with mtimes on the mocked clock), env, clock, session, process. Every argv is recorded.
@@ -57,10 +58,10 @@ export function host(on: any, o: Opts = {}) {
   let now = T0
   const files = new Map<string, string>(), mtime = new Map<string, number>()
   const put = (p: string, t: string) => { files.set(p, t); mtime.set(p, now) }
-  put(`${CWD}/.claude/settings.json`, JSON.stringify({ projectId: PRJ, orgId: 'org_t' }))
+  if (!o.noSettings) put(`${CWD}/.claude/settings.json`, JSON.stringify({ env: { ACE_PROJECT_ID: PRJ, ACE_ORG_ID: 'org_t' } }))
   for (const [k, v] of Object.entries(o.files ?? {})) put(k, v)
   if (!o.noClassic) put(`${SDIR}/mod-classic`, String(now))  // classic.* hooks fire (no managed-settings guard)
-  const runs: Run[] = [], logs: string[] = [], statuses: (string | undefined)[] = [], envAsked: string[] = []
+  const debug: string[] = [], registered: string[] = [], runs: Run[] = [], logs: string[] = [], statuses: (string | undefined)[] = [], envAsked: string[] = [], envSet: [string, string | undefined][] = []
   // §31 default is ACE_RENDER_FULL_PCT=50 (50/50 split); this suite pins the full arm unless defaultArm (its own tests below)
   // item D: the Haiku self-eval is off in this suite unless selfEval (its own tests below): learns stay synchronous
   const env: Record<string, string> = { HOME, ...(o.defaultArm ? {} : { ACE_RENDER_FULL_PCT: '100' }), ...(o.selfEval ? {} : { ACE_SELF_EVAL: '0' }), ...(o.env ?? {}) }
@@ -74,9 +75,10 @@ export function host(on: any, o: Opts = {}) {
     : argv.includes('--git-dir') ? '.git\n' : argv.includes('--is-inside-work-tree') ? 'true\n' : ''
 
   on('session.id', () => ({ value: SID }))
-  on('session.cwd', () => ({ value: CWD }))
-  on('session.root', () => ({ value: CWD }))
+  on('session.cwd', () => ({ value: o.cwd ?? o.root ?? CWD }))
+  on('session.root', () => ({ value: o.root ?? CWD }))
   on('env.get', (_$: any, e: any) => { envAsked.push(e.name); return { value: env[e.name] } })
+  on('env.set', (_$: any, e: any) => { if (e.value === undefined) delete env[e.name]; else env[e.name] = e.value; envSet.push([e.name, e.value]); return { value: {} } })
   on('clock.now', () => ({ value: now }))
   on('fs.exists', (_$: any, e: any) => ({ value: files.has(e.path) || [...files.keys()].some(k => k.startsWith(e.path + '/')) }))
   on('fs.read', (_$: any, e: any) => { if (!files.has(e.path)) throw new Error('ENOENT: ' + e.path); return { value: files.get(e.path) } })
@@ -105,14 +107,18 @@ export function host(on: any, o: Opts = {}) {
       if (a.killed) throw new Error('ace: $.process.run(ace-cli) aborted: still running after timeoutMs')
       return res(a.exitCode ?? 0, a.stdout ?? '', a.stderr ?? '')
     }
+    if (o.cli && cliOf(argv)) { const a = o.cli(cliOf(argv)!, init.stdin); if (a) { now += a.advanceMs ?? 0; if (a.killed) throw new Error('ace: $.process.run aborted: still running after timeoutMs'); return res(a.exitCode ?? 0, a.stdout ?? '', a.stderr ?? '') } }
+    if (argv[0] === '/bin/sh' && argv[2] === REPO_WRITE_SH) { const t = `${argv[4]}/${argv[5]}`; if ((o.links ?? []).some(l => t === l || t.startsWith(l + '/'))) return res(3, ''); put(t, init.stdin ?? ''); if (argv[5] === '.gitignore') put(`${argv[4]}/.gitignore-fixed`, ''); return res(0, '') }
     if (argv[0] === '/bin/sh' && argv[2] === PRIVATE_WRITE_SH) { if (o.beforeWrite) return Promise.resolve(o.beforeWrite(argv[4])).then(() => { put(argv[4], init.stdin ?? ''); return res(0, '') }); put(argv[4], init.stdin ?? ''); return res(0, '') }  // umask 077 + rename
+    if ((argv[0] === 'git' || argv[0].endsWith('/git')) && argv.includes('check-ignore')) return res(o.ignored && !files.has(`${argv[2]}/.gitignore-fixed`) ? 0 : 1, '')
+    if ((argv[0] === 'git' || argv[0].endsWith('/git')) && argv.includes('--error-unmatch')) return res(1, '')
     if (argv[0] === 'git' || argv[0].endsWith('/git')) return res(0, git(argv))
     if (o.learnExit !== undefined && argv.includes('ace-cli') && argv.includes('learn')) return res(o.learnExit, '')
     if (argv.some(a => /(^|[\s;&|(])rm($|\s)/.test(a) || a === 'rm'))
       for (const a of argv) for (const k of [...files.keys()]) if (k === a || k.startsWith(a + '/')) files.delete(k)
     return res(0, '')
   })
-  on('ui.log', (_$: any, e: any) => { if (e.to !== 'debug') logs.push(e.text); return { value: undefined } })
+  on('ui.log', (_$: any, e: any) => { if (e.to !== 'debug') logs.push(e.text); else debug.push(e.text); return { value: undefined } })
   on('ui.status', (_$: any, e: any) => { statuses.push(e.text); return { value: undefined } })
   on('ui.toast', () => ({ value: undefined }))
   on('prompt.submit', (_$: any, e: any) => ({ text: e.text, context: e.context }))
@@ -131,6 +137,8 @@ export function host(on: any, o: Opts = {}) {
   on('model.complete', async (_$: any, e: any) => { modelCalls.push(e); return { value: o.model ? await o.model(e) : { isAnswered: false, reason: 'api-error', status: 500, error: 'x' } } })
   on('session.start', (_$: any, e: any) => ({ cwd: e.cwd }))
   on('session.end', (_$: any, e: any) => ({ sessionId: e.sessionId }))
+  on('command.register', (_$: any, e: any) => { registered.push(e.name); return { value: { command: e.name } } })
+  on('command.run', () => ({ text: 'core ran' }))
   on('classic.UserPromptSubmit', () => ({}))
   on('classic.Stop', () => ({}))
   on('classic.SubagentStop', () => ({}))
@@ -148,7 +156,9 @@ export function host(on: any, o: Opts = {}) {
   const learnArgv = (r: Run) => r.argv.slice(r.argv.indexOf('ace-cli'))
   const flag = (argv: string[], f: string) => { const i = argv.indexOf(f); return i < 0 ? undefined : argv[i + 1] }
   const trace = (r: Run) => JSON.parse(files.get(flag(learnArgv(r), '--transcript')!)!)
-  return { files, mtime, runs, logs, statuses, envAsked, searches, learns, rows, state, pin, learnArgv, flag, trace, modelCalls,
+  return { files, mtime, runs, logs, statuses, envAsked, envSet, env, registered, debug,
+    band: () => { const l = [...debug].reverse().find(x => x.startsWith('ace band ')); return l ? JSON.parse(l.slice(9)) : null },
+    pending: () => { const l = [...debug].reverse().find(x => x.startsWith('ace pending ')); return l ? JSON.parse(l.slice(12)) : null }, searches, learns, rows, state, pin, learnArgv, flag, trace, modelCalls,
     advance: (ms: number) => { now += ms }, now: () => now, put }
 }
 

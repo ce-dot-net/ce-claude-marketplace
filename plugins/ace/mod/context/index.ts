@@ -20,9 +20,11 @@ export const FILE_SOURCES = ['repo_file', 'settings_file'], ADOPT_SOURCES = ['se
 const ORG_ID = /^org_[A-Za-z0-9_-]+$/, PRJ_ID = /^prj_[A-Za-z0-9_-]+$/
 
 // $.fs as the resolver's reader: null when missing, throws for a directory or an unreadable file.
-export const fsReader = ($: any): Reader => async (p: string) => {
-  if (!await $.fs.exists(p).catch(() => false)) return null
-  return await $.fs.read(p) as string
+export function fsReader($: any): Reader {
+  return async (p: string) => {
+    if (!await $.fs.exists(p).catch(() => false)) return null
+    return await $.fs.read(p) as string
+  }
 }
 // The env names are literals ($.env.get validates them); read once per load, before the mod exports its own.
 export async function readEnv($: any): Promise<Env> {

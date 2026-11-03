@@ -6,11 +6,13 @@ import { FEEDBACK_DOWNVOTE_FILE, RENDER_FULL_PCT_FILE, serverDownvote, serverFul
 import { REJECTION_PREV_MAX_AGE_S, type ToolRec } from '../lib/evidence.ts'
 import { num, pyDumps } from '../lib/pyjson.ts'
 import { type StateUpdate, dataRootFromPluginRoot, mergeState, safeComponent as safe } from '../lib/state.ts'
+import { type Ctx, type Env, type State, exportEnv, readEnv, resolveContext } from '../context/index.ts'
+import { cliRun } from './cli.ts'
 
 export const MARKER_REFRESH_MS = 60_000           // between handoffs; plugin_data_dir.MOD_AFTER_TOOL_S is 120 s, MOD_HANDOFF_S 15 s
 export const MAX_TOOL_RECS = 1000                 // ponytail: the trace keeps the last 50 + failures anyway; older steps are lost past this
 export type Sess = { sessionId: string; cwd: string; project: string; org?: string; root: string; pdir: string; sdir: string;
-  logs: string; minChars: number; extraPrefixes: string[]; clientId: string }
+  logs: string; logRoot: string; minChars: number; extraPrefixes: string[]; clientId: string }
 export const uuid = (): string => {
   const c: any = (globalThis as any).crypto
   if (c?.randomUUID) return c.randomUUID()
@@ -18,26 +20,29 @@ export const uuid = (): string => {
     const r = Math.random() * 16 | 0; return (ch === 'x' ? r : (r & 3) | 8).toString(16)
   })
 }
-// ace_context.get_context: the settings file wins; env only when the file is missing.
-export async function resolveSession($: any, cwd: string): Promise<Sess | null> {
-  let project: string | undefined, org: string | undefined
-  const file = `${cwd}/.claude/settings.json`
-  if (await $.fs.exists(file)) {
-    const st = await readJson($, file)
-    if (!st || typeof st !== 'object') return null
-    project = st.projectId; org = st.orgId
-    if (!project || !org) { project = st.env?.ACE_PROJECT_ID; org = st.env?.ACE_ORG_ID }
-  } else {
-    project = await $.env.get('ACE_PROJECT_ID'); org = await $.env.get('ACE_ORG_ID')
-  }
-  if (!project) return null
-  const root = dataRootFromPluginRoot(await $.env.get('HOME') ?? '', $.plugin.root, $.plugin.name, await $.env.get('CLAUDE_CONFIG_DIR'))
+export async function dataRoot($: any) {
+  return dataRootFromPluginRoot(await $.env.get('HOME') ?? '', $.plugin.root, $.plugin.name, await $.env.get('CLAUDE_CONFIG_DIR'))
+}
+// 8.1.0: the binding comes from the one core (context/), resolved once per load from the env as the session started
+// (before the mod exported its own ids). Unbound, refused or invalid: no Sess, every hook steps aside.
+export async function resolveContextOnce($: any, L: Load, cwd: string): Promise<Ctx> {
+  if (L.ctx && L.ctxCwd === cwd) return L.ctx
+  L.env0 ??= await readEnv($)
+  L.ctx = await resolveContext($, cwd, L.env0, { dataRoot: await dataRoot($), cli: (argv, o) => cliRun($, null, argv, o) })
+  L.ctxCwd = cwd
+  return L.ctx
+}
+export async function resolveSession($: any, cwd: string, L?: Load): Promise<Sess | null> {
+  const c: any = L ? await resolveContextOnce($, L, cwd) : await resolveContext($, cwd, await readEnv($), { dataRoot: await dataRoot($) })
+  if (!c.bound) return null
+  const project: string = c.projectId, org: string = c.orgId
+  const root = await dataRoot($)
   const sessionId = await $.session.id()
   const pdir = `${root}/projects/${safe(project)}`
   const minRaw = Number(await $.env.get('ACE_MIN_PROMPT_CHARS'))
   const extra = String(await $.env.get('ACE_MACHINE_PROMPT_PREFIXES') ?? '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean)
   const manifest = await readJson($, `${$.plugin.root}/.claude-plugin/plugin.json`)
-  return { sessionId, cwd, project, org, root, pdir, sdir: `${pdir}/sessions/${safe(sessionId)}`, logs: `${cwd}/.claude/data/logs`,
+  return { sessionId, cwd, project, org, root, pdir, sdir: `${pdir}/sessions/${safe(sessionId)}`, logs: `${c.root}/.claude/data/logs`, logRoot: c.root,
     minChars: Number.isFinite(minRaw) && minRaw > 0 ? minRaw : 12, extraPrefixes: extra,
     clientId: `claude-code-plugin/${manifest?.version ?? '0.0.0'}` }
 }
@@ -45,6 +50,12 @@ export async function resolveSession($: any, cwd: string): Promise<Sess | null> 
 // records, a mid-turn prompt. Lost on a reload: the Stop effort, title, in-flight claims, pending late searches.
 export type Load = {
   sess: Sess | null
+  env0: Env | undefined                         // the env as the session started (the core's input; never our own export)
+  ctx: Ctx | undefined                          // the core's binding for ctxCwd
+  ctxCwd: string | undefined
+  ctxState: State | null | undefined            // verify's state; undefined = not checked yet
+  ctxLogged: boolean                            // the one `context` row of this load
+  verifying: Promise<unknown> | undefined
   pendingMain: string | null | undefined        // set by prompt.submit, bound to the next main turn.start
   pendingTitle: string | undefined              // classic.UserPromptSubmit answers it
   stopEffort: string | undefined                // classic.Stop's effort for the turn.complete learn
@@ -72,7 +83,7 @@ export type Load = {
 }
 export async function ensure($: any, L: Load): Promise<Sess | null> {
   if (L.sess && L.sess.sessionId === await $.session.id()) return L.sess
-  L.sess = await resolveSession($, await $.session.root())  // the session cwd can move to a subdir; the project cannot
+  L.sess = await resolveSession($, await $.session.root(), L)  // the session cwd can move to a subdir; the project cannot
   return L.sess
 }
 export const stateFile = (s: Sess, key: string) => `${s.sdir}/patterns-used-${safe(key)}.json`
@@ -104,6 +115,7 @@ export async function refreshMarker($: any, L: Load, force = false) {
     L.markerAt = now  // first: no project means no marker, and no settings read per tool call either
     const s = await ensure($, L)
     if (s) await touchMarker($, L, s, now)
+    if (L.ctx?.bound) await exportEnv($, L.ctx, now)  // keeps ACE_CONTEXT fresh for the Python chain
   } catch { /* the Python chain may wake; nothing is lost */ }
 }
 export function readState($: any, s: Sess, key: string) { return readJson($, stateFile(s, key)) }
@@ -186,7 +198,7 @@ export async function clearDeferred($: any, L: Load, s: Sess) {
 export type HookArgs<E extends EventName> = Parameters<Hook<E>>
 // Per-load state, fresh in each register (a reload starts over).
 export function newLoad(): Load {
-  return { sess: null, pendingMain: undefined, pendingTitle: undefined, stopEffort: undefined, domains: null,
+  return { sess: null, env0: undefined, ctx: undefined, ctxCwd: undefined, ctxState: undefined, ctxLogged: false, verifying: undefined, pendingMain: undefined, pendingTitle: undefined, stopEffort: undefined, domains: null,
     turnAnchor: new Map(), tools: new Map(), spawnPrompts: new Map(), placeholders: new Set(), late: new Map(), agentTypes: new Map(),
     earlyStart: new Map(), agentEffort: new Map(), lastClaim: new Map(), markerAt: 0, claims: new Set(), queues: new Map(),
     stopDefer: null, deferred: undefined, handback: new Map(), reuseUsed: new Set(), compacted: false, mainSeen: 0,

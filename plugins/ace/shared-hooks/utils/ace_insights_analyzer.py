@@ -2032,10 +2032,12 @@ def _resolve_relevance_path():
     """Project relevance log (.claude/data/logs/ace-relevance.jsonl) only (P-19)."""
     from pathlib import Path as _Path
 
-    legacy = _Path(".claude/data/logs/ace-relevance.jsonl")
-    if legacy.exists():
-        return legacy
-    return None
+    try:  # 8.1.0: the repo root's log (worktrees and subfolders share it)
+        from ace_project_context import logs_dir
+        p = _Path(logs_dir()) / "ace-relevance.jsonl"
+    except Exception:
+        p = _Path(".claude/data/logs/ace-relevance.jsonl")
+    return p if p.exists() else None
 
 
 if __name__ == "__main__":

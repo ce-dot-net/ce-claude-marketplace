@@ -13,6 +13,8 @@ export function aceEnv(s: Sess): Record<string, string> {
   if (s.org) env.ACE_ORG_ID = s.org
   return env
 }
+// 8.1.0: --org/--project on every CLI spawn, after the subcommand: the CLI never picks its own binding (4.3.4 reads settings.json).
+export const ids = (s: Sess): string[] => [...(s.org ? ['--org', s.org] : []), '--project', s.project]
 export const isAuthFailure = (t: string) => /unauthorized|401|not logged in|no api token|token_expired/i.test(t)
 // §17/§23: the same order as ace_cli.cli_argv: the plugin-local pinned CLI, else the global `ace-cli` on PATH.
 export async function cliHead($: any): Promise<string[]> {
@@ -66,7 +68,7 @@ export async function search($: any, s: Sess, query: string, pin: string | undef
     if (age < (Number.isFinite(min) && min > 0 ? min : 5) * 60_000) { usePin = undefined; pinSkipped = 'backoff' }  // 5 min since SDK 4.3.0 (sessions.db index); server team agreed
   }
   const spawn = async (p: string | undefined, timeoutMs: number) => {
-    const argv = [...head, 'search', '--stdin', '--json', ...(p ? ['--pin-session', p] : []), ...(sid ? ['--session-id', sid.slice(0, 512)] : []), ...(topK ? ['--top-k', String(topK)] : [])]
+    const argv = [...head, 'search', '--stdin', '--json', ...(p ? ['--pin-session', p] : []), ...(sid ? ['--session-id', sid.slice(0, 512)] : []), ...(topK ? ['--top-k', String(topK)] : []), ...ids(s)]
     try { return { ...(await $.process.run(argv, { stdin: query, env: aceEnv(s), timeoutMs })), threw: '' } }
     catch (err) { return { exitCode: -1, stdout: '', stderr: String(err), threw: String(err) } }
   }

@@ -1,5 +1,5 @@
 // ACE v8 production mod (DESIGN §13.1): search -> inject -> domain shift -> subagent inject -> detached learn with
-// F-080 credit, in-process. The Python command hooks stay installed as the fallback and step aside while the
+// F-080 credit, in-process. 8.1.0: one binding core (context/), the context band (ui/band.ts), model-free commands. The Python command hooks stay installed as the fallback and step aside while the
 // mod-active marker is fresh. ace-cli is consumed as-is via $.process.run; state lives on disk in the Python formats.
 // Wiring only: one on(event, hook) per event; each hook hands its arguments and the per-load state to its handler.
 import type { Register } from 'claude-code'
@@ -12,6 +12,8 @@ import { classicUserPromptSubmit, classicStop, classicSubagentStop } from './han
 import { turnStart, turnComplete } from './handlers/turn.ts'
 import { agentSpawn } from './handlers/agent.ts'
 import { toolCall } from './handlers/tool.ts'
+import { commandRun } from './handlers/command.ts'
+import { renderBand } from './ui/band.ts'
 
 export const register: Register = (on) => {
   const L = newLoad()
@@ -27,4 +29,6 @@ export const register: Register = (on) => {
   on('tool.call', ($, e, next) => toolCall($, L, e, next))
   on('turn.complete', ($, e, next) => turnComplete($, L, e, next))
   on('session.end', ($, e, next) => sessionEnd($, L, e, next))
+  on('command.run', ($, e, next) => commandRun($, L, e, next))
+  on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => renderBand($, L, e, next))
 }
