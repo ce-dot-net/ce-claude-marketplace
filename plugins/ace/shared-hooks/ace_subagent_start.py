@@ -472,7 +472,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         log_search(hook='SubagentStart', session_id=session_id, user_prompt=query,
                    search_query=query, patterns_returned=pattern_list,
                    patterns_injected=[_by_id[i] for i in pattern_ids or [] if i in _by_id],
-                   domains=list(dict.fromkeys(p.get('domain') for p in pattern_list if isinstance(p, dict) and p.get('domain'))),
+                   domains=list(dict.fromkeys(_by_id[i].get('domain') for i in pattern_ids or [] if i in _by_id and _by_id[i].get('domain'))),
                    hook_ms=int((time.monotonic() - t_start) * 1000),
                    project_id=context['project'], org_id=context['org'],
                    agent_type=agent_type, render_cohort=_cohort, parent_task_id=parent_task_id,

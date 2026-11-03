@@ -52,7 +52,7 @@ def run(tmp_path):
     logs = proj / ".claude" / "data" / "logs"
     logs.mkdir(parents=True)
     (logs / "ace-relevance.jsonl").write_text(
-        json.dumps({"event": "search", "session_id": "s1", "patterns_injected": 7, "avg_confidence": 0.8,
+        json.dumps({"event": "search", "hook": "UserPromptSubmit", "session_id": "s1", "patterns_injected": 7, "avg_confidence": 0.8,
                     "domains": ["a", "b"]}) + "\n"
         + json.dumps({"event": "domain_shift", "session_id": "s1"}) + "\n"
     )
@@ -91,7 +91,7 @@ def test_statusline_output_format_preserved(run):
     assert lines[0].startswith("Opus · ") and "42%" in lines[0] and "[high]" in lines[0]
     assert lines[0].count("█") + lines[0].count("░") == 15
     assert lines[1].startswith("◆ ACE")
-    for frag in ("7 injected", "80%", "2 domains", "1 shifts", "75% quality", "~5m"):
+    for frag in ("7 injected", "2 domains", "1 shifts", "75% quality", "~5m"):  # 8.1.0: no prior-confidence "%"
         assert frag in lines[1], (frag, lines[1])
     assert lines[2].startswith("limits 5h:30%") and "7d:10%" in lines[2]
 
@@ -111,11 +111,12 @@ def _run_with_log(tmp_path, rows, session_id):
 
 
 TWO_SESSIONS = [
-    {"event": "search", "session_id": "A", "patterns_injected": 7, "domains": ["a"]},
-    {"event": "search", "session_id": "B", "patterns_injected": 3, "domains": ["b", "c"]},
-    {"event": "execution", "session_id": "B"},
+    {"event": "search", "hook": "UserPromptSubmit", "session_id": "A", "patterns_injected": 7, "domains": ["a"]},
+    {"event": "search", "hook": "UserPromptSubmit", "session_id": "B", "patterns_injected": 3, "domains": ["b", "c"]},
+    {"event": "execution", "session_id": "B", "agent_type": "main", "patterns_used_count": 3, "used_ids_count": 1},
+    {"event": "search", "hook": "UserPromptSubmit", "session_id": "B", "patterns_injected": 2, "domains": ["d"]},
+    {"event": "search", "hook": "SubagentStart", "session_id": "B", "agent_type": "Explore", "patterns_injected": 50, "domains": ["z"]},
     {"event": "domain_shift", "session_id": "B"},
-    {"event": "search", "session_id": "B", "patterns_injected": 2, "domains": ["d"]},
 ]
 
 
@@ -126,9 +127,10 @@ def test_statusline_counts_only_current_session(tmp_path):
 
 
 def test_statusline_session_task_boundary(tmp_path):
-    """Within the session, counting still starts after that session's own last execution row."""
+    """8.1.0: the task starts at the session's newest MAIN prompt search (subagent searches never count); the last
+    finished main task shows its evidenced use (used N/M)."""
     line = _run_with_log(tmp_path, TWO_SESSIONS, "B")
-    assert "2 injected" in line and "1 domains" in line and "1 shifts" in line, line
+    assert "2 injected" in line and "1 domains" in line and "1 shifts" in line and "used 1/3" in line, line
 
 
 def test_statusline_no_session_id_keeps_old_behaviour(tmp_path):
@@ -136,4 +138,31 @@ def test_statusline_no_session_id_keeps_old_behaviour(tmp_path):
     line = _run_with_log(tmp_path, TWO_SESSIONS, None)
     assert "2 injected" in line and "1 shifts" in line, line
     line = _run_with_log(tmp_path / "x", TWO_SESSIONS[:2], None)
-    assert "10 injected" in line and "3 domains" in line, line
+    assert "3 injected" in line and "2 domains" in line, line
+
+
+def test_a_problem_context_state_replaces_the_stats_line(tmp_path):
+    rows = TWO_SESSIONS[:2] + [{"event": "context", "session_id": "B", "state": "expired"}]
+    assert _run_with_log(tmp_path, rows, "B") == "ACE ▼ expired"
+
+
+def test_rows_at_the_repo_root_count_in_a_subfolder_and_a_worktree(tmp_path):
+    """Logs land at the repo root (main checkout); the statusline finds them from a subfolder and a worktree."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "-c", "user.email=t@x.invalid", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "i"], check=True)
+    wt = tmp_path / "wt"
+    subprocess.run(["git", "-C", str(repo), "worktree", "add", "-q", str(wt)], check=True)
+    (repo / "sub").mkdir()
+    logs = repo / ".claude" / "data" / "logs"
+    logs.mkdir(parents=True)
+    (logs / "ace-relevance.jsonl").write_text(json.dumps(TWO_SESSIONS[0]) + "\n")
+    home = tmp_path / "home"
+    (home / ".claude/plugins").mkdir(parents=True)
+    (home / ".claude/plugins/installed_plugins.json").write_text(json.dumps(
+        {"plugins": {"ace@x": [{"installPath": str(SCRIPT.parents[1])}]}}))
+    for cwd in (repo / "sub", wt):
+        p = subprocess.run(["bash", str(SCRIPT)], input=json.dumps({"cwd": str(cwd), "session_id": "A"}), capture_output=True,
+                           text=True, timeout=20, env=dict(os.environ, HOME=str(home)))
+        assert "7 injected" in re.sub(r"\033\[[0-9;]*m", "", p.stdout), (cwd, p.stdout)

@@ -15,7 +15,7 @@ export function searchRow(a: { hook: string; sessionId: string; userPrompt: stri
     search_query: a.query.slice(0, 100), patterns_returned: a.returned.length, patterns_injected: a.injected.length,
     patterns_filtered: a.returned.length - a.injected.length,
     avg_confidence: conf.length ? Math.round(conf.reduce((x, y) => x + y, 0) / conf.length * 1000) / 1000 : 0,
-    domains: [...new Set(a.returned.map(p => p.domain).filter(Boolean))].slice(0, 10),
+    domains: [...new Set(a.injected.map(p => p.domain).filter(Boolean))].slice(0, 10),  // 8.1.0 audit: what the model got
     top_patterns: a.injected.slice(0, 5).map(p => ({ id: p.id ?? 'unknown', confidence: p.confidence ?? 0, helpful: p.helpful ?? 0,
       harmful: p.harmful ?? 0, domain: p.domain ?? 'unknown', section: p.section ?? 'unknown',
       content: String(p.content ?? '').slice(0, 100) + (String(p.content ?? '').length > 100 ? '...' : ''),

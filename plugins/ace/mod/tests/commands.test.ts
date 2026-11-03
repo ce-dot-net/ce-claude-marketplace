@@ -213,3 +213,9 @@ test('cleanup refuses a symlinked logs dir', async ($, on) => {
   await start($)
   expect(await run($, 'cleanup')).toContain('cleanup refused')
 })
+
+test('doctor: the fallback hooks need Python >= 3.10 (named only when missing; the mod chain is unaffected)', async ($, on) => {
+  host(on, { noPython: true })
+  await start($)
+  expect(await run($, 'doctor')).toContain('Python >= 3.10 needed for the fallback hooks; the mod chain is unaffected')
+})

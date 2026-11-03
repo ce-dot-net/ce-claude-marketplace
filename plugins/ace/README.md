@@ -59,7 +59,7 @@ tested with, and a new CLI reaches you with the next plugin update. If the CLI i
 
 **Requirements:** Claude Code >= 2.1.311, Node.js (for the CLI), macOS, Linux or WSL2. Windows is not supported (use WSL2).
 
-**Statusline (deprecated in 8.1.0):** the mod shows problems itself (`ACE ▼` in the status area). `~/.claude/ace_statusline.sh` stays only for standalone installs (a user copy; it reads the repo-root log via the plugin core); refresh it with `/ace:ace-statusline-setup update`.
+**Statusline:** `~/.claude/ace_statusline.sh` is a user copy of the plugin script (install/refresh with `/ace:ace-statusline-setup update`). It reads the repo-root log through the plugin core, so subfolders and worktrees show the same task; a binding problem shows `ACE ▼ <state>` instead of the stats.
 
 ### 2. Enable Plugin
 
