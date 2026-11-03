@@ -1,5 +1,7 @@
 cases.json and exit-codes.json are copied verbatim from ce-ace-clients branch feature/aop-1361-project-context, commit 9500190 (spec/fixtures/project-context/). Do not edit them; re-copy on a spec change.
 
+init-target.json is copied verbatim from ce-ace-clients main, commit 8e9bf64 (cli 4.4.1; spec/project-context.md §9): where `ace-cli init` writes .ace/config.json (main checkout of a linked worktree, verified topology, shadowing file). Runners: tests/test_init_target.py (our fallback writer), tests/test_cli_contract.py (the real pinned CLI) and plugins/ace/mod/tests/init_target.test.ts (the mod's fallback target); wrapper plugins/ace/mod/tests/fixtures/init_target_cases.ts.
+
 extra-cases.json is ours (plugin probes beyond the spec), same format plus: `unreadable` (layout paths whose read raises), and `$ROOT` substituted in layout values as in env. A `message` in a result must be a non-empty string and is dropped before comparing.
 
 Runners: tests/test_project_context_spec.py (Python) and plugins/ace/mod/tests/project_context.test.ts (TypeScript).

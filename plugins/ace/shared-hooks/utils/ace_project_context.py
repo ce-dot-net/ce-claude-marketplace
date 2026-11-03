@@ -326,6 +326,13 @@ LINES = {
     'config_refused': 'ACE ▼ .ace/config.json enthält apiToken/serverUrl und wird ignoriert: /ace:ace-configure',
     'config_invalid': 'ACE ▼ Bindungsdatei ist kein gültiges JSON: /ace:ace-doctor',
 }
+# `ace-cli init` warnings the user must see (cli 4.4.1, spec §9); same words in mod/context/lines.ts.
+WARN_LINES = {
+    'worktree_file_shadows_main': 'ACE ▼ Dieser Worktree hat eine eigene .ace/config.json, die die Bindung des '
+                                  'Haupt-Checkouts überschreibt',
+    'worktree_topology_untrusted': 'ACE ▼ Worktree-Struktur nicht verifizierbar (.git/commondir?): nichts in den '
+                                   'Haupt-Checkout geschrieben',
+}
 
 
 def _env_map(env):
@@ -669,18 +676,158 @@ ORG_ID = re.compile(r'^org_[A-Za-z0-9_-]+$')
 PRJ_ID = re.compile(r'^prj_[A-Za-z0-9_-]+$')
 
 
+def init_target(cwd, read=read_file):
+    """(root, main_checkout, untrusted): where `ace-cli init` writes .ace/config.json (spec §9). A linked worktree
+    writes to its MAIN checkout, but only when the topology verifies like git does it (commondir is untrusted
+    input): realpath(gitdir) == <common>/worktrees/<name>, <gitdir>/gitdir points back at this .git file, <common>
+    has HEAD and config, and is a `.git` dir (a bare repo has no main checkout). Else the worktree root, untrusted.
+    Plain repos and submodules: their own root; outside git: cwd."""
+    cwd = os.path.abspath(cwd)
+    rp = os.path.realpath
+    d = cwd
+    while True:
+        dotgit = os.path.join(d, '.git')
+        try:
+            txt = read(dotgit)
+        except Exception:
+            return d, False, False  # .git directory
+        if txt is not None:
+            m = re.match(r'\s*gitdir:\s*(.+?)\s*$', txt)
+            if not m:
+                return d, False, False
+            gitdir = os.path.normpath(os.path.join(d, m.group(1)))
+            common = _quiet(read, os.path.join(gitdir, 'commondir'))
+            if common is None:
+                return d, False, False  # submodule
+            common = os.path.normpath(os.path.join(gitdir, common.strip()))
+            back = _quiet(read, os.path.join(gitdir, 'gitdir'))
+            ok = (rp(gitdir) == rp(os.path.join(common, 'worktrees', os.path.basename(gitdir)))
+                  and back is not None and rp(os.path.join(gitdir, back.strip())) == rp(dotgit)
+                  and _exists(read, os.path.join(common, 'HEAD')) and _exists(read, os.path.join(common, 'config'))
+                  and os.path.basename(rp(common)) == '.git')
+            return (os.path.dirname(common), True, False) if ok else (d, False, True)
+        parent = os.path.dirname(d)
+        if parent == d:
+            return cwd, False, False
+        d = parent
+
+
+def find_shadow(cwd):
+    """The first worktree-local .ace/config.json on the walk-up from cwd to the worktree root, or None."""
+    top, _ = repo_roots(os.path.abspath(cwd))
+    d = os.path.abspath(cwd)
+    while True:
+        f = os.path.join(d, '.ace', 'config.json')
+        if os.path.isfile(f):
+            return f
+        if d == top or os.path.dirname(d) == d:
+            return None
+        d = os.path.dirname(d)
+
+
+def cli_init(cwd, org, project):
+    """`ace-cli init --json --fix-gitignore --org --project` in cwd: its JSON result (via 'cli'), None when the CLI
+    has no `init --json` (missing, unknown command, no JSON: feature-detected, like the context seam), and
+    WriteRefused when it refused (exit 1, stderr {"error":{...}}: symlink, outside the root). A refusal is final."""
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import ace_cli
+    try:
+        argv = ace_cli._cmd('init', '--json', '--fix-gitignore', '--org', org, '--project', project)
+        p = subprocess.run(argv, capture_output=True, text=True, timeout=15, cwd=cwd)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    try:
+        j = json.loads(p.stdout or '')
+    except ValueError:
+        j = None
+    if p.returncode == 0 and isinstance(j, dict) and isinstance(j.get('path'), str):
+        j.setdefault('warnings', [])
+        j['via'] = 'cli'
+        return j
+    for line in (p.stderr or '').splitlines():
+        try:
+            e = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(e, dict) and isinstance(e.get('error'), dict):
+            raise WriteRefused(str(e['error'].get('message') or e['error'].get('code') or 'refused'))
+    return None
+
+
+def fallback_init(cwd, org, project):
+    """Our writer for a CLI without `init --json`: the same target, warnings and shadowedBy as the CLI.
+    It can go once the CLI floor (the pin AND an accepted global ace-cli) is >= 4.4.1."""
+    root, main_checkout, untrusted = init_target(cwd)
+    out = dict(write_binding(root, org, project), via='fallback', warnings=[])
+    if main_checkout:
+        out['mainCheckout'] = True
+        out['warnings'].append('written_to_main_checkout')
+    if untrusted:
+        out['warnings'].append('worktree_topology_untrusted')
+    shadow = find_shadow(cwd) if main_checkout else None
+    if shadow:
+        out['shadowedBy'] = shadow
+        out['warnings'].append('worktree_file_shadows_main')
+    return out
+
+
+def bind(cwd, org, project):
+    """Write the binding for cwd: the CLI's `init --json` when it has it, else our writer. Raises WriteRefused."""
+    if not (ORG_ID.match(org or '') and PRJ_ID.match(project or '')):
+        raise ValueError('ids must look like org_... / prj_...')
+    cwd = os.path.abspath(cwd)
+    try:
+        r = cli_init(cwd, org, project)
+    except WriteRefused as e:
+        _log_refused(init_target(cwd)[0], '.ace/config.json', str(e))
+        raise
+    return r if r is not None else fallback_init(cwd, org, project)
+
+
+def remove_shadow(cwd, path):
+    """Delete the worktree-local .ace/config.json that shadows the main checkout's binding, and nothing else:
+    an `.ace/config.json` inside this linked worktree, no symlinked dir or file, unlinked through the dir's fd."""
+    import stat
+    root, main_root = repo_roots(os.path.abspath(cwd))
+    if not (root and main_root):
+        raise WriteRefused('not a linked worktree: %s' % cwd)
+    path = os.path.abspath(path)
+    d = os.path.dirname(path)
+    if os.path.basename(path) != 'config.json' or os.path.basename(d) != '.ace':
+        raise WriteRefused('not an .ace/config.json: %s' % path)
+    if os.path.islink(d) or os.path.islink(path):
+        raise WriteRefused('symlink: %s' % path)
+    real_root = os.path.realpath(root)
+    if os.path.commonpath([os.path.realpath(d), real_root]) != real_root:
+        raise WriteRefused('outside the worktree %s: %s' % (root, path))
+    fd = os.open(d, os.O_RDONLY | getattr(os, 'O_DIRECTORY', 0) | getattr(os, 'O_NOFOLLOW', 0))
+    try:
+        if not stat.S_ISREG(os.stat('config.json', dir_fd=fd, follow_symlinks=False).st_mode):
+            raise WriteRefused('not a regular file: %s' % path)
+        os.unlink('config.json', dir_fd=fd)
+    finally:
+        os.close(fd)
+    return path
+
+
 def adopt(r, cwd, env=None):
     """Automatic adoption: a legacy settings_file or remote_map binding becomes a tracked .ace/config.json in the
-    main checkout. Only in git, only if the file is missing, never for flag/env, opt-out ACE_AUTO_ADOPT=0."""
+    main checkout (`ace-cli init --json --fix-gitignore`). Only in git, only if the file is missing, never for
+    flag/env, never on an unverifiable worktree topology, opt-out ACE_AUTO_ADOPT=0."""
     env = _env_map(env)
     if env.get('ACE_AUTO_ADOPT') == '0' or not r.get('bound') or r.get('source') not in ADOPT_SOURCES:
         return None
-    root, main_root = repo_roots(os.path.abspath(cwd))
-    main = main_root or root
-    if not main or os.path.exists(os.path.join(main, '.ace', 'config.json')):
+    cwd = os.path.abspath(cwd)
+    root, main_root = repo_roots(cwd)
+    if not (main_root or root):
+        return None
+    target, _, untrusted = init_target(cwd)
+    if untrusted:  # checked BEFORE the write: the CLI would already have written to the worktree root
+        return {'path': None, 'warnings': ['worktree_topology_untrusted']}
+    if os.path.exists(os.path.join(target, '.ace', 'config.json')):
         return None
     try:
-        return write_binding(main, r['orgId'], r['projectId'])
+        return bind(cwd, r['orgId'], r['projectId'])
     except (OSError, ValueError, WriteRefused):
         return None
 
@@ -746,8 +893,10 @@ def session_notice(sid, cwd=None, env=None, spawn_verify=True, bound=None):
         st = {'state': local_state(r), 'shown': False, 'adopted': None, 'adopt_shown': False}
         remember(r, cwd)
         a = adopt(r, cwd, env)
-        if a:
+        if a and a.get('path'):
             st['adopted'] = a['path']
+        elif a:
+            st['note'] = WARN_LINES['worktree_topology_untrusted']
         _save(p, st)
         if st['state']:
             log_context(r, st['state'], sid=sid)
@@ -761,6 +910,8 @@ def session_notice(sid, cwd=None, env=None, spawn_verify=True, bound=None):
     line = None
     if st.get('state') in PROBLEM_STATES and not st.get('shown'):
         line, st['shown'] = LINES[st['state']], True
+    elif st.get('note') and not st.get('note_shown'):
+        line, st['note_shown'] = st['note'], True
     elif st.get('adopted') and not st.get('adopt_shown') and untracked(os.path.dirname(os.path.dirname(st['adopted']))):
         line, st['adopt_shown'] = ADOPT_LINE, True
     if line:
@@ -814,16 +965,18 @@ def _write_export(cwd, target, force):
 
 def _bind_cli(cwd, org, prj, yes):
     root, main_root = repo_roots(cwd)
-    main = main_root or root
-    if not main:
+    if not (main_root or root):
         print('Not a git repo: there is no tracked file to write. Set ACE_ORG_ID / ACE_PROJECT_ID in the env instead.')
         return 1
     if not (ORG_ID.match(org) and PRJ_ID.match(prj)):
         print('ids must look like org_... / prj_...')
         return 1
+    main, _, untrusted = init_target(cwd)
     path = os.path.join(main, '.ace', 'config.json')
     if not yes:
         print('Would write %s:\n%s' % (path, json.dumps({'orgId': org, 'projectId': prj}, indent=2)))
+        if untrusted:
+            print(WARN_LINES['worktree_topology_untrusted'])
         if ignored(main):
             before = read_file(os.path.join(main, '.gitignore')) or ''
             after, _ = fix_gitignore(before)
@@ -833,12 +986,26 @@ def _bind_cli(cwd, org, prj, yes):
         print('Nothing written. Re-run with --yes after the user confirmed.')
         return 0
     try:
-        r = write_binding(main, org, prj)
+        r = bind(cwd, org, prj)  # the user confirmed: --fix-gitignore
     except WriteRefused as e:
         print('Refused: %s' % e)
         return 1
     print('Wrote %s (gitignore: %s). Nothing staged or committed: commit it to bind every clone.' % (r['path'], r['gitignore']))
+    for w in r.get('warnings') or []:
+        if w in WARN_LINES:
+            print(WARN_LINES[w])
+    if r.get('shadowedBy'):
+        print('Remove it (after the user confirmed): ace-context --remove-shadow %s' % r['shadowedBy'])
     return 0
+
+
+def _remove_shadow_cli(cwd, path):
+    try:
+        print('Removed %s' % remove_shadow(cwd, path))
+        return 0
+    except (OSError, WriteRefused) as e:
+        print('Refused: %s' % e)
+        return 1
 
 
 def main(argv=None):
@@ -850,7 +1017,10 @@ def main(argv=None):
       ace-context --write-export FILE [--force]  stdin -> FILE inside the repo root (no symlink, no silent overwrite)
       ace-context --logs                 <log root>/.claude/data/logs (main checkout of a worktree, git root, else cwd)
       ace-context --bind ORG PRJ [--yes] the tracked <main checkout>/.ace/config.json: a preview (with the .gitignore
-                                         diff when the file is ignored); written only with --yes. Never settings.json.
+                                         diff when the file is ignored); written only with --yes (ace-cli init --json
+                                         --fix-gitignore, our writer when the CLI has none). Never settings.json.
+      ace-context --remove-shadow PATH   delete the worktree-local .ace/config.json that overrides the main checkout's
+                                         binding (only that file, symlink-safe; after the user confirmed).
     """
     import argparse
     ap = argparse.ArgumentParser(prog='ace-context')
@@ -866,12 +1036,15 @@ def main(argv=None):
     ap.add_argument('--verify-session')
     ap.add_argument('--bind', nargs=2, metavar=('ORG', 'PRJ'))
     ap.add_argument('--write-export', metavar='FILE')
+    ap.add_argument('--remove-shadow', metavar='PATH')
     ap.add_argument('--force', action='store_true')
     ap.add_argument('--yes', action='store_true')
     a = ap.parse_args(argv)
     cwd = os.path.abspath(a.cwd or os.getcwd())
     if a.bind:
         return _bind_cli(cwd, a.bind[0], a.bind[1], a.yes)
+    if a.remove_shadow:
+        return _remove_shadow_cli(cwd, a.remove_shadow)
     if a.write_export:
         return _write_export(cwd, a.write_export, a.force)
     if a.logs:  # the repo root's log dir (worktrees and subfolders share it)

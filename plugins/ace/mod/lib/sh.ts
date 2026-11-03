@@ -26,3 +26,14 @@ export const REPO_WRITE_SH = 'umask 022; m="$1"; r="$2"; case "/$r/" in */../*|*
   + 't=$(mktemp "$d/.ace-w-XXXXXXXX") || exit 5; cat > "$t" || { rm -f "$t"; exit 5; }; chmod 644 "$t"; '
   + '[ -L "$m/$r" ] && { rm -f "$t"; exit 3; }; mv -f "$t" "$m/$r" || { rm -f "$t"; exit 5; }'
 export const REPO_WRITE_WHY: Record<number, string> = { 3: 'symlink', 4: 'outside the main checkout', 5: 'io error' }
+
+// The band's [Entfernen] (cli 4.4.1 warning worktree_file_shadows_main): delete ONE worktree-local .ace/config.json,
+// nothing else (same rules as ace_project_context.remove_shadow): the path ends in .ace/config.json, neither the file
+// nor .ace is a symlink, it is a regular file, realpath(.ace) is under realpath(worktree root); rm goes through the
+// resolved dir. $1 = file, $2 = worktree root. Exit 0 removed, 3 a symlink, 4 not ours / outside, 5 missing or io.
+export const REMOVE_SHADOW_SH = 'f="$1"; r="$2"; case "$f" in */.ace/config.json) ;; *) exit 4;; esac; d=$(dirname "$f"); '
+  + '[ -L "$d" ] && exit 3; [ -L "$f" ] && exit 3; [ -f "$f" ] || exit 5; '
+  + 'rd=$(cd "$d" && pwd -P) && rr=$(cd "$r" && pwd -P) || exit 5; case "$rd/" in "$rr"/*) ;; *) exit 4;; esac; '
+  + 'rm -f "$rd/config.json" || exit 5'
+// realpath of a dir, or of a file's dir plus its name; empty when it does not exist. $1 = path.
+export const REALPATH_SH = 'if [ -d "$1" ]; then cd "$1" && pwd -P; else cd "$(dirname "$1")" 2>/dev/null && printf "%s/%s" "$(pwd -P)" "$(basename "$1")"; fi'

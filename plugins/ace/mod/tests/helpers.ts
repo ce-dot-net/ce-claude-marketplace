@@ -12,7 +12,7 @@ import { renderPatternsDict } from '../lib/render.ts'
 import { traceVariant, renderCohort, serverFullPct, storedFullPct } from '../lib/cohort.ts'
 import { hasSubstantialWork, toolRec } from '../lib/trace.ts'
 import { rejectionMatch, evalStats, evalInjection, usedPatternIds, toolHaystack } from '../lib/evidence.ts'
-import { PRIVATE_WRITE_SH, REPO_WRITE_SH } from '../lib/sh.ts'
+import { PRIVATE_WRITE_SH, REMOVE_SHADOW_SH, REPO_WRITE_SH } from '../lib/sh.ts'
 import { statusLine, learnLine } from '../ui/status.ts'
 
 // ACE v8.0.0 production mod - `claude plugin test plugins/ace` suite (DESIGN §13.1, §12, §9 G9, §4/C1).
@@ -110,6 +110,7 @@ export function host(on: any, o: Opts = {}) {
     if (o.cli && cliOf(argv)) { const a = o.cli(cliOf(argv)!, init.stdin); if (a) { now += a.advanceMs ?? 0; if (a.killed) throw new Error('ace: $.process.run aborted: still running after timeoutMs'); return res(a.exitCode ?? 0, a.stdout ?? '', a.stderr ?? '') } }
     if (argv[0].endsWith('/scripts/ace-python')) return o.noPython ? res(1, '') : res(0, '/usr/bin/python3.13\n')
     if (argv[0] === '/bin/sh' && argv[2] === REPO_WRITE_SH) { const t = `${argv[4]}/${argv[5]}`; if ((o.links ?? []).some(l => t === l || t.startsWith(l + '/'))) return res(3, ''); put(t, init.stdin ?? ''); if (argv[5] === '.gitignore') put(`${argv[4]}/.gitignore-fixed`, ''); return res(0, '') }
+    if (argv[0] === '/bin/sh' && argv[2] === REMOVE_SHADOW_SH) { if ((o.links ?? []).some(l => argv[4] === l || argv[4].startsWith(l + '/'))) return res(3, ''); if (!files.has(argv[4])) return res(5, ''); files.delete(argv[4]); return res(0, '') }  // real sh: tests/test_mod_repo_write_sh.py
     if (argv[0] === '/bin/sh' && argv[2] === PRIVATE_WRITE_SH) { if (o.beforeWrite) return Promise.resolve(o.beforeWrite(argv[4])).then(() => { put(argv[4], init.stdin ?? ''); return res(0, '') }); put(argv[4], init.stdin ?? ''); return res(0, '') }  // umask 077 + rename
     if ((argv[0] === 'git' || argv[0].endsWith('/git')) && argv.includes('check-ignore')) return res(o.ignored && !files.has(`${argv[2]}/.gitignore-fixed`) ? 0 : 1, '')
     if ((argv[0] === 'git' || argv[0].endsWith('/git')) && argv.includes('--error-unmatch')) return res(1, '')

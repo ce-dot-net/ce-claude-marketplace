@@ -138,6 +138,7 @@ const MAIN = '/repo', WT = '/repo/.claude/worktrees/w1'
 const worktreeFiles = (extra: Record<string, string> = {}) => ({
   [`${MAIN}/.git/config`]: '[core]\n[remote "origin"]\n\turl = git@github.com:acme/widget.git\n',
   [`${WT}/.git`]: `gitdir: ${MAIN}/.git/worktrees/w1\n`, [`${MAIN}/.git/worktrees/w1/commondir`]: '../..\n',
+  [`${MAIN}/.git/worktrees/w1/gitdir`]: `${WT}/.git\n`, [`${MAIN}/.git/HEAD`]: 'ref: refs/heads/main\n',  // a real git worktree (spec §9 verifies it)
   [`${MAIN}/.claude/settings.json`]: JSON.stringify({ env: { ACE_ORG_ID: 'org_m', ACE_PROJECT_ID: 'prj_m' } }),
   [`${MAIN}/.claude/data/logs/.keep`]: '', [`${WT}/src/x.ts`]: '', ...extra })
 
