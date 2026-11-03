@@ -17,6 +17,7 @@ resolve.js contract (pinned here):
 import json
 import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -180,3 +181,38 @@ def test_engine_stderr_names_the_fetch_cause():
           "console.log(errText(e));console.log(errText(new Error('plain')));")
     r = subprocess.run([E.node_bin(), "-e", js, str(E.ENGINE / "resolve.js")], capture_output=True, text=True, timeout=20)
     assert r.stdout.splitlines() == ["fetch failed (ECONNRESET)", "plain"], r.stderr
+
+
+# core >= 3.4.0 exports "./client" and "./config": load through them, deep dist/cjs paths only for older cores.
+@pytest.mark.parametrize("missing", [None, "client/ace-client.js", "config/context.js"])
+def test_resolve_uses_public_exports_when_present(tmp_path, missing):
+    rc, out, err = _resolve(E.make_prefix(tmp_path, version="3.4.0", public=True, missing=missing))
+    assert rc == 0 and out["ok"] is True, (out, err)
+    assert out["load"] == "exports"
+
+
+def test_resolve_falls_back_to_deep_paths_on_older_core(tmp_path):
+    rc, out, _ = _resolve(E.make_prefix(tmp_path, version="3.3.2"))
+    assert rc == 0 and out["load"] == "deep"
+
+
+def test_resolve_public_exports_keep_the_version_and_export_gate(tmp_path):
+    rc, out, _ = _resolve(E.make_prefix(tmp_path, version="4.0.0", public=True))
+    assert rc == 3 and out["reason"] == "core_too_new"
+    rc, out, _ = _resolve(E.make_prefix(tmp_path / "b", version="3.4.0", public=True, no_export=True))
+    assert rc == 3 and out["reason"] == "export_missing"
+
+
+_REPO_PLUGIN = Path(__file__).resolve().parent.parent / "plugins" / "ace"  # E.PLUGIN is a copy without node_modules
+_PINNED_CORE = [_REPO_PLUGIN / "node_modules" / "@ace-sdk" / "cli" / "node_modules" / "@ace-sdk" / "core",
+                _REPO_PLUGIN / "node_modules" / "@ace-sdk" / "core"]
+
+
+@pytest.mark.skipif(not any((c / "package.json").is_file() for c in _PINNED_CORE),
+                    reason="pinned CLI not installed: npm ci --ignore-scripts in plugins/ace")
+def test_resolve_pinned_core_loads_through_public_exports():
+    r = subprocess.run([E.node_bin(), str(_REPO_PLUGIN / "engine" / "resolve.js")], capture_output=True, text=True,
+                       env=dict(os.environ, PATH="/usr/bin:/bin"), timeout=20)
+    out = json.loads(r.stdout)
+    assert r.returncode == 0 and out["ok"] is True, out
+    assert out["load"] == "exports" and out["core_version"] >= "3.4.0"
