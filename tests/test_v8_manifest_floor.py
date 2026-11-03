@@ -58,3 +58,9 @@ def test_pin_supports_search_session_id():
     pin = json.loads((REPO / "plugins" / "ace" / "package.json").read_text())["dependencies"]["@ace-sdk/cli"]
     assert re.fullmatch(r"\d+\.\d+\.\d+", pin), pin
     assert tuple(map(int, pin.split("."))) >= (4, 3, 1)
+
+
+def test_pin_is_at_least_4_3_2():
+    """SDK asked for cli >= 4.3.2 (learn Idempotency-Key, search session_id validation; core ^3.5.0)."""
+    pin = json.loads((REPO / "plugins" / "ace" / "package.json").read_text())["dependencies"]["@ace-sdk/cli"]
+    assert tuple(map(int, pin.split("."))) >= (4, 3, 2)
