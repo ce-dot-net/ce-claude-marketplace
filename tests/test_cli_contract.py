@@ -26,7 +26,7 @@ SQLITE_BINARY = PLUGIN / "node_modules" / "better-sqlite3" / "build" / "Release"
 pytestmark = pytest.mark.skipif(not (CLI_JS.is_file() and NODE),
                                 reason="pinned CLI not installed: npm ci --ignore-scripts in plugins/ace")
 
-ORG, PROJECT, TOKEN = "org_contract", "prj_contract", "ace_contract_token"
+ORG, PROJECT, TOKEN = "org_contract", "prj_contract", "ace_user_contract_token"  # 4.4.0: only ace_user_* tokens
 
 # What the plugin passes (ace_cli.py/ace_engine.py: run_search/run_learn/check_auth_status; ace_graph_builder; commands).
 FLAGS = {
@@ -219,9 +219,18 @@ def test_whoami_fields(run):
 
 
 def test_whoami_unauthenticated_is_rc_zero_json(run, tmp_path):
+    """4.4.0: not logged in = exit 3, stderr {"error":{"code":"not_logged_in",...}} (the verify classifier's input)."""
     (tmp_path / "xdg" / "ace" / "config.json").write_text("{}")
     p = run("whoami", "--json")
-    assert p.returncode == 0 and json.loads(p.stdout)["authenticated"] is False
+    assert p.returncode == 3 and json.loads(p.stderr.strip().splitlines()[-1])["error"]["code"] == "not_logged_in"
+
+
+def test_context_json_is_the_seam_shape(run, tmp_path):
+    """4.4.0: `context --json` (offline) gives the resolver result the mod's seam parses; unbound = exit 5."""
+    p = run("context", "--json")
+    j = json.loads(p.stdout)
+    assert isinstance(j.get("bound"), bool)
+    assert p.returncode == (0 if j["bound"] else 5)
 
 
 def test_projects_fields(run):

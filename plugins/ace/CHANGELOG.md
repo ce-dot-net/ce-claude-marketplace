@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [8.1.0] - Unreleased
 
+Requires: Claude Code >= 2.1.311, ace-cli 4.4.0 (pinned exactly; @ace-sdk/core >= 3.8.0), Python >= 3.10 for the fallback hooks (the mod chain needs none).
+
 ### Added
 - One binding core for both chains: `mod/context/` and `shared-hooks/utils/ace_project_context.py`, conformant to the SDK
   spec `project-context` (ce-ace-clients 9500190, 70 cases) plus our strict id check (`org_`/`prj_`). Precedence flag >

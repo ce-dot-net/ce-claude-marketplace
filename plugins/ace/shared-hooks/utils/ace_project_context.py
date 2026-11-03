@@ -493,8 +493,12 @@ def classify(exit_code, stderr, spawn_error=False, timeout=False):
         code = e.get('error', {}).get('code') if isinstance(e, dict) and isinstance(e.get('error'), dict) else None
         if code in _NAMES:
             return _NAMES[code]
+        if code:  # the new CLI's generic exit 1 (e.g. a subscription 403): never guessed from the message text
+            return 'server_error'
     if re.search(r'Cannot find module|MODULE_NOT_FOUND|ace-cli not found', err):
         return 'cli_missing'
+    if re.search(r'token_expired|Session expired', err):
+        return 'expired'
     if re.search(r'No API token found|Please login first|Not logged in|not_logged_in', err, re.I):
         return 'not_logged_in'
     m = _HTTP.search(err)

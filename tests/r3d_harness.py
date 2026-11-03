@@ -82,7 +82,7 @@ sys.exit(rc)
 
 
 class Box3d:
-    def __init__(self, tmp, pin="4.3.4", local=False, global_version=None, node=True, npm=True):
+    def __init__(self, tmp, pin="4.4.0", local=False, global_version=None, node=True, npm=True):
         self.tmp = Path(tmp)
         self.root = self.tmp / "ace-plugin"
         self.data = self.tmp / "ace-data"

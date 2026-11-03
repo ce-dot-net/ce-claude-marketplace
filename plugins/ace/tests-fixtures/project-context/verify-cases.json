@@ -123,5 +123,23 @@
   "stderr": "{\"level\":\"error\",\"message\":\"{\\\"error\\\":\\\"Server error (500): x\\\"}\"}",
   "stdout": "No API token found",
   "state": "server_error"
+ },
+ {
+  "name": "4.4.0: exit 1 subscription 403 (account_blocked) is generic, never no_access",
+  "exit": 1,
+  "stderr": "{\"error\": {\"code\": \"account_blocked\", \"status\": 403, \"message\": \"Server error (403): account blocked\"}}",
+  "state": "server_error"
+ },
+ {
+  "name": "4.4.0: exit 7 insufficient_permissions",
+  "exit": 7,
+  "stderr": "{\"error\": {\"code\": \"no_access\", \"status\": 403, \"message\": \"insufficient_permissions\"}}",
+  "state": "no_access"
+ },
+ {
+  "name": "4.3.4: X-ACE-Token-Expired -> token_expired in the message",
+  "exit": 1,
+  "stderr": "{\"level\":\"error\",\"message\":\"{\\\"error\\\":\\\"token_expired\\\",\\\"message\\\":\\\"Session expired (7-day hard cap reached). Run `ace-cli login`\\\"}\"}",
+  "state": "expired"
  }
 ]

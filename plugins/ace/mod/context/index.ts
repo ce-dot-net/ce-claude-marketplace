@@ -118,9 +118,13 @@ export function classify(exitCode: number | null | undefined, stderr: string, sp
   if (exitCode != null && CODES[exitCode]) return CODES[exitCode]
   const err = String(stderr ?? '')
   for (const line of err.split('\n')) {
-    try { const e = JSON.parse(line); const code = e?.error?.code; if (typeof code === 'string' && NAMES[code]) return NAMES[code] } catch { /* not JSON */ }
+    let code: unknown
+    try { code = JSON.parse(line)?.error?.code } catch { continue }
+    if (typeof code === 'string' && NAMES[code]) return NAMES[code]
+    if (typeof code === 'string' && code) return 'server_error'  // new CLI generic exit 1 (subscription 403): never from text
   }
   if (/Cannot find module|MODULE_NOT_FOUND|ace-cli not found/.test(err)) return 'cli_missing'
+  if (/token_expired|Session expired/.test(err)) return 'expired'
   if (/No API token found|Please login first|Not logged in|not_logged_in/i.test(err)) return 'not_logged_in'
   const m = /Server error \((\d{3})\)/.exec(err)
   const code = m ? Number(m[1]) : 0
