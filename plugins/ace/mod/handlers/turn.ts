@@ -79,7 +79,8 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
       project_id: s.project, agent_type: agentType, patterns_used_count: playbook.length, pattern_ids: playbook.slice(0, 20),
       tools_executed: recs.length, state_changing_tools: recs.filter(r => ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit'].some(x => r.tool.includes(x))).length,
       success, execution_time_seconds: Math.round((await $.clock.now() - t0) / 10) / 100, learning_sent: sent,
-      used_ids_count: used.length, used_source: source, ...bySource, ...(capped ? { used_ids_capped: true } : {}) })
+      used_ids_count: used.length, used_source: source, ...bySource, ...(capped ? { used_ids_capped: true } : {}),
+      source: 'mod', agent_id: agentId ?? null, task_session_id: tsid ?? null, render_cohort: variant ?? null })  // 8.1.0 audit
     const log = `${s.logs}/ace-relevance.jsonl`
     const python = (await readText($, `${s.root}/python_path`))?.trim()
     const verbosity = await $.env.get('ACE_VERBOSITY') || 'detailed'
@@ -99,7 +100,7 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
     }
     await relLog($, s, { timestamp: await nowIso($), event: 'learn_dispatched', hook, session_id: s.sessionId, agent_id: agentId ?? null,
       agent_type: agentType, task_session_id: tsid ?? null, parent_task_id: state.parent_task_id ?? null, retrieval_id: state.retrieval_id ?? null,
-      applied_log_ids: applied.length, patterns_used: playbook.length, tools_executed: recs.length, success, spawn_exit: spawned?.exitCode ?? null,
+      applied_log_ids_count: applied.length, patterns_used: playbook.length, tools_executed: recs.length, success, spawn_exit: spawned?.exitCode ?? null,
       used_source: source, ...bySource, source: 'mod' })
     return !!spawned && spawned.exitCode === 0
   }

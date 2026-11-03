@@ -15,6 +15,7 @@ export async function doctorCmd($: any, { c, cli }: Kit): Promise<string> {
     for (const w of cc.warnings ?? []) out.push(`warning  ${w === 'global_project_id_ignored'
       ? `global projectId in ${gpath} is ignored: bind each repo with .ace/config.json` : w}`)
     out.push(`log root ${c.root}`)
+    out.push(await logCounts($, `${c.root}/.claude/data/logs`))
     const py = await run($, [`${$.plugin.root}/scripts/ace-python`])  // the fallback hooks' interpreter (>= 3.10)
     out.push(py && py.exitCode === 0 ? `python   ✓ ${String(py.stdout).trim()}` : 'python   ✗ Python >= 3.10 needed for the fallback hooks; the mod chain is unaffected')
     const v = await cliRun($, null, ['--version'], { timeoutMs: 10_000 })
@@ -25,4 +26,23 @@ export async function doctorCmd($: any, { c, cli }: Kit): Promise<string> {
       out.push(st === 'ok' ? `server   ✓ ${json(s)?.playbook?.total_patterns ?? '?'} patterns` : `server   ✗ ${problemLine(st)}`)
     }
     return out.join('\n')
+}
+
+// learn retries, failed learns, the context state/source mix, from the repo root's log and its rotation (.1)
+export async function logCounts($: any, dir: string): Promise<string> {
+  let retry = 0, failed = 0
+  const ctx: Record<string, number> = {}
+  for (const f of ['ace-relevance.jsonl', 'ace-relevance.1.jsonl']) {
+    let text = ''
+    try { text = await $.fs.read(`${dir}/${f}`) as string } catch { continue }
+    for (const line of text.split('\n')) {
+      if (!line.includes('"event"')) continue
+      let r: any
+      try { r = JSON.parse(line) } catch { continue }
+      if (r.event === 'learn_retry') retry++
+      else if (r.event === 'execution' && r.learning_sent === false) failed++
+      else if (r.event === 'context') { const k = `${r.source}/${r.state}`; ctx[k] = (ctx[k] ?? 0) + 1 }
+    }
+  }
+  return `logs     learn retries ${retry} · failed learns ${failed} · binding ${Object.entries(ctx).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}`
 }

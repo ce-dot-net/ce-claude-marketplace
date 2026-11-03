@@ -491,15 +491,32 @@ db = os.path.expanduser("~/.ace-cache/sessions.db")
 if os.path.exists(db) and os.path.getsize(db) > 100 * MB:
     warned = True
     print("WARN: %s is %d MB (over 100 MB)" % (db, os.path.getsize(db) // MB))
-log = os.path.join(os.getcwd(), ".claude", "data", "logs", "ace-relevance.jsonl")
+import subprocess
+try:
+    logs = subprocess.run([os.path.join(os.environ.get("CLAUDE_PLUGIN_ROOT", ""), "scripts", "ace-context"), "--logs"],
+                          capture_output=True, text=True).stdout.strip()
+except OSError:
+    logs = ""
+logs = logs or os.path.join(os.getcwd(), ".claude", "data", "logs")
+log = os.path.join(logs, "ace-relevance.jsonl")  # 8.1.0: the repo root's log (log_root)
 cutoff = time.time() - 24 * 3600
 locked = 0
-for path in (log, log + ".1"):  # also the rotated file
+counts = {"learn_retry": 0, "learn_failed": 0}
+ctx = {}
+for path in (log, os.path.join(logs, "ace-relevance.1.jsonl")):  # also the rotated file (ace-relevance.1.jsonl)
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 try:
                     row = json.loads(line)
+                    ev = row.get("event")
+                    if ev == "learn_retry":
+                        counts["learn_retry"] += 1
+                    elif ev == "execution" and row.get("learning_sent") is False:
+                        counts["learn_failed"] += 1
+                    elif ev == "context":
+                        k = "%s/%s" % (row.get("source"), row.get("state"))
+                        ctx[k] = ctx.get(k, 0) + 1
                     # stderr_sample is cut at 300 chars, so also count pin-drop rows
                     if not ("database is locked" in line or row.get("pin_failed") is True
                             or row.get("pin_skipped") == "backoff"):
@@ -512,6 +529,8 @@ for path in (log, log + ".1"):  # also the rotated file
                     locked += 1
     except OSError:
         pass
+print("INFO: learn retries %d, failed learns %d; binding source/state: %s" % (
+    counts["learn_retry"], counts["learn_failed"], ", ".join("%s %d" % kv for kv in ctx.items()) or "none"))
 if locked:
     warned = True
     print("WARN: %d lock incident(s) ('database is locked' / pin_failed / pin backoff) in ace-relevance.jsonl in the last 24 h" % locked)

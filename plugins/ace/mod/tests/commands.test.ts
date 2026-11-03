@@ -219,3 +219,11 @@ test('doctor: the fallback hooks need Python >= 3.10 (named only when missing; t
   await start($)
   expect(await run($, 'doctor')).toContain('Python >= 3.10 needed for the fallback hooks; the mod chain is unaffected')
 })
+
+test('doctor counts retries, failed learns and the binding source/state from the repo root log (+ .1)', async ($, on) => {
+  const L = `${CWD}/.claude/data/logs`
+  host(on, { files: { [`${L}/ace-relevance.jsonl`]: '{"event":"learn_retry"}\n{"event":"execution","learning_sent":false}\n{"event":"context","source":"repo_file","state":"ok"}\n',
+    [`${L}/ace-relevance.1.jsonl`]: '{"event":"learn_retry"}\n' } })
+  await start($)
+  expect(await run($, 'doctor')).toContain('learn retries 2 · failed learns 1 · binding repo_file/ok 1')
+})

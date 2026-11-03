@@ -66,7 +66,10 @@ def test_hook_returns_fast_while_detached_learn_runs(box):
     assert lock.exists(), "lock must be held while the detached learn runs"
     assert _wait(lambda: box.cli_calls("learn"), 6), "detached learn never ran"
     assert _wait(lambda: not lock.exists(), 3), "lock must be removed after the learn"
-    assert box.relevance_rows("execution"), "execution metrics row must be written by the child"
+    ex = box.relevance_rows("execution")
+    assert ex, "execution metrics row must be written by the child"
+    # 8.1.0 audit: the same correlation fields as the mod's row
+    assert ex[-1]["source"] == "python" and {"agent_id", "task_session_id", "render_cohort"} <= set(ex[-1])
     assert not list(box.session_dir(sid).glob("learn-job-*.json"))
 
 
