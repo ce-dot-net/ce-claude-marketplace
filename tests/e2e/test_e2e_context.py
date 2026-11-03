@@ -20,6 +20,9 @@ REPO = Path(__file__).resolve().parents[2]
 PLUGIN = REPO / 'plugins/ace'
 sys.path.insert(0, str(PLUGIN / 'shared-hooks/utils'))
 import ace_project_context as apc  # noqa: E402
+from plugin_copy import hermetic_root  # noqa: E402
+
+HOOKS = hermetic_root()  # the hooks under test must find the fake ace-cli, not a developer's npm-ci'd real one
 
 pytestmark = pytest.mark.skipif(os.environ.get('ACE_E2E') != '1', reason='e2e: set ACE_E2E=1')
 ORG, PRJ = 'org_e2e', 'prj_e2e'
@@ -57,15 +60,15 @@ def box(tmp_path, monkeypatch):
 
 
 def ctx_cli(cwd, *a, env=None):
-    return subprocess.run([str(PLUGIN / 'scripts/ace-context'), *a], cwd=str(cwd), capture_output=True, text=True,
+    return subprocess.run([str(HOOKS / 'scripts/ace-context'), *a], cwd=str(cwd), capture_output=True, text=True,
                           env=dict(os.environ, **(env or {})))
 
 
 def ups(cwd, sid, prompt='please refactor the hook so it injects patterns when reading plugin files'):
     ev = {'hook_event_name': 'UserPromptSubmit', 'session_id': sid, 'cwd': str(cwd), 'prompt': prompt,
           'transcript_path': '/dev/null', 'prompt_id': 'p-' + sid}
-    return subprocess.run([str(PLUGIN / 'scripts/ace_before_task_wrapper.sh')], input=json.dumps(ev), cwd=str(cwd),
-                          capture_output=True, text=True, timeout=60, env=dict(os.environ, CLAUDE_PLUGIN_ROOT=str(PLUGIN)))
+    return subprocess.run([str(HOOKS / 'scripts/ace_before_task_wrapper.sh')], input=json.dumps(ev), cwd=str(cwd),
+                          capture_output=True, text=True, timeout=60, env=dict(os.environ, CLAUDE_PLUGIN_ROOT=str(HOOKS)))
 
 
 def rows(main):
