@@ -37,9 +37,11 @@ def test_changelog_backfills_7_1_x(ver):
 
 
 def test_changelog_8_0_0_is_newest_entry():
-    """Keep-a-Changelog order: 8.0.0 is the first version heading."""
-    first = re.search(r"^## \[(\d+\.\d+\.\d+)\]", _read(CHANGELOG), re.M)
-    assert first and first.group(1) == "8.0.0"
+    """Keep-a-Changelog order: newest first; 8.0.0 is the newest released heading (8.0.1 may sit above it, Unreleased)."""
+    heads = re.findall(r"^## \[(\d+\.\d+\.\d+)\]( - Unreleased)?", _read(CHANGELOG), re.M)
+    released = [v for v, unreleased in heads if not unreleased]
+    assert released and released[0] == "8.0.0"
+    assert heads[0][0] in ("8.0.0", "8.0.1")
 
 
 def test_adr_001_language_exists_with_verdict():

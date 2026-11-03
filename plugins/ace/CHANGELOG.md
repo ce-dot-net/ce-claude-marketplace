@@ -5,6 +5,18 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.0.1] - Unreleased
+
+### Changed
+- Pinned `@ace-sdk/cli` 4.3.4 (`@ace-sdk/core` 3.7.0): learn retries POST /traces up to 4 attempts (~2/8/20 s, honours Retry-After, same Idempotency-Key), dead-letter only after the 4th failure. Requires text: ace-cli >= 4.3.4, @ace-sdk/core >= 3.7.0.
+- The engine learn (`engine/learn.js`) passes a logger to `AceClient`, so it writes the same `[ace] trace retry ...` stderr line as ace-cli; stdout is unchanged.
+
+### Added
+- Both chains parse the detached learn's stderr and append one `learn_retry` row per retry to `ace-relevance.jsonl` (hook, session_id, conversation_id, task_session_id, attempt, max_attempts, reason, idempotency_key, at, engine lib|cli, learning_sent). A learn that succeeds after retries still counts as sent.
+
+### Fixed
+- Mod: the detached learn's execution row is appended through the symlink-safe writer (it was a plain append).
+
 ## [8.0.0] - 2026-11-03
 
 ### Headline
