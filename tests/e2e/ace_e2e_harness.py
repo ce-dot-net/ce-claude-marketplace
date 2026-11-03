@@ -116,8 +116,11 @@ def _tmp_snapshot(token):
     # /tmp/ace-*-<session-uuid>.* during the run; the fixture's ids are never UUIDs,
     # so a full UUID in a name not carrying our token marks a foreign file: skip it
     # (and never delete it).
+    # Parallel runs (rstest, Linux TMPDIR=/tmp): another worker's own sandbox /tmp/ace-e2e-* is not a hook artifact
+    # and must never be diffed (or deleted) here.
     return {os.path.realpath(p) for p in glob.glob("/tmp/ace*")
-            if token in p or not _UUID_RE.search(os.path.basename(p))}
+            if not os.path.basename(p).startswith("ace-e2e-")
+            and (token in p or not _UUID_RE.search(os.path.basename(p)))}
 
 
 def _mtime(p):
