@@ -751,14 +751,14 @@ def run_learn_job(job):
     except Exception as e:
         log_hook_exception('AfterTask.learn', e)
     finally:
+        try:  # the metrics row first, the lock last (as the mod's learn child): a released lock means the row is there
+            log_execution_metrics(learning_sent=response is not None, hook=job.get('hook_event_name') or 'Stop', **job['metrics'])
+        except Exception:
+            pass
         try:
             lock.unlink()
         except OSError:
             pass
-    try:
-        log_execution_metrics(learning_sent=response is not None, hook=job.get('hook_event_name') or 'Stop', **job['metrics'])
-    except Exception:
-        pass
 
 
 def dispatch_learn(job, session_id):
