@@ -35,5 +35,7 @@ export const REMOVE_SHADOW_SH = 'f="$1"; r="$2"; case "$f" in */.ace/config.json
   + '[ -L "$d" ] && exit 3; [ -L "$f" ] && exit 3; [ -f "$f" ] || exit 5; '
   + 'rd=$(cd "$d" && pwd -P) && rr=$(cd "$r" && pwd -P) || exit 5; case "$rd/" in "$rr"/*) ;; *) exit 4;; esac; '
   + 'rm -f "$rd/config.json" || exit 5'
-// realpath of a dir, or of a file's dir plus its name; empty when it does not exist. $1 = path.
-export const REALPATH_SH = 'if [ -d "$1" ]; then cd "$1" && pwd -P; else cd "$(dirname "$1")" 2>/dev/null && printf "%s/%s" "$(pwd -P)" "$(basename "$1")"; fi'
+// realpath of a dir, or of a file's dir plus its name (a symlinked file followed first, at most 40 hops); empty when its
+// dir does not exist. $1 = an absolute path.
+export const REALPATH_SH = 'p="$1"; n=0; while [ -L "$p" ] && [ $n -lt 40 ]; do l=$(readlink "$p"); case "$l" in /*) p="$l";; *) p="${p%/*}/$l";; esac; n=$((n+1)); done; '
+  + 'if [ -d "$p" ]; then cd "$p" && pwd -P; else cd "$(dirname "$p")" 2>/dev/null && printf "%s/%s" "$(pwd -P)" "$(basename "$p")"; fi'

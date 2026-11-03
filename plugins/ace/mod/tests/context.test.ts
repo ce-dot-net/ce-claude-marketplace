@@ -277,3 +277,63 @@ test('bound: ACE_BIND_ROOT is exported beside the ids (a child session elsewhere
   await tick()
   expect(h.env.ACE_BIND_ROOT).toBe(CWD)
 })
+
+// ---- 8.1.0 review: forged commondir, oversized and out-of-repo binding files (mirror: tests/test_binding_file_guards.py) ----
+const CTX_CLI = (a: string[]) => a[0] === 'context'
+  ? { stdout: JSON.stringify({ bound: true, orgId: 'org_v', projectId: 'prj_v', source: 'settings_file', path: '/victim/.claude/settings.json' }) } : undefined
+const askedCli = (h: any) => h.runs.some((r: any) => cliOf(r.argv)?.[0] === 'context')
+const forgedFiles = () => ({
+  '/victim/.git/HEAD': 'ref: refs/heads/main\n', '/victim/.git/config': '[remote "origin"]\n\turl = git@github.com:victim/repo.git\n',
+  '/victim/.claude/settings.json': JSON.stringify({ env: { ACE_ORG_ID: 'org_v', ACE_PROJECT_ID: 'prj_v' } }), '/victim/.claude/data/logs/.keep': '',
+  '/a/.git': 'gitdir: /gd\n', '/gd/commondir': '/victim/.git\n', '/gd/gitdir': '/a/.git\n', '/a/.claude/data/logs/.keep': '' })
+
+test('forged .git commondir: no climb into the victim, the CLI is not asked, nothing logged or adopted there', async ($, on) => {
+  const h = host(on, { noSettings: true, root: '/a', cwd: '/a', files: forgedFiles(), cli: CTX_CLI })
+  await start($, '/a')
+  await tick()
+  expect(h.env.ACE_PROJECT_ID).toBe(undefined)
+  expect(askedCli(h)).toBe(false)
+  expect(h.band()?.state).toBe('unbound')
+  const rows = ctxRows(h, '/a/.claude/data/logs/ace-relevance.jsonl')
+  expect(rows[0]).toMatchObject({ state: 'unbound', reason: 'no_binding', root: '/a', warnings: ['worktree_topology_untrusted'] })
+  expect(h.runs.some((r: any) => r.argv.some((x: string) => x.startsWith('/victim/.claude/data') || x.startsWith('/victim/.ace')))).toBe(false)
+  expect([...h.files.keys()].some(k => k.startsWith('/victim/.ace'))).toBe(false)
+})
+
+const GIT = { [`${CWD}/.git/config`]: '[core]\n', [`${CWD}/.claude/data/logs/.keep`]: '' }
+const ACE = JSON.stringify({ orgId: 'org_a', projectId: 'prj_a' })
+for (const [rel, body] of [['.ace/config.json', ACE], ['.claude/settings.json', JSON.stringify({ env: { ACE_ORG_ID: 'org_a', ACE_PROJECT_ID: 'prj_a' } })]] as const) {
+  test(`${rel} over 64 KiB: config_invalid + config_too_large, the CLI is not asked`, async ($, on) => {
+    const h = host(on, { noSettings: true, env: { ACE_ORG_ID: 'org_e', ACE_PROJECT_ID: 'prj_e' }, cli: CTX_CLI,
+      files: { ...GIT, [`${CWD}/${rel}`]: body + ' '.repeat(64 * 1024 + 1 - body.length) } })
+    await start($)
+    await tick()
+    expect(askedCli(h)).toBe(false)
+    expect(h.band()?.state).toBe('config_invalid')
+    expect(ctxRows(h)[0]).toMatchObject({ state: 'config_invalid', reason: 'config_invalid', warnings: ['config_too_large'] })
+  })
+  test(`${rel} of exactly 64 KiB still binds`, async ($, on) => {
+    const h = host(on, { noSettings: true, files: { ...GIT, [`${CWD}/${rel}`]: body + ' '.repeat(64 * 1024 - body.length) } })
+    await start($)
+    await tick()
+    expect(h.env.ACE_PROJECT_ID).toBe('prj_a')
+  })
+}
+
+for (const real of ['/elsewhere/config.json', '/proj2/.ace/config.json']) {
+  test(`symlinked .ace/config.json -> ${real}: config_refused + repo_file_outside_root, the CLI is not asked`, async ($, on) => {
+    const h = host(on, { noSettings: true, files: { ...GIT, [`${CWD}/.ace/config.json`]: ACE }, realpaths: { [`${CWD}/.ace/config.json`]: real }, cli: CTX_CLI })
+    await start($)
+    await tick()
+    expect(askedCli(h)).toBe(false)
+    expect(h.band()?.state).toBe('config_refused')
+    expect(ctxRows(h)[0]).toMatchObject({ state: 'config_refused', source: 'repo_file', warnings: ['repo_file_outside_root'] })
+  })
+}
+
+test('a symlinked .ace/config.json inside the repo still binds', async ($, on) => {
+  const h = host(on, { noSettings: true, files: { ...GIT, [`${CWD}/.ace/config.json`]: ACE }, realpaths: { [`${CWD}/.ace/config.json`]: `${CWD}/conf/config.json` } })
+  await start($)
+  await tick()
+  expect(h.env.ACE_PROJECT_ID).toBe('prj_a')
+})

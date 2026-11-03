@@ -50,7 +50,9 @@
    "repo/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"prj_main\"}",
    "repo/.claude/worktrees/agent-1/.git": "gitdir: $ROOT/repo/.git/worktrees/agent-1\n",
    "repo/.git/worktrees/agent-1/commondir": "../..\n",
-   "repo/.claude/worktrees/agent-1/plugins/ace": null
+   "repo/.claude/worktrees/agent-1/plugins/ace": null,
+   "repo/.git/HEAD": "ref: refs/heads/main\n",
+   "repo/.git/worktrees/agent-1/gitdir": "$ROOT/repo/.claude/worktrees/agent-1/.git\n"
   },
   "cwd": "repo/.claude/worktrees/agent-1/plugins/ace",
   "env": {},
@@ -225,7 +227,9 @@
   "layout": {
    "repo/.git/config": "[core]\n",
    "wt/.git": "gitdir: $ROOT/repo/.git/worktrees/wt\n",
-   "repo/.git/worktrees/wt/commondir": "../..\n"
+   "repo/.git/worktrees/wt/commondir": "../..\n",
+   "repo/.git/HEAD": "ref: refs/heads/main\n",
+   "repo/.git/worktrees/wt/gitdir": "$ROOT/wt/.git\n"
   },
   "cwd": "wt",
   "env": {
@@ -241,6 +245,153 @@
    "projectId": "prj_e",
    "source": "env",
    "path": null
+  }
+ },
+ {
+  "name": "plugin: forged .git file, commondir at an unrelated repo -> no main-checkout climb, untrusted",
+  "layout": {
+   "victim/.git/HEAD": "ref: refs/heads/main\n",
+   "victim/.git/config": "[remote \"origin\"]\n\turl = git@github.com:victim/repo.git\n",
+   "victim/.claude/settings.json": "{\"env\":{\"ACE_ORG_ID\":\"org_v\",\"ACE_PROJECT_ID\":\"prj_v\"}}",
+   "victim/.ace/config.json": "{\"orgId\":\"org_v\",\"projectId\":\"prj_v\"}",
+   "a/.git": "gitdir: ../gd\n",
+   "gd/commondir": "../victim/.git\n",
+   "gd/gitdir": "$ROOT/a/.git\n"
+  },
+  "cwd": "a",
+  "env": {},
+  "flags": {},
+  "globalConfig": {
+   "projects": {
+    "github.com/victim/repo": {
+     "orgId": "org_v",
+     "projectId": "prj_v"
+    }
+   }
+  },
+  "expect": {
+   "bound": false,
+   "reason": "no_binding",
+   "tried": [
+    {
+     "source": "repo_file",
+     "path": "a/.ace/config.json",
+     "key": null
+    },
+    {
+     "source": "settings_file",
+     "path": "a/.claude/settings.json",
+     "key": null
+    },
+    {
+     "source": "env",
+     "path": null,
+     "key": null
+    },
+    {
+     "source": "remote_map",
+     "path": null,
+     "key": null
+    }
+   ],
+   "warnings": [
+    "worktree_topology_untrusted"
+   ]
+  }
+ },
+ {
+  "name": "plugin: forged .git file, gitdir planted inside the victim's worktrees but no back-pointer -> untrusted",
+  "layout": {
+   "victim/.git/HEAD": "ref: refs/heads/main\n",
+   "victim/.git/config": "[remote \"origin\"]\n\turl = git@github.com:victim/repo.git\n",
+   "victim/.claude/settings.json": "{\"env\":{\"ACE_ORG_ID\":\"org_v\",\"ACE_PROJECT_ID\":\"prj_v\"}}",
+   "victim/.ace/config.json": "{\"orgId\":\"org_v\",\"projectId\":\"prj_v\"}",
+   "a/.git": "gitdir: ../victim/.git/worktrees/a\n",
+   "victim/.git/worktrees/a/commondir": "../..\n"
+  },
+  "cwd": "a",
+  "env": {},
+  "flags": {},
+  "globalConfig": {
+   "projects": {
+    "github.com/victim/repo": {
+     "orgId": "org_v",
+     "projectId": "prj_v"
+    }
+   }
+  },
+  "expect": {
+   "bound": false,
+   "reason": "no_binding",
+   "tried": [
+    {
+     "source": "repo_file",
+     "path": "a/.ace/config.json",
+     "key": null
+    },
+    {
+     "source": "settings_file",
+     "path": "a/.claude/settings.json",
+     "key": null
+    },
+    {
+     "source": "env",
+     "path": null,
+     "key": null
+    },
+    {
+     "source": "remote_map",
+     "path": null,
+     "key": null
+    }
+   ],
+   "warnings": [
+    "worktree_topology_untrusted"
+   ]
+  }
+ },
+ {
+  "name": "plugin: worktree of a bare repo (common not named .git) -> no main checkout, untrusted",
+  "layout": {
+   "bare.git/HEAD": "ref: refs/heads/main\n",
+   "bare.git/config": "[core]\n\tbare = true\n",
+   "bare.git/worktrees/w/commondir": "../..\n",
+   "bare.git/worktrees/w/gitdir": "$ROOT/w/.git\n",
+   "w/.git": "gitdir: $ROOT/bare.git/worktrees/w\n",
+   ".ace/config.json": "{\"orgId\":\"org_v\",\"projectId\":\"prj_v\"}"
+  },
+  "cwd": "w",
+  "env": {},
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "no_binding",
+   "tried": [
+    {
+     "source": "repo_file",
+     "path": "w/.ace/config.json",
+     "key": null
+    },
+    {
+     "source": "settings_file",
+     "path": "w/.claude/settings.json",
+     "key": null
+    },
+    {
+     "source": "env",
+     "path": null,
+     "key": null
+    },
+    {
+     "source": "remote_map",
+     "path": null,
+     "key": null
+    }
+   ],
+   "warnings": [
+    "worktree_topology_untrusted"
+   ]
   }
  }
 ]
