@@ -52,9 +52,9 @@ def run(tmp_path):
     logs = proj / ".claude" / "data" / "logs"
     logs.mkdir(parents=True)
     (logs / "ace-relevance.jsonl").write_text(
-        json.dumps({"event": "search", "patterns_injected": 7, "avg_confidence": 0.8,
+        json.dumps({"event": "search", "session_id": "s1", "patterns_injected": 7, "avg_confidence": 0.8,
                     "domains": ["a", "b"]}) + "\n"
-        + json.dumps({"event": "domain_shift"}) + "\n"
+        + json.dumps({"event": "domain_shift", "session_id": "s1"}) + "\n"
     )
     (logs / "ace-review-result.json").write_text(json.dumps({"quality_pct": 75, "time_saved": "5m"}))
 
@@ -94,3 +94,46 @@ def test_statusline_output_format_preserved(run):
     for frag in ("7 injected", "80%", "2 domains", "1 shifts", "75% quality", "~5m"):
         assert frag in lines[1], (frag, lines[1])
     assert lines[2].startswith("limits 5h:30%") and "7d:10%" in lines[2]
+
+
+def _run_with_log(tmp_path, rows, session_id):
+    proj = tmp_path / "proj2"
+    logs = proj / ".claude" / "data" / "logs"
+    logs.mkdir(parents=True)
+    (logs / "ace-relevance.jsonl").write_text("".join(json.dumps(r) + "\n" for r in rows))
+    payload = {"cwd": str(proj)}
+    if session_id:
+        payload["session_id"] = session_id
+    env = dict(os.environ, HOME=str(tmp_path))
+    proc = subprocess.run(["bash", str(SCRIPT)], input=json.dumps(payload),
+                          capture_output=True, text=True, timeout=20, env=env)
+    return re.sub(r"\033\[[0-9;]*m", "", proc.stdout).splitlines()[1]
+
+
+TWO_SESSIONS = [
+    {"event": "search", "session_id": "A", "patterns_injected": 7, "domains": ["a"]},
+    {"event": "search", "session_id": "B", "patterns_injected": 3, "domains": ["b", "c"]},
+    {"event": "execution", "session_id": "B"},
+    {"event": "domain_shift", "session_id": "B"},
+    {"event": "search", "session_id": "B", "patterns_injected": 2, "domains": ["d"]},
+]
+
+
+def test_statusline_counts_only_current_session(tmp_path):
+    """Another session's execution row must not reset, and its rows must not add to, this session's counts."""
+    line = _run_with_log(tmp_path, TWO_SESSIONS, "A")
+    assert "7 injected" in line and "1 domains" in line and "shifts" not in line, line
+
+
+def test_statusline_session_task_boundary(tmp_path):
+    """Within the session, counting still starts after that session's own last execution row."""
+    line = _run_with_log(tmp_path, TWO_SESSIONS, "B")
+    assert "2 injected" in line and "1 domains" in line and "1 shifts" in line, line
+
+
+def test_statusline_no_session_id_keeps_old_behaviour(tmp_path):
+    """No session_id on stdin -> all sessions, since the last execution row of any session."""
+    line = _run_with_log(tmp_path, TWO_SESSIONS, None)
+    assert "2 injected" in line and "1 shifts" in line, line
+    line = _run_with_log(tmp_path / "x", TWO_SESSIONS[:2], None)
+    assert "10 injected" in line and "3 domains" in line, line
