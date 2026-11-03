@@ -1397,6 +1397,17 @@ test('learn launcher carries the execution metrics rows for both outcomes (learn
   }
 })
 
+test('v8.0.1 learn launcher carries the learn_retry base row (CC session, conversation, task session, hook) and the cwd for the symlink-safe append', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  await done($)
+  const argv = h.learns()[0]!.argv
+  const base = argv.flatMap(a => { try { const o = JSON.parse(a); return o && o.event === 'learn_retry' ? [o] : [] } catch { return [] } })
+  expect(base).toEqual([{ event: 'learn_retry', hook: 'Stop', session_id: SID, conversation_id: SID,
+    task_session_id: h.pin(h.searches()[0]!), agent_id: null, source: 'mod' }])
+  expect(argv[argv.findIndex(a => a.includes('"learn_retry"')) + 1]).toBe(CWD)
+})
+
 test('learn launcher: gets a 15 s spawn limit; the execution row names the real hook; a failed spawn logs learning_sent false and cleans up', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }), learnExit: 1 })
   await mainTask($, h)
