@@ -230,7 +230,10 @@ def test_real_core_search_parity_with_ace_cli_on_fake_server(real, tmp_path):
                          input=json.dumps({"query": "hook json", "org": "org_fake", "project": "prj_fake"}),
                          capture_output=True, text=True, env=env, timeout=60)
     assert lib.returncode == 0, lib.stderr
-    assert json.loads(lib.stdout) == json.loads(cli.stdout)
+    out = json.loads(lib.stdout)
+    switches = {k: out.pop(k) for k in ("feedback_downvote", "render_full_pct") if k in out}
+    assert out == json.loads(cli.stdout)  # parity, plus the server switches the core (and so the CLI) drops
+    assert switches == {"feedback_downvote": True, "render_full_pct": 0}
     bodies = [q["body"] for q in srv.requests() if q["path"].startswith("/patterns/search")]
     for body in bodies:  # searchPatterns generates these two per call (temp_search_<Date.now()>)
         del body["pattern"]["id"], body["pattern"]["created_at"]
@@ -313,3 +316,18 @@ def test_learn_without_applied_flag_sends_an_empty_list(fake_core, tmp_path):
     assert r.returncode == 0, r.stderr
     t = [x for x in E.read_jsonl(log) if x["op"] == "learn"][0]["trace"]
     assert t["applied_log_ids"] == []
+
+
+
+@needs_real
+def test_real_core_search_passes_the_server_switches_through(real, tmp_path):
+    """The core rebuilds its search result from a fixed field list; the engine must keep the server's
+    feedback_downvote and render_full_pct (the downvote gate and the full kill switch)."""
+    bin_dir, srv, env = real
+    env["PATH"] = E.path_with(bin_dir)
+    r = subprocess.run([E.node_bin(), str(E.ENGINE / "search.js")],
+                       input=json.dumps({"query": "hook json", "org": "org_fake", "project": "prj_fake"}),
+                       capture_output=True, text=True, env=env, timeout=60)
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert out["feedback_downvote"] is True and out["render_full_pct"] == 0

@@ -21,6 +21,7 @@ PATTERN = {"id": "ctx-fake-0001", "content": "use jq -n --arg for hook JSON", "s
            "cumulative_v15_reward": 1.0, "isAtRisk": False, "n_hot_pos": 1, "n_hot_neg": 0,
            "match_factors": {"bandit_rank": 1, "retrieval_log_id": 7, "semantic_score": 0.8}}
 SEARCH = {"similar_patterns": [PATTERN], "count": 1, "threshold": 0.5, "retrieval_id": "ret-fake-1",
+          "feedback_downvote": True, "render_full_pct": 0,
           "domains_summary": {"hooks": 1}}
 TRACE_OK = {"stored": True, "analysis_performed": True, "learning_queued": True, "trace_id": "fake-trace-1",
             "learning_statistics": {"patterns_created": 1, "patterns_updated": 2}}
