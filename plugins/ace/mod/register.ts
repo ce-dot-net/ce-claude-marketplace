@@ -213,6 +213,7 @@ type Load = {
   lastClaim: Map<string, string>                // key -> newest claimed domain: only that one writes domain-last
   markerAt: number
   reuseUsed: Set<string>                         // §32: `${entry}\0${agent}` already served to that agent
+  mainSeen: number                              // item 4: main tool.call events of the current task (diagnostic: tools_mismatch)
   compacted: boolean                             // item A: a main compaction ran; prompt.compose re-adds the patterns
   stopDefer: string[] | null                    // classic.Stop: background task types while delegated work runs (§16 P2)
   deferred: string | undefined                  // tsid of the main task whose learn waits for its delegated work
@@ -351,6 +352,7 @@ async function clearDeferred($: any, L: Load, s: Sess) {
 
 // Reap a finished task's state; main keeps rendered-main.txt for the SessionStart compact re-inject (patterns_used_state).
 async function reap($: any, L: Load, s: Sess, key: string, state: any) {
+  if (key === 'main') L.mainSeen = 0
   if (key === 'main' && state?.rendered_context) await writePrivate($, `${s.sdir}/rendered-main.txt`, state.rendered_context)
   await rm($, stateFile(s, key))
   await clearTools($, L, s, key)
@@ -363,6 +365,8 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   const t0 = await $.clock.now()
   const agentId = key === 'main' ? undefined : key
   const recs = await takeTools($, L, s, key)
+  if (key === 'main' && !recs.length && L.mainSeen > 0)  // item 4: a seen-once anomaly (Stop learned tools: 0 after Bash calls)
+    await relLog($, s, { timestamp: await nowIso($), event: 'tools_mismatch', hook: 'Stop', recorded: 0, seen: L.mainSeen, source: 'mod' })
   const state = await readState($, s, key)
   if (!state) {
     await clearTools($, L, s, key)
@@ -487,6 +491,7 @@ async function onPrompt($: any, L: Load, e: any): Promise<any> {
     : updateState($, L, s, 'main', u, true)
   if (!defer) {
     L.pendingMain = tsid
+    L.mainSeen = 0
     await clearDeferred($, L, s)  // accepted edge (CHANGELOG): a new human prompt before the notification drops the deferred learn
     await clearTools($, L, s, 'main')
     if (await $.fs.exists(pendingFile(s))) await rm($, pendingFile(s))
@@ -664,7 +669,7 @@ export const register: Register = (on) => {
   const L: Load = { sess: null, pendingMain: undefined, pendingTitle: undefined, stopEffort: undefined, domains: null,
     turnAnchor: new Map(), tools: new Map(), spawnPrompts: new Map(), placeholders: new Set(), late: new Map(), agentTypes: new Map(),
     earlyStart: new Map(), agentEffort: new Map(), lastClaim: new Map(), markerAt: 0, claims: new Set(), queues: new Map(),
-    stopDefer: null, deferred: undefined, handback: new Map(), reuseUsed: new Set(), compacted: false }
+    stopDefer: null, deferred: undefined, handback: new Map(), reuseUsed: new Set(), compacted: false, mainSeen: 0 }
   const effortOf = (e: any): unknown => e.effort && typeof e.effort === 'object' ? e.effort.level : e.effort
 
   on('session.start', async ($, e, next) => {
@@ -762,6 +767,7 @@ export const register: Register = (on) => {
             await enqueue(L, stateFile(s, 'main'), () => writePrivate($, stateFile(s, 'main'), pend.state))
             await rm($, pendingFile(s))
             await clearTools($, L, s, 'main')
+            L.mainSeen = 0
             anchor = pyLoads(pend.state).task_session_id
           } else anchor = (s && (await readState($, s, 'main'))?.task_session_id) ?? null
         }
@@ -838,6 +844,7 @@ export const register: Register = (on) => {
     const r: any = await next(e)
     await refreshMarker($, L)  // the call itself can outlast the marker
     const key = (e as any).agentId ?? 'main'
+    if (key === 'main') L.mainSeen++
     let s: Sess | null = null
     try {
       s = await ensure($, L)
