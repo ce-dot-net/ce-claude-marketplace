@@ -45,6 +45,14 @@ Requires: Claude Code >= 2.1.311, ace-cli 4.4.0 (pinned exactly; @ace-sdk/core >
   table) is matched by name.
 - Security review: repo writes refuse symlinks and paths outside the main checkout (random O_EXCL temp + rename);
   export goes through the confirm and stays inside the repo; import reads only inside the repo; argv values checked.
+- Review: a forged `.git` commondir (a `.git` file naming another repo's `.git`) no longer binds to, logs into or adopts
+  into that repo. One topology check per chain (`_git` / `git()`: gitdir under `<common>/worktrees/<name>`, the gitdir
+  back-pointer, HEAD and config in common, common named `.git`) serves the resolver, the log root, init target and
+  auto-adopt; untrusted = the worktree's own root, no main-checkout climb, warning `worktree_topology_untrusted`, and the
+  mod never asks `ace-cli context` for it.
+- Review: `.ace/config.json` and `.claude/settings.json` over 64 KiB are never parsed (size checked before the read):
+  `config_invalid` (exit 5, no fallback) with warning `config_too_large`. A symlinked `.ace` or `config.json` whose
+  realpath leaves the repo root is never read: `config_refused` with warning `repo_file_outside_root`.
 
 ## [8.0.1] - 2026-11-03
 

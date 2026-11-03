@@ -149,6 +149,76 @@ def test_bad_config_never_reaches_the_cli(box, monkeypatch, body, state):
     assert not log.exists() or not [l for l in log.read_text().splitlines() if '"search"' in l]
 
 
+MOD_RESOLVE = """
+import { readFileSync, statSync, realpathSync } from 'node:fs'
+import { resolve, git } from '%s/mod/context/resolve.ts'
+import { initTarget } from '%s/mod/context/index.ts'
+const read = (p) => { let st; try { st = statSync(p) } catch { return null }
+  if (st.isDirectory()) throw new Error('EISDIR ' + p); return readFileSync(p, 'utf8') }
+const rp = async (p) => { try { return realpathSync(p) } catch { return p } }
+const cwd = process.argv[1]
+const r = await resolve(cwd, { HOME: process.env.HOME }, { read, realpath: rp })
+process.stdout.write(JSON.stringify({ r, g: await git(cwd, read, rp), t: await initTarget(cwd, read, rp) }))
+"""
+
+
+def forged_layout(box):
+    """The review's probe on real git: repo A's .git file names a gitdir whose commondir is an unrelated victim/.git."""
+    victim = mkrepo(box / 'victim')
+    legacy(victim)
+    a = box / 'a'
+    a.mkdir()
+    gd = box / 'gd'
+    gd.mkdir()
+    (gd / 'commondir').write_text(str(victim / '.git') + '\n')
+    (gd / 'gitdir').write_text(str(a / '.git') + '\n')
+    (a / '.git').write_text('gitdir: %s\n' % gd)
+    return a, victim
+
+
+def test_forged_commondir_never_binds_or_logs_into_the_victim_both_chains(box, monkeypatch):
+    import shutil
+    a, victim = forged_layout(box)
+    log = box / 'cli.log'
+    monkeypatch.setenv('ACE_FAKE_CLI_LOG', str(log))
+    # Python chain: scripts/ace-context and the UserPromptSubmit hook
+    p = ctx_cli(a, '--json', env={'ACE_AUTO_ADOPT': '1'})
+    r = json.loads(p.stdout)
+    assert p.returncode == 5 and r['reason'] == 'no_binding' and 'worktree_topology_untrusted' in r['warnings'], p.stdout
+    assert ups(a, 'sess-e2e-forged').returncode == 0
+    assert not (victim / '.claude/data').exists() and not (victim / '.ace').exists()
+    assert not log.exists() or not [l for l in log.read_text().splitlines() if 'prj_e2e' in l]
+    # mod chain: the same resolve.ts / initTarget the mod runs, on the real filesystem
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('node not found')
+    out = subprocess.run([node, '--experimental-transform-types', '--no-warnings', '--input-type=module', '-e',
+                          MOD_RESOLVE % (PLUGIN, PLUGIN), str(a)], capture_output=True, text=True, timeout=60)
+    assert out.returncode == 0, out.stderr
+    m = json.loads(out.stdout)
+    assert (m['r']['bound'], m['r']['reason'], m['r']['warnings']) == (False, 'no_binding', ['worktree_topology_untrusted'])
+    assert (m['g']['root'], m['g']['mainRoot'], m['g']['untrusted']) == (str(a), None, True)
+    assert m['t'] == {'root': str(a), 'mainCheckout': False, 'untrusted': True}
+
+
+def test_a_real_linked_worktree_still_verifies_in_both_chains(box):
+    import shutil
+    main = mkrepo(box / 'm')
+    legacy(main)
+    wt = box / 'wt'
+    git(main, 'worktree', 'add', '-q', str(wt))
+    r = json.loads(ctx_cli(wt, '--json', env={'ACE_AUTO_ADOPT': '0'}).stdout)
+    assert (r['bound'], r['source'], 'worktree_topology_untrusted' in r.get('warnings', [])) == (True, 'settings_file', False)
+    node = shutil.which('node')
+    if not node:
+        pytest.skip('node not found')
+    out = subprocess.run([node, '--experimental-transform-types', '--no-warnings', '--input-type=module', '-e',
+                          MOD_RESOLVE % (PLUGIN, PLUGIN), str(wt)], capture_output=True, text=True, timeout=60)
+    m = json.loads(out.stdout)
+    assert (m['r']['bound'], m['r']['source'], m['g']['untrusted']) == (True, 'settings_file', False), out.stdout
+    assert os.path.realpath(m['g']['mainRoot']) == os.path.realpath(main)
+
+
 def test_shell_metacharacters_in_a_path_never_execute(box):
     weird = box / 'x$(touch CANARY)`touch CANARY2`;y'
     main = mkrepo(weird)

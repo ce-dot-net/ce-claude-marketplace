@@ -130,3 +130,12 @@ def test_realpath_sh(tmp_path):
     assert rp(tmp_path / 'link') == real
     assert rp(tmp_path / 'link' / '.git') == real + '/.git'  # a file path: its dir resolved, the name kept
     assert rp(tmp_path / 'nope' / 'x') == ''
+    # a symlinked FILE resolves too (relative and absolute targets, chained): the repo-file outside-root check needs it
+    (tmp_path / 'out').mkdir()
+    (tmp_path / 'out/c.json').write_text('{}')
+    (tmp_path / 'real/abs.json').symlink_to(tmp_path / 'out/c.json')
+    (tmp_path / 'real/rel.json').symlink_to('../out/c.json')
+    (tmp_path / 'real/chain.json').symlink_to('rel.json')
+    target = str((tmp_path / 'out/c.json').resolve())
+    for n in ('abs.json', 'rel.json', 'chain.json'):
+        assert rp(tmp_path / 'link' / n) == target, n

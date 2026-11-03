@@ -49,11 +49,28 @@ def _reader(layout, unreadable):
     return read
 
 
+def _as_git_writes_it(layout):
+    """The SDK spec layouts are schematic: their linked worktrees lack what `git worktree add` always writes
+    (<common>/HEAD and the <gitdir>/gitdir back-pointer), which our resolver verifies (8.1.0: commondir is untrusted).
+    Complete only that; a layout that already has them (and every plugin extra) runs as written."""
+    out = dict(layout)
+    for rel, txt in layout.items():
+        if not (rel.endswith('/.git') and isinstance(txt, str) and txt.startswith('gitdir:')):
+            continue
+        gitdir = posixpath.normpath(posixpath.join(posixpath.dirname(rel), txt.split(':', 1)[1].strip()))
+        if gitdir + '/commondir' not in layout:
+            continue
+        common = posixpath.normpath(posixpath.join(gitdir, layout[gitdir + '/commondir'].strip()))
+        out[gitdir + '/gitdir'] = posixpath.join(ROOT, rel) + '\n'
+        out.setdefault(common + '/HEAD', 'ref: refs/heads/main\n')
+    return out
+
+
 def _rel(p):
     return posixpath.relpath(p, ROOT) if p else p
 
 
-def run_case(case):
+def run_case(case, spec=False):
     gc = case.get('globalConfig') or {}
     res = apc.resolve(
         posixpath.join(ROOT, case['cwd']),
@@ -63,7 +80,7 @@ def run_case(case):
         organizations=(gc.get('auth') or {}).get('organizations'),
         default_org_id=gc.get('default_org_id'),
         global_project_id=gc.get('projectId'),
-        read=_reader(case['layout'], case.get('unreadable', [])),
+        read=_reader(_as_git_writes_it(case['layout']) if spec else case['layout'], case.get('unreadable', [])),
         strict=case.get('strict', False),
     )
     if 'message' in res:
@@ -81,8 +98,13 @@ def test_fixture_counts():
     assert len(EXTRA) >= 4
 
 
-@pytest.mark.parametrize('case', SPEC + EXTRA, ids=[c['name'] for c in SPEC + EXTRA])
-def test_case(case):
+@pytest.mark.parametrize('case', SPEC, ids=[c['name'] for c in SPEC])
+def test_spec_case(case):
+    assert run_case(case, spec=True) == case['expect']
+
+
+@pytest.mark.parametrize('case', EXTRA, ids=[c['name'] for c in EXTRA])
+def test_extra_case(case):
     assert run_case(case) == case['expect']
 
 

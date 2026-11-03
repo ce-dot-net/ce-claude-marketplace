@@ -5,6 +5,8 @@
 // > settings_file (.claude/settings.json, same walk) > env > remote_map > unbound.
 // Refusals (spec; no fallback to lower sources; CLI exit 5): apiToken/serverUrl in a repo file -> config_refused with
 // warning repo_file_contains_secret; broken/unreadable JSON, a non-object or a non-string id -> config_invalid.
+// A binding file over MAX_REPO_FILE (64 KiB) -> config_invalid + config_too_large (never parsed); a repo_file whose
+// realpath leaves its repo root (a symlinked .ace or config.json) -> config_refused + repo_file_outside_root (never read).
 
 export type Reader = (path: string) => string | null | Promise<string | null>
 export type Source = 'flag' | 'repo_file' | 'settings_file' | 'env' | 'remote_map'
@@ -30,12 +32,17 @@ export type ResolveOpts = {
 }
 
 export const SECRET_KEYS = ['apiToken', 'serverUrl', 'api_token', 'server_url']
+export const MAX_REPO_FILE = 64 * 1024   // a binding file is a few hundred bytes (mirror: ace_project_context.MAX_REPO_FILE)
+// a reader throws this for a file over MAX_REPO_FILE (fsReader checks the size before it reads)
+export class FileTooLarge extends Error {}
 const ALIAS_RE = /^(.+\.[a-z]+)-[A-Za-z0-9_-]+$/
 
 type Entry = { source: Source, path: string | null, org: string | null, prj: string | null }
 class Refused { constructor(public result: Result) {} }
 const invalid = (source: Source, path: string, message?: string): Refused =>
   new Refused({ bound: false, reason: 'config_invalid', source, path, ...(message ? { message } : {}) })
+const tooLarge = (source: Source, path: string): Refused =>
+  new Refused({ bound: false, reason: 'config_invalid', source, path, message: `larger than ${MAX_REPO_FILE} bytes`, warnings: ['config_too_large'] })
 
 // posix path helpers (absolute paths only)
 export function normPath(p: string): string {
@@ -53,23 +60,37 @@ async function quiet(read: Reader, p: string): Promise<string | null> {
   try { return await read(p) } catch { return null }
 }
 
-export async function git(cwd: string, read: Reader): Promise<{ root: string | null, mainRoot: string | null, config: string | null }> {
+// The one worktree topology check of the mod (resolver, log root, init target, auto-adopt, the CLI seam): a linked
+// worktree's main checkout counts only when it verifies like git does it, because commondir is untrusted input:
+// realpath(gitdir) == <common>/worktrees/<name>, <gitdir>/gitdir points back at this .git file, <common> has HEAD and
+// config, and is a `.git` dir (a bare repo has no main checkout). Else the worktree's own root, no main checkout, no
+// common config (no remote key from a forged one), untrusted. Mirror: ace_project_context._git.
+export type Git = { root: string | null, mainRoot: string | null, config: string | null, untrusted: boolean }
+export async function git(cwd: string, read: Reader, realpath: (p: string) => string | Promise<string> = p => p): Promise<Git> {
+  const rp = async (p: string) => normPath(await realpath(p))
+  const exists = async (p: string) => { try { return await read(p) !== null } catch { return true } }
   let d = cwd
   for (;;) {
     const dotgit = join(d, '.git')
     let txt: string | null
-    try { txt = await read(dotgit) } catch { return { root: d, mainRoot: null, config: join(dotgit, 'config') } }
+    try { txt = await read(dotgit) } catch { return { root: d, mainRoot: null, config: join(dotgit, 'config'), untrusted: false } }
     if (txt !== null) {
       const m = /^\s*gitdir:\s*(.+?)\s*$/.exec(txt)
-      if (!m) return { root: d, mainRoot: null, config: null }
+      if (!m) return { root: d, mainRoot: null, config: null, untrusted: false }
       const gitdir = join(d, m[1])
       const common = await quiet(read, join(gitdir, 'commondir'))
-      if (common === null) return { root: d, mainRoot: null, config: join(gitdir, 'config') }   // submodule
+      if (common === null) return { root: d, mainRoot: null, config: join(gitdir, 'config'), untrusted: false }   // submodule
       const cd = join(gitdir, common.trim())
-      return { root: d, mainRoot: dirname(cd), config: join(cd, 'config') }
+      const back = await quiet(read, join(gitdir, 'gitdir'))
+      const ok = await rp(gitdir) === await rp(join(cd, `worktrees/${gitdir.split('/').pop()}`))
+        && back !== null && await rp(join(gitdir, back.trim())) === await rp(dotgit)
+        && await exists(join(cd, 'HEAD')) && await exists(join(cd, 'config'))
+        && (await rp(cd)).split('/').pop() === '.git'
+      if (!ok) return { root: d, mainRoot: null, config: null, untrusted: true }
+      return { root: d, mainRoot: dirname(cd), config: join(cd, 'config'), untrusted: false }
     }
     const parent = dirname(d)
-    if (parent === d) return { root: null, mainRoot: null, config: null }
+    if (parent === d) return { root: null, mainRoot: null, config: null, untrusted: false }
     d = parent
   }
 }
@@ -146,26 +167,36 @@ const settingsEntry: Parse = (text, path, strict) => {
 // Spec 1.1/7: the first existing file in the walk ends it; the main checkout is checked only without a projectId yet.
 // lenient (projectId already decided: a --project flag or a higher source): a refused/invalid file contributes
 // nothing and only warns (spec 9500190).
-async function search(source: Source, rel: string, dirs: string[], mainRoot: string | null, home: string | null, read: Reader,
-  tried: Tried[], parse: Parse, warnings: string[], lenient: boolean, strict = true): Promise<Entry[]> {
+// base: the root the walk's files must stay inside (realpath; repo_file only).
+async function search(source: Source, rel: string, dirs: string[], base: string, mainRoot: string | null, home: string | null, read: Reader,
+  tried: Tried[], parse: Parse, warnings: string[], lenient: boolean, strict: boolean, rp: (p: string) => Promise<string>): Promise<Entry[]> {
   const found: Entry[] = []
-  const probe = async (path: string) => {
+  const probe = async (path: string, root: string) => {
     tried.push({ source, path, key: null })
     try {
+      if (source === 'repo_file') {  // before the read: a symlink out of the repo is never read
+        const real = await rp(path), top = await rp(root)
+        if (real !== top && !real.startsWith(top.replace(/\/+$/, '') + '/')) throw new Refused({ bound: false, reason: 'config_refused', source, path,
+          message: `realpath ${real} is outside the repo root ${top}`, warnings: ['repo_file_outside_root'] })
+      }
       let text: string | null
-      try { text = await read(path) } catch (e) { throw invalid(source, path, String((e as Error)?.message ?? e)) }
+      try { text = await read(path) } catch (e) {
+        if (e instanceof FileTooLarge) throw tooLarge(source, path)
+        throw invalid(source, path, String((e as Error)?.message ?? e))
+      }
       if (text === null) return false
+      if (new TextEncoder().encode(text).length > MAX_REPO_FILE) throw tooLarge(source, path)
       found.push(parse(text, path, strict))
     } catch (e) {
       if (!(e instanceof Refused) || !lenient) throw e
-      const w = e.result.reason === 'config_refused' ? 'repo_file_contains_secret' : 'config_invalid'
+      const w = (e.result as any).warnings?.[0] ?? 'config_invalid'
       if (!warnings.includes(w)) warnings.push(w)
       found.push({ source, path, org: null, prj: null })
     }
     return true
   }
-  for (const d of dirs) if (await probe(join(d, rel))) break
-  if (mainRoot && mainRoot !== home && !(found[0]?.prj)) await probe(join(mainRoot, rel))
+  for (const d of dirs) if (await probe(join(d, rel), base)) break
+  if (mainRoot && mainRoot !== home && !(found[0]?.prj)) await probe(join(mainRoot, rel), mainRoot)
   return found
 }
 
@@ -180,12 +211,13 @@ async function resolveInner(cwd: string, env: Record<string, string | undefined>
   const flags = o.flags ?? {}
   const read = o.read
   const warnings: string[] = typeof o.globalProjectId === 'string' && o.globalProjectId ? ['global_project_id_ignored'] : []
-  const rp = o.realpath ?? ((p: string) => p)
+  const rp = async (p: string) => normPath(await (o.realpath ?? ((x: string) => x))(p))
   const homeRaw = env.HOME || o.osHome
   const homeReal = homeRaw ? await rp(normPath(homeRaw)) : null
   const isHome = async (d: string | null) => d !== null && homeReal !== null && await rp(d) === homeReal
   const home = null
-  const { root, mainRoot, config } = await git(cwd, read)
+  const { root, mainRoot, config, untrusted } = await git(cwd, read, rp)
+  if (untrusted) warnings.push('worktree_topology_untrusted')
 
   const dirs: string[] = []
   for (let d = cwd; ; d = dirname(d)) {
@@ -197,8 +229,9 @@ async function resolveInner(cwd: string, env: Record<string, string | undefined>
   const entries: Entry[] = [{ source: 'flag', path: null, org: flags.org || null, prj: flags.project || null }]
   const main = await isHome(mainRoot) ? null : mainRoot
   const strict = o.strict ?? true
-  entries.push(...await search('repo_file', '.ace/config.json', dirs, main, home, read, tried, repoEntry, warnings, entries.some(e => e.prj), strict))
-  entries.push(...await search('settings_file', '.claude/settings.json', dirs, main, home, read, tried, settingsEntry, warnings, entries.some(e => e.prj), strict))
+  const base = root ?? cwd
+  entries.push(...await search('repo_file', '.ace/config.json', dirs, base, main, home, read, tried, repoEntry, warnings, entries.some(e => e.prj), strict, rp))
+  entries.push(...await search('settings_file', '.claude/settings.json', dirs, base, main, home, read, tried, settingsEntry, warnings, entries.some(e => e.prj), strict, rp))
   // a malformed env / remote-map id is dropped with a warning (never blocks a file binding)
   const soft = (v: unknown, kind: 'org' | 'prj') => {
     try { return id(v, 'env', null, kind, strict) } catch {

@@ -26,14 +26,32 @@ function reader(layout: Record<string, string | null>, unreadable: string[] = []
   }
 }
 
-async function runCase(c: any): Promise<any> {
+// The SDK spec layouts are schematic: their linked worktrees lack what `git worktree add` always writes (<common>/HEAD
+// and the <gitdir>/gitdir back-pointer), which git() verifies (8.1.0: commondir is untrusted). Complete only that;
+// every plugin extra runs as written. Mirror: _as_git_writes_it in tests/test_project_context_spec.py.
+function asGitWritesIt(layout: Record<string, string | null>): Record<string, string | null> {
+  const out = { ...layout }
+  const n = (p: string) => normPath(`/${p}`).slice(1)
+  for (const [rel, txt] of Object.entries(layout)) {
+    if (!rel.endsWith('/.git') || typeof txt !== 'string' || !txt.startsWith('gitdir:')) continue
+    const gitdir = n(`${rel.slice(0, rel.lastIndexOf('/'))}/${txt.slice(7).trim()}`)
+    const cd = layout[`${gitdir}/commondir`]
+    if (typeof cd !== 'string') continue
+    const common = n(`${gitdir}/${cd.trim()}`)
+    out[`${gitdir}/gitdir`] = `${ROOT}/${rel}\n`
+    if (!(`${common}/HEAD` in out)) out[`${common}/HEAD`] = 'ref: refs/heads/main\n'
+  }
+  return out
+}
+
+async function runCase(c: any, spec = false): Promise<any> {
   const gc = c.globalConfig ?? {}
   const env: Record<string, string> = {}
   for (const [k, v] of Object.entries(c.env)) env[k] = sub(v) as string
   const res: any = await resolve(`${ROOT}/${c.cwd}`, env, {
     flags: c.flags, remoteMap: gc.projects, organizations: gc.auth?.organizations,
     defaultOrgId: gc.default_org_id, globalProjectId: gc.projectId,
-    read: reader(c.layout, c.unreadable), strict: c.strict ?? false,
+    read: reader(spec ? asGitWritesIt(c.layout) : c.layout, c.unreadable), strict: c.strict ?? false,
   })
   if ('message' in res) {
     expect(typeof res.message === 'string' && res.message.length > 0).toBe(true)
@@ -49,7 +67,12 @@ test('project-context fixtures: 70 spec cases plus the plugin extras are loaded'
   expect((EXTRA as any[]).length >= 4).toBe(true)
 })
 
-for (const c of [...(SPEC as any[]), ...(EXTRA as any[]).map((x: any) => ({ strict: true, ...x }))]) {
+for (const c of SPEC as any[]) {
+  test(`project-context: ${c.name}`, async () => {
+    expect(await runCase(c, true)).toEqual(c.expect)
+  })
+}
+for (const c of (EXTRA as any[]).map((x: any) => ({ strict: true, ...x }))) {
   test(`project-context: ${c.name}`, async () => {
     expect(await runCase(c)).toEqual(c.expect)
   })

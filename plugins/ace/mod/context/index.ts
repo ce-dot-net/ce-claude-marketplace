@@ -1,7 +1,7 @@
 // The one core of the mod (8.1.0): binding, verify, export, adopt, the context log row. Every handler and every
 // command takes its ids from here; nothing else reads settings.json, .ace/config.json or ACE_* binding env.
 // Mirror: shared-hooks/utils/ace_project_context.py (same states, same lines: ./lines.ts).
-import { dirname, git, join, normPath, originUrl, normalizeRemote, resolve, type Reader, type Result } from './resolve.ts'
+import { FileTooLarge, MAX_REPO_FILE, dirname, git, join, normPath, originUrl, normalizeRemote, resolve, type Reader, type Result } from './resolve.ts'
 import { LINES, ADOPT_LINE, WARN_LINES } from './lines.ts'
 import { REALPATH_SH, REPO_WRITE_SH, REPO_WRITE_WHY } from '../lib/sh.ts'
 
@@ -16,10 +16,13 @@ export const PROBLEM_STATES: State[] = ['unbound', 'not_logged_in', 'expired', '
 export const FILE_SOURCES = ['repo_file', 'settings_file'], ADOPT_SOURCES = ['settings_file', 'remote_map']
 const ORG_ID = /^org_[A-Za-z0-9_-]+$/, PRJ_ID = /^prj_[A-Za-z0-9_-]+$/
 
-// $.fs as the resolver's reader: null when missing, throws for a directory or an unreadable file.
+// $.fs as the resolver's reader: null when missing, throws for a directory or an unreadable file, FileTooLarge (checked
+// by size BEFORE the read) for a file over MAX_REPO_FILE: every file the resolver reads is small.
 export function fsReader($: any): Reader {
   return async (p: string) => {
     if (!await $.fs.exists(p).catch(() => false)) return null
+    const st = await $.fs.stat(p).catch(() => null)
+    if (typeof st?.size === 'number' && st.size > MAX_REPO_FILE) throw new FileTooLarge(`larger than ${MAX_REPO_FILE} bytes: ${p}`)
     return await $.fs.read(p) as string
   }
 }
@@ -74,31 +77,38 @@ async function cliIdentity($: any): Promise<string> {
 }
 export const CLI_CONTEXT_UNKNOWN = /unknown command|error: unknown|Usage: ace-cli|too many arguments/i
 
+// Our own guards the SDK's spec resolver does not have (8.1.0 review): when ours trips one, the CLI is never asked.
+const OWN_GUARDS = ['worktree_topology_untrusted', 'config_too_large', 'repo_file_outside_root']
 export async function resolveContext($: any, cwd: string, envIn: Env, o: { dataRoot?: string, flags?: { org?: string, project?: string },
   cli?: (argv: string[], opts?: any) => Promise<any> } = {}): Promise<Ctx> {
   const read = fsReader($)
-  const g = await git(normPath(cwd), read)
+  const realpath = memoRealpath(realpathVia((argv, init) => $.process.run(argv, init)))
+  const g = await git(normPath(cwd), read, realpath)
   const root = logRoot(cwd, { gitRoot: g.root, mainRoot: g.mainRoot })
   const env = stripOwnExport(envIn, root)
   const base = { root, mainRoot: g.mainRoot, gitRoot: g.root }
+  const gc = await readJsonObj($, globalConfigPath(env))
+  const remoteMap = { ...(o.dataRoot ? await readJsonObj($, machineMapPath(o.dataRoot)) : {}), ...(gc.projects && typeof gc.projects === 'object' ? gc.projects : {}) }
+  const orgs = Array.isArray(gc.auth?.organizations) ? gc.auth.organizations : null
+  const r = await resolve(cwd, env, { flags: o.flags ?? null, remoteMap, organizations: orgs, read, realpath,
+    defaultOrgId: gc.default_org_id ?? gc.defaultOrgId ?? null, globalProjectId: gc.projectId ?? null })
+  const ours = { ...r, ...base, via: 'resolver' } as Ctx
+  // an untrusted worktree topology, an oversized or out-of-repo binding file never reach the CLI (its spec resolver
+  // would climb a forged commondir, parse the file, follow the symlink)
+  if (g.untrusted || ((r as any).warnings ?? []).some((w: string) => OWN_GUARDS.includes(w))) return ours
   const capPath = o.dataRoot ? `${o.dataRoot}/cli-context-cap.json` : null
   const capKey = await cliIdentity($)
   const cap = capPath ? await readJsonObj($, capPath) : {}
   const known = cap.key === capKey ? cap.has : undefined  // an old CLI is probed once per CLI build, not per session
   if (o.cli && env.ACE_CONTEXT_ENGINE !== 'resolver' && (known !== false || env.ACE_CONTEXT_ENGINE === 'cli')) {
-    const r = await o.cli(['context', '--json', ...(o.flags?.org ? ['--org', o.flags.org] : []), ...(o.flags?.project ? ['--project', o.flags.project] : [])],
+    const c = await o.cli(['context', '--json', ...(o.flags?.org ? ['--org', o.flags.org] : []), ...(o.flags?.project ? ['--project', o.flags.project] : [])],
       { cwd, env: { ACE_ORG_ID: env.ACE_ORG_ID ?? '', ACE_PROJECT_ID: env.ACE_PROJECT_ID ?? '', ACE_BIND_ROOT: env.ACE_BIND_ROOT ?? '' }, timeoutMs: 10_000 })
-    const parsed = parseCliContext(r?.stdout)
-    const old = !parsed && CLI_CONTEXT_UNKNOWN.test(`${r?.stderr ?? ''}\n${r?.stdout ?? ''}`)
+    const parsed = parseCliContext(c?.stdout)
+    const old = !parsed && CLI_CONTEXT_UNKNOWN.test(`${c?.stderr ?? ''}\n${c?.stdout ?? ''}`)
     if (capPath && (parsed || old) && known !== !!parsed) await $.fs.write(capPath, JSON.stringify({ key: capKey, has: !!parsed })).catch(() => undefined)
     if (parsed) return { ...parsed, ...base, via: 'cli' } as Ctx
   }
-  const gc = await readJsonObj($, globalConfigPath(env))
-  const remoteMap = { ...(o.dataRoot ? await readJsonObj($, machineMapPath(o.dataRoot)) : {}), ...(gc.projects && typeof gc.projects === 'object' ? gc.projects : {}) }
-  const orgs = Array.isArray(gc.auth?.organizations) ? gc.auth.organizations : null
-  const r = await resolve(cwd, env, { flags: o.flags ?? null, remoteMap, organizations: orgs, read,
-    defaultOrgId: gc.default_org_id ?? gc.defaultOrgId ?? null, globalProjectId: gc.projectId ?? null })
-  return { ...r, ...base, via: 'resolver' } as Ctx
+  return ours
 }
 
 export function localState(c: { bound: boolean, reason?: string }): State | null {
@@ -229,35 +239,16 @@ export async function cliInit(cli: CliRun, cwd: string, ids: { orgId: string, pr
 }
 // realpath through the shell ($.fs has none); the path as given when it does not resolve (the in-memory test host).
 export const realpathVia = (run: Run) => async (p: string) => String((await run(['/bin/sh', '-c', REALPATH_SH, 'sh', p], { timeoutMs: 5000 }).catch(() => null))?.stdout ?? '').trim() || p
+const memoRealpath = (f: (p: string) => Promise<string>) => {
+  const m = new Map<string, Promise<string>>()
+  return (p: string) => { if (!m.has(p)) m.set(p, f(p)); return m.get(p)! }
+}
 // Where init writes (spec §9, mirror of ace_project_context.init_target): a linked worktree's MAIN checkout, only when
 // the topology verifies like git does it; else the worktree root, untrusted. Plain repo / submodule: its root; no git: cwd.
 export async function initTarget(cwd: string, read: Reader, realpath: (p: string) => Promise<string> = async p => p) {
-  const rp = async (p: string) => normPath(await realpath(p))
-  const quiet = async (p: string) => { try { return await read(p) } catch { return null } }
-  const exists = async (p: string) => { try { return await read(p) !== null } catch { return true } }
-  let d = normPath(cwd)
-  for (;;) {
-    const dotgit = join(d, '.git')
-    let txt: string | null
-    try { txt = await read(dotgit) } catch { return { root: d, mainCheckout: false, untrusted: false } }  // .git dir
-    if (txt !== null) {
-      const m = /^\s*gitdir:\s*(.+?)\s*$/.exec(txt)
-      if (!m) return { root: d, mainCheckout: false, untrusted: false }
-      const gitdir = join(d, m[1])
-      const cd = await quiet(join(gitdir, 'commondir'))
-      if (cd === null) return { root: d, mainCheckout: false, untrusted: false }  // submodule
-      const common = join(gitdir, cd.trim())
-      const back = await quiet(join(gitdir, 'gitdir'))
-      const ok = await rp(gitdir) === await rp(join(common, `worktrees/${gitdir.split('/').pop()}`))
-        && back !== null && await rp(join(gitdir, back.trim())) === await rp(dotgit)
-        && await exists(join(common, 'HEAD')) && await exists(join(common, 'config'))
-        && (await rp(common)).split('/').pop() === '.git'
-      return ok ? { root: dirname(common), mainCheckout: true, untrusted: false } : { root: d, mainCheckout: false, untrusted: true }
-    }
-    const parent = dirname(d)
-    if (parent === d) return { root: normPath(cwd), mainCheckout: false, untrusted: false }
-    d = parent
-  }
+  const g = await git(normPath(cwd), read, realpath)
+  if (g.mainRoot) return { root: g.mainRoot, mainCheckout: true, untrusted: false }
+  return { root: g.root ?? normPath(cwd), mainCheckout: false, untrusted: g.untrusted }
 }
 // The first worktree-local .ace/config.json on the walk-up from cwd to the worktree root.
 async function findShadow($: any, cwd: string): Promise<string | null> {

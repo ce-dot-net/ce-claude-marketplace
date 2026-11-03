@@ -13,6 +13,9 @@ Refusals (spec, both chains, no fallback to lower sources, CLI exit 5):
     warnings: ['repo_file_contains_secret']}
   - broken/unreadable JSON, a non-object, or a non-string id in repo_file or settings_file:
     {bound: False, reason: 'config_invalid', source, path, message?}
+  - a repo_file or settings_file over MAX_REPO_FILE (64 KiB): config_invalid, warnings: ['config_too_large']
+  - a repo_file whose realpath leaves its repo root (a symlinked .ace or config.json): config_refused,
+    warnings: ['repo_file_outside_root']
 """
 
 import json
@@ -20,16 +23,34 @@ import os
 import re
 
 SECRET_KEYS = ('apiToken', 'serverUrl', 'api_token', 'server_url')
+MAX_REPO_FILE = 64 * 1024  # a binding file is a few hundred bytes; above this it is never parsed (mirror: resolve.ts)
 _ALIAS_RE = re.compile(r'^(.+\.[a-z]+)-[A-Za-z0-9_-]+$')
 
 
+class FileTooLarge(OSError):
+    pass
+
+
 def read_file(path):
-    """Default reader: text, None if missing; directories and permission errors raise."""
+    """Default reader: text, None if missing; directories, non-regular files (a FIFO or device would block or never
+    end), files over MAX_REPO_FILE (FileTooLarge) and permission errors raise. Every file the resolver reads (binding
+    files, .git, commondir, gitdir, HEAD, git config) is small; at most MAX_REPO_FILE + 1 bytes are ever read."""
+    import stat
     try:
-        with open(path, encoding='utf-8') as f:
-            return f.read()
+        st = os.stat(path)
     except (FileNotFoundError, NotADirectoryError):
         return None
+    if stat.S_ISDIR(st.st_mode):
+        raise IsADirectoryError(21, 'Is a directory', path)
+    if not stat.S_ISREG(st.st_mode):
+        raise OSError('not a regular file: %s' % path)
+    if st.st_size > MAX_REPO_FILE:
+        raise FileTooLarge('larger than %d bytes: %s' % (MAX_REPO_FILE, path))
+    with open(path, 'rb') as f:
+        data = f.read(MAX_REPO_FILE + 1)
+    if len(data) > MAX_REPO_FILE:
+        raise FileTooLarge('larger than %d bytes: %s' % (MAX_REPO_FILE, path))
+    return data.decode('utf-8')
 
 
 class _Refused(Exception):
@@ -56,28 +77,42 @@ def _quiet(read, path):
         return None
 
 
-def _git(cwd, read):
-    """(root, main_root, config_path) from files only. root None = not inside a git work tree."""
+def _git(cwd, read, realpath=os.path.realpath):
+    """(root, main_root, config_path, untrusted) from files only. root None = not inside a git work tree.
+
+    The one worktree topology check of the Python chain (resolver, log root, init target, auto-adopt): a linked
+    worktree's main checkout counts only when it verifies like git does it, because commondir is untrusted input:
+    realpath(gitdir) == <common>/worktrees/<name>, <gitdir>/gitdir points back at this .git file, <common> has HEAD
+    and config, and is a `.git` dir (a bare repo has no main checkout). Else the worktree's own root, no main
+    checkout, no common config (no remote key from a forged one), untrusted=True. Mirror: mod/context/resolve.ts git()."""
     d = cwd
     while True:
         dotgit = os.path.join(d, '.git')
         try:
             txt = read(dotgit)
         except Exception:
-            return d, None, os.path.join(dotgit, 'config')  # .git directory: plain repo
+            return d, None, os.path.join(dotgit, 'config'), False  # .git directory: plain repo
         if txt is not None:
             m = re.match(r'\s*gitdir:\s*(.+?)\s*$', txt)
             if not m:
-                return d, None, None
+                return d, None, None, False
             gitdir = os.path.normpath(os.path.join(d, m.group(1)))
             common = _quiet(read, os.path.join(gitdir, 'commondir'))
             if common is None:
-                return d, None, os.path.join(gitdir, 'config')  # submodule: no main-checkout fallback
+                return d, None, os.path.join(gitdir, 'config'), False  # submodule: no main-checkout fallback
             common = os.path.normpath(os.path.join(gitdir, common.strip()))
-            return d, os.path.dirname(common), os.path.join(common, 'config')
+            back = _quiet(read, os.path.join(gitdir, 'gitdir'))
+            rp = realpath
+            ok = (rp(gitdir) == rp(os.path.join(common, 'worktrees', os.path.basename(gitdir)))
+                  and back is not None and rp(os.path.join(gitdir, back.strip())) == rp(dotgit)
+                  and _exists(read, os.path.join(common, 'HEAD')) and _exists(read, os.path.join(common, 'config'))
+                  and os.path.basename(rp(common)) == '.git')
+            if not ok:
+                return d, None, None, True
+            return d, os.path.dirname(common), os.path.join(common, 'config'), False
         parent = os.path.dirname(d)
         if parent == d:
-            return None, None, None
+            return None, None, None, False
         d = parent
 
 
@@ -166,36 +201,49 @@ def _settings_entry(text, path):
             'prj': _id(env.get('ACE_PROJECT_ID'), 'settings_file', path)}
 
 
-def _search(source, rel, dirs, main_root, home, read, tried, parse, warnings, lenient):
+def _too_large(source, path):
+    return _Refused('config_invalid', source, path, 'larger than %d bytes' % MAX_REPO_FILE, warning='config_too_large')
+
+
+def _search(source, rel, dirs, base, main_root, home, read, tried, parse, warnings, lenient, realpath):
     """Spec 1.1/7: first existing file in the walk ends it; main checkout only if no projectId yet.
-    lenient (projectId already decided: a --project flag or a higher source): a refused/invalid file contributes
-    nothing and only warns (spec 9500190)."""
+    base: the root the walk's files must stay inside (realpath; repo_file only). lenient (projectId already decided:
+    a --project flag or a higher source): a refused/invalid file contributes nothing and only warns (spec 9500190)."""
     found = []
 
-    def probe(path):
+    def probe(path, root):
         tried.append({'source': source, 'path': path, 'key': None})
         try:
+            if source == 'repo_file':  # before the read: a symlink out of the repo is never read
+                real, top = realpath(path), realpath(root)
+                if real != top and not real.startswith(top.rstrip('/') + '/'):
+                    raise _Refused('config_refused', source, path, 'realpath %s is outside the repo root %s' % (real, top),
+                                   warning='repo_file_outside_root')
             try:
                 text = read(path)
+            except FileTooLarge:
+                raise _too_large(source, path)
             except Exception as e:
                 raise _Refused('config_invalid', source, path, f'{type(e).__name__}: {e}')
             if text is None:
                 return False
+            if len(text.encode('utf-8', 'surrogatepass')) > MAX_REPO_FILE:
+                raise _too_large(source, path)
             found.append(parse(text, path))
         except _Refused as r:
             if not lenient:
                 raise
-            w = 'repo_file_contains_secret' if r.result['reason'] == 'config_refused' else 'config_invalid'
+            w = (r.result.get('warnings') or ['config_invalid'])[0]
             if w not in warnings:
                 warnings.append(w)
             found.append({'source': source, 'path': path, 'org': None, 'prj': None})
         return True
 
     for d in dirs:
-        if probe(os.path.join(d, rel)):
+        if probe(os.path.join(d, rel), base):
             break
     if main_root and main_root != home and not (found and found[0]['prj']):
-        probe(os.path.join(main_root, rel))
+        probe(os.path.join(main_root, rel), main_root)
     return found
 
 
@@ -225,7 +273,9 @@ def _resolve(cwd, env, flags, remote_map, organizations, read, default_org_id, g
     def is_home(d):
         return d is not None and realpath(d) == home_real
     home = None
-    root, main_root, git_config = _git(cwd, read)
+    root, main_root, git_config, untrusted = _git(cwd, read, realpath)
+    if untrusted:
+        warnings.append('worktree_topology_untrusted')
 
     dirs = []
     d = cwd
@@ -240,10 +290,11 @@ def _resolve(cwd, env, flags, remote_map, organizations, read, default_org_id, g
     entries = [{'source': 'flag', 'path': None, 'org': flags.get('org') or None, 'prj': flags.get('project') or None}]
     if is_home(main_root):
         main_root = None
-    entries += _search('repo_file', os.path.join('.ace', 'config.json'), dirs, main_root, home, read, tried,
-                       _repo_entry, warnings, any(e['prj'] for e in entries))
-    entries += _search('settings_file', os.path.join('.claude', 'settings.json'), dirs, main_root, home, read,
-                       tried, _settings_entry, warnings, any(e['prj'] for e in entries))
+    base = root or cwd
+    entries += _search('repo_file', os.path.join('.ace', 'config.json'), dirs, base, main_root, home, read, tried,
+                       _repo_entry, warnings, any(e['prj'] for e in entries), realpath)
+    entries += _search('settings_file', os.path.join('.claude', 'settings.json'), dirs, base, main_root, home, read,
+                       tried, _settings_entry, warnings, any(e['prj'] for e in entries), realpath)
     def soft(v, kind):  # a malformed env / remote-map id is dropped with a warning (never blocks a file binding)
         try:
             return _id(v, 'env', None, kind)
@@ -378,7 +429,7 @@ def load_machine_map():
 
 def repo_roots(cwd, read=read_file):
     """(git root or None, main checkout root or None) from files only."""
-    root, main_root, _ = _git(os.path.normpath(cwd), read)
+    root, main_root, _, _ = _git(os.path.normpath(cwd), read)
     return root, main_root
 
 
@@ -394,7 +445,7 @@ def logs_dir(cwd=None):
 
 
 def remote_key(cwd, read=read_file):
-    _, _, cfg = _git(os.path.normpath(cwd), read)
+    _, _, cfg, _ = _git(os.path.normpath(cwd), read)
     return normalize_remote(origin_url(_quiet(read, cfg))) if cfg else None
 
 
@@ -678,38 +729,13 @@ PRJ_ID = re.compile(r'^prj_[A-Za-z0-9_-]+$')
 
 def init_target(cwd, read=read_file):
     """(root, main_checkout, untrusted): where `ace-cli init` writes .ace/config.json (spec §9). A linked worktree
-    writes to its MAIN checkout, but only when the topology verifies like git does it (commondir is untrusted
-    input): realpath(gitdir) == <common>/worktrees/<name>, <gitdir>/gitdir points back at this .git file, <common>
-    has HEAD and config, and is a `.git` dir (a bare repo has no main checkout). Else the worktree root, untrusted.
-    Plain repos and submodules: their own root; outside git: cwd."""
+    writes to its MAIN checkout, but only when the topology verifies (_git, the one check). Else the worktree root,
+    untrusted. Plain repos and submodules: their own root; outside git: cwd."""
     cwd = os.path.abspath(cwd)
-    rp = os.path.realpath
-    d = cwd
-    while True:
-        dotgit = os.path.join(d, '.git')
-        try:
-            txt = read(dotgit)
-        except Exception:
-            return d, False, False  # .git directory
-        if txt is not None:
-            m = re.match(r'\s*gitdir:\s*(.+?)\s*$', txt)
-            if not m:
-                return d, False, False
-            gitdir = os.path.normpath(os.path.join(d, m.group(1)))
-            common = _quiet(read, os.path.join(gitdir, 'commondir'))
-            if common is None:
-                return d, False, False  # submodule
-            common = os.path.normpath(os.path.join(gitdir, common.strip()))
-            back = _quiet(read, os.path.join(gitdir, 'gitdir'))
-            ok = (rp(gitdir) == rp(os.path.join(common, 'worktrees', os.path.basename(gitdir)))
-                  and back is not None and rp(os.path.join(gitdir, back.strip())) == rp(dotgit)
-                  and _exists(read, os.path.join(common, 'HEAD')) and _exists(read, os.path.join(common, 'config'))
-                  and os.path.basename(rp(common)) == '.git')
-            return (os.path.dirname(common), True, False) if ok else (d, False, True)
-        parent = os.path.dirname(d)
-        if parent == d:
-            return cwd, False, False
-        d = parent
+    root, main_root, _, untrusted = _git(cwd, read)
+    if main_root:
+        return main_root, True, False
+    return root or cwd, False, untrusted
 
 
 def find_shadow(cwd):
