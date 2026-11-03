@@ -142,6 +142,21 @@ def test_learn_uses_sync_post_and_f080_fields(fake_core, tmp_path):
     assert out["message"] == "Execution trace stored successfully"
 
 
+def test_learn_caps_applied_log_ids_at_20(fake_core, tmp_path):
+    """Server 5.15.8: > 20 applied_log_ids = 'all shown' -> the trace falls to COLD. The engine keeps the first 20."""
+    bin_dir, log = fake_core
+    r = _learn_js(bin_dir, ["--transcript", str(_trace(tmp_path)), "--json",
+                            "--applied-log-ids", ",".join(str(i) for i in range(1, 26))], ACE_FAKE_CORE_LOG=str(log))
+    assert r.returncode == 0, r.stderr
+    t = [x for x in E.read_jsonl(log) if x["op"] == "learn"][0]["trace"]
+    assert t["applied_log_ids"] == list(range(1, 21))
+    p = tmp_path / "t2.json"
+    p.write_text(json.dumps(dict(json.loads(_trace(tmp_path).read_text()), applied_log_ids=list(range(30)))))
+    log.write_text("")
+    assert _learn_js(bin_dir, ["--transcript", str(p), "--json"], ACE_FAKE_CORE_LOG=str(log)).returncode == 0
+    assert [x for x in E.read_jsonl(log) if x["op"] == "learn"][0]["trace"]["applied_log_ids"] == list(range(20))
+
+
 def test_learn_server_error_exits_nonzero(fake_core, tmp_path):
     bin_dir, log = fake_core
     r = _learn_js(bin_dir, ["--transcript", str(_trace(tmp_path)), "--json"], ACE_FAKE_CORE_LOG=str(log),

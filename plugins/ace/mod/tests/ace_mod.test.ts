@@ -823,6 +823,32 @@ test('item D/H1: Haiku self-eval (not blocking the turn) writes the review and i
   expect(h.files.has(EVAL_REQ)).toBe(false)  // no HTML-comment self-eval request while the mod is active
 })
 
+test('server 5.15.8: more than 20 used ids -> 20 applied_log_ids, Haiku ids first (injected order), then token ids', async ($, on) => {
+  let model: string[] = []
+  const h = host(on, { search: () => ({ stdout: S100 }), selfEval: true,
+    model: () => ({ isAnswered: true, text: `ACE_REVIEW: 70% | 4m saved | ok\nACE_USED: ${model.join(', ')}`, usage: {} }) })
+  await submit($)
+  const st = h.state()!, rlog = st.retrieval_log_ids, ids: string[] = st.pattern_ids.filter((id: string) => id in rlog)
+  model = ids.slice(30, 40).reverse()  // 10 Haiku ids, named out of order
+  await $.turn.start({ text: HUMAN, turnId: 't1' } as any)
+  await $.tool.call({ tool: 'Edit', file_path: '/proj/x.py', old_string: 'a', new_string: 'b' } as any)
+  await done($, 'used ' + ids.slice(0, 15).join(' '))  // 15 token ids (by id in the answer)
+  await settle(h)
+  const want = [...ids.slice(30, 40), ...ids.slice(0, 10)].map(id => rlog[id])
+  expect(h.trace(h.learns()[0]!).applied_log_ids).toEqual(want)
+  const row = execRow(h)
+  expect([row.used_ids_count, row.used_ids_capped]).toEqual([25, true])
+})
+
+test('server 5.15.8: 20 or fewer used ids are sent as before, no used_ids_capped field', async ($, on) => {
+  const st8 = JSON.parse(G.state_main_8), [a] = Object.keys(st8.retrieval_log_ids)
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  await done($, 'applied ' + a)
+  expect(h.trace(h.learns()[0]!).applied_log_ids).toEqual([st8.retrieval_log_ids[a]])
+  expect('used_ids_capped' in execRow(h)).toBe(false)
+})
+
 test('item 3: with the self-eval on, "learning sent" shows only once the learn went out: no turn.complete text, ONE log line with the review parts (none at 0% or without a review)', async ($, on) => {
   const cases: [string, string][] = [['ACE_REVIEW: 70% | 4m saved | helped', 'ACE · learning sent · 70% · ~4m saved'],
     ['ACE_REVIEW: 55% | n/a | meh', 'ACE · learning sent · 55%'], ['ACE_REVIEW: 0% | 0m saved | none', 'ACE · learning sent'], ['no review here', 'ACE · learning sent']]
