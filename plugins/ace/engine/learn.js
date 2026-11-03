@@ -14,6 +14,9 @@ const args = process.argv.slice(2);
 const opt = (k) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : undefined; };
 let sent = false;
 const APPLIED_CAP = 20;
+// core >= 3.7.0 emits its POST /traces retry line ("[ace] trace retry attempt=N/4 ...") only through logger.warn:
+// stderr, unchanged, so the hooks parse the same line as ace-cli's. stdout is the parsed result: nothing else there.
+const logger = { warn: (m) => process.stderr.write(m + '\n'), error: () => {}, info: () => {}, success: () => {}, debug: () => {}, trace: () => {}, isTrace: () => false };
 
 (async () => {
   const trace = JSON.parse(fs.readFileSync(opt('--transcript'), 'utf8'));
@@ -24,7 +27,7 @@ const APPLIED_CAP = 20;
   // server 5.15.8: more than 20 applied_log_ids in one trace count as "all shown" (the whole trace falls to COLD)
   trace.applied_log_ids = trace.applied_log_ids.slice(0, APPLIED_CAP);
   const ctx = await createContext({});
-  const client = new AceClient(ctx, { customHeaders: clientHeaders() });
+  const client = new AceClient(ctx, { customHeaders: clientHeaders(), logger });
   try {
     const config = await client.getConfig();
     if (config?.runtime_settings?.learningEnabled === false) process.stderr.write('warn: learning disabled on the server\n');
