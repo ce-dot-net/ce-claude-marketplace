@@ -19,7 +19,7 @@ import SEDGE from './fixtures/search_edge.ts'
 import G from './fixtures/golden.ts'
 import USED_CASES from './fixtures/used_cases.ts'
 import { statusLine, hasSubstantialWork, traceVariant, toolRec } from '../core.ts'
-import { pyLoads, PRIVATE_WRITE_SH, evalStats, evalInjection, learnLine, reviewLine, usedPatternIds, toolHaystack } from '../core.ts'
+import { pyLoads, PRIVATE_WRITE_SH, evalStats, evalInjection, learnLine, usedPatternIds, toolHaystack } from '../core.ts'
 
 const HOME = '/home/u', CWD = '/proj', SID = 'sess-1', PRJ = 'prj_t'
 const PROOT = decodeURIComponent(new URL('../..', import.meta.url).pathname).replace(/\/$/, '')  // $.plugin.root
@@ -119,7 +119,7 @@ function host(on: any, o: Opts = {}) {
   on('turn.complete', (_$: any, e: any) => ({ text: e.answer }))
   on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'engine intro', scope: 'shared' }] }))
   on('session.compact', () => o.compact ? o.compact(files) : ({ messages: [{ role: 'user', text: 'summary', toolUses: [] }] }))
-  on('model.complete', (_$: any, e: any) => { modelCalls.push(e); return { value: o.model ? o.model(e) : { isAnswered: false, reason: 'api-error', status: 500, error: 'x' } } })
+  on('model.complete', async (_$: any, e: any) => { modelCalls.push(e); return { value: o.model ? await o.model(e) : { isAnswered: false, reason: 'api-error', status: 500, error: 'x' } } })
   on('session.start', (_$: any, e: any) => ({ cwd: e.cwd }))
   on('session.end', (_$: any, e: any) => ({ sessionId: e.sessionId }))
   on('classic.UserPromptSubmit', () => ({}))
@@ -804,7 +804,7 @@ test('item D/H1: Haiku self-eval (not blocking the turn) writes the review and i
     model: () => ({ isAnswered: true, text: `ACE_REVIEW: 70% | 4m saved | helped\nACE_USED: ${b}, ctx-9999999999-zzzz`, usage: {} }) })
   await mainTask($, h)
   const r: any = await done($, 'finished the change')
-  expect(r.text).toBe('ACE · learning sent')  // the line does not wait for the model
+  expect(r.text).toBe('finished the change')  // item 3: the line waits for the dispatch
   await settle(h)
   const req = h.modelCalls[0]
   expect([req.model, req.effort, req.timeoutMs]).toEqual(['haiku', 'low', 15000])
@@ -820,22 +820,45 @@ test('item D/H1: Haiku self-eval (not blocking the turn) writes the review and i
   expect(h.files.has(EVAL_REQ)).toBe(false)  // no HTML-comment self-eval request while the mod is active
 })
 
-test('fix 2: the Haiku review arrives after the turn: ONE extra line "ACE · review N% · ~Xm saved"; none at 0% or without a review', async ($, on) => {
-  const cases: [string, string | null][] = [['ACE_REVIEW: 70% | 4m saved | helped', 'ACE · review 70% · ~4m saved'],
-    ['ACE_REVIEW: 55% | n/a | meh', 'ACE · review 55%'], ['ACE_REVIEW: 0% | 0m saved | none', null], ['no review here', null]]
+test('item 3: with the self-eval on, "learning sent" shows only once the learn went out: no turn.complete text, ONE log line with the review parts (none at 0% or without a review)', async ($, on) => {
+  const cases: [string, string][] = [['ACE_REVIEW: 70% | 4m saved | helped', 'ACE · learning sent · 70% · ~4m saved'],
+    ['ACE_REVIEW: 55% | n/a | meh', 'ACE · learning sent · 55%'], ['ACE_REVIEW: 0% | 0m saved | none', 'ACE · learning sent'], ['no review here', 'ACE · learning sent']]
   let text = ''
-  const h = host(on, { search: () => ({ stdout: S8 }), selfEval: true, defaultArm: true, model: () => ({ isAnswered: true, text, usage: {} }) })  // budget arm: no dedupe across tasks
+  let release: () => void = () => {}
+  const h = host(on, { search: () => ({ stdout: S8 }), selfEval: true, defaultArm: true,  // budget arm: no dedupe across tasks
+    model: () => new Promise(r => { release = () => r({ isAnswered: true, text, usage: {} }) }) })
   for (const [i, [t, want]] of cases.entries()) {
     text = t
     const from = h.logs.length
     await mainTask($, h)
     const r: any = await done($)
-    expect(r.text).toBe('ACE · learning sent')
+    expect(r.text).toBe('done')  // the hook returned before the model answered: no line yet
+    expect(h.learns().length).toBe(i)
+    expect(h.logs.slice(from).some((l: string) => l.startsWith('ACE · learning sent'))).toBe(false)
+    release()
     await settle(h, i + 1)
-    expect(h.logs.slice(from).filter((l: string) => l.startsWith('ACE · review'))).toEqual(want ? [want] : [])
+    for (let k = 0; k < 50 && h.logs.length === from; k++) await new Promise(r => setTimeout(r, 5))
+    expect(h.logs.slice(from).filter((l: string) => /^ACE · (learning|review)/.test(l))).toEqual([want])
   }
-  expect(reviewLine({ quality_pct: 80, time_saved: '12 min' })).toBe('ACE · review 80% · ~12m saved')
-  expect(reviewLine(null)).toBe(null)
+})
+
+test('item 3: a model error still sends the learn, then logs the line without review parts', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), selfEval: true, model: () => { throw new Error('boom') } })
+  await mainTask($, h)
+  const r: any = await done($)
+  expect(r.text).toBe('done')
+  await settle(h)
+  for (let k = 0; k < 50 && !h.logs.length; k++) await new Promise(r => setTimeout(r, 5))
+  expect(h.learns().length).toBe(1)
+  expect(h.logs.filter((l: string) => /^ACE · (learning|review)/.test(l))).toEqual(['ACE · learning sent'])
+})
+
+test('item 3: ACE_SELF_EVAL=0 keeps the turn.complete line', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), selfEval: true, env: { ACE_SELF_EVAL: '0' } })
+  await mainTask($, h)
+  const r: any = await done($, 'ACE_REVIEW: 80% | 5m saved | ok')
+  expect(r.text).toBe('ACE · learning sent · 80% · ~5m saved')
+  expect(h.logs.some((l: string) => l.startsWith('ACE · learning sent'))).toBe(false)
 })
 
 test('item D/H1: a failed or timed-out model call falls back to the token evidence (H2); the learn still goes out', async ($, on) => {

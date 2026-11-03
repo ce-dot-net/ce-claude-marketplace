@@ -6,7 +6,7 @@ import {
   pyLoads, pyDumps, sanitize, renderFull, renderBudget, renderCompact, renderDomainShift, renderCohort, renderPatternsDict,
   dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
   matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
-  detachedLearnArgv, FALLBACK_ON_3, reuseKey, reuseEnabled, REUSE_TTL_MS, parseAceReview, parseDiffStat, evalStats, learnLine, reviewLine, selfEvalPrompt, parseUsedIds, searchRow, searchSummary, searchErrorLine, statusLine, topDomains, sessionTitle,
+  detachedLearnArgv, FALLBACK_ON_3, reuseKey, reuseEnabled, REUSE_TTL_MS, parseAceReview, parseDiffStat, evalStats, learnLine, selfEvalPrompt, parseUsedIds, searchRow, searchSummary, searchErrorLine, statusLine, topDomains, sessionTitle,
   subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, appliedLogIds, usedPatternIds, injectedContents, type StateUpdate, type ToolRec, type Cohort,
 } from './core.ts'
 
@@ -357,9 +357,9 @@ async function reap($: any, L: Load, s: Sess, key: string, state: any) {
   L.late.delete(key)
 }
 
-// true = a learn was dispatched (the detached launcher started)
+// true = a learn was dispatched (the detached launcher started); 'later' = it goes out after the self-eval, which logs the line
 async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook: 'Stop' | 'SubagentStop', effortEvent: string | undefined, summaryCap = 2000,
-  usedText = answer): Promise<boolean> {
+  usedText = answer): Promise<boolean | 'later'> {
   const t0 = await $.clock.now()
   const agentId = key === 'main' ? undefined : key
   const recs = await takeTools($, L, s, key)
@@ -433,25 +433,28 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   }
 
   // item D / H1: main agent, patterns injected -> a Haiku self-eval (review + evidenced ids) before the learn goes out.
-  // Not awaited: the turn ends now; a failed or timed-out call falls back to the token evidence (H2).
+  // Not awaited: the turn ends now; a failed or timed-out call falls back to the token evidence (H2). item 3: the
+  // "learning sent" line goes out once the learn really did, with the review's parts (none at 0% or without one).
   if (hook === 'Stop' && playbook.length && (await $.env.get('ACE_SELF_EVAL')) !== '0') {  // a rejecting call falls back too
     void selfEval($, s, prompt, answer, playbook, state.pattern_contents ?? {}, recs).catch(() => null)
-      .then(m => dispatch(m))
+      .then(async m => {
+        if (!(await dispatch(m?.ids ?? null))) return
+        const rv = m?.review
+        $.ui.log(learnLine(rv && Number(rv.quality_pct) > 0 ? rv : { time_saved: rv?.time_saved }))
+      })
       .catch(async err => { await rm($, lock).catch(() => {}); await relLog($, s, { timestamp: await nowIso($), event: 'error', hook, location: 'mod.self_eval', error: String(err).slice(0, 300), source: 'mod' }) })
-    return true
+    return 'later'
   }
   return dispatch(null)
 }
 
 const SELF_EVAL_MS = 15_000
-async function selfEval($: any, s: Sess, task: string, answer: string, ids: string[], contents: Record<string, string>, recs: ToolRec[]): Promise<string[] | null> {
+async function selfEval($: any, s: Sess, task: string, answer: string, ids: string[], contents: Record<string, string>, recs: ToolRec[]): Promise<{ ids: string[]; review: any } | null> {
   const r = await $.model.complete({ model: 'haiku', effort: 'low', timeoutMs: SELF_EVAL_MS, prompt: selfEvalPrompt({ task, answer, ids, contents, tools: recs }) })
   if (!r?.isAnswered || typeof r.text !== 'string') return null
   const review = parseAceReview(r.text)
   if (review && await logsSafe($, s, 'ace-review-result.json')) await $.fs.write(`${s.logs}/ace-review-result.json`, pyDumps(review))
-  const line = reviewLine(review)
-  if (line) $.ui.log(line)
-  return parseUsedIds(r.text, ids)
+  return { ids: parseUsedIds(r.text, ids), review }
 }
 
 async function onPrompt($: any, L: Load, e: any): Promise<any> {
@@ -881,7 +884,7 @@ export const register: Register = (on) => {
           await relLog($, s, { timestamp: await nowIso($), event: 'learn_deferred', hook: 'Stop', session_id: s.sessionId, types, task_session_id: anchor, source: 'mod' })
         } else {
           await clearDeferred($, L, s)
-          if (await learn($, L, s, 'main', e.answer, 'Stop', effort)) line = learnLine(review)
+          if ((await learn($, L, s, 'main', e.answer, 'Stop', effort)) === true) line = learnLine(review)
         }
       } else {
         const effort = L.agentEffort.get(agentId)
