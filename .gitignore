@@ -9,7 +9,8 @@ build/
 .ace-cache/
 
 # ACE configuration with credentials and project settings
-.ace/
+.ace/*
+!.ace/config.json
 
 # Claude Code data and logs
 .claude/data/
