@@ -125,6 +125,24 @@ def pytest_configure(config):
         # session-wide too: modules that resolve their root at import time (ace_engine) must not see the real install
         os.environ["CLAUDE_PLUGIN_ROOT"] = str(hermetic_root())
     _state.update(root=root, fake_bin=fake_bin)
+    # Guard: no in-process relevance row may target the developer's real <repo>/.claude/data/logs (every row goes
+    # through plugin_data_dir.open_project_log); hook subprocesses are kept out by the per-test cwd below.
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "plugins" / "ace" / "shared-hooks" / "utils"))
+    import plugin_data_dir
+    real_log = (Path(__file__).resolve().parent.parent / ".claude" / "data" / "logs" / "ace-relevance.jsonl").resolve()
+    orig = plugin_data_dir.open_project_log
+
+    def guarded(path, *a, **kw):
+        if Path(path).resolve() == real_log:
+            _state.setdefault("real_log_writes", []).append(str(path))
+        return orig(path, *a, **kw)
+    plugin_data_dir.open_project_log = guarded
+
+
+def pytest_sessionfinish(session, exitstatus):
+    if _state.get("real_log_writes"):
+        print("\nFAIL: %d test rows written to the real repo .claude/data/logs/ace-relevance.jsonl" % len(_state["real_log_writes"]))
+        session.exitstatus = 1
 
 
 def pytest_unconfigure(config):
