@@ -137,7 +137,7 @@ async function search($: any, s: Sess, query: string, pin: string | undefined, t
   if (usePin) {
     const min = Number(await $.env.get('ACE_PIN_BACKOFF_MIN'))
     const age = await $.fs.stat(backoffPath).then((st: any) => t1 - st.mtimeMs, () => Infinity)
-    if (age < (Number.isFinite(min) && min > 0 ? min : 30) * 60_000) { usePin = undefined; pinSkipped = 'backoff' }
+    if (age < (Number.isFinite(min) && min > 0 ? min : 5) * 60_000) { usePin = undefined; pinSkipped = 'backoff' }  // 5 min since SDK 4.3.0 (sessions.db index); server team agreed
   }
   const spawn = async (p: string | undefined, timeoutMs: number) => {
     const argv = [...head, 'search', '--stdin', '--json', ...(p ? ['--pin-session', p] : []), ...(topK ? ['--top-k', String(topK)] : [])]

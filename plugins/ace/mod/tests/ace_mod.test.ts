@@ -314,14 +314,14 @@ test('pin-drop: "database is locked" → ONE unpinned re-run, pin_failed logged,
   expect(h.files.has(`${ROOT}/pin-backoff`)).toBe(true)
 })
 
-test('pin-backoff younger than 30 min → no pin up front (pin_skipped backoff); older → pinned again', async ($, on) => {
+test('pin-backoff younger than 5 min → no pin up front (pin_skipped backoff); older → pinned again', async ($, on) => {
   const h = host(on, { files: { [`${ROOT}/pin-backoff`]: '' } })
   await submit($)
   expect(h.searches().length).toBe(1)
   expect(h.searches()[0]!.argv.includes('--pin-session')).toBe(false)
   expect(h.rows().find((x: any) => x.event === 'search')!.pin_skipped).toBe('backoff')
   expect(h.state()!.task_session_id).toBeDefined()
-  h.advance(31 * MIN)
+  h.advance(6 * MIN)
   await submit($, HUMAN + ' later')
   expect(h.searches()[1]!.argv.includes('--pin-session')).toBe(true)
 })
