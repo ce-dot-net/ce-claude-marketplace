@@ -805,9 +805,8 @@
   "flags": {},
   "globalConfig": null,
   "expect": {
-   "bound": true,
-   "orgId": "org_a",
-   "projectId": "proj_a",
+   "bound": false,
+   "reason": "config_refused",
    "source": "repo_file",
    "path": "main/.ace/config.json",
    "warnings": [
@@ -826,9 +825,8 @@
   "flags": {},
   "globalConfig": null,
   "expect": {
-   "bound": true,
-   "orgId": "org_a",
-   "projectId": "proj_a",
+   "bound": false,
+   "reason": "config_refused",
    "source": "repo_file",
    "path": "main/.ace/config.json",
    "warnings": [

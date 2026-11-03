@@ -1,53 +1,161 @@
 [
-  {
-    "name": "plugin: leaked foreign env plus a tracked .ace file -> the file wins",
-    "strict": true,
-    "layout": {"main/.git/config": "[core]\n", "main/.ace/config.json": "{\"orgId\": \"org_mine\", \"projectId\": \"prj_mine\"}"},
-    "cwd": "main",
-    "env": {"ACE_ORG_ID": "org_foreign", "ACE_PROJECT_ID": "prj_foreign"},
-    "flags": {}, "globalConfig": null,
-    "expect": {"bound": true, "orgId": "org_mine", "projectId": "prj_mine", "source": "repo_file", "path": "main/.ace/config.json"}
+ {
+  "name": "plugin: leaked foreign env plus a tracked .ace file -> the file wins",
+  "layout": {
+   "main/.git/config": "[core]\n",
+   "main/.ace/config.json": "{\"orgId\": \"org_mine\", \"projectId\": \"prj_mine\"}"
   },
-  {
-    "name": "plugin: .ace file with apiToken -> refused, nothing sent",
-    "strict": true,
-    "layout": {"main/.git/config": "[core]\n", "main/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"prj_a\", \"apiToken\": \"ace_user_x\"}"},
-    "cwd": "main", "env": {}, "flags": {}, "globalConfig": null,
-    "expect": {"bound": false, "reason": "config_refused", "detail": "repo_file_contains_secret", "source": "repo_file", "path": "main/.ace/config.json"}
+  "cwd": "main",
+  "env": {
+   "ACE_ORG_ID": "org_foreign",
+   "ACE_PROJECT_ID": "prj_foreign"
   },
-  {
-    "name": "plugin: bad JSON -> refused with a reason",
-    "strict": true,
-    "layout": {"main/.git/config": "[core]\n", "main/.ace/config.json": "{\"orgId\": \"org_a\", "},
-    "cwd": "main", "env": {"ACE_ORG_ID": "org_e", "ACE_PROJECT_ID": "prj_e"}, "flags": {}, "globalConfig": null,
-    "expect": {"bound": false, "reason": "config_refused", "detail": "invalid_json", "source": "repo_file", "path": "main/.ace/config.json"}
-  },
-  {
-    "name": "plugin: unreadable .ace file -> refused",
-    "strict": true,
-    "unreadable": ["main/.ace/config.json"],
-    "layout": {"main/.git/config": "[core]\n", "main/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"prj_a\"}"},
-    "cwd": "main", "env": {"ACE_ORG_ID": "org_e", "ACE_PROJECT_ID": "prj_e"}, "flags": {}, "globalConfig": null,
-    "expect": {"bound": false, "reason": "config_refused", "detail": "unreadable", "source": "repo_file", "path": "main/.ace/config.json"}
-  },
-  {
-    "name": "plugin: claude worktree without its own .ace -> main checkout, path shows it",
-    "strict": true,
-    "layout": {
-      "repo/.git/config": "[core]\n",
-      "repo/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"prj_main\"}",
-      "repo/.claude/worktrees/agent-1/.git": "gitdir: $ROOT/repo/.git/worktrees/agent-1\n",
-      "repo/.git/worktrees/agent-1/commondir": "../..\n",
-      "repo/.claude/worktrees/agent-1/plugins/ace": null
-    },
-    "cwd": "repo/.claude/worktrees/agent-1/plugins/ace", "env": {}, "flags": {}, "globalConfig": null,
-    "expect": {"bound": true, "orgId": "org_a", "projectId": "prj_main", "source": "repo_file", "path": "repo/.ace/config.json"}
-  },
-  {
-    "name": "plugin: strict mode refuses ids without the org_/prj_ prefix",
-    "strict": true,
-    "layout": {"main/.git/config": "[core]\n", "main/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"proj_a\"}"},
-    "cwd": "main", "env": {}, "flags": {}, "globalConfig": null,
-    "expect": {"bound": false, "reason": "config_refused", "detail": "invalid_id", "orgId": "org_a", "projectId": "proj_a", "source": "repo_file", "path": "main/.ace/config.json"}
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": true,
+   "orgId": "org_mine",
+   "projectId": "prj_mine",
+   "source": "repo_file",
+   "path": "main/.ace/config.json"
   }
+ },
+ {
+  "name": "plugin: .ace file with apiToken -> refused, nothing sent",
+  "layout": {
+   "main/.git/config": "[core]\n",
+   "main/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"prj_a\", \"apiToken\": \"ace_user_x\"}"
+  },
+  "cwd": "main",
+  "env": {},
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "config_refused",
+   "source": "repo_file",
+   "path": "main/.ace/config.json",
+   "warnings": [
+    "repo_file_contains_secret"
+   ]
+  }
+ },
+ {
+  "name": "plugin: bad JSON -> refused with a reason",
+  "layout": {
+   "main/.git/config": "[core]\n",
+   "main/.ace/config.json": "{\"orgId\": \"org_a\", "
+  },
+  "cwd": "main",
+  "env": {
+   "ACE_ORG_ID": "org_e",
+   "ACE_PROJECT_ID": "prj_e"
+  },
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "config_invalid",
+   "source": "repo_file",
+   "path": "main/.ace/config.json"
+  }
+ },
+ {
+  "name": "plugin: unreadable .ace file -> refused",
+  "unreadable": [
+   "main/.ace/config.json"
+  ],
+  "layout": {
+   "main/.git/config": "[core]\n",
+   "main/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"prj_a\"}"
+  },
+  "cwd": "main",
+  "env": {
+   "ACE_ORG_ID": "org_e",
+   "ACE_PROJECT_ID": "prj_e"
+  },
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "config_invalid",
+   "source": "repo_file",
+   "path": "main/.ace/config.json"
+  }
+ },
+ {
+  "name": "plugin: claude worktree without its own .ace -> main checkout, path shows it",
+  "layout": {
+   "repo/.git/config": "[core]\n",
+   "repo/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"prj_main\"}",
+   "repo/.claude/worktrees/agent-1/.git": "gitdir: $ROOT/repo/.git/worktrees/agent-1\n",
+   "repo/.git/worktrees/agent-1/commondir": "../..\n",
+   "repo/.claude/worktrees/agent-1/plugins/ace": null
+  },
+  "cwd": "repo/.claude/worktrees/agent-1/plugins/ace",
+  "env": {},
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": true,
+   "orgId": "org_a",
+   "projectId": "prj_main",
+   "source": "repo_file",
+   "path": "repo/.ace/config.json"
+  }
+ },
+ {
+  "name": "plugin: broken settings.json -> config_invalid, no fallback to env",
+  "layout": {
+   "main/.git/config": "[core]\n",
+   "main/.claude/settings.json": "{nope"
+  },
+  "cwd": "main",
+  "env": {
+   "ACE_ORG_ID": "org_e",
+   "ACE_PROJECT_ID": "prj_e"
+  },
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "config_invalid",
+   "source": "settings_file",
+   "path": "main/.claude/settings.json"
+  }
+ },
+ {
+  "name": "plugin: .ace file that is a JSON array -> config_invalid",
+  "layout": {
+   "main/.git/config": "[core]\n",
+   "main/.ace/config.json": "[1,2]"
+  },
+  "cwd": "main",
+  "env": {},
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "config_invalid",
+   "source": "repo_file",
+   "path": "main/.ace/config.json"
+  }
+ },
+ {
+  "name": "plugin: non-string projectId -> config_invalid",
+  "layout": {
+   "main/.git/config": "[core]\n",
+   "main/.ace/config.json": "{\"orgId\":\"org_a\",\"projectId\":42}"
+  },
+  "cwd": "main",
+  "env": {},
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "config_invalid",
+   "source": "repo_file",
+   "path": "main/.ace/config.json"
+  }
+ }
 ]

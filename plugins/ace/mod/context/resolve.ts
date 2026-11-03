@@ -3,9 +3,8 @@
 // All file access goes through the injected reader: text, null when missing, throws for a directory or unreadable.
 // Precedence: flag > repo_file (.ace/config.json walk-up to the git root, then the linked worktree's main checkout)
 // > settings_file (.claude/settings.json, same walk) > env > remote_map > unbound.
-// strict (default true, what the plugin uses): secret keys in a repo file are refused, ids must match ^org_/^prj_.
-// The spec fixtures use ids like proj_a and only warn on secrets, so the conformance runner passes strict:false.
-// Bad JSON / unreadable config files are refused in both modes.
+// Refusals (spec; no fallback to lower sources; CLI exit 5): apiToken/serverUrl in a repo file -> config_refused with
+// warning repo_file_contains_secret; broken/unreadable JSON, a non-object or a non-string id -> config_invalid.
 
 export type Reader = (path: string) => string | null
 export type Source = 'flag' | 'repo_file' | 'settings_file' | 'env' | 'remote_map'
@@ -15,8 +14,8 @@ export type Result =
   | { bound: false, reason: 'no_binding', tried: Tried[], warnings?: string[] }
   | { bound: false, reason: 'no_org', projectId: string, source: Source, path: string | null, warnings?: string[] }
   | { bound: false, reason: 'org_not_member', orgId: string, source: Source, path: string | null, warnings: string[] }
-  | { bound: false, reason: 'config_refused', detail: string, source: Source, path: string | null,
-      message?: string, orgId?: string, projectId?: string, warnings?: string[] }
+  | { bound: false, reason: 'config_refused' | 'config_invalid', source: Source, path: string | null,
+      message?: string, warnings?: string[] }
 
 export type ResolveOpts = {
   flags?: { org?: string, project?: string } | null
@@ -25,18 +24,15 @@ export type ResolveOpts = {
   read: Reader
   defaultOrgId?: string | null
   globalProjectId?: string | null                                              // never used, only warned about
-  strict?: boolean
 }
 
 export const SECRET_KEYS = ['apiToken', 'serverUrl', 'api_token', 'server_url']
-const ORG_RE = /^org_[A-Za-z0-9_-]+$/
-const PRJ_RE = /^prj_[A-Za-z0-9_-]+$/
 const ALIAS_RE = /^(.+\.[a-z]+)-[A-Za-z0-9_-]+$/
 
 type Entry = { source: Source, path: string | null, org: string | null, prj: string | null }
 class Refused { constructor(public result: Result) {} }
-const refuse = (detail: string, source: Source, path: string, message?: string): Refused =>
-  new Refused({ bound: false, reason: 'config_refused', detail, source, path, ...(message ? { message } : {}) })
+const invalid = (source: Source, path: string, message?: string): Refused =>
+  new Refused({ bound: false, reason: 'config_invalid', source, path, ...(message ? { message } : {}) })
 
 // posix path helpers (absolute paths only)
 export function normPath(p: string): string {
@@ -113,25 +109,23 @@ export function normalizeRemote(url: string | null): string | null {
 
 function parseJson(text: string, source: Source, path: string): Record<string, unknown> {
   let data: unknown
-  try { data = JSON.parse(text) } catch (e) { throw refuse('invalid_json', source, path, String((e as Error).message ?? e)) }
-  if (!data || typeof data !== 'object' || Array.isArray(data)) throw refuse('invalid_json', source, path, 'top level is not an object')
+  try { data = JSON.parse(text) } catch (e) { throw invalid(source, path, String((e as Error).message ?? e)) }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) throw invalid(source, path, 'top level is not an object')
   return data as Record<string, unknown>
 }
 
 function id(v: unknown, source: Source, path: string): string | null {
   if (v === undefined || v === null || v === '') return null
-  if (typeof v !== 'string') throw refuse('invalid_id', source, path, 'id is not a string')
+  if (typeof v !== 'string') throw invalid(source, path, 'id is not a string')
   return v
 }
 
-type Parse = (text: string, path: string, strict: boolean, warnings: string[]) => Entry
+type Parse = (text: string, path: string) => Entry
 
-const repoEntry: Parse = (text, path, strict, warnings) => {
+const repoEntry: Parse = (text, path) => {
   const d = parseJson(text, 'repo_file', path)
-  if (SECRET_KEYS.some(k => k in d)) {
-    if (strict) throw refuse('repo_file_contains_secret', 'repo_file', path, 'repo .ace/config.json contains apiToken/serverUrl; remove them')
-    if (!warnings.includes('repo_file_contains_secret')) warnings.push('repo_file_contains_secret')
-  }
+  if (SECRET_KEYS.some(k => k in d)) throw new Refused({ bound: false, reason: 'config_refused', source: 'repo_file', path,
+    message: 'repo .ace/config.json contains apiToken/serverUrl; remove them', warnings: ['repo_file_contains_secret'] })
   return { source: 'repo_file', path, org: id(d.orgId ?? d.org_id, 'repo_file', path), prj: id(d.projectId ?? d.project_id, 'repo_file', path) }
 }
 
@@ -143,13 +137,13 @@ const settingsEntry: Parse = (text, path) => {
 
 // Spec 1.1/7: the first existing file in the walk ends it; the main checkout is checked only without a projectId yet.
 function search(source: Source, rel: string, dirs: string[], mainRoot: string | null, home: string | null, read: Reader,
-  tried: Tried[], parse: Parse, strict: boolean, warnings: string[]): Entry[] {
+  tried: Tried[], parse: Parse): Entry[] {
   const found: Entry[] = []
   const probe = (path: string) => {
     tried.push({ source, path, key: null })
     let text: string | null
-    try { text = read(path) } catch (e) { throw refuse('unreadable', source, path, String((e as Error)?.message ?? e)) }
-    if (text !== null) found.push(parse(text, path, strict, warnings))
+    try { text = read(path) } catch (e) { throw invalid(source, path, String((e as Error)?.message ?? e)) }
+    if (text !== null) found.push(parse(text, path))
     return text !== null
   }
   for (const d of dirs) if (probe(join(d, rel))) break
@@ -159,13 +153,13 @@ function search(source: Source, rel: string, dirs: string[], mainRoot: string | 
 
 export function resolve(cwd: string, env: Record<string, string | undefined>, opts: ResolveOpts): Result {
   try { return resolveInner(normPath(cwd), env ?? {}, opts) } catch (e) {
-    if (e instanceof Refused) return e.result
-    throw e
+    if (!(e instanceof Refused)) throw e
+    if (opts.globalProjectId) e.result.warnings = ['global_project_id_ignored', ...(e.result.warnings ?? [])]
+    return e.result
   }
 }
 
 function resolveInner(cwd: string, env: Record<string, string | undefined>, o: ResolveOpts): Result {
-  const strict = o.strict ?? true
   const flags = o.flags ?? {}
   const read = o.read
   const warnings: string[] = o.globalProjectId ? ['global_project_id_ignored'] : []
@@ -180,8 +174,8 @@ function resolveInner(cwd: string, env: Record<string, string | undefined>, o: R
 
   const tried: Tried[] = []
   const entries: Entry[] = [{ source: 'flag', path: null, org: flags.org || null, prj: flags.project || null }]
-  entries.push(...search('repo_file', '.ace/config.json', dirs, mainRoot, home, read, tried, repoEntry, strict, warnings))
-  entries.push(...search('settings_file', '.claude/settings.json', dirs, mainRoot, home, read, tried, settingsEntry, strict, warnings))
+  entries.push(...search('repo_file', '.ace/config.json', dirs, mainRoot, home, read, tried, repoEntry))
+  entries.push(...search('settings_file', '.claude/settings.json', dirs, mainRoot, home, read, tried, settingsEntry))
   entries.push({ source: 'env', path: null, org: env.ACE_ORG_ID || null, prj: env.ACE_PROJECT_ID || null })
   tried.push({ source: 'env', path: null, key: null })
   const key = config ? normalizeRemote(originUrl(quiet(read, config))) : null
@@ -204,12 +198,6 @@ function resolveInner(cwd: string, env: Record<string, string | undefined>, o: R
   else if (win.org) { org = win.org; orgFrom = win }
   else { orgFrom = entries.find(e => e.org); org = orgFrom ? orgFrom.org : o.defaultOrgId }
   if (!org) return done({ bound: false, reason: 'no_org', projectId: win.prj!, source: win.source, path: win.path })
-
-  if (strict && !(ORG_RE.test(org) && PRJ_RE.test(win.prj!))) {
-    const bad = orgFrom && !ORG_RE.test(org) ? orgFrom : win
-    return done({ bound: false, reason: 'config_refused', detail: 'invalid_id', orgId: org, projectId: win.prj!,
-      source: bad.source, path: bad.path, message: 'ids must look like org_... / prj_...' })
-  }
 
   if (orgFrom && ['repo_file', 'settings_file', 'remote_map'].includes(orgFrom.source) && o.organizations
     && !o.organizations.some(x => x && x.org_id === org)) {

@@ -8,12 +8,11 @@ Pure: no git spawn, no network, no os.getcwd(). All file access goes through `re
 Precedence: flag > repo_file (.ace/config.json, walk-up to git root, then the main checkout of a
 linked worktree) > settings_file (.claude/settings.json, same walk) > env > remote_map > unbound.
 
-Beyond the spec, `strict=True` (the default, what the hooks use):
-  - a repo file with apiToken/serverUrl (or snake_case) is refused instead of warned about,
-  - ids must match ^org_ / ^prj_.
-  The spec fixtures use ids like proj_a and expect a warning for secrets, so the conformance runner passes strict=False.
-Bad JSON and unreadable config files are refused in both modes. Result shapes: spec 1.5, plus
-  {bound: False, reason: 'config_refused', detail, source, path, message?}.
+Refusals (spec, both chains, no fallback to lower sources, CLI exit 5):
+  - apiToken/serverUrl (or snake_case) in a repo file: {bound: False, reason: 'config_refused', source, path,
+    warnings: ['repo_file_contains_secret']}
+  - broken/unreadable JSON, a non-object, or a non-string id in repo_file or settings_file:
+    {bound: False, reason: 'config_invalid', source, path, message?}
 """
 
 import json
@@ -21,8 +20,6 @@ import os
 import re
 
 SECRET_KEYS = ('apiToken', 'serverUrl', 'api_token', 'server_url')
-ORG_RE = re.compile(r'^org_[A-Za-z0-9_-]+$')
-PRJ_RE = re.compile(r'^prj_[A-Za-z0-9_-]+$')
 _ALIAS_RE = re.compile(r'^(.+\.[a-z]+)-[A-Za-z0-9_-]+$')
 
 
@@ -36,11 +33,13 @@ def read_file(path):
 
 
 class _Refused(Exception):
-    def __init__(self, detail, source, path, message=None):
-        super().__init__(detail)
-        self.result = {'bound': False, 'reason': 'config_refused', 'detail': detail, 'source': source, 'path': path}
+    def __init__(self, reason, source, path, message=None, warning=None):
+        super().__init__(reason)
+        self.result = {'bound': False, 'reason': reason, 'source': source, 'path': path}
         if message:
             self.result['message'] = message
+        if warning:
+            self.result['warnings'] = [warning]
 
 
 def _exists(read, path):
@@ -124,9 +123,9 @@ def _parse_json(text, source, path):
     try:
         data = json.loads(text)
     except ValueError as e:
-        raise _Refused('invalid_json', source, path, str(e))
+        raise _Refused('config_invalid', source, path, str(e))
     if not isinstance(data, dict):
-        raise _Refused('invalid_json', source, path, 'top level is not an object')
+        raise _Refused('config_invalid', source, path, 'top level is not an object')
     return data
 
 
@@ -134,25 +133,23 @@ def _id(value, source, path):
     if value is None or value == '':
         return None
     if not isinstance(value, str):
-        raise _Refused('invalid_id', source, path, 'id is not a string')
+        raise _Refused('config_invalid', source, path, 'id is not a string')
     return value
 
 
-def _repo_entry(text, path, strict, warnings):
+def _repo_entry(text, path):
     data = _parse_json(text, 'repo_file', path)
     if any(k in data for k in SECRET_KEYS):
-        if strict:
-            raise _Refused('repo_file_contains_secret', 'repo_file', path,
-                           'repo .ace/config.json contains apiToken/serverUrl; remove them')
-        if 'repo_file_contains_secret' not in warnings:
-            warnings.append('repo_file_contains_secret')
+        raise _Refused('config_refused', 'repo_file', path,
+                       'repo .ace/config.json contains apiToken/serverUrl; remove them',
+                       warning='repo_file_contains_secret')
     org = data.get('orgId', data.get('org_id'))
     prj = data.get('projectId', data.get('project_id'))
     return {'source': 'repo_file', 'path': path,
             'org': _id(org, 'repo_file', path), 'prj': _id(prj, 'repo_file', path)}
 
 
-def _settings_entry(text, path, strict, warnings):
+def _settings_entry(text, path):
     data = _parse_json(text, 'settings_file', path)
     env = data.get('env') if isinstance(data.get('env'), dict) else {}
     return {'source': 'settings_file', 'path': path,
@@ -160,7 +157,7 @@ def _settings_entry(text, path, strict, warnings):
             'prj': _id(env.get('ACE_PROJECT_ID'), 'settings_file', path)}
 
 
-def _search(source, rel, dirs, main_root, home, read, tried, parse, strict, warnings):
+def _search(source, rel, dirs, main_root, home, read, tried, parse):
     """Spec 1.1/7: first existing file in the walk ends it; main checkout only if no projectId yet."""
     found = []
     for d in dirs:
@@ -169,9 +166,9 @@ def _search(source, rel, dirs, main_root, home, read, tried, parse, strict, warn
         try:
             text = read(path)
         except Exception as e:
-            raise _Refused('unreadable', source, path, f'{type(e).__name__}: {e}')
+            raise _Refused('config_invalid', source, path, f'{type(e).__name__}: {e}')
         if text is not None:
-            found.append(parse(text, path, strict, warnings))
+            found.append(parse(text, path))
             break
     if main_root and main_root != home and not (found and found[0]['prj']):
         path = os.path.join(main_root, rel)
@@ -179,14 +176,14 @@ def _search(source, rel, dirs, main_root, home, read, tried, parse, strict, warn
         try:
             text = read(path)
         except Exception as e:
-            raise _Refused('unreadable', source, path, f'{type(e).__name__}: {e}')
+            raise _Refused('config_invalid', source, path, f'{type(e).__name__}: {e}')
         if text is not None:
-            found.append(parse(text, path, strict, warnings))
+            found.append(parse(text, path))
     return found
 
 
 def resolve(cwd, env, flags=None, remote_map=None, organizations=None, read=read_file,
-            default_org_id=None, global_project_id=None, strict=True):
+            default_org_id=None, global_project_id=None):
     """Resolve {orgId, projectId} for an absolute `cwd`. Never falls back to a default project.
 
     remote_map: global config `projects` ({normalized remote: {orgId?, projectId}}).
@@ -195,12 +192,14 @@ def resolve(cwd, env, flags=None, remote_map=None, organizations=None, read=read
     """
     try:
         return _resolve(os.path.normpath(cwd), env or {}, flags or {}, remote_map or {}, organizations,
-                        read, default_org_id, global_project_id, strict)
+                        read, default_org_id, global_project_id)
     except _Refused as r:
+        if global_project_id:
+            r.result['warnings'] = ['global_project_id_ignored'] + r.result.get('warnings', [])
         return r.result
 
 
-def _resolve(cwd, env, flags, remote_map, organizations, read, default_org_id, global_project_id, strict):
+def _resolve(cwd, env, flags, remote_map, organizations, read, default_org_id, global_project_id):
     warnings = ['global_project_id_ignored'] if global_project_id else []
     home = os.path.normpath(env['HOME']) if env.get('HOME') else None
     root, main_root, git_config = _git(cwd, read)
@@ -217,9 +216,9 @@ def _resolve(cwd, env, flags, remote_map, organizations, read, default_org_id, g
     tried = []
     entries = [{'source': 'flag', 'path': None, 'org': flags.get('org') or None, 'prj': flags.get('project') or None}]
     entries += _search('repo_file', os.path.join('.ace', 'config.json'), dirs, main_root, home, read, tried,
-                       _repo_entry, strict, warnings)
+                       _repo_entry)
     entries += _search('settings_file', os.path.join('.claude', 'settings.json'), dirs, main_root, home, read,
-                       tried, _settings_entry, strict, warnings)
+                       tried, _settings_entry)
     entries.append({'source': 'env', 'path': None,
                     'org': env.get('ACE_ORG_ID') or None, 'prj': env.get('ACE_PROJECT_ID') or None})
     tried.append({'source': 'env', 'path': None, 'key': None})
@@ -251,12 +250,6 @@ def _resolve(cwd, env, flags, remote_map, organizations, read, default_org_id, g
     if not org:
         return done({'bound': False, 'reason': 'no_org', 'projectId': win['prj'],
                      'source': win['source'], 'path': win['path']})
-
-    if strict and not (isinstance(org, str) and ORG_RE.match(org) and PRJ_RE.match(win['prj'])):
-        bad = org_from if (org_from and not ORG_RE.match(str(org))) else win
-        return done({'bound': False, 'reason': 'config_refused', 'detail': 'invalid_id',
-                     'orgId': org, 'projectId': win['prj'], 'source': bad['source'], 'path': bad['path'],
-                     'message': 'ids must look like org_... / prj_...'})
 
     if (org_from and org_from['source'] in ('repo_file', 'settings_file', 'remote_map')
             and organizations is not None
