@@ -270,6 +270,5 @@ def test_prerelease_context_matches_our_resolver(box, case):
     ours = apc.context(str(cwd), env=full)
     keys = ('bound', 'reason', 'orgId', 'projectId', 'source', 'warnings')
     assert {k: theirs.get(k) for k in keys} == {k: ours.get(k) for k in keys}, (theirs, ours)
-    rp = lambda p: os.path.realpath(p) if p else p  # the SDK may realpath (/private/var/...); ours stays as given
-    assert rp(theirs.get('path')) == rp(ours.get('path'))
+    assert theirs.get('path') == ours.get('path')  # byte-exact: the CLI runs with the cwd our resolver used
     assert cli.returncode == (0 if ours['bound'] else 5)
