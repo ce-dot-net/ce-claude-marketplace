@@ -110,3 +110,14 @@ def test_engine_search_cpu_vs_cli(tmp_path):
         assert lib_cpu < 0.6, "engine spawn CPU %.3fs" % lib_cpu
     finally:
         srv.stop()
+
+
+@pytest.mark.parametrize("mode", ["noisy", "empty"])
+def test_engine_noisy_core_or_empty_result_never_falls_back_to_the_cli(prefix_env, monkeypatch, mode):
+    """8.1.0 audit: 'lib failed: no similar_patterns list' came from core log lines on stdout; an empty result is a
+    valid empty search. Neither may fall back to an ace-cli search."""
+    tmp, made = prefix_env
+    monkeypatch.setenv("ACE_FAKE_CORE_MODE", mode)
+    r = _run("UserPromptSubmit_human", made)
+    assert not [c for c in r["cli_calls"] if c["argv"][:1] == ["search"]], r["cli_calls"]
+    assert any(x["engine"] == "lib" and x.get("reason") == "ok" for x in _engine_rows(r)), _engine_rows(r)

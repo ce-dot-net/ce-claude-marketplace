@@ -86,6 +86,9 @@ class AceClient {
     if (mode() === 'garbage') { process.stdout.write('not json at all\n'); process.exit(0); }
     if (mode() === 'throw') throw new Error('Server error (500): boom');
     if (mode() === 'drift') return {};
+    // noisy: a core that logs through its logger (default: console = stdout) during a search, e.g. "Cache hit"
+    if (mode() === 'noisy') { (this.opts.logger && this.opts.logger.info ? this.opts.logger.info : console.log)('ℹ Cache hit (SQLite)'); return RESP; }
+    if (mode() === 'empty') return { ...RESP, similar_patterns: [], count: 0 };
     // raw_*: the raw /patterns/search body carries switches; raw_new = core >= 3.4.0 passes them through.
     if (mode() === 'raw_new' || mode() === 'raw_old') {
       await this.request('/patterns/search', 'POST', p);

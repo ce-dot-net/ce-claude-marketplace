@@ -251,7 +251,14 @@ def _resolve(cwd, env, flags, remote_map, organizations, read, default_org_id, g
             if 'invalid_id_ignored' not in warnings:
                 warnings.append('invalid_id_ignored')
             return None
-    entries.append({'source': 'env', 'path': None, 'org': soft(env.get('ACE_ORG_ID'), 'org'), 'prj': soft(env.get('ACE_PROJECT_ID'), 'prj')})
+    # ACE_BIND_ROOT (8.1.0, set by the mod beside the ids it exports): env ids bind only inside that repo, so an export
+    # inherited by a child session in another directory never binds it. Unset (a user/launcher env, e.g. herdr): spec.
+    bind = env.get('ACE_BIND_ROOT')
+    env_ok = not bind or (main_root or root) == os.path.normpath(bind) or (cwd + '/').startswith(os.path.normpath(bind) + '/')
+    if bind and not env_ok and (env.get('ACE_PROJECT_ID') or env.get('ACE_ORG_ID')):
+        warnings.append('env_bound_elsewhere')
+    entries.append({'source': 'env', 'path': None, 'org': soft(env.get('ACE_ORG_ID'), 'org') if env_ok else None,
+                    'prj': soft(env.get('ACE_PROJECT_ID'), 'prj') if env_ok else None})
     tried.append({'source': 'env', 'path': None, 'key': None})
     key = normalize_remote(origin_url(_quiet(read, git_config))) if git_config else None
     hit = remote_map.get(key) if key else None
@@ -404,7 +411,7 @@ def context(cwd=None, env=None, flags=None, now=None):
     cwd = os.path.abspath(cwd or os.getcwd())
     root = log_root(cwd)
     key = (cwd, json.dumps(flags or {}, sort_keys=True),
-           tuple(env.get(k) for k in (CONTEXT_ENV, 'ACE_ORG_ID', 'ACE_PROJECT_ID', 'ACE_CONFIG_PATH', 'HOME')))
+           tuple(env.get(k) for k in (CONTEXT_ENV, 'ACE_ORG_ID', 'ACE_PROJECT_ID', 'ACE_BIND_ROOT', 'ACE_CONFIG_PATH', 'HOME')))
     if now is None and key in _CACHE:
         return dict(_CACHE[key])
     t = time.time() if now is None else now
@@ -777,6 +784,30 @@ def _shell(r):
         ('ACE_CONTEXT_ROOT', r['root'])))
 
 
+def _write_export(cwd, target, force):
+    """stdin -> <repo root>/<target>: inside the repo root only (text + realpath), no symlink, no overwrite without
+    --force (security review 8.1.0; the mod's export does the same through REPO_WRITE_SH)."""
+    root = log_root(cwd)
+    if not target or any(c in target for c in '\0\n\r'):
+        print('Refused: bad path')
+        return 1
+    abs_ = os.path.normpath(target if os.path.isabs(target) else os.path.join(root, target))
+    if os.path.commonpath([abs_, root]) != root or abs_ == root:
+        print('Refused: %s is outside the repo root %s' % (abs_, root))
+        return 1
+    rel = os.path.relpath(abs_, root)
+    if os.path.lexists(abs_) and not force:
+        print('Refused: %s exists (re-run with --force after the user confirmed the overwrite)' % abs_)
+        return 1
+    try:
+        path = safe_repo_write(root, rel, sys.stdin.read())
+    except WriteRefused as e:
+        print('Refused: %s' % e)
+        return 1
+    print('Exported to %s' % path)
+    return 0
+
+
 def _bind_cli(cwd, org, prj, yes):
     root, main_root = repo_roots(cwd)
     main = main_root or root
@@ -812,6 +843,7 @@ def main(argv=None):
       ace-context --shell                export lines for eval (nothing printed when not bound; exit 5)
       ace-context --verify               plus `state` from one status call
       ace-context --line                 the one problem line, empty when ok
+      ace-context --write-export FILE [--force]  stdin -> FILE inside the repo root (no symlink, no silent overwrite)
       ace-context --logs                 <log root>/.claude/data/logs (main checkout of a worktree, git root, else cwd)
       ace-context --bind ORG PRJ [--yes] the tracked <main checkout>/.ace/config.json: a preview (with the .gitignore
                                          diff when the file is ignored); written only with --yes. Never settings.json.
@@ -829,11 +861,15 @@ def main(argv=None):
     ap.add_argument('--verify', action='store_true')
     ap.add_argument('--verify-session')
     ap.add_argument('--bind', nargs=2, metavar=('ORG', 'PRJ'))
+    ap.add_argument('--write-export', metavar='FILE')
+    ap.add_argument('--force', action='store_true')
     ap.add_argument('--yes', action='store_true')
     a = ap.parse_args(argv)
     cwd = os.path.abspath(a.cwd or os.getcwd())
     if a.bind:
         return _bind_cli(cwd, a.bind[0], a.bind[1], a.yes)
+    if a.write_export:
+        return _write_export(cwd, a.write_export, a.force)
     if a.logs:  # the repo root's log dir (worktrees and subfolders share it)
         print(logs_dir(cwd))
         return 0
