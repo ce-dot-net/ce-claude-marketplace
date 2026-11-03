@@ -816,6 +816,7 @@ export function buildTrace(a: {
   userPrompt: string; tools: ToolRec[]; answer: string; playbookUsed: string[]; agentType: string; tsid?: string; agentId?: string
   parentTaskId?: string; retrievalId?: string; appliedLogIds: number[]; nowIso: string; renderVariant?: string; effort: string; git?: any
   conversationId?: string
+  usedIds?: { used_ids_model: number; used_ids_tokens: number }  // per-source counters (Haiku, H2), 0 when none
   summaryCap?: number  // 2000 for the closing answer, 4000 for a SubagentHandback report (ace_after_task.handback_summary)
 }) {
   const success = !a.tools.some(t => t.failed)
@@ -835,6 +836,8 @@ export function buildTrace(a: {
   if (a.parentTaskId) trace.parent_agent_id = a.parentTaskId // §16 P3: server field name (local state keeps parent_task_id)
   if (a.retrievalId) trace.retrieval_id = a.retrievalId
   trace.applied_log_ids = a.appliedLogIds // server contract: [] when nothing was used, never omitted
+  trace.used_ids_model = a.usedIds?.used_ids_model ?? 0
+  trace.used_ids_tokens = a.usedIds?.used_ids_tokens ?? 0
   trace.effort_level = a.effort
   trace.effort_weight = effortWeight(a.effort)
   if (a.git) trace.git = a.git

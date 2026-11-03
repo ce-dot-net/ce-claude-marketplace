@@ -815,6 +815,7 @@ test('item D/H1: Haiku self-eval (not blocking the turn) writes the review and i
   expect(JSON.parse(h.files.get(`${CWD}/.claude/data/logs/ace-review-result.json`)!)).toEqual({ quality_pct: 70, time_saved: '4m' })
   const t = h.trace(h.learns()[0]!)
   expect(t.applied_log_ids).toEqual([st8.retrieval_log_ids[b]])  // the non-injected id is dropped
+  expect([t.used_ids_model, t.used_ids_tokens]).toEqual([1, 0])  // per-source counters in the trace itself
   const row = execRow(h)
   expect([row.used_ids_count, row.used_source]).toEqual([1, 'model'])
   expect([row.used_ids_model, row.used_ids_tokens]).toEqual([1, 0])  // item 2: per-source counts for the server team
@@ -898,6 +899,7 @@ test('item D/H1: a failed or timed-out model call falls back to the token eviden
   expect(h.learns().length).toBe(1)
   expect(h.trace(h.learns()[0]!).applied_log_ids).toEqual([])
   expect(execRow(h).used_source).toBe('none')
+  expect([h.trace(h.learns()[0]!).used_ids_model, h.trace(h.learns()[0]!).used_ids_tokens]).toEqual([0, 0])
 })
 
 test('item D: ACE_SELF_EVAL=0 makes no model call (the learn goes out at once)', async ($, on) => {

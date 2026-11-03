@@ -157,6 +157,17 @@ def test_learn_caps_applied_log_ids_at_20(fake_core, tmp_path):
     assert [x for x in E.read_jsonl(log) if x["op"] == "learn"][0]["trace"]["applied_log_ids"] == list(range(20))
 
 
+def test_learn_forwards_unknown_top_level_trace_fields(fake_core, tmp_path):
+    """The trace body goes to the server verbatim (render_variant, conversation_id, the per-source counters)."""
+    bin_dir, log = fake_core
+    extra = {"used_ids_model": 2, "used_ids_tokens": 3, "render_variant": "full", "conversation_id": "c-1"}
+    p = tmp_path / "t3.json"
+    p.write_text(json.dumps(dict(json.loads(_trace(tmp_path).read_text()), **extra)))
+    assert _learn_js(bin_dir, ["--transcript", str(p), "--json", "--applied-log-ids", "5"], ACE_FAKE_CORE_LOG=str(log)).returncode == 0
+    t = [x for x in E.read_jsonl(log) if x["op"] == "learn"][0]["trace"]
+    assert {k: t[k] for k in extra} == extra and t["applied_log_ids"] == [5]
+
+
 def test_learn_server_error_exits_nonzero(fake_core, tmp_path):
     bin_dir, log = fake_core
     r = _learn_js(bin_dir, ["--transcript", str(_trace(tmp_path)), "--json"], ACE_FAKE_CORE_LOG=str(log),

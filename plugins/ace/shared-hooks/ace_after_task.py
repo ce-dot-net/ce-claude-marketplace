@@ -1192,6 +1192,8 @@ def main():
         if retrieval_id:
             trace["retrieval_id"] = retrieval_id
         trace["applied_log_ids"] = applied_log_ids  # server contract: [] when nothing was used, never omitted
+        trace["used_ids_model"] = 0  # per-source counters for the server (the Python chain has no Haiku source)
+        trace["used_ids_tokens"] = len(_used)
 
         # v6.5.0 Item #9: effort level signal (CC 2.1.133+ provides this in hook input).
         # Plugin-side weight mapping per SDK-team guidance (Q4):

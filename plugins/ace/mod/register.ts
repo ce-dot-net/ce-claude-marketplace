@@ -424,7 +424,7 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
       if (git && commits.length) git.session_commits = commits
     } catch { /* git context is optional */ }
     const { trace, success } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
-      tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied,
+      tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied, usedIds: bySource,
       nowIso: await nowIso($), renderVariant: variant, conversationId: s.sessionId, effort, git, summaryCap })
     const traceFile = `${s.root}/tmp/ace-trace-${uuid()}.json`
     await writePrivate($, traceFile, pyDumps(trace))
