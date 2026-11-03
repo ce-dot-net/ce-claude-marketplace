@@ -1,6 +1,6 @@
 """WP-E (v8.0.0) — manifest `Requires:` floor text.
 
-§16 P6 + §23: floor is Claude Code >= 2.1.311; the ace-cli floor is the pin in plugins/ace/package.json; @ace-sdk/core >= 3.2.2.
+§16 P6 + §23: floor is Claude Code >= 2.1.311; the ace-cli floor is the pin in plugins/ace/package.json; @ace-sdk/core >= the core the pinned cli locks (3.5.0 since cli 4.3.2).
 WP-E updates ONLY the floor text/description, NOT the version number (release-manager does).
 Supersedes tests/test_v712_features.py::TestFloorBump::test_plugin_json_description_cc_floor_2_1_163
 (merge agent: that 2.1.163 pin must be rewritten/removed).
@@ -39,11 +39,12 @@ def test_manifest_requires_claude_code_2_1_311(name):
 
 @pytest.mark.parametrize("name", sorted(MANIFESTS))
 def test_manifest_keeps_ace_cli_and_core_floors(name):
-    """§23: `Requires:` ace-cli text comes from package.json; core floor unchanged (3.2.2)."""
+    """§23: `Requires:` ace-cli text comes from package.json; the core floor is the core in package-lock.json."""
     desc = _entry(name)["description"]
     pkg = Path(__file__).resolve().parent.parent / "plugins" / "ace" / "package.json"
     assert _floor(desc, "ace-cli") == json.loads(pkg.read_text())["dependencies"]["@ace-sdk/cli"]
-    assert _floor(desc, "@ace-sdk/core") == "3.2.2"
+    lock = json.loads((pkg.parent / "package-lock.json").read_text())["packages"]
+    assert _floor(desc, "@ace-sdk/core") == lock["node_modules/@ace-sdk/core"]["version"]
 
 
 @pytest.mark.parametrize("name", sorted(MANIFESTS))
