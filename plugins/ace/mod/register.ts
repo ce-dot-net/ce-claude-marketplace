@@ -220,6 +220,8 @@ type Load = {
   handback: Map<string, string>                 // agentId -> last SubagentHandback message (§16 P1)
   claims: Set<string>                           // ponytail: in-process; the marker silences the Python hook, so no second process races this one
   queues: Map<string, Promise<unknown>>         // per state file: parallel hooks read-merge-write in turn
+  interactive: boolean                          // item 1a: session.start isInteractive (false: -p / SDK, no Haiku wait)
+  pendingLearns: Set<{ ctl: AbortController; flush: () => Promise<boolean> }>  // item 1b: self-evals session.end must not lose
 }
 
 async function ensure($: any, L: Load): Promise<Sess | null> {
@@ -439,10 +441,21 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
   // item D / H1: main agent, patterns injected -> a Haiku self-eval (review + evidenced ids) before the learn goes out.
   // Not awaited: the turn ends now; a failed or timed-out call falls back to the token evidence (H2). item 3: the
   // "learning sent" line goes out once the learn really did, with the review's parts (none at 0% or without one).
-  if (hook === 'Stop' && playbook.length && (await $.env.get('ACE_SELF_EVAL')) !== '0') {  // a rejecting call falls back too
-    void selfEval($, s, prompt, answer, playbook, state.pattern_contents ?? {}, recs).catch(() => null)
+  // item 1a: non-interactive (-p, SDK): the process may exit right after this turn, so no wait; H2 only.
+  if (hook === 'Stop' && playbook.length && L.interactive && (await $.env.get('ACE_SELF_EVAL')) !== '0') {  // a rejecting call falls back too
+    // item 1b: session.end flushes a still-pending chain with H2 ids; whichever comes first dispatches, once.
+    let fired = false
+    const p = { ctl: new AbortController(), flush: () => once(null) }
+    const once = (ids: string[] | null): Promise<boolean> => {
+      if (fired) return Promise.resolve(false)
+      fired = true
+      L.pendingLearns.delete(p)
+      return dispatch(ids)
+    }
+    L.pendingLearns.add(p)
+    void selfEval($, s, prompt, answer, playbook, state.pattern_contents ?? {}, recs, p.ctl.signal).catch(() => null)
       .then(async m => {
-        if (!(await dispatch(m?.ids ?? null))) return
+        if (!(await once(m?.ids ?? null))) return
         const rv = m?.review
         $.ui.log(learnLine(rv && Number(rv.quality_pct) > 0 ? rv : { time_saved: rv?.time_saved }))
       })
@@ -453,8 +466,9 @@ async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook
 }
 
 const SELF_EVAL_MS = 15_000
-async function selfEval($: any, s: Sess, task: string, answer: string, ids: string[], contents: Record<string, string>, recs: ToolRec[]): Promise<{ ids: string[]; review: any } | null> {
-  const r = await $.model.complete({ model: 'haiku', effort: 'low', timeoutMs: SELF_EVAL_MS, prompt: selfEvalPrompt({ task, answer, ids, contents, tools: recs }) })
+async function selfEval($: any, s: Sess, task: string, answer: string, ids: string[], contents: Record<string, string>, recs: ToolRec[],
+  signal?: AbortSignal): Promise<{ ids: string[]; review: any } | null> {
+  const r = await $.model.complete({ model: 'haiku', effort: 'low', timeoutMs: SELF_EVAL_MS, prompt: selfEvalPrompt({ task, answer, ids, contents, tools: recs }) }, { signal })
   if (!r?.isAnswered || typeof r.text !== 'string') return null
   const review = parseAceReview(r.text)
   if (review && await logsSafe($, s, 'ace-review-result.json')) await $.fs.write(`${s.logs}/ace-review-result.json`, pyDumps(review))
@@ -669,11 +683,13 @@ export const register: Register = (on) => {
   const L: Load = { sess: null, pendingMain: undefined, pendingTitle: undefined, stopEffort: undefined, domains: null,
     turnAnchor: new Map(), tools: new Map(), spawnPrompts: new Map(), placeholders: new Set(), late: new Map(), agentTypes: new Map(),
     earlyStart: new Map(), agentEffort: new Map(), lastClaim: new Map(), markerAt: 0, claims: new Set(), queues: new Map(),
-    stopDefer: null, deferred: undefined, handback: new Map(), reuseUsed: new Set(), compacted: false, mainSeen: 0 }
+    stopDefer: null, deferred: undefined, handback: new Map(), reuseUsed: new Set(), compacted: false, mainSeen: 0,
+    interactive: true, pendingLearns: new Set() }
   const effortOf = (e: any): unknown => e.effort && typeof e.effort === 'object' ? e.effort.level : e.effort
 
   on('session.start', async ($, e, next) => {
     const r = await next(e)
+    L.interactive = e.isInteractive !== false
     try {
       L.sess = await resolveSession($, e.cwd)
       if (L.sess) await touchMarker($, L, L.sess, await $.clock.now())
@@ -909,6 +925,8 @@ export const register: Register = (on) => {
 
   on('session.end', async ($, e, next) => {
     const s = L.sess ?? await ensure($, L).catch(() => null)
+    // item 1b: the process exits after this; a self-eval still waiting would take its learn with it. Stop waiting, send H2.
+    for (const p of [...L.pendingLearns]) { p.ctl.abort(); await p.flush().catch(() => false) }
     try {
       if (s) {
         // A detached learn may still run (it owns its lock): keep the dir until the lock is stale, as ace_session_end.py.
