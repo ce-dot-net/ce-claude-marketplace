@@ -51,3 +51,10 @@ def test_manifest_description_mentions_its_own_version(name):
     """Guard (test_v600_version_bump): WP-E must not bump versions nor drop the vX.Y.Z mention."""
     e = _entry(name)
     assert ("v" + e["version"]) in e["description"]
+
+
+def test_pin_supports_search_session_id():
+    """The CLI search path passes `--session-id` (unpinned session stamp): needs @ace-sdk/cli >= 4.3.1, pinned exactly."""
+    pin = json.loads((REPO / "plugins" / "ace" / "package.json").read_text())["dependencies"]["@ace-sdk/cli"]
+    assert re.fullmatch(r"\d+\.\d+\.\d+", pin), pin
+    assert tuple(map(int, pin.split("."))) >= (4, 3, 1)
