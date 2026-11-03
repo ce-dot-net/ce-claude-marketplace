@@ -58,8 +58,16 @@ class H(BaseHTTPRequestHandler):
         self._log(None)
         if self.path.startswith("/analytics"):  # `ace-cli status` (8.1.0 context verify): FAKE_STATUS=ok|401|403|404|500
             st = os.environ.get("FAKE_STATUS", "ok")
+            if st == "401":  # an expired token says so (spec: exit 4 token_expired only with this header)
+                b = json.dumps({"detail": "token expired", "message": "token expired"}).encode()
+                self.send_response(401)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("X-ACE-Token-Expired", "true")
+                self.send_header("Content-Length", str(len(b)))
+                self.end_headers()
+                return self.wfile.write(b)
             if st != "ok":
-                msg = {"401": "token expired", "403": "no access to project", "404": "project not found"}.get(st, "boom")
+                msg = {"403": "no access to project", "404": "project not found"}.get(st, "boom")
                 return self._send(int(st), {"detail": msg, "message": msg})
             return self._send(200, {"total_patterns": 1, "by_section": {"strategies_and_hard_rules": 1}, "by_domain": {"hooks": 1}})
         if "graph" in self.path:
