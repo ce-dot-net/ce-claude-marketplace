@@ -132,7 +132,9 @@ export const isValidPatternId = (id: unknown): boolean =>
 // ---------- utils/ace_pattern_render.render_patterns_dict ----------
 const KEEP = ['id', 'domain', 'content', 'section', 'evidence', 'root_cause', 'error_context',
   'cumulative_v15_reward', 'n_hot_pos', 'n_hot_neg', 'isAtRisk', 'confidence', 'helpful', 'harmful']
-const DROP_TOP = new Set(['domains_summary', 'expanded', 'threshold'])
+// Allow-list, not deny-list: since @ace-sdk/cli 4.3.0 the search response carries every server field
+// (search_params, tokens_in_response, local_count, session_id, feedback_downvote ...); the model needs only these.
+const KEEP_TOP = new Set(['retrieval_id', 'count'])
 const truthy = (v: any) => !(v === null || v === undefined || v === false || v === 0 || v === ''
   || (Array.isArray(v) && v.length === 0) || (v instanceof PyFloat && v.v === 0)
   || (typeof v === 'object' && !Array.isArray(v) && !(v instanceof PyFloat) && Object.keys(v).length === 0))
@@ -168,7 +170,7 @@ export function renderPatternsDict(resp: any): { dict: any; ids: string[]; rlog:
   const processed = sorted.map(hoistAndStrip)
   const ids = processed.filter(p => truthy(p.id) && isValidPatternId(p.id)).map(p => p.id)
   const dict: any = {}
-  for (const k of Object.keys(resp)) if (!DROP_TOP.has(k) && k !== 'similar_patterns') dict[k] = resp[k]
+  for (const k of Object.keys(resp)) if (KEEP_TOP.has(k)) dict[k] = resp[k]
   dict.similar_patterns = processed
   dict.count = processed.length
   return { dict, ids, rlog }

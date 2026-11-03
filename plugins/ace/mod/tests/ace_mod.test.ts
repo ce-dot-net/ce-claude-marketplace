@@ -19,7 +19,7 @@ import SEDGE from './fixtures/search_edge.ts'
 import G from './fixtures/golden.ts'
 import USED_CASES from './fixtures/used_cases.ts'
 import REJECTION_CASES from './fixtures/rejection_cases.ts'
-import { statusLine, hasSubstantialWork, traceVariant, toolRec, renderCohort, serverFullPct, storedFullPct, rejectionMatch } from '../core.ts'
+import { statusLine, hasSubstantialWork, traceVariant, toolRec, renderCohort, serverFullPct, storedFullPct, rejectionMatch, renderPatternsDict } from '../core.ts'
 import { pyLoads, PRIVATE_WRITE_SH, evalStats, evalInjection, learnLine, usedPatternIds, toolHaystack } from '../core.ts'
 
 const HOME = '/home/u', CWD = '/proj', SID = 'sess-1', PRJ = 'prj_t'
@@ -201,6 +201,8 @@ test('prompt.submit: one pinned search with a fresh uuid4 task pin per human pro
   expect(s.timeoutMs! <= 25000).toBe(true)
   expect(r.context.length).toBe(1)
   expect(r.context[0]).toBe(G.full_main_8)
+  expect(S8).toContain('zz_extra')  // the fixture's unknown top-level field ...
+  expect(r.context[0]).not.toContain('zz_extra')  // ... never reaches the model (allow-list)
   await submit($, HUMAN + ' again please')
   expect(h.pin(h.searches()[1]!)).not.toBe(h.pin(s))
   const row = h.rows().find((x: any) => x.event === 'search')!
@@ -1884,4 +1886,11 @@ test('fix 5a: a Bash call with a non-zero exit code is a failed step (trace succ
   expect(rec({ stdout: '', stderr: '', exitCode: 1, returnCodeInterpretation: 'No matches found' }).failed).toBe(false)
   expect(rec({ stdout: 'ok', stderr: '', exitCode: 0 }).failed).toBe(false)
   expect(rec({ stdout: 'ok', stderr: '' }).failed).toBe(false)
+})
+
+test('render keeps only retrieval_id and count at top level (cli 4.3.0 passes every server field through)', async () => {
+  const resp: any = { retrieval_id: 'r1', count: 1, search_params: { top_k: 100 }, tokens_in_response: 4000, local_count: 1,
+    session_id: 's', feedback_downvote: true, render_full_pct: 50,
+    similar_patterns: [{ id: '11111111-2222-4333-8444-555555555555', content: 'x', domain: 'd' }] }
+  expect(Object.keys(renderPatternsDict(resp).dict).sort()).toEqual(['count', 'retrieval_id', 'similar_patterns'])
 })

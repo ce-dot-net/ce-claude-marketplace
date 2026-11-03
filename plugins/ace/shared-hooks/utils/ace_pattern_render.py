@@ -66,6 +66,8 @@ _KEEP_FIELDS = frozenset({
 # Top-level response fields that are BLOAT and must be dropped from the
 # rendered JSON payload (save chars, no value to the model).
 _DROP_TOP_LEVEL = frozenset({'domains_summary', 'expanded', 'threshold'})
+# Allow-list (cli 4.3.0 passes every server field through): only these reach the model. Parity: mod KEEP_TOP.
+_KEEP_TOP_LEVEL = frozenset({'retrieval_id', 'count'})
 
 
 def _hoist_and_strip(pattern: Dict[str, Any]) -> Dict[str, Any]:
@@ -204,7 +206,7 @@ def render_patterns_dict(
     # Copy top-level fields, drop bloat fields
     output_response: Dict[str, Any] = {}
     for k, v in patterns_response.items():
-        if k in _DROP_TOP_LEVEL or k == 'similar_patterns':
+        if k not in _KEEP_TOP_LEVEL:
             continue
         output_response[k] = v
 
