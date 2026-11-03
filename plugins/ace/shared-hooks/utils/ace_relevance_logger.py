@@ -305,6 +305,8 @@ class ACERelevanceLogger:
         if used_ids_count is not None:  # item H: how many injected ids the task evidenced, and by what
             entry['used_ids_count'] = used_ids_count
             entry['used_source'] = used_source or 'none'
+            entry['used_ids_tokens'] = used_ids_count  # item 2: H2 is the Python chain's only source
+            entry['used_ids_model'] = 0
 
         self._write_log(entry)
 
