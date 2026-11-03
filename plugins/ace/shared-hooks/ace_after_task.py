@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 
-from ace_context import get_context
+from ace_project_context import get_context
 from utils.git_utils import get_git_context, detect_commits_in_session
 from ace_relevance_logger import log_event, log_execution_metrics, log_hook_error, log_stop_telemetry
 from patterns_used_state import (load_playbook_used, reap_patterns_used,
@@ -682,7 +682,7 @@ def learn_line(review):
     return line
 
 
-def parse_ace_review(message, review_file='.claude/data/logs/ace-review-result.json'):
+def parse_ace_review(message, review_file=None):
     """`ACE_REVIEW: N% | Xm saved | ...` in the last assistant message -> review file
     (read by the statusline). Pure Python: a message without a time phrase used to
     abort the old bash parse (set -eo pipefail) before learning ran."""
@@ -690,7 +690,9 @@ def parse_ace_review(message, review_file='.claude/data/logs/ace-review-result.j
     if not r:
         return
     try:
-        f = plugin_data_dir.open_project_log(review_file, append=False)  # §24: no symlink out of the project
+        from ace_project_context import log_root, logs_dir
+        f = plugin_data_dir.open_project_log(review_file or os.path.join(logs_dir(), 'ace-review-result.json'),
+                                             append=False, base=None if review_file else log_root())  # §24
         if f is not None:
             with f:
                 f.write(json.dumps(r))
@@ -698,10 +700,12 @@ def parse_ace_review(message, review_file='.claude/data/logs/ace-review-result.j
         pass
 
 
-def write_eval_request(patterns_injected, tools_executed, stats=None, path='.claude/data/logs/ace-eval-request.json'):
+def write_eval_request(patterns_injected, tools_executed, stats=None, path=None):
     """Next UserPromptSubmit (ace_before_task.check_eval_request_and_review) turns this into a silent self-eval."""
     try:
-        f = plugin_data_dir.open_project_log(path, append=False)  # §24: no symlink out of the project
+        from ace_project_context import log_root, logs_dir
+        f = plugin_data_dir.open_project_log(path or os.path.join(logs_dir(), 'ace-eval-request.json'),
+                                             append=False, base=None if path else log_root())  # §24
         if f is not None:
             with f:
                 f.write(json.dumps({

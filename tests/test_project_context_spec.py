@@ -1,4 +1,4 @@
-"""Conformance: ace_project_context.resolve vs the SDK spec fixtures (65 cases) plus our extra probes.
+"""Conformance: ace_project_context.resolve vs the SDK spec fixtures (70 cases) plus our extra probes.
 
 Fixtures: plugins/ace/tests-fixtures/project-context/ (see its README). In-memory layout, no real FS.
 Mirror runner: plugins/ace/mod/tests/project_context.test.ts.
@@ -76,7 +76,7 @@ def run_case(case):
 
 
 def test_fixture_counts():
-    assert len(SPEC) == 65
+    assert len(SPEC) == 70
     assert len(EXTRA) >= 4
 
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """v8 state layout (DESIGN §4, contract C3, §10 P-19) — the ONLY way to compute state paths.
 
-Project ids are the server `prj_...` ids from ace_context (single scheme).
+Project ids are the server `prj_...` ids from ace_project_context (single scheme).
 Root = $CLAUDE_PLUGIN_DATA (exported to hook processes) else the real CC data dir.
 """
 from __future__ import annotations
@@ -62,16 +62,21 @@ def private_write(path, text: str) -> None:
         raise
 
 
-def project_log_unsafe(path) -> bool:
+def project_log_unsafe(path, base=None) -> bool:
     """§24: <cwd>/.claude/data/logs is repo-controlled. True when writing `path` could leave the project: a symlinked
     component of a relative path (or the target), or a resolved dir outside cwd. An absolute dir (an explicit
     log_dir) only must not itself be, or hold the target as, a symlink."""
     path = Path(path)
     if path.is_symlink():
         return True
-    if path.is_absolute():
+    if path.is_absolute() and base:  # 8.1.0: logs keyed to the repo root: the same walk, from that root
+        try:
+            path = path.relative_to(base)
+        except ValueError:
+            return True
+    elif path.is_absolute():
         return path.parent.is_symlink()
-    base = Path(os.getcwd())
+    base = Path(base or os.getcwd())
     cur = base
     for part in path.parent.parts:
         cur = cur / part
@@ -84,14 +89,14 @@ def project_log_unsafe(path) -> bool:
     return False
 
 
-def open_project_log(path, append: bool = True):
+def open_project_log(path, append: bool = True, base=None):
     """Open a <cwd>/.claude/data/logs file for writing without following a symlinked target (O_NOFOLLOW),
     or None when project_log_unsafe. Creates the dir."""
     path = Path(path)
-    if project_log_unsafe(path):
+    if project_log_unsafe(path, base):
         return None
     path.parent.mkdir(parents=True, exist_ok=True)
-    if project_log_unsafe(path):  # re-check after mkdir: nothing may have been swapped in
+    if project_log_unsafe(path, base):  # re-check after mkdir: nothing may have been swapped in
         return None
     flags = os.O_WRONLY | os.O_CREAT | (os.O_APPEND if append else os.O_TRUNC) | getattr(os, "O_NOFOLLOW", 0)
     return os.fdopen(os.open(str(path), flags, 0o600), "a" if append else "w")  # 0600: rows carry prompts

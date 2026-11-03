@@ -502,6 +502,109 @@
   }
  },
  {
+  "name": "valid repo_file projectId + malformed settings_file: bound repo_file, settings contributes nothing, warning config_invalid",
+  "layout": {
+   "main/.git/config": "[core]\n\trepositoryformatversion = 0\n",
+   "main/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"proj_a\"}",
+   "main/.claude/settings.json": "{not json"
+  },
+  "cwd": "main",
+  "env": {},
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": true,
+   "orgId": "org_a",
+   "projectId": "proj_a",
+   "source": "repo_file",
+   "path": "main/.ace/config.json",
+   "warnings": [
+    "config_invalid"
+   ]
+  }
+ },
+ {
+  "name": "repo_file projectId without orgId + settings_file orgId: org from settings_file",
+  "layout": {
+   "main/.git/config": "[core]\n\trepositoryformatversion = 0\n",
+   "main/.ace/config.json": "{\"projectId\": \"proj_a\"}",
+   "main/.claude/settings.json": "{\"env\": {\"ACE_ORG_ID\": \"org_s\"}}"
+  },
+  "cwd": "main",
+  "env": {},
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": true,
+   "orgId": "org_s",
+   "projectId": "proj_a",
+   "source": "repo_file",
+   "path": "main/.ace/config.json"
+  }
+ },
+ {
+  "name": "malformed repo_file + valid settings_file: config_invalid (repo_file), settings never consulted",
+  "layout": {
+   "main/.git/config": "[core]\n\trepositoryformatversion = 0\n",
+   "main/.ace/config.json": "{not json",
+   "main/.claude/settings.json": "{\"env\": {\"ACE_ORG_ID\": \"org_s\", \"ACE_PROJECT_ID\": \"proj_s\"}}"
+  },
+  "cwd": "main",
+  "env": {},
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "config_invalid",
+   "source": "repo_file",
+   "path": "main/.ace/config.json"
+  }
+ },
+ {
+  "name": "refused repo_file + global projectId: only repo_file_contains_secret, no global_project_id_ignored",
+  "layout": {
+   "main/.git/config": "[core]\n\trepositoryformatversion = 0\n",
+   "main/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"proj_a\", \"apiToken\": \"ace_user_secret\"}"
+  },
+  "cwd": "main",
+  "env": {},
+  "flags": {},
+  "globalConfig": {
+   "projectId": "proj_g"
+  },
+  "expect": {
+   "bound": false,
+   "reason": "config_refused",
+   "source": "repo_file",
+   "path": "main/.ace/config.json",
+   "warnings": [
+    "repo_file_contains_secret"
+   ]
+  }
+ },
+ {
+  "name": "empty-string global projectId: no global_project_id_ignored warning",
+  "layout": {
+   "plain": null
+  },
+  "cwd": "plain",
+  "env": {
+   "ACE_ORG_ID": "org_e",
+   "ACE_PROJECT_ID": "proj_e"
+  },
+  "flags": {},
+  "globalConfig": {
+   "projectId": ""
+  },
+  "expect": {
+   "bound": true,
+   "orgId": "org_e",
+   "projectId": "proj_e",
+   "source": "env",
+   "path": null
+  }
+ },
+ {
   "name": "flag project only: orgId falls back down chain (repo_file)",
   "layout": {
    "main/.git/config": "[core]\n\trepositoryformatversion = 0\n",

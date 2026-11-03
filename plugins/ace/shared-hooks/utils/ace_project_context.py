@@ -159,7 +159,8 @@ def _settings_entry(text, path):
 
 def _search(source, rel, dirs, main_root, home, read, tried, parse, warnings, lenient):
     """Spec 1.1/7: first existing file in the walk ends it; main checkout only if no projectId yet.
-    lenient (a --project flag): a refused/invalid file contributes nothing and only warns (spec 9c049a0)."""
+    lenient (projectId already decided: a --project flag or a higher source): a refused/invalid file contributes
+    nothing and only warns (spec 9500190)."""
     found = []
 
     def probe(path):
@@ -190,7 +191,7 @@ def _search(source, rel, dirs, main_root, home, read, tried, parse, warnings, le
 
 
 def resolve(cwd, env, flags=None, remote_map=None, organizations=None, read=read_file,
-            default_org_id=None, global_project_id=None):
+            default_org_id=None, global_project_id=None, realpath=None):
     """Resolve {orgId, projectId} for an absolute `cwd`. Never falls back to a default project.
 
     remote_map: global config `projects` ({normalized remote: {orgId?, projectId}}).
@@ -199,22 +200,25 @@ def resolve(cwd, env, flags=None, remote_map=None, organizations=None, read=read
     """
     try:
         return _resolve(os.path.normpath(cwd), env or {}, flags or {}, remote_map or {}, organizations,
-                        read, default_org_id, global_project_id)
+                        read, default_org_id, global_project_id, realpath or os.path.realpath)
     except _Refused as r:
-        if global_project_id:
-            r.result['warnings'] = ['global_project_id_ignored'] + r.result.get('warnings', [])
-        return r.result
+        return r.result  # spec 9500190: only its own warning
 
 
-def _resolve(cwd, env, flags, remote_map, organizations, read, default_org_id, global_project_id):
-    warnings = ['global_project_id_ignored'] if global_project_id else []
-    home = os.path.normpath(env['HOME']) if env.get('HOME') else None
+def _resolve(cwd, env, flags, remote_map, organizations, read, default_org_id, global_project_id, realpath):
+    warnings = ['global_project_id_ignored'] if isinstance(global_project_id, str) and global_project_id else []
+    # spec 9500190: HOME is compared by realpath on both sides, the OS home when unset; reported paths stay unresolved
+    home_real = realpath(os.path.normpath(env.get('HOME') or os.path.expanduser('~')))
+
+    def is_home(d):
+        return d is not None and realpath(d) == home_real
+    home = None
     root, main_root, git_config = _git(cwd, read)
 
     dirs = []
     d = cwd
     while True:
-        if d != home:
+        if not is_home(d):
             dirs.append(d)
         if root is None or d == root:
             break
@@ -222,11 +226,12 @@ def _resolve(cwd, env, flags, remote_map, organizations, read, default_org_id, g
 
     tried = []
     entries = [{'source': 'flag', 'path': None, 'org': flags.get('org') or None, 'prj': flags.get('project') or None}]
-    lenient = bool(flags.get('project'))
+    if is_home(main_root):
+        main_root = None
     entries += _search('repo_file', os.path.join('.ace', 'config.json'), dirs, main_root, home, read, tried,
-                       _repo_entry, warnings, lenient)
+                       _repo_entry, warnings, any(e['prj'] for e in entries))
     entries += _search('settings_file', os.path.join('.claude', 'settings.json'), dirs, main_root, home, read,
-                       tried, _settings_entry, warnings, lenient)
+                       tried, _settings_entry, warnings, any(e['prj'] for e in entries))
     entries.append({'source': 'env', 'path': None,
                     'org': env.get('ACE_ORG_ID') or None, 'prj': env.get('ACE_PROJECT_ID') or None})
     tried.append({'source': 'env', 'path': None, 'key': None})
@@ -480,7 +485,7 @@ def verify(r, timeout=20):
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import ace_cli
     try:
-        argv = ace_cli._cmd(*cli_ids(r), 'status', '--json')
+        argv = ace_cli._cmd('status', '--json', *cli_ids(r))
     except FileNotFoundError:
         return 'cli_missing'
     env = dict(os.environ)
@@ -548,24 +553,85 @@ def untracked(main):
     return _git_rc(main, 'ls-files', '--error-unmatch', '.ace/config.json') != 0
 
 
+class WriteRefused(Exception):
+    """A repo write that could leave the main checkout (symlinked component, path outside it)."""
+
+
+def safe_repo_write(main, rel, text, mode=0o644):
+    """Write <main>/<rel> atomically without ever following a symlink out of the repo (security review 8.1.0):
+    every component below main must be a real directory/file (no symlink), realpath(dir) must stay under
+    realpath(main), the temp file is O_CREAT|O_EXCL|O_NOFOLLOW with a random name, then os.replace."""
+    import secrets
+    main = os.path.abspath(main)
+    parts = [p for p in rel.split('/') if p]
+    if not parts or any(p in ('.', '..') for p in parts):
+        raise WriteRefused('bad relative path: %s' % rel)
+    cur = main
+    for p in parts:
+        cur = os.path.join(cur, p)
+        if os.path.islink(cur):
+            raise WriteRefused('symlink: %s' % cur)
+    d = os.path.dirname(os.path.join(main, *parts))
+    os.makedirs(d, exist_ok=True)
+    if os.path.islink(d):
+        raise WriteRefused('symlink: %s' % d)
+    real_main = os.path.realpath(main)
+    if os.path.commonpath([os.path.realpath(d), real_main]) != real_main:
+        raise WriteRefused('outside the main checkout: %s' % d)
+    target = os.path.join(d, parts[-1])
+    tmp = os.path.join(d, '.ace-w-%s.tmp' % secrets.token_hex(8))
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, 'O_NOFOLLOW', 0), mode)
+    try:
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
+            f.write(text)
+        if os.path.islink(target):
+            raise WriteRefused('symlink: %s' % target)
+        os.replace(tmp, target)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    return target
+
+
+def _log_refused(main, what, reason):
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from ace_relevance_logger import ACERelevanceLogger
+        from datetime import datetime, timezone
+        d = os.path.join(main, '.claude', 'data', 'logs')
+        lg = ACERelevanceLogger(d)
+        lg.base = main
+        lg._write_log({'timestamp': datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+                       'event': 'write_refused', 'what': what, 'reason': reason, 'chain': 'python'})
+    except Exception:
+        pass
+
+
 def write_binding(main, org, project):
-    """Write <main>/.ace/config.json {orgId, projectId} (never anything else) and un-ignore it."""
+    """Write <main>/.ace/config.json {orgId, projectId} (never anything else) and un-ignore it. Raises WriteRefused."""
     if not (ORG_ID.match(org or '') and PRJ_ID.match(project or '')):
         raise ValueError('ids must look like org_... / prj_...')
-    d = os.path.join(main, '.ace')
-    os.makedirs(d, exist_ok=True)
-    path = os.path.join(d, 'config.json')
-    tmp = path + '.tmp'
-    with open(tmp, 'w', encoding='utf-8') as f:
-        f.write(json.dumps({'orgId': org, 'projectId': project}, indent=2) + '\n')
-    os.replace(tmp, path)
+    try:
+        path = safe_repo_write(main, '.ace/config.json', json.dumps({'orgId': org, 'projectId': project}, indent=2) + '\n')
+    except WriteRefused as e:
+        _log_refused(main, '.ace/config.json', str(e))
+        raise
     gi = 'ok'
+    gpath = os.path.join(main, '.gitignore')
+    if os.path.islink(gpath):  # never read or rewrite through it (git itself does not follow it either)
+        _log_refused(main, '.gitignore', 'symlink: %s' % gpath)
+        return {'path': path, 'gitignore': 'refused'}
     if ignored(main):
-        gpath = os.path.join(main, '.gitignore')
         new, changed = fix_gitignore(read_file(gpath) or '')
         if changed:
-            with open(gpath, 'w', encoding='utf-8') as f:
-                f.write(new)
+            try:
+                safe_repo_write(main, '.gitignore', new)
+            except WriteRefused as e:
+                _log_refused(main, '.gitignore', str(e))
+                return {'path': path, 'gitignore': 'refused'}
         gi = 'still_ignored' if ignored(main) else 'fixed'
     return {'path': path, 'gitignore': gi}
 
@@ -586,7 +652,7 @@ def adopt(r, cwd, env=None):
         return None
     try:
         return write_binding(main, r['orgId'], r['projectId'])
-    except (OSError, ValueError):
+    except (OSError, ValueError, WriteRefused):
         return None
 
 

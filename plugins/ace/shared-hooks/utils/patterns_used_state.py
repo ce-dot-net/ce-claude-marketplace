@@ -52,7 +52,7 @@ def _project_id(project_id=None):
     if project_id:
         return project_id
     try:
-        from ace_context import get_context
+        from ace_project_context import get_context
         # Anchor to $CLAUDE_PROJECT_DIR (cwd-independent, v6.6.6 lesson): the
         # session cwd can move to a subdir; the cwd-relative lookup would then
         # resolve a different project id for writer vs reader.

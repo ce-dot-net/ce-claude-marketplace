@@ -343,7 +343,7 @@ def _send_to_cli(trace: dict) -> bool:
         return False
     try:
         from ace_cli import run_learn
-        from ace_context import get_context
+        from ace_project_context import get_context
         ctx = get_context() or {}
         res, _ms = run_learn(trace, org=ctx.get("org"), project=_PROJECT_ID, timeout=60,
                              hook_event_name="PermissionDenied")

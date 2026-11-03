@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # ACE Statusline — 2-line: CC session info + per-task ACE metrics
+# DEPRECATED in 8.1.0: the mod shows ACE problems itself (▼ in the status area). Kept for standalone installs.
 # Reads CC JSON stdin + ace-relevance.jsonl (local, no network calls)
 set -eo pipefail
 
@@ -44,7 +45,16 @@ out = {
  "rl_7d_pct": num(get(j, "rate_limits", "seven_day", "used_percentage") or 0),
  "rl_7d_resets": get(j, "rate_limits", "seven_day", "resets_at") or "",
 }
-logs = os.path.join(out["cwd"], ".claude", "data", "logs") if out["cwd"] else ""
+def _log_root(cwd):  # 8.1.0: the plugin core keys logs to the repo root (worktrees + subfolders share one log)
+    try:
+        ip = json.load(open(os.path.expanduser("~/.claude/plugins/installed_plugins.json")))["plugins"]
+        p = [v[0]["installPath"] for k, v in ip.items() if k.startswith("ace@")][0]
+        sys.path.insert(0, os.path.join(p, "shared-hooks", "utils"))
+        import ace_project_context
+        return ace_project_context.log_root(cwd)
+    except Exception:
+        return cwd
+logs = os.path.join(_log_root(out["cwd"]), ".claude", "data", "logs") if out["cwd"] else ""
 # Task boundary: events of this session since its last "execution" event (Stop hook writes these)
 try:
     events = []

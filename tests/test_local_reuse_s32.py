@@ -85,6 +85,7 @@ def _subagent(monkeypatch, tmp_path, agent_id, calls):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     tp = _make_transcript(tmp_path, [{"subagent_type": "coder", "prompt": "Implement the SubagentStart hook"}])
     mod = _load_subagent_start()

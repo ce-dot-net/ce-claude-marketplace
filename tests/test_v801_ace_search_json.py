@@ -42,7 +42,7 @@ def test_step3_renders_root_cause_only_when_present(tmp_path):
     w.chmod(0o755)
     cwd = tmp_path / "repo"
     (cwd / ".claude").mkdir(parents=True)
-    (cwd / ".claude" / "settings.json").write_text(json.dumps({"orgId": "o", "projectId": "p"}))
+    (cwd / ".claude" / "settings.json").write_text(json.dumps({"env": {"ACE_PROJECT_ID": "p", "ACE_ORG_ID": "o"}}))
     script = _step3().replace("${CLAUDE_PLUGIN_ROOT}", str(root))
     r = subprocess.run(["bash", "-c", script, "bash", "jq", "hook", "json"], cwd=cwd, capture_output=True, text=True, timeout=30)
     assert r.returncode == 0, r.stderr

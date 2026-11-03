@@ -1,4 +1,4 @@
-cases.json and exit-codes.json are copied verbatim from ce-ace-clients branch feature/aop-1361-project-context, commit 9c049a0 (spec/fixtures/project-context/). Do not edit them; re-copy on a spec change.
+cases.json and exit-codes.json are copied verbatim from ce-ace-clients branch feature/aop-1361-project-context, commit 9500190 (spec/fixtures/project-context/). Do not edit them; re-copy on a spec change.
 
 extra-cases.json is ours (plugin probes beyond the spec), same format plus: `unreadable` (layout paths whose read raises), and `$ROOT` substituted in layout values as in env. A `message` in a result must be a non-empty string and is dropped before comparing.
 
