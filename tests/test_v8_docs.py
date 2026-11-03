@@ -4,6 +4,7 @@ DESIGN §6 WP-E: CHANGELOG backfill 7.1.7–7.1.14 + [8.0.0] entry (critic T25: 
 stale since 7.1.6"); ARCHITECTURE.md to v8; new docs/technical/ADR-001-language.md (§2 + §8
 deferred items); README floor text; statusline user-copy note.
 """
+import json
 import re
 from pathlib import Path
 
@@ -36,12 +37,13 @@ def test_changelog_backfills_7_1_x(ver):
     )
 
 
-def test_changelog_8_0_0_is_newest_entry():
-    """Keep-a-Changelog order: newest first; 8.0.0 is the newest released heading (8.0.1 may sit above it, Unreleased)."""
+def test_changelog_newest_entry_matches_manifest():
+    """Keep-a-Changelog order: newest first; the newest dated heading is the plugin.json version
+    (an Unreleased entry may sit above it)."""
+    version = json.loads(_read(PLUGIN / ".claude-plugin" / "plugin.json"))["version"]
     heads = re.findall(r"^## \[(\d+\.\d+\.\d+)\]( - Unreleased)?", _read(CHANGELOG), re.M)
     released = [v for v, unreleased in heads if not unreleased]
-    assert released and released[0] == "8.0.0"
-    assert heads[0][0] in ("8.0.0", "8.0.1")
+    assert released and released[0] == version
 
 
 def test_adr_001_language_exists_with_verdict():

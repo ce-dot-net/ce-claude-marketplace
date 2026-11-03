@@ -250,7 +250,7 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Version**: v8.0.0
+**Version**: v8.0.1
 **Maintainer**: CE.NET Team
 **Requires**: Claude Code >= 2.1.311, ace-cli pinned in package.json (installed with the plugin; a global ace-cli >= the pin is an untested fallback). Windows not supported (WSL2 works).
 **Architecture**: mod + Python hooks + CLI/engine (no MCP)
