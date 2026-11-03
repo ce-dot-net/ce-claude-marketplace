@@ -28,9 +28,9 @@ pytestmark = pytest.mark.skipif(not (CLI_JS.is_file() and NODE),
 
 ORG, PROJECT, TOKEN = "org_contract", "prj_contract", "ace_contract_token"
 
-# What the plugin passes (ace_cli.py: run_search/run_learn/check_auth_status; ace_graph_builder; commands).
+# What the plugin passes (ace_cli.py/ace_engine.py: run_search/run_learn/check_auth_status; ace_graph_builder; commands).
 FLAGS = {
-    "search": ["--stdin", "--pin-session", "--top-k"],
+    "search": ["--stdin", "--pin-session", "--session-id", "--top-k"],
     "learn": ["--transcript", "--stdin", "--no-stream", "--timeout", "--verbosity", "--retrieval-id", "--applied-log-ids"],
     "whoami": [],
     "projects": [],
@@ -133,11 +133,24 @@ def test_global_flags_exist(run, flag):
 
 
 def test_flags_table_covers_ace_cli_py():
-    """If the plugin starts passing a new flag, it must land in FLAGS (and so in the contract)."""
-    src = (PLUGIN / "shared-hooks" / "utils" / "ace_cli.py").read_text()
-    used = set(re.findall(r"""['"](--[a-z][a-z-]+)['"]""", src))
+    """If the plugin starts passing a new flag, it must land in FLAGS (and so in the contract).
+    ace_engine.py builds the ace-cli argv (search_command/learn_command); its own `--status` is not an ace-cli flag."""
+    used = set()
+    for name in ("ace_cli.py", "ace_engine.py"):
+        src = (PLUGIN / "shared-hooks" / "utils" / name).read_text()
+        used |= set(re.findall(r"""['"](--[a-z][a-z-]+)['"]""", src))
     known = {f for fs in FLAGS.values() for f in fs} | set(GLOBAL_FLAGS)
-    assert used - known == set()
+    assert used - known - {"--status"} == set()
+
+
+def test_search_session_id_reaches_the_server_without_pinning(run, server, tmp_path):
+    """cli >= 4.3.1: --session-id puts session_id into the search request and never opens sessions.db."""
+    server.requests.clear()
+    _check_search(run("search", "--stdin", "--json", "--session-id", "tsid-contract", "--top-k", "8",
+                      stdin="contract query"))
+    bodies = [json.loads(b) for m, path, b in server.requests if m == "POST" and "search" in path and b]
+    assert bodies and bodies[-1].get("session_id") == "tsid-contract", server.requests
+    assert not (tmp_path / "home" / ".ace-cache" / "sessions.db").exists()
 
 
 def _check_search(p):
