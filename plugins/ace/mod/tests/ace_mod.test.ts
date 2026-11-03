@@ -194,6 +194,7 @@ test('prompt.submit: one pinned search with a fresh uuid4 task pin per human pro
   const s = h.searches()[0]!
   expect(s.argv.slice(0, 5)).toEqual(['ace-cli', 'search', '--stdin', '--json', '--pin-session'])
   expect(UUID4.test(h.pin(s)!)).toBe(true)
+  expect(h.flag(s.argv, '--session-id')).toBe(h.pin(s))
   expect(s.argv.includes('--top-k')).toBe(false)
   expect(s.stdin).toBe(HUMAN)
   expect(s.env!.ACE_PROJECT_ID).toBe(PRJ)
@@ -309,6 +310,7 @@ test('pin-drop: "database is locked" → ONE unpinned re-run, pin_failed logged,
   const r: any = await submit($)
   expect(h.searches().length).toBe(2)
   expect(h.searches()[1]!.argv.includes('--pin-session')).toBe(false)
+  expect(h.flag(h.searches()[1]!.argv, '--session-id')).toBe(h.pin(h.searches()[0]!))  // cli 4.3.1: the retry still stamps the task session
   expect(r.context[0]).toBe(G.full_main_8)
   expect(h.rows().find((x: any) => x.event === 'search')!.pin_failed).toBe(true)
   expect(h.files.has(`${ROOT}/pin-backoff`)).toBe(true)
@@ -321,6 +323,7 @@ test('pin-backoff younger than 5 min → no pin up front (pin_skipped backoff); 
   expect(h.searches()[0]!.argv.includes('--pin-session')).toBe(false)
   expect(h.rows().find((x: any) => x.event === 'search')!.pin_skipped).toBe('backoff')
   expect(h.state()!.task_session_id).toBeDefined()
+  expect(h.flag(h.searches()[0]!.argv, '--session-id')).toBe(h.state()!.task_session_id)  // backoff skips the pin, not the stamp
   h.advance(6 * MIN)
   await submit($, HUMAN + ' later')
   expect(h.searches()[1]!.argv.includes('--pin-session')).toBe(true)
@@ -432,6 +435,7 @@ test('agent.spawn: own search, FRESH uuid4 pin per subagent (never the parent pi
   expect(s1).not.toBe(main)
   expect(s2).not.toBe(main)
   expect(s1).not.toBe(s2)
+  expect(h.flag(h.searches()[1]!.argv, '--session-id')).toBe(s1)  // SubagentStart: the subagent's own task session
   expect(h.searches()[1]!.stdin).toBe(p1)
   expect(h.searches()[1]!.timeoutMs! <= 25000).toBe(true)
   expect(r1.seenPrompt).toBe(p1 + '\n\n' + G.full_sub_8)
@@ -742,6 +746,7 @@ test('domain shift: Read in a known domain → one --top-k 8 search, NO pin (§1
   expect(ds.length).toBe(1)
   expect(h.flag(ds[0]!.argv, '--top-k')).toBe('8')
   expect(h.pin(ds[0]!)).toBeUndefined()  // §16 P8: the server never credits domain-shift rows; the sqlite pin is the lock source
+  expect(h.flag(ds[0]!.argv, '--session-id')).toBe(main)  // cli 4.3.1: unpinned session stamp
   expect(h.state()!.task_session_id).toBe(main)
   expect(ds[0]!.stdin).toBe('notes')
   expect(ds[0]!.timeoutMs! <= 17000).toBe(true)

@@ -78,10 +78,21 @@ def env(tmp_path, monkeypatch):
 def test_search_command_cli_argv_unchanged(env, tmp_path):
     e = env.use(E.make_prefix(tmp_path))
     argv, stdin = e.engine.search_command("fix it", session_id="tsid-1", top_k=8)
-    assert argv == ["ace-cli", "search", "--stdin", "--json", "--pin-session", "tsid-1", "--top-k", "8"]
+    assert argv == ["ace-cli", "search", "--stdin", "--json", "--pin-session", "tsid-1", "--session-id", "tsid-1", "--top-k", "8"]
     assert stdin == b"fix it"
     argv, _ = e.engine.search_command("fix it")
     assert argv == ["ace-cli", "search", "--stdin", "--json"]
+
+
+def test_search_command_session_id_without_pin_and_capped(env, tmp_path):
+    """cli >= 4.3.1: --session-id stamps the task session on the request without sessions.db; capped at 512."""
+    e = env.use(E.make_prefix(tmp_path))
+    argv, _ = e.engine.search_command("q", session_id="tsid-1", pin=False, top_k=8)
+    assert argv == ["ace-cli", "search", "--stdin", "--json", "--session-id", "tsid-1", "--top-k", "8"]
+    argv, _ = e.engine.search_command("q", session_id="x" * 600, pin=False)
+    assert argv[-1] == "x" * 512
+    argv, stdin = e.engine.search_command("q", session_id="tsid-1", pin=False, node="/node")
+    assert b"session_id" in stdin, "engine payload unchanged (it already sends session_id)"
 
 
 def test_search_command_lib_argv_and_stdin_json(env, tmp_path):
@@ -213,7 +224,7 @@ def test_cli_head_comes_from_the_caller(env, tmp_path):
     """r3d: cli_argv() may return [node, cli.js]; the builders must not hard-code the head."""
     e = env.use(E.make_prefix(tmp_path))
     argv, stdin = e.engine.search_command("q", session_id="t", top_k=8, cli=["/n", "/cli.js"])
-    assert argv == ["/n", "/cli.js", "search", "--stdin", "--json", "--pin-session", "t", "--top-k", "8"]
+    assert argv == ["/n", "/cli.js", "search", "--stdin", "--json", "--pin-session", "t", "--session-id", "t", "--top-k", "8"]
     assert stdin == b"q"
     assert e.engine.learn_command("/t.json", cli=["/n", "/cli.js"])[:3] == ["/n", "/cli.js", "learn"]
 

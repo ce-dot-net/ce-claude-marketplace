@@ -272,24 +272,27 @@ def _ms(t0: float) -> int:
 
 
 def run_search(query: str, *, org: str = None, project: str = None, session_id: str = None,
-               top_k: int = None, timeout: int = 25,
+               top_k: int = None, timeout: int = 25, pin: bool = True,
                hook_event_name: str = "UserPromptSubmit") -> Tuple[Optional[Dict[str, Any]], int]:
     """ONE engine spawn if the gate passes, else or on its failure ONE
-    `ace-cli search --stdin --json [--pin-session X] [--top-k N]` spawn.
+    `ace-cli search --stdin --json [--pin-session X] [--session-id X] [--top-k N]` spawn.
 
     Returns (result_dict_or_None, duration_ms). Structured error dicts are kept:
     {"error": "not_authenticated"|"timeout"|"cli_not_found", "message": ...}.
     Context goes via ACE_ORG_ID / ACE_PROJECT_ID env. session_id pins the results
-    server-side (always used when given; ace-cli >= 4.1.2 supports it).
+    server-side unless pin=False or the pin-backoff is active; the CLI path always sends it as
+    --session-id (request field only, ace-cli >= 4.3.1), the engine only when pinning (as before).
     Failures are logged with the CALLER's hook_event_name.
     """
     t0 = time.monotonic()
     t_cli = t0
+    want_pin = pin
     pin = None
     try:
         node, reason = ace_engine.preflight()
         if node:
-            parsed, reason = _search_lib(node, query, org, project, session_id, top_k, timeout, hook_event_name)
+            parsed, reason = _search_lib(node, query, org, project, session_id if want_pin else None, top_k, timeout,
+                                         hook_event_name)
             if parsed is not None:
                 return parsed, _ms(t0)
             t_cli = time.monotonic()
@@ -300,14 +303,14 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
                 return None, _ms(t0)
             reason = "lib failed: " + reason
         _log_engine("cli", reason, hook_event_name)
-        pin = session_id
+        pin = session_id if want_pin else None
         if pin and _pin_backoff_active():  # sessions.db lock is sticky (p2): don't even try
             pin = None
             _log_pin(session_id, hook_event_name, pin_skipped="backoff")
 
         def spawn(with_pin, to):
-            argv, stdin = ace_engine.search_command(query, session_id=pin if with_pin else None, top_k=top_k,
-                                                    cli=_cmd())
+            argv, stdin = ace_engine.search_command(query, session_id=session_id, pin=bool(with_pin and pin),
+                                                    top_k=top_k, cli=_cmd())
             return subprocess.run(argv, input=stdin, capture_output=True, timeout=to, env=_env(org, project))
 
         result = spawn(True, timeout)

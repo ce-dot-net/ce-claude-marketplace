@@ -117,6 +117,7 @@ def test_pin_failure_drops_pin_once(fake, monkeypatch, mode):
     assert len(calls) == 2, [c["argv"] for c in calls]
     assert flag_value(calls[0]["argv"], "--pin-session") == "tsid-1"
     assert "--pin-session" not in calls[1]["argv"], "fallback must drop --pin-session"
+    assert flag_value(calls[1]["argv"], "--session-id") == "tsid-1", "the unpinned retry still stamps the task session"
     assert calls[1]["stdin"] == "fix the hook"
     assert isinstance(result, dict) and result.get("similar_patterns"), result
     assert isinstance(ms, int)
@@ -146,6 +147,7 @@ def test_fresh_backoff_skips_pin_up_front(fake, monkeypatch):
     result, _ = fake.cli.run_search("q", session_id="tsid-2", hook_event_name="UserPromptSubmit")
     calls = _search(fake)
     assert len(calls) == 1 and "--pin-session" not in calls[0]["argv"], [c["argv"] for c in calls]
+    assert flag_value(calls[0]["argv"], "--session-id") == "tsid-2", "backoff skips the pin, not the session stamp"
     assert result and result.get("similar_patterns")
     assert any(r.get("pin_skipped") == "backoff" for r in fake.rows()), fake.rows()
 
@@ -252,3 +254,14 @@ def test_ups_disabled_writes_nothing_before_check(tmp_path):
     proc = env.run("ace_before_task_wrapper.sh", ev)
     assert proc.returncode == 0 and proc.stdout == ""
     assert env.relevance_rows() == []
+
+
+def test_unpinned_search_with_session_id_stamps_without_pin_or_backoff(fake, monkeypatch):
+    """Domain shift (pin=False): --session-id only; a locked pin store is irrelevant (no pin, no retry, no backoff)."""
+    monkeypatch.setenv("ACE_FAKE_PIN_MODE", "locked")
+    result, _ = fake.cli.run_search("q", session_id="tsid-ds", pin=False, top_k=8, hook_event_name="PostToolUse")
+    calls = _search(fake)
+    assert len(calls) == 1 and "--pin-session" not in calls[0]["argv"]
+    assert flag_value(calls[0]["argv"], "--session-id") == "tsid-ds"
+    assert result.get("similar_patterns") and not fake.pdd.pin_backoff_file().exists()
+    assert not any(r.get("event") == "pin" for r in fake.rows())

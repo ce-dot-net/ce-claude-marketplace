@@ -65,15 +65,20 @@ def select():
     return out
 
 
-def search_command(query, *, org=None, project=None, session_id=None, top_k=None, node=None, cli=None):
-    """(argv, stdin_bytes). node=None -> the CLI head `cli` (session_id becomes --pin-session), else the engine."""
+def search_command(query, *, org=None, project=None, session_id=None, top_k=None, node=None, cli=None, pin=True):
+    """(argv, stdin_bytes). node=None -> the CLI head `cli`, else the engine.
+
+    CLI: session_id (the TASK session) is always sent as --session-id (cli >= 4.3.1: request field, no
+    sessions.db; capped at the CLI's 512) and, with pin, also as --pin-session."""
     if node:
         payload = {'query': query, 'org': org, 'project': project, 'session_id': session_id, 'top_k': top_k}
         payload = {k: v for k, v in payload.items() if v}
         return [node, str(ENGINE_DIR / 'search.js')], json.dumps(payload).encode('utf-8')
     argv = list(cli or (CLI_BIN,)) + ['search', '--stdin', '--json']
-    if session_id:
+    if session_id and pin:
         argv += ['--pin-session', session_id]
+    if session_id:
+        argv += ['--session-id', str(session_id)[:512]]
     if top_k:
         argv += ['--top-k', str(top_k)]
     return argv, query.encode('utf-8', errors='replace')

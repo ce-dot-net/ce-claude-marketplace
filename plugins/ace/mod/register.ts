@@ -115,8 +115,9 @@ async function engineSearch($: any, s: Sess, script: string, query: string, pin:
   return { why: `exit ${r.exitCode}: ${String(r.stderr).trim().slice(0, 200)}` }
 }
 // ace_cli.run_search + §11 A1: while pin-backoff is young no pin at all; a locked/empty pinned search is re-run ONCE
-// without the pin, only within what is left of the blocking budget.
-async function search($: any, s: Sess, query: string, pin: string | undefined, topK: number | undefined, budgetMs: number) {
+// without the pin, only within what is left of the blocking budget. Every CLI spawn carries --session-id <task session>
+// (cli >= 4.3.1: request field, no sessions.db; capped at 512): `sid` defaults to the pin, domain shift passes it unpinned.
+async function search($: any, s: Sess, query: string, pin: string | undefined, topK: number | undefined, budgetMs: number, sid: string | undefined = pin) {
   const t0 = await $.clock.now()
   let engineWhy: string | undefined = 'no engine'
   const eng = await engineScript($, 'search.js')
@@ -140,7 +141,7 @@ async function search($: any, s: Sess, query: string, pin: string | undefined, t
     if (age < (Number.isFinite(min) && min > 0 ? min : 5) * 60_000) { usePin = undefined; pinSkipped = 'backoff' }  // 5 min since SDK 4.3.0 (sessions.db index); server team agreed
   }
   const spawn = async (p: string | undefined, timeoutMs: number) => {
-    const argv = [...head, 'search', '--stdin', '--json', ...(p ? ['--pin-session', p] : []), ...(topK ? ['--top-k', String(topK)] : [])]
+    const argv = [...head, 'search', '--stdin', '--json', ...(p ? ['--pin-session', p] : []), ...(sid ? ['--session-id', sid.slice(0, 512)] : []), ...(topK ? ['--top-k', String(topK)] : [])]
     try { return { ...(await $.process.run(argv, { stdin: query, env: aceEnv(s), timeoutMs })), threw: '' } }
     catch (err) { return { exitCode: -1, stdout: '', stderr: String(err), threw: String(err) } }
   }
@@ -706,7 +707,7 @@ async function domainShift($: any, L: Load, e: any, key: string): Promise<string
     const state = await readState($, s, key)
     const tsid: string = state?.task_session_id ?? uuid()
     const cached = await reuseGet($, L, s, 'domain', query, key)
-    const sr: any = cached ? hitResult(cached) : await search($, s, query, undefined, 8, DOMAIN_MS)  // §16 P8: no pin; tsid only for the state merge
+    const sr: any = cached ? hitResult(cached) : await search($, s, query, undefined, 8, DOMAIN_MS, tsid)  // §16 P8: no pin; tsid for the state merge and --session-id
     if (!cached) await reuseStore($, L, s, 'domain', query, key, sr.resp)
     // A failed search stays retryable. Parallel domains: the newest claim writes, so the finishing order cannot flip it.
     if (sr.resp && L.lastClaim.get(key) === matched) await $.fs.write(lastFile, matched)

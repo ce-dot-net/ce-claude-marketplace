@@ -82,7 +82,7 @@ def test_run_search_pin_session_and_top_k(cli):
     with patch("subprocess.run", return_value=_ok()) as run:
         cli.run_search("q", session_id="tsid-1", top_k=8, hook_event_name="PostToolUse")
     assert run.call_args.args[0] == [
-        "ace-cli", "search", "--stdin", "--json", "--pin-session", "tsid-1", "--top-k", "8"]
+        "ace-cli", "search", "--stdin", "--json", "--pin-session", "tsid-1", "--session-id", "tsid-1", "--top-k", "8"]
 
 
 def test_run_search_top_k_only(cli):
