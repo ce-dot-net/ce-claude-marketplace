@@ -2,14 +2,16 @@
 // F-080 credit, in-process. The Python command hooks stay installed as the fallback and step aside while the
 // mod-active marker is fresh. ace-cli is consumed as-is via $.process.run; state lives on disk in the Python formats.
 import type { Register } from 'claude-code'
-import {
-  num,
-  pyLoads, pyDumps, sanitize, renderFull, renderBudget, renderCompact, renderDomainShift, renderCohort, renderPatternsDict,
-  dataRootFromPluginRoot, safeComponent as safe, mergeState, domainsSummary, skipReason, MACHINE_ORIGINS, expandAbbreviations,
-  matchDomainToPath, domainNames, basenameQuery, isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv,
-  detachedLearnArgv, FALLBACK_ON_3, reuseKey, reuseEnabled, REUSE_TTL_MS, parseAceReview, parseDiffStat, evalStats, learnLine, selfEvalPrompt, parseUsedIds, searchRow, searchSummary, searchErrorLine, statusLine, topDomains, sessionTitle,
-  subagentQuery, isNoTaskCommand, delegatedRunning, STATE_CAP, PRIVATE_WRITE_SH, APPEND_SH, traceVariant, serverFullPct, storedFullPct, RENDER_FULL_PCT_FILE, rejectionMatch, REJECTION_PREV_MAX_AGE_S, FEEDBACK_DOWNVOTE_FILE, serverDownvote, storedDownvote, appliedLogIds, usedPatternIds, injectedContents, type StateUpdate, type ToolRec, type Cohort,
-} from './core.ts'
+import { num, pyLoads, pyDumps, sanitize } from './lib/pyjson.ts'
+import { renderFull, renderBudget, renderCompact, renderDomainShift, renderPatternsDict, domainsSummary, STATE_CAP } from './lib/render.ts'
+import { renderCohort, traceVariant, serverFullPct, storedFullPct, RENDER_FULL_PCT_FILE, FEEDBACK_DOWNVOTE_FILE, serverDownvote, storedDownvote, type Cohort } from './lib/cohort.ts'
+import { dataRootFromPluginRoot, safeComponent as safe, mergeState, reuseKey, reuseEnabled, REUSE_TTL_MS, type StateUpdate } from './lib/state.ts'
+import { skipReason, MACHINE_ORIGINS, expandAbbreviations, matchDomainToPath, domainNames, basenameQuery, subagentQuery, isNoTaskCommand } from './lib/text.ts'
+import { isTrivialTask, hasSubstantialWork, toolRec, buildTrace, learnArgv, detachedLearnArgv, FALLBACK_ON_3, parseDiffStat, delegatedRunning } from './lib/trace.ts'
+import { parseAceReview, evalStats, selfEvalPrompt, parseUsedIds, rejectionMatch, REJECTION_PREV_MAX_AGE_S, appliedLogIds, usedPatternIds, injectedContents, type ToolRec } from './lib/evidence.ts'
+import { PRIVATE_WRITE_SH, APPEND_SH } from './lib/sh.ts'
+import { learnLine, searchSummary, searchErrorLine, statusLine, topDomains, sessionTitle } from './ui/status.ts'
+import { searchRow } from './io/log.ts'
 
 const SEARCH_MS = 25000, DOMAIN_MS = 17000 // §11 A2: blocking budget per search, retry included
 const PIN_SHARE = 0.6                      // of a search budget, for the pinned attempt

@@ -334,7 +334,7 @@ def _format_bullet_token(pattern):
 
 
 def status_line(injected, returned, cohort, injected_patterns):
-    """The visible per-prompt notice, one line (parity with the mod's statusLine in mod/core.ts)."""
+    """The visible per-prompt notice, one line (parity with the mod's statusLine in mod/ui/status.ts)."""
     if not returned:
         return "ACE · no patterns for this prompt"
     arm = "full" if cohort == "full" else "budget"

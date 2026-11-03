@@ -133,7 +133,7 @@ def test_mod_is_registered_in_plugin_json_beside_the_classic_hooks():
     assert "./hooks/hooks.json" not in hooks  # loaded by convention; listing it again is a duplicate
     assert json.loads((R.MOD / "hooks.json").read_text()) == {"modules": ["./register.ts"]}
     assert (R.PLUGIN / "hooks" / "hooks.json").exists()
-    assert (R.MOD / "register.ts").exists() and (R.MOD / "core.ts").exists()
+    assert (R.MOD / "register.ts").exists() and (R.MOD / "lib" / "render.ts").exists()
 
 
 def test_mod_is_typescript_without_build_step_or_dependencies():
@@ -162,7 +162,7 @@ def _launcher_argv(job):
     p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", str(HERE / "mod_parity_node.mjs")],
                        input=json.dumps({"fixtures": [], "sids": [], "envs": [], "roots": [], "learnJob": job}),
                        capture_output=True, text=True, timeout=60)
-    assert p.returncode == 0, "mod core.ts did not run:\n" + p.stderr[-2000:]
+    assert p.returncode == 0, "mod lib/trace.ts did not run:\n" + p.stderr[-2000:]
     return json.loads(p.stdout)["learnArgv"]
 
 

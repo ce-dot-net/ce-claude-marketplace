@@ -1,4 +1,4 @@
-"""User rejection as a downvote on the NEXT main task's trace (server-team spec; mod: core.ts REJECTION_PHRASES).
+"""User rejection as a downvote on the NEXT main task's trace (server-team spec; mod: lib/evidence.ts REJECTION_PHRASES).
 
 A human main prompt <= 300 chars with a REJECTION_PHRASES phrase (whole word, not right after "nicht"/"not") rejects
 the previous main task. Its evidenced applied_log_ids (last-main-applied.json, < 6 h) become a pending downvote that
@@ -10,7 +10,7 @@ import time
 
 import plugin_data_dir
 
-# One list for the Python chain; the mod's copy is core.ts REJECTION_PHRASES (parity test).
+# One list for the Python chain; the mod's copy is lib/evidence.ts REJECTION_PHRASES (parity test).
 REJECTION_PHRASES = (
     "falsch", "stimmt nicht", "geht nicht", "funktioniert nicht", "klappt nicht", "rückgängig", "mach das rückgängig",
     "immer noch kaputt", "immer noch nicht", "nicht das was ich wollte", "das war nicht gemeint", "doch nicht",

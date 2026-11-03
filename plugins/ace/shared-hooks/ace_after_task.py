@@ -139,7 +139,7 @@ def has_substantial_work_from_accumulated(tools: list) -> bool:
 
     Returns:
         True if ANY state-changing tool was used, or (v8) the task made >= MIN_RESEARCH_CALLS
-        tool calls of any kind: research/analysis tasks carry learnings too. Parity: mod/core.ts.
+        tool calls of any kind: research/analysis tasks carry learnings too. Parity: mod/lib/trace.ts.
     """
     if len(tools) >= MIN_RESEARCH_CALLS:
         return True
@@ -156,7 +156,7 @@ def has_substantial_work_from_accumulated(tools: list) -> bool:
 
 def tool_failed(resp) -> bool:
     """A failed step: error / stderr, or (fix 5a) a non-zero exit code - structured or the transcript's
-    "Exit code N" text - unless the tool interpreted it (grep exit 1 = no matches). Parity: mod/core.ts toolRec."""
+    "Exit code N" text - unless the tool interpreted it (grep exit 1 = no matches). Parity: mod/lib/trace.ts toolRec."""
     if not isinstance(resp, dict):
         return False
     if resp.get('error') or resp.get('stderr'):
