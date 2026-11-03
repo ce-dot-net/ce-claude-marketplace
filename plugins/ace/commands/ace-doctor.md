@@ -626,7 +626,7 @@ After running all checks, present results in this format:
 [1] Plugin Installation................... ✅ PASS
 [2] Global Configuration................. ✅ PASS
 [3] Project Configuration................ ✅ PASS
-[4] CLI Availability..................... ✅ PASS (v4.4.0)
+[4] CLI Availability..................... ✅ PASS (v4.4.1)
 [5] ACE Server Connectivity.............. ✅ PASS (ace-cli status)
 [6] Hooks Registered..................... ✅ PASS (11/11)
 [7] CLI Configuration.................... ✅ PASS (device-code)
@@ -646,7 +646,7 @@ ACE is properly configured and ready to use.
 System Information:
 
 Plugin Version: v7.0.0
-CLI Version: v4.4.0
+CLI Version: v4.4.1
 Architecture: Hook-based (v7.x)
 Project ID: prj_d3a244129d62c198
 Organization: org_34fYIlitYk4nyFuTvtsAzA6uUJF
@@ -683,7 +683,7 @@ Report issues: https://github.com/ce-dot-net/ce-claude-marketplace/issues
 [1] Plugin Installation................... ✅ PASS
 [2] Global Configuration................. ✅ PASS
 [3] Project Configuration................ ⚠️  WARN
-[4] CLI Availability..................... ✅ PASS (v4.4.0)
+[4] CLI Availability..................... ✅ PASS (v4.4.1)
 [5] ACE Server Connectivity.............. ✅ PASS (ace-cli status)
 [6] Hooks Registered..................... ⚠️  WARN (8/11)
 [7] CLI Configuration.................... ✅ PASS
@@ -726,7 +726,7 @@ Run these commands in order:
 System Information:
 
 Plugin Version: v7.0.0
-CLI Version: v4.4.0
+CLI Version: v4.4.1
 Architecture: Hook-based (v7.x)
 Project ID: (not configured)
 

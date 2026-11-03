@@ -90,14 +90,14 @@ def test_no_latest_or_range_install_in_production():
 # ── §23: resolution order ───────────────────────────────────────────────────────────────
 
 def test_resolution_plugin_local_wins_over_global(tmp_path):
-    b = Box3d(tmp_path, local=True, global_version="4.4.0")
+    b = Box3d(tmp_path, local=True, global_version="4.4.1")
     argv, source = b.resolve()
     assert source == "plugin-local"
     assert argv == [str(b.node), str(b.cli_js)]
 
 
 def test_resolution_global_when_no_plugin_local(tmp_path):
-    b = Box3d(tmp_path, global_version="4.4.0")
+    b = Box3d(tmp_path, global_version="4.4.1")
     argv, source = b.resolve()
     assert source == "global"
     assert len(argv) == 1 and Path(argv[0]).name == "ace-cli"
@@ -108,7 +108,7 @@ def test_resolution_none(tmp_path):
 
 
 def test_resolution_plugin_local_without_node_falls_through_to_global(tmp_path):
-    b = Box3d(tmp_path, local=True, global_version="4.4.0", node=False)
+    b = Box3d(tmp_path, local=True, global_version="4.4.1", node=False)
     assert b.resolve()[1] == "global"
 
 
@@ -119,20 +119,20 @@ def test_resolution_plugin_local_without_node_and_global_is_none(tmp_path):
 
 def test_cli_argv_spawns_nothing(tmp_path):
     """Search/learn stay exactly ONE spawn (DESIGN §5 C2): no --version probe in the resolver."""
-    b = Box3d(tmp_path, global_version="4.4.0")
+    b = Box3d(tmp_path, global_version="4.4.1")
     b.resolve()
     assert b.cli_calls() == []
 
 
 def test_run_search_spawns_plugin_local(tmp_path):
-    b = Box3d(tmp_path, local=True, global_version="4.4.0")
+    b = Box3d(tmp_path, local=True, global_version="4.4.1")
     res = b.py("import ace_cli; print(json.dumps(ace_cli.run_search('q', org='o', project='p')[0]))")
     assert res["retrieval_id"] == "r-r3d"
     assert [c["source"] for c in b.cli_calls()] == ["plugin-local"]
 
 
 def test_run_learn_spawns_plugin_local(tmp_path):
-    b = Box3d(tmp_path, local=True, global_version="4.4.0")
+    b = Box3d(tmp_path, local=True, global_version="4.4.1")
     b.py("import ace_cli; print(json.dumps(ace_cli.run_learn({'task': 't'}, org='o', project='p')[0]))")
     calls = b.cli_calls("learn")
     assert len(calls) == 1 and calls[0]["source"] == "plugin-local"
@@ -140,13 +140,13 @@ def test_run_learn_spawns_plugin_local(tmp_path):
 
 
 def test_check_auth_status_spawns_plugin_local(tmp_path):
-    b = Box3d(tmp_path, local=True, global_version="4.4.0")
+    b = Box3d(tmp_path, local=True, global_version="4.4.1")
     b.py("import ace_cli; print(json.dumps(ace_cli.check_auth_status()))")
     assert [c["source"] for c in b.cli_calls("whoami")] == ["plugin-local"]
 
 
 def test_ups_hook_runs_the_plugin_local_cli(tmp_path):
-    b = Box3d(tmp_path, local=True, global_version="4.4.0")
+    b = Box3d(tmp_path, local=True, global_version="4.4.1")
     assert b.ups().returncode == 0
     assert [c["source"] for c in b.cli_calls("search")] == ["plugin-local"]
 
@@ -172,7 +172,7 @@ def test_sessionstart_plugin_local_ok_silent(tmp_path):
 
 
 def test_sessionstart_global_ok_silent_and_logged_as_global(tmp_path):
-    b = Box3d(tmp_path, global_version="4.4.0")
+    b = Box3d(tmp_path, global_version="4.4.1")
     p = b.session_start()
     assert "ace-cli" not in system_message(p) and b.flags() == []
     assert any(r.get("cli_source") == "global" for r in b.relevance()), b.relevance()
@@ -205,7 +205,7 @@ def test_sessionstart_global_below_pin_message_no_flag_and_not_used(tmp_path):
 
 def test_floor_is_read_from_package_json(tmp_path):
     """§23: no MIN_VERSION constant survives; the pin in package.json is the single source."""
-    b = Box3d(tmp_path, pin="9.9.9", global_version="4.4.0")
+    b = Box3d(tmp_path, pin="9.9.9", global_version="4.4.1")
     assert "/ace:ace-install-cli" in system_message(b.session_start())
 
 
@@ -257,7 +257,7 @@ def test_sync_sessionstart_never_touches_npm(tmp_path):
 
 def test_async_row_with_no_cli_makes_no_npm_call_and_writes_no_update_cache(tmp_path):
     """Global path: §23 removes the daily npm check entirely, not only for plugin-local."""
-    b = Box3d(tmp_path, global_version="4.4.0")
+    b = Box3d(tmp_path, global_version="4.4.1")
     p = b.session_start_async()
     assert p.returncode == 0 and p.stdout == ""
     assert b.npm_calls() == []
@@ -352,7 +352,7 @@ def test_rebuild_skipped_under_disable_nonessential_traffic(tmp_path):
 
 
 def test_rebuild_skipped_without_plugin_local_deps(tmp_path):
-    b = Box3d(tmp_path, global_version="4.4.0")
+    b = Box3d(tmp_path, global_version="4.4.1")
     b.session_start_async()
     assert b.npm_calls() == []
 
@@ -388,7 +388,7 @@ def _wrapper(b, *args, **env):
 
 
 def test_command_wrapper_is_plugin_local_first(tmp_path):
-    b = Box3d(tmp_path, local=True, global_version="4.4.0")
+    b = Box3d(tmp_path, local=True, global_version="4.4.1")
     p = _wrapper(b, "search", "--json", "q")
     assert p.returncode == 0, p.stderr
     assert json.loads(p.stdout)["retrieval_id"] == "r-r3d"
@@ -396,8 +396,8 @@ def test_command_wrapper_is_plugin_local_first(tmp_path):
 
 
 def test_command_wrapper_falls_back_to_global(tmp_path):
-    b = Box3d(tmp_path, global_version="4.4.0")
-    assert _wrapper(b, "--version").stdout.strip() == "4.4.0"
+    b = Box3d(tmp_path, global_version="4.4.1")
+    assert _wrapper(b, "--version").stdout.strip() == "4.4.1"
     assert [c["source"] for c in b.cli_calls()] == ["global"]
 
 
@@ -456,7 +456,7 @@ def test_command_allows_the_wrapper(path):
 
 def test_foreign_plugin_root_does_not_hide_the_local_cli_or_the_floor(tmp_path):
     """§16 P5: other plugins export THEIR CLAUDE_PLUGIN_ROOT into the shared env file."""
-    b = Box3d(tmp_path, local=True, global_version="4.4.0")
+    b = Box3d(tmp_path, local=True, global_version="4.4.1")
     foreign = tmp_path / "other-plugin"
     foreign.mkdir()
     assert b.resolve(CLAUDE_PLUGIN_ROOT=foreign)[1] == "plugin-local"
