@@ -9,7 +9,7 @@ export type State = 'ok' | 'unbound' | 'not_logged_in' | 'expired' | 'project_no
   | 'cli_missing' | 'config_refused' | 'config_invalid'
 export type Ctx = Result & { root: string, mainRoot: string | null, gitRoot: string | null, via: 'resolver' | 'cli' }
 export type Env = { HOME?: string, ACE_ORG_ID?: string, ACE_PROJECT_ID?: string, ACE_CONTEXT?: string, ACE_CONFIG_PATH?: string,
-  XDG_CONFIG_HOME?: string, ACE_AUTO_ADOPT?: string, ACE_CONTEXT_ENGINE?: string }
+  XDG_CONFIG_HOME?: string, ACE_AUTO_ADOPT?: string, ACE_CONTEXT_ENGINE?: string, ACE_BIND_ROOT?: string }
 export { LINES, ADOPT_LINE }
 export const PROBLEM_STATES: State[] = ['unbound', 'not_logged_in', 'expired', 'project_not_found', 'no_access', 'server_error',
   'cli_missing', 'config_refused', 'config_invalid']
@@ -29,7 +29,7 @@ export async function readEnv($: any): Promise<Env> {
   return { HOME: await g($.env.get('HOME')), ACE_ORG_ID: await g($.env.get('ACE_ORG_ID')), ACE_PROJECT_ID: await g($.env.get('ACE_PROJECT_ID')),
     ACE_CONTEXT: await g($.env.get('ACE_CONTEXT')), ACE_CONFIG_PATH: await g($.env.get('ACE_CONFIG_PATH')),
     XDG_CONFIG_HOME: await g($.env.get('XDG_CONFIG_HOME')), ACE_AUTO_ADOPT: await g($.env.get('ACE_AUTO_ADOPT')),
-    ACE_CONTEXT_ENGINE: await g($.env.get('ACE_CONTEXT_ENGINE')) }
+    ACE_CONTEXT_ENGINE: await g($.env.get('ACE_CONTEXT_ENGINE')), ACE_BIND_ROOT: await g($.env.get('ACE_BIND_ROOT')) }
 }
 export const globalConfigPath = (env: Env) => env.ACE_CONFIG_PATH
   || `${env.XDG_CONFIG_HOME || `${env.HOME ?? ''}/.config`}/ace/config.json`
@@ -87,7 +87,7 @@ export async function resolveContext($: any, cwd: string, envIn: Env, o: { dataR
   const known = cap.key === capKey ? cap.has : undefined  // an old CLI is probed once per CLI build, not per session
   if (o.cli && env.ACE_CONTEXT_ENGINE !== 'resolver' && (known !== false || env.ACE_CONTEXT_ENGINE === 'cli')) {
     const r = await o.cli(['context', '--json', ...(o.flags?.org ? ['--org', o.flags.org] : []), ...(o.flags?.project ? ['--project', o.flags.project] : [])],
-      { cwd, env: { ACE_ORG_ID: env.ACE_ORG_ID ?? '', ACE_PROJECT_ID: env.ACE_PROJECT_ID ?? '' }, timeoutMs: 10_000 })
+      { cwd, env: { ACE_ORG_ID: env.ACE_ORG_ID ?? '', ACE_PROJECT_ID: env.ACE_PROJECT_ID ?? '', ACE_BIND_ROOT: env.ACE_BIND_ROOT ?? '' }, timeoutMs: 10_000 })
     const parsed = parseCliContext(r?.stdout)
     const old = !parsed && CLI_CONTEXT_UNKNOWN.test(`${r?.stderr ?? ''}\n${r?.stdout ?? ''}`)
     if (capPath && (parsed || old) && known !== !!parsed) await $.fs.write(capPath, JSON.stringify({ key: capKey, has: !!parsed })).catch(() => undefined)
@@ -138,10 +138,12 @@ export async function exportEnv($: any, c: Ctx, now: number) {
   if (c.bound) {
     await $.env.set('ACE_ORG_ID', c.orgId)
     await $.env.set('ACE_PROJECT_ID', c.projectId)
+    await $.env.set('ACE_BIND_ROOT', c.root)  // the ids bind only inside this repo (a child session elsewhere ignores them)
     await $.env.set('ACE_CONTEXT', JSON.stringify({ root: c.root, source: c.source, path: c.path, orgId: c.orgId, projectId: c.projectId, at: now }))
   } else {  // no ids, but the Python chain learns that the mod owns this root's notice and its one context row
     await $.env.set('ACE_ORG_ID', undefined)
     await $.env.set('ACE_PROJECT_ID', undefined)
+    await $.env.set('ACE_BIND_ROOT', undefined)
     await $.env.set('ACE_CONTEXT', JSON.stringify({ root: c.root, bound: false, reason: (c as any).reason, at: now }))
   }
 }

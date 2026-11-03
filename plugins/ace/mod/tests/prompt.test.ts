@@ -350,3 +350,10 @@ test('ACE commands, commands without arguments and session built-ins stay out', 
   await cmd($, 'model', 'claude-sonnet-with-a-long-argument')
   expect(h.searches().length).toBe(0)
 })
+
+test('8.1.0 audit: an engine stdout with a core log line before the JSON is still a lib search (no CLI fallback)', async ($, on) => {
+  const h = host(on, { files: { [`${PROOT}/engine/search.js`]: '' }, engine: () => ({ stdout: 'ℹ Cache hit (SQLite)\n' + S8 }) })
+  await submit($)
+  expect(h.searches().length).toBe(0)
+  expect(h.rows().find((r: any) => r.event === 'search')?.engine).toBe('lib')
+})

@@ -269,3 +269,10 @@ test('unbound: the export tells the Python chain the mod owns this root (no ids)
   expect(JSON.parse(h.env.ACE_CONTEXT!)).toMatchObject({ root: CWD, bound: false })
   expect(h.env.ACE_PROJECT_ID).toBe(undefined)
 })
+
+test('bound: ACE_BIND_ROOT is exported beside the ids (a child session elsewhere ignores them)', async ($, on) => {
+  const h = host(on)
+  await start($)
+  await tick()
+  expect(h.env.ACE_BIND_ROOT).toBe(CWD)
+})

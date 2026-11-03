@@ -155,5 +155,92 @@
     "invalid_id_ignored"
    ]
   }
+ },
+ {
+  "name": "plugin: ACE_BIND_ROOT elsewhere -> an inherited env export does not bind this dir",
+  "layout": {
+   "plain": null
+  },
+  "cwd": "plain",
+  "env": {
+   "ACE_ORG_ID": "org_e",
+   "ACE_PROJECT_ID": "prj_e",
+   "ACE_BIND_ROOT": "$ROOT/other"
+  },
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "no_binding",
+   "tried": [
+    {
+     "source": "repo_file",
+     "path": "plain/.ace/config.json",
+     "key": null
+    },
+    {
+     "source": "settings_file",
+     "path": "plain/.claude/settings.json",
+     "key": null
+    },
+    {
+     "source": "env",
+     "path": null,
+     "key": null
+    },
+    {
+     "source": "remote_map",
+     "path": null,
+     "key": null
+    }
+   ],
+   "warnings": [
+    "env_bound_elsewhere"
+   ]
+  }
+ },
+ {
+  "name": "plugin: ACE_BIND_ROOT covering cwd -> the env binds",
+  "layout": {
+   "other/sub": null
+  },
+  "cwd": "other/sub",
+  "env": {
+   "ACE_ORG_ID": "org_e",
+   "ACE_PROJECT_ID": "prj_e",
+   "ACE_BIND_ROOT": "$ROOT/other"
+  },
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": true,
+   "orgId": "org_e",
+   "projectId": "prj_e",
+   "source": "env",
+   "path": null
+  }
+ },
+ {
+  "name": "plugin: ACE_BIND_ROOT = the worktree's main checkout -> the env binds the worktree",
+  "layout": {
+   "repo/.git/config": "[core]\n",
+   "wt/.git": "gitdir: $ROOT/repo/.git/worktrees/wt\n",
+   "repo/.git/worktrees/wt/commondir": "../..\n"
+  },
+  "cwd": "wt",
+  "env": {
+   "ACE_ORG_ID": "org_e",
+   "ACE_PROJECT_ID": "prj_e",
+   "ACE_BIND_ROOT": "$ROOT/repo"
+  },
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": true,
+   "orgId": "org_e",
+   "projectId": "prj_e",
+   "source": "env",
+   "path": null
+  }
  }
 ]

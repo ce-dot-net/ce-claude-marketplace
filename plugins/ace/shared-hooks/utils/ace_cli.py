@@ -256,7 +256,11 @@ def _search_lib(node, query, org, project, session_id, top_k, timeout, hook_even
         reason = _failure_reason(result)
         if result.returncode == 0:
             try:
-                parsed = json.loads(_text(result.stdout))
+                out = _text(result.stdout).strip()
+                try:
+                    parsed = json.loads(out)
+                except ValueError:  # a core log line before the JSON (8.1.0 audit): the result is the last line
+                    parsed = json.loads(out.splitlines()[-1]) if out else None
                 if isinstance(parsed, dict) and isinstance(parsed.get("similar_patterns"), list):
                     _log_engine("lib", "ok", hook_event_name, ok=True, ms=_ms(t0))
                     _store_full_pct(parsed)

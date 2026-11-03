@@ -127,7 +127,7 @@ test('doctor: binding, tried paths when unbound, global projectId warning', asyn
   const t = await run($, 'doctor')
   expect(t).toContain('binding  ✗ no_binding')
   expect(t).toContain('tried:')
-  expect(t).toContain('global projectId')
+  expect(t).toContain('global projectId in ~/.config/ace/config.json')
 })
 
 test('graph: the core ids go to the builder (no newest-DB fallback)', async ($, on) => {

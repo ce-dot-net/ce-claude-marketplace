@@ -316,3 +316,38 @@ def test_a_fresh_unbound_mod_export_silences_the_python_notice_and_row(tmp_path)
     assert not (main / '.claude/data/logs/ace-relevance.jsonl').exists()
     stale = dict(env, ACE_CONTEXT=json.dumps({'root': str(main), 'bound': False, 'at': (time.time() - 3600) * 1000}))
     assert apc.session_notice('s9', str(main), env=stale, spawn_verify=False) == apc.LINES['unbound']
+
+
+# ---- the markdown export fallback: ace-context --write-export (inside the repo root only) ----
+
+@pytest.mark.parametrize('target,why', [('../../etc/x', 'outside'), ('/etc/passwd', 'outside'), ('out/x.json', 'symlink')])
+def test_write_export_refuses(tmp_path, target, why):
+    main = mkrepo(tmp_path / 'r')
+    outside = tmp_path / 'outside'
+    outside.mkdir()
+    (main / 'out').symlink_to(outside)
+    p = subprocess.run([str(PLUGIN / 'scripts/ace-context'), '--write-export', target], cwd=str(main), input='{"playbook":{}}',
+                       capture_output=True, text=True)
+    assert p.returncode == 1 and why in p.stdout + p.stderr
+    assert list(outside.iterdir()) == []
+
+
+def test_write_export_needs_force_to_overwrite(tmp_path):
+    main = mkrepo(tmp_path / 'r')
+    (main / 'sub').mkdir()
+    (main / 'pb.json').write_text('old')
+    run = lambda *a: subprocess.run([str(PLUGIN / 'scripts/ace-context'), '--write-export', 'pb.json', *a], cwd=str(main / 'sub'),
+                                    input='{"playbook":{}}', capture_output=True, text=True)
+    p = run()
+    assert p.returncode == 1 and 'exists' in p.stdout and (main / 'pb.json').read_text() == 'old'  # relative to the repo root
+    assert run('--force').returncode == 0 and (main / 'pb.json').read_text() == '{"playbook":{}}'
+
+
+def test_bind_root_keeps_an_inherited_export_out_of_other_dirs(tmp_path):
+    repo, other = mkrepo(tmp_path / 'repo'), tmp_path / 'elsewhere'
+    other.mkdir()
+    env = {'ACE_ORG_ID': ORG, 'ACE_PROJECT_ID': PRJ, 'ACE_BIND_ROOT': str(repo), 'HOME': str(tmp_path)}
+    assert apc.context(str(other), env=env)['bound'] is False
+    assert apc.context(str(repo), env=env)['source'] == 'env'
+    env.pop('ACE_BIND_ROOT')  # a deliberate env (herdr, a launcher): spec behaviour
+    assert apc.context(str(other), env=env)['source'] == 'env'

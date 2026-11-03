@@ -53,3 +53,9 @@ def test_removed_shell_scripts_stay_removed():
     scripts = CMDS.parent / 'scripts'
     assert not (scripts / 'ace-tune.sh').exists() and not (scripts / 'ace-bootstrap.sh').exists()
     assert (scripts / 'ace-context').exists() and (scripts / 'ace-cli').exists()
+
+
+def test_md_export_writes_only_through_the_guarded_helper():
+    t = (CMDS / 'ace-export-patterns.md').read_text()
+    assert 'ace-context" --write-export' in t
+    assert not [l for l in t.splitlines() if 'export' in l and '>' in l and 'OUTPUT_FILE' in l]  # no raw redirect

@@ -206,7 +206,12 @@ async function resolveInner(cwd: string, env: Record<string, string | undefined>
       return null
     }
   }
-  entries.push({ source: 'env', path: null, org: soft(env.ACE_ORG_ID, 'org'), prj: soft(env.ACE_PROJECT_ID, 'prj') })
+  // ACE_BIND_ROOT (8.1.0, set by the mod beside the ids it exports): env ids bind only inside that repo, so an export
+  // inherited by a child session in another directory never binds it. Unset (a user/launcher env, e.g. herdr): spec.
+  const bind = env.ACE_BIND_ROOT ? normPath(env.ACE_BIND_ROOT) : null
+  const envOk = !bind || (mainRoot ?? root) === bind || (cwd + '/').startsWith(bind + '/')
+  if (bind && !envOk && (env.ACE_PROJECT_ID || env.ACE_ORG_ID)) warnings.push('env_bound_elsewhere')
+  entries.push({ source: 'env', path: null, org: envOk ? soft(env.ACE_ORG_ID, 'org') : null, prj: envOk ? soft(env.ACE_PROJECT_ID, 'prj') : null })
   tried.push({ source: 'env', path: null, key: null })
   const key = config ? normalizeRemote(originUrl(await quiet(read, config))) : null
   const hit = key ? o.remoteMap?.[key] : undefined

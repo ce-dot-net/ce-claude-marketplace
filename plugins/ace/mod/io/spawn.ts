@@ -35,7 +35,10 @@ export async function engineSearch($: any, s: Sess, script: string, query: strin
   try { r = await $.process.run(['node', script], { stdin: JSON.stringify(payload), env: aceEnv(s), timeoutMs: budgetMs }) }
   catch (err) { return /ENOENT|not found/i.test(String(err)) ? { why: 'spawn failed: ' + String(err).slice(0, 200) } : { timeout: true } }
   if (r.exitCode === 0) {
-    try { const resp = sanitize(pyLoads(r.stdout)); if (resp && Array.isArray(resp.similar_patterns)) return { resp } } catch { /* below */ }
+    const out = String(r.stdout ?? '').trim()
+    for (const text of [out, out.split('\n').pop() ?? '']) {  // a core log line before the JSON (8.1.0 audit): the last line
+      try { const resp = sanitize(pyLoads(text)); if (resp && Array.isArray(resp.similar_patterns)) return { resp } } catch { /* next */ }
+    }
     return { why: 'unexpected output (no similar_patterns list)' }
   }
   return { why: `exit ${r.exitCode}: ${String(r.stderr).trim().slice(0, 200)}` }

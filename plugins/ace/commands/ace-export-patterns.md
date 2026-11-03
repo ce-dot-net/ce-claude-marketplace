@@ -31,27 +31,17 @@ if [ -z "$PROJECT_ID" ]; then
   exit 1
 fi
 
-# Export playbook
+# Export playbook: written ONLY inside the repo root, never through a symlink, never over an existing file
+# unless the user confirmed the overwrite (then add --force). 8.1.0 security review.
 OUTPUT_FILE="${1:-ace-playbook-export.json}"
 
 echo "📦 Exporting ACE playbook..."
 
-if [ -n "$ORG_ID" ]; then
-  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --json --org "$ORG_ID" --project "$PROJECT_ID" export > "$OUTPUT_FILE"
+if ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli export --json --org "$ORG_ID" --project "$PROJECT_ID" \
+  | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --write-export "$OUTPUT_FILE"; then
+  echo "✅ Playbook exported (the line above names the file)"
 else
-  ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --json --project "$PROJECT_ID" export > "$OUTPUT_FILE"
-fi
-
-if [ $? -eq 0 ]; then
-  PATTERN_COUNT=$(jq '.playbook | to_entries | map(.value | length) | add' "$OUTPUT_FILE" 2>/dev/null || echo "unknown")
-  FILE_SIZE=$(du -h "$OUTPUT_FILE" | cut -f1)
-
-  echo "✅ Playbook exported successfully!"
-  echo "   File: $OUTPUT_FILE"
-  echo "   Size: $FILE_SIZE"
-  echo "   Patterns: $PATTERN_COUNT"
-else
-  echo "❌ Export failed"
+  echo "❌ Export failed or refused (see the line above)"
   exit 1
 fi
 ```
