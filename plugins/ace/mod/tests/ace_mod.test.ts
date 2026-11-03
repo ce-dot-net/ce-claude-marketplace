@@ -879,6 +879,37 @@ test('item D: ACE_SELF_EVAL=0 makes no model call (the learn goes out at once)',
   expect(h.modelCalls.length).toBe(0)
 })
 
+test('item 1a: a non-interactive session (-p, SDK) skips the Haiku wait: the learn goes out at once with H2 only', async ($, on) => {
+  const st8 = JSON.parse(G.state_main_8), [a] = Object.keys(st8.retrieval_log_ids)
+  const h = host(on, { search: () => ({ stdout: S8 }), selfEval: true, model: () => new Promise(() => {}) })
+  await $.session.start({ cwd: CWD, surface: null, isInteractive: false } as any)
+  await mainTask($, h)
+  await done($, 'applied ' + a)
+  expect(h.learns().length).toBe(1)
+  expect(h.modelCalls.length).toBe(0)
+  expect(h.trace(h.learns()[0]!).applied_log_ids).toEqual([st8.retrieval_log_ids[a]])
+  expect(execRow(h).used_source).toBe('tokens')
+})
+
+test('item 1b: a self-eval still pending at session.end dispatches once with H2 ids; Haiku answering later sends no second learn', async ($, on) => {
+  const st8 = JSON.parse(G.state_main_8), [a, b] = Object.keys(st8.retrieval_log_ids)
+  let release: () => void = () => {}
+  const h = host(on, { search: () => ({ stdout: S8 }), selfEval: true,
+    model: () => new Promise(r => { release = () => r({ isAnswered: true, text: `ACE_USED: ${b}`, usage: {} }) }) })
+  await $.session.start({ cwd: CWD, surface: null, isInteractive: true } as any)
+  await mainTask($, h)
+  await done($, 'applied ' + a)
+  expect(h.modelCalls.length).toBe(1)
+  expect(h.learns().length).toBe(0)
+  await $.session.end({ reason: 'prompt_input_exit', sessionId: SID, resume: {} } as any)
+  expect(h.learns().length).toBe(1)
+  expect(h.trace(h.learns()[0]!).applied_log_ids).toEqual([st8.retrieval_log_ids[a]])
+  release()
+  for (let k = 0; k < 20; k++) await new Promise(r => setTimeout(r, 5))
+  expect(h.learns().length).toBe(1)
+  expect(h.rows().filter((x: any) => x.event === 'learn_dispatched').length).toBe(1)
+})
+
 test('item D: subagents never call the model (H2 only)', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }), selfEval: true })
   await spawn($, 'review the domain shift python port for parity bugs')
