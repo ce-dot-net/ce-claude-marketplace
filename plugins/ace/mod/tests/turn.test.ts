@@ -307,3 +307,17 @@ test('8.1.0: SubagentHandback is matched by name (not in the typed tool table); 
   await $.tool.call({ tool: 'SubagentHandback', message: 'main never hands back' } as any)
   expect(h.rows().some((r: any) => r.event === 'error')).toBe(false)
 })
+
+test('8.1.0 audit: the execution row carries source, agent_id, task_session_id, render_cohort; learn_dispatched counts applied ids', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  await done($)
+  await settle(h)
+  const ex = execRow(h)
+  expect(ex.source).toBe('mod')
+  expect('agent_id' in ex && 'render_cohort' in ex).toBe(true)
+  expect(ex.task_session_id).toBe(h.state()?.task_session_id ?? ex.task_session_id)
+  const d = h.rows().find((r: any) => r.event === 'learn_dispatched')
+  expect(typeof d.applied_log_ids_count).toBe('number')
+  expect('applied_log_ids' in d).toBe(false)
+})

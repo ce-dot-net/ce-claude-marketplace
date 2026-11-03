@@ -1270,6 +1270,9 @@ def main():
                     "project_id": context.get('project'), "agent_type": agent_type,
                     "used_ids_count": len(_used), "used_source": "tokens" if _used else "none",
                     **({"used_ids_capped": True} if _capped else {}),
+                    # 8.1.0 audit: the same correlation fields as the mod's execution row
+                    "agent_id": agent_id or None, "task_session_id": task_session_id or None,
+                    "render_cohort": _render_variant,
                 },
             }
         except Exception as e:

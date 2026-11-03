@@ -14,6 +14,14 @@ Generate a shareable interactive HTML report where Claude evaluates how helpful 
 
 When the user runs `/ace:ace-insights`, follow these three steps sequentially.
 
+### Step 0: The shared report (the same text the mod answers with, model-free)
+
+```bash
+python3 -c "import os, sys, runpy; root = os.environ.get('CLAUDE_PLUGIN_ROOT', ''); sys.path.insert(0, os.path.join(root, 'shared-hooks', 'utils')); sys.argv = ['ace_insights_analyzer', '--mode', 'text', '--hours', (sys.argv[1:] or ['24'])[0]]; runpy.run_path(os.path.join(root, 'shared-hooks', 'utils', 'ace_insights_analyzer.py'), run_name='__main__')" ${1:-24}
+```
+
+Show it verbatim first. Then continue with the per-task evaluation below.
+
 ### Step 1: Extract Task Data
 
 Run this bash script to extract structured per-task data as JSON:

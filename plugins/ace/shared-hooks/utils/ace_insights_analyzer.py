@@ -1944,69 +1944,71 @@ def format_insights_html(
 
 # v6.5.0 Item #11: CLI entry for /ace-recap (text-mode digest).
 # Keeps the big HTML report path untouched; recap is a separate render mode.
+def _is_main_search(e):
+    """A main prompt search: UserPromptSubmit of the main agent, no cache hit (8.1.0 audit)."""
+    return (e.get("event") == "search" and e.get("hook") == "UserPromptSubmit" and (e.get("agent_type") or "main") == "main"
+            and not e.get("cache_hit") and e.get("engine") != "cache")
+
+
 def generate_text_report(entries, hours: int = 12) -> str:
-    """Plain-text recap: last task summary + top patterns + session totals.
-
-    Designed for /ace-recap slash command (model: haiku, cheap).
-    """
-    import json as _json
+    """The recap / insights text (one output for /ace:ace-recap, /ace:ace-insights and the mod command), on the v8 log
+    schema: tasks by task_session_id, "used" = used_ids_count of patterns_used_count, plus evidenced use per arm,
+    learn health, skips/rejections, context mix and the domain-shift cache."""
+    from collections import Counter
     from datetime import datetime as _dt, timedelta as _td
-
     if not entries:
         return "[ACE Recap] No telemetry events found."
-
-    # Filter to last N hours
     cutoff = _dt.now().astimezone() - _td(hours=hours)
     recent = []
     for e in entries:
-        ts = e.get("timestamp") or e.get("ts")
-        if not ts:
-            continue
         try:
-            t = _parse_timestamp(ts)
+            if isinstance(e, dict) and _parse_timestamp(e.get("timestamp") or e.get("ts")) >= cutoff:
+                recent.append(e)
         except Exception:
             continue
-        if t >= cutoff:
-            recent.append(e)
-
     if not recent:
-        return f"[ACE Recap] No events in last {hours}h."
-
-    lines = [f"[ACE Recap] Last {hours}h ({len(recent)} events)\n"]
-
-    # Last task / execution
-    executions = [e for e in recent if e.get("event") == "execution"]
-    if executions:
-        last = executions[-1]
-        task = (last.get("task") or last.get("prompt") or "")[:200]
-        success = last.get("success")
-        lines.append(f"Last task: {task}")
-        if success is not None:
-            lines.append(f"  outcome: {'✅ success' if success else '⚠ partial/error'}")
-
-    # Top patterns
-    try:
-        top = get_top_patterns(recent, limit=5)
-        if top:
-            lines.append("\nTop patterns:")
-            for i, p in enumerate(top, 1):
-                content = (p.get("content") or "")[:120]
-                helpful = p.get("helpful", 0)
-                lines.append(f"  {i}. (h={helpful}) {content}")
-    except Exception as _exc:
-        lines.append(f"  (top-patterns unavailable: {_exc})")
-
-    # Session totals
-    try:
-        sess = analyze_sessions(recent, hours=hours)
-        inj = sess.get("patterns_injected", 0)
-        relv = sess.get("avg_relevance", 0)
-        doms = sess.get("domains_count", 0)
-        lines.append(f"\nSession totals: {inj} injected · {relv}% rel · {doms} domains")
-    except Exception:
-        pass
-
-    return "\n".join(lines)
+        return "[ACE Recap] No events in last %dh." % hours
+    by = lambda ev: [e for e in recent if e.get("event") == ev]
+    searches = [e for e in recent if _is_main_search(e)]
+    execs = [e for e in by("execution") if (e.get("agent_type") or "main") == "main"]
+    tasks = {}
+    for e in searches + execs:
+        k = e.get("task_session_id")
+        if k:
+            tasks.setdefault(k, {}).update({"search": e} if e.get("event") == "search" else {"exec": e})
+    out = ["[ACE Recap] Last %dh: Tasks: %d · Main searches: %d" % (hours, len(tasks), len(searches))]
+    last = next((t for t in reversed(list(tasks.values())) if "exec" in t), None)
+    if last:
+        ex, se = last["exec"], last.get("search", {})
+        out.append("Last task: %s" % (se.get("user_prompt") or "?")[:160])
+        out.append("  used %s/%s (%s) · %s · learning %s" % (ex.get("used_ids_count") or 0, ex.get("patterns_used_count") or 0,
+                   ex.get("used_source") or "none", "success" if ex.get("success") else "error/partial",
+                   "sent" if ex.get("learning_sent") else "NOT sent"))
+    out.append("\nEvidenced use per arm (main tasks):")
+    for arm in ("budget", "full"):
+        rows = [e for e in execs if e.get("render_cohort") == arm]
+        if rows:
+            src = Counter(e.get("used_source") for e in rows if (e.get("used_ids_count") or 0) > 0)
+            out.append("  %s: %d/%d tasks with evidenced use (tokens %d, model %d, both %d)" % (
+                arm, sum(1 for e in rows if (e.get("used_ids_count") or 0) > 0), len(rows),
+                src.get("tokens", 0), src.get("model", 0), src.get("both", 0)))
+    lib = sum(1 for e in searches if e.get("engine") == "lib")
+    cli = sum(1 for e in searches if e.get("engine") == "cli")
+    errs = Counter(str(e.get("engine_reason")) for e in searches if e.get("engine_reason") not in (None, "ok", "no engine", "cache_hit"))
+    zero = sum(1 for e in by("learn_dispatched") if (e.get("applied_log_ids_count", e.get("applied_log_ids")) or 0) == 0)
+    out.append("\nLearn health:")
+    out.append("  learning_sent false: %d · learns with 0 applied ids: %d · learn retries: %d" % (
+        sum(1 for e in by("execution") if e.get("learning_sent") is False), zero, len(by("learn_retry"))))
+    out.append("  engine lib %d · cli %d%s" % (lib, cli, ("; errors: " + ", ".join("%s %d" % kv for kv in errs.most_common(3))) if errs else ""))
+    skips = Counter(e.get("reason") for e in by("search_skipped") + by("learn_skipped"))
+    rej = by("rejection_detected")
+    ctx = Counter("%s/%s" % (e.get("source"), e.get("state")) for e in by("context"))
+    ds = by("domain_shift")
+    out.append("\nSkips: " + (", ".join("%s %d" % kv for kv in skips.most_common()) or "none"))
+    out.append("Rejections: rejections %d (downvotes sent %d)" % (len(rej), sum(1 for e in rej if e.get("downvote_sent"))))
+    out.append("Binding: context: " + (", ".join("%s %d" % kv for kv in ctx.most_common()) or "none"))
+    out.append("Domain shift: domain-shift cache hits: %d/%d" % (sum(1 for e in ds if e.get("cache_hit")), len(ds)))
+    return "\n".join(out)
 
 
 def _load_relevance_log(path):

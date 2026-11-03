@@ -291,6 +291,9 @@ class ACERelevanceLogger:
         used_source: Optional[str] = None,
         hook: str = 'Stop',
         used_ids_capped: bool = False,
+        agent_id: Optional[str] = None,
+        task_session_id: Optional[str] = None,
+        render_cohort: Optional[str] = None,
     ) -> None:
         """
         Log task execution metrics for correlation with pattern usage.
@@ -310,7 +313,8 @@ class ACERelevanceLogger:
             'state_changing_tools': state_changing_tools,
             'success': success,
             'execution_time_seconds': round(execution_time_seconds, 2),
-            'learning_sent': learning_sent
+            'learning_sent': learning_sent,
+            'source': 'python', 'agent_id': agent_id, 'task_session_id': task_session_id, 'render_cohort': render_cohort,
         }
         if used_ids_count is not None:  # item H: how many injected ids the task evidenced, and by what
             entry['used_ids_count'] = used_ids_count
