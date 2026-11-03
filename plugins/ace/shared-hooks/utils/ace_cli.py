@@ -281,7 +281,7 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
     {"error": "not_authenticated"|"timeout"|"cli_not_found", "message": ...}.
     Context goes via ACE_ORG_ID / ACE_PROJECT_ID env. session_id pins the results
     server-side unless pin=False or the pin-backoff is active; the CLI path always sends it as
-    --session-id (request field only, ace-cli >= 4.3.1), the engine only when pinning (as before).
+    --session-id (request field only, ace-cli >= 4.3.1) and the engine always as session_id (it never pins).
     Failures are logged with the CALLER's hook_event_name.
     """
     t0 = time.monotonic()
@@ -291,7 +291,7 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
     try:
         node, reason = ace_engine.preflight()
         if node:
-            parsed, reason = _search_lib(node, query, org, project, session_id if want_pin else None, top_k, timeout,
+            parsed, reason = _search_lib(node, query, org, project, session_id, top_k, timeout,
                                          hook_event_name)
             if parsed is not None:
                 return parsed, _ms(t0)
