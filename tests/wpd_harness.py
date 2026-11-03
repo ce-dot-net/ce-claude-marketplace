@@ -64,7 +64,7 @@ class HookEnv:
         for d in (self.home, self.pd, self.proj / ".claude", self.elsewhere, self.bin):
             d.mkdir(parents=True, exist_ok=True)
         (self.proj / ".claude" / "settings.json").write_text(
-            json.dumps({"projectId": project_id, "orgId": org_id}))
+            json.dumps({"env": {"ACE_PROJECT_ID": project_id, "ACE_ORG_ID": org_id}}))
         cli = self.bin / "ace-cli"
         cli.write_text(_FAKE_CLI)
         cli.chmod(0o755)

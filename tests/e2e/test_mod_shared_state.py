@@ -87,7 +87,7 @@ def test_rendered_context_survives_the_python_reap_into_the_sidecar(data_root):
 def _run_compact(root, tmp_path):
     proj = tmp_path / "proj"
     (proj / ".claude").mkdir(parents=True)
-    (proj / ".claude" / "settings.json").write_text(json.dumps({"projectId": PRJ, "orgId": "org_shared"}))
+    (proj / ".claude" / "settings.json").write_text(json.dumps({"env": {"ACE_PROJECT_ID": PRJ, "ACE_ORG_ID": "org_shared"}}))
     env = dict(os.environ, CLAUDE_PLUGIN_DATA=str(root), CLAUDE_PROJECT_DIR=str(proj))
     event = {"hook_event_name": "SessionStart", "source": "compact", "session_id": SID, "cwd": str(proj)}
     p = subprocess.run([sys.executable, str(R.PLUGIN / "shared-hooks" / "ace_session_start.py"), "--compact"],

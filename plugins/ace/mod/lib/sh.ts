@@ -14,3 +14,15 @@ export const APPEND_SH = 'umask 077; for p in "$2/.claude" "$2/.claude/data" "$(
 // §24: files holding prompts, tool records or traces: umask 077 (file 0600), the dir chmod 700, atomic create+rename.
 // $1 = target path, stdin = content.
 export const PRIVATE_WRITE_SH = 'umask 077; d=$(dirname "$1"); mkdir -p "$d" && chmod 700 "$d" && t="$d/.w$$.tmp" && cat > "$t" && mv -f "$t" "$1"'
+
+// A tracked repo file (.ace/config.json, .gitignore) written without ever leaving the main checkout (security review
+// 8.1.0, same rules as ace_project_context.safe_repo_write): no symlinked component or target, realpath(dir) under
+// realpath(main), mktemp (O_EXCL, random name) + mv. $1 = main root, $2 = relative path, stdin = content.
+// Exit 0 written, 3 a symlink, 4 outside the checkout, 5 io.
+export const REPO_WRITE_SH = 'umask 022; m="$1"; r="$2"; case "/$r/" in */../*|*/./*) exit 4;; esac; c="$m"; '
+  + 'for p in $(printf %s "$r" | tr "/" " "); do c="$c/$p"; [ -L "$c" ] && exit 3; done; '
+  + 'd=$(dirname "$m/$r"); mkdir -p "$d" || exit 5; [ -L "$d" ] && exit 3; '
+  + 'rd=$(cd "$d" && pwd -P) && rm_=$(cd "$m" && pwd -P) || exit 5; case "$rd/" in "$rm_"/*) ;; *) exit 4;; esac; '
+  + 't=$(mktemp "$d/.ace-w-XXXXXXXX") || exit 5; cat > "$t" || { rm -f "$t"; exit 5; }; chmod 644 "$t"; '
+  + '[ -L "$m/$r" ] && { rm -f "$t"; exit 3; }; mv -f "$t" "$m/$r" || { rm -f "$t"; exit 5; }'
+export const REPO_WRITE_WHY: Record<number, string> = { 3: 'symlink', 4: 'outside the main checkout', 5: 'io error' }

@@ -41,7 +41,7 @@ def test_writer_reader_consistent_across_cwd_change(monkeypatch, tmp_path):
     import json
     root = tmp_path / "root"
     (root / ".claude").mkdir(parents=True)
-    (root / ".claude" / "settings.json").write_text(json.dumps({"orgId": "o", "projectId": "prj_x"}))
+    (root / ".claude" / "settings.json").write_text(json.dumps({"env": {"ACE_PROJECT_ID": "prj_x", "ACE_ORG_ID": "o"}}))
     sub = root / "sub"
     sub.mkdir()
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))

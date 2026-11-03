@@ -178,7 +178,7 @@ def run_fixture(name, prepare=None):
     for d in (home, data, tmpdir, proj / ".claude", proj / "src" / "auth"):
         d.mkdir(parents=True)
     project_id, session_id, agent_id = "prj_" + token, token + "-session", "agent-" + token
-    (proj / ".claude" / "settings.json").write_text(json.dumps({"projectId": project_id, "orgId": "org_" + token}))
+    (proj / ".claude" / "settings.json").write_text(json.dumps({"env": {"ACE_PROJECT_ID": project_id, "ACE_ORG_ID": "org_" + token}}))
     (proj / "src" / "auth" / "login.py").write_text("def login(): pass\n")
     (data / "python_path").write_text(sys.executable + "\n")  # what SessionStart caches (DESIGN §3.1)
     transcript = sandbox / "transcript.jsonl"

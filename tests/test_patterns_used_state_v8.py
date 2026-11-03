@@ -53,6 +53,7 @@ def test_project_id_resolved_from_context_then_default(env, monkeypatch):
     pus, root = env
     assert pus.state_file_path(SESSION, None).parts[-4] == "default"
     monkeypatch.setenv("ACE_PROJECT_ID", "prj_env")
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     assert pus.state_file_path(SESSION, None).parts[-4] == "prj_env"
 
 
@@ -123,7 +124,7 @@ def test_load_state_missing_returns_empty_dict(env):
 def test_cli_flags_unchanged(env, tmp_path):
     _, root = env
     script = UTILS / "patterns_used_state.py"
-    e = dict(os.environ, CLAUDE_PLUGIN_DATA=str(root), ACE_PROJECT_ID="prj_cli")
+    e = dict(os.environ, CLAUDE_PLUGIN_DATA=str(root), ACE_PROJECT_ID="prj_cli", ACE_ORG_ID="org_cli")
     payload = json.dumps({"similar_patterns": [{"id": PID_A}], "retrieval_id": "r1"})
     r = subprocess.run([sys.executable, str(script), "--session", SESSION, "--agent-id", "",
                         "--task-session-id", "tsid-cli"],

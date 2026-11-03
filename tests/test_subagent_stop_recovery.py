@@ -146,6 +146,7 @@ def _run_main(tmp_path, monkeypatch, event, write_state_under=None):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
 
     if write_state_under is not None:
@@ -453,6 +454,7 @@ class TestSubagentStopGracefulDegradation:
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
         monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
+        monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
         monkeypatch.chdir(tmp_path)
         event = {
             "hook_event_name": "SubagentStop",
@@ -479,6 +481,7 @@ class TestMainStopNoKeymap:
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
         monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
+        monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
         monkeypatch.chdir(tmp_path)
         event = {
             "hook_event_name": "Stop",

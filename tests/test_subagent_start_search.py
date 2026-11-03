@@ -215,6 +215,7 @@ def test_run_search_called_with_transcript_query_type_matched(tmp_path, monkeypa
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "general-purpose", "prompt": "Do some general research"},
@@ -254,6 +255,7 @@ def test_tail_scan_picks_most_recent_matching_type(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "OLD coder task"},
@@ -288,6 +290,7 @@ def test_type_match_skips_mismatched_types(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "general-purpose", "prompt": "General task"},
@@ -329,6 +332,7 @@ def test_global_fallback_when_no_type_match(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "general-purpose", "prompt": "First general task"},
@@ -364,6 +368,7 @@ def test_global_fallback_when_subagent_type_absent(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"prompt": "Task without subagent_type field"},
@@ -401,6 +406,7 @@ def test_description_used_when_prompt_absent(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "description": "Task via description field"},
@@ -438,6 +444,7 @@ def test_long_prompt_is_truncated(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     long_prompt = "A" * 1200
     transcript_path = _make_transcript(tmp_path, [
@@ -476,6 +483,7 @@ def test_no_run_search_when_transcript_missing(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     event = _make_event(tmp_path, transcript_path=str(tmp_path / "nonexistent.jsonl"))
 
@@ -498,6 +506,7 @@ def test_no_run_search_when_transcript_has_no_task_blocks(tmp_path, monkeypatch)
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     # Transcript with only user/system entries, no Task tool_use
     entries = [
@@ -530,6 +539,7 @@ def test_no_run_search_when_transcript_empty(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript = tmp_path / "empty.jsonl"
     transcript.write_text("")
@@ -554,6 +564,7 @@ def test_no_run_search_when_transcript_path_absent(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     event = _make_event(tmp_path)
     del event["transcript_path"]
@@ -577,6 +588,7 @@ def test_graceful_when_transcript_is_all_malformed_json(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript = tmp_path / "bad.jsonl"
     transcript.write_text("{{not json\nnot json either\n{broken")
@@ -605,6 +617,7 @@ def test_run_search_task_intent_kwarg_not_passed(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some coder task"},
@@ -643,6 +656,7 @@ def test_append_patterns_used_called_with_subagent_agent_id(tmp_path, monkeypatc
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Implement the SubagentStart hook"},
@@ -678,6 +692,7 @@ def test_per_agent_state_file_written_for_subagent(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Implement the SubagentStart hook"},
@@ -718,6 +733,7 @@ def test_graceful_when_run_search_returns_none(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some task"},
@@ -740,6 +756,7 @@ def test_graceful_when_no_context(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some task"},
@@ -762,6 +779,7 @@ def test_graceful_when_run_search_raises(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some task"},
@@ -793,6 +811,7 @@ def test_output_contains_additional_context_when_patterns_found(tmp_path, monkey
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Implement the SubagentStart hook"},
@@ -835,6 +854,7 @@ def test_org_and_project_passed_to_run_search_from_context(tmp_path, monkeypatch
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some coder task"},
@@ -884,6 +904,7 @@ def test_session_id_from_event_passed_to_run_search(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some coder task"},
@@ -946,6 +967,7 @@ def test_no_append_when_agent_id_is_none(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some task"},
@@ -974,6 +996,7 @@ def test_no_run_search_when_agent_id_is_none(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some task"},
@@ -1002,6 +1025,7 @@ def test_no_append_when_agent_id_absent(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some task"},
@@ -1036,6 +1060,7 @@ def test_agent_id_none_does_not_write_main_state_file(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Some task"},
@@ -1095,6 +1120,7 @@ def test_agent_tool_use_name_also_matched(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
 
     # Build a transcript with an 'Agent' block instead of 'Task'
@@ -1162,6 +1188,7 @@ def test_task_session_id_persisted_when_search_returns_zero_patterns(tmp_path, m
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Implement the auth hook"},
@@ -1207,6 +1234,7 @@ def test_task_session_id_persisted_when_search_returns_error_dict(tmp_path, monk
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Implement the auth hook"},
@@ -1244,6 +1272,7 @@ def test_task_session_id_persisted_when_search_returns_none(tmp_path, monkeypatc
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Implement the auth hook"},
@@ -1276,6 +1305,7 @@ def test_pattern_ids_still_stored_when_patterns_present(tmp_path, monkeypatch):
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [
         {"subagent_type": "coder", "prompt": "Implement the auth hook"},
@@ -1565,6 +1595,7 @@ def test_subagent_search_row_gets_the_pattern_lists_like_the_mod(tmp_path, monke
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", GOOD_CONTEXT["project"])
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.setenv("ACE_RENDER_FULL_PCT", "0")
     monkeypatch.chdir(tmp_path)
     transcript_path = _make_transcript(tmp_path, [{"subagent_type": "coder", "prompt": "Implement the SubagentStart hook"}])

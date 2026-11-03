@@ -94,7 +94,7 @@ class Box3d:
         for d in (self.home, self.data, self.proj / ".claude", self.bin, self.xdg / "ace"):
             d.mkdir(parents=True, exist_ok=True)
         (self.xdg / "ace" / "config.json").write_text(json.dumps({"apiToken": "x"}))
-        (self.proj / ".claude" / "settings.json").write_text(json.dumps({"projectId": PROJECT_ID, "orgId": ORG_ID}))
+        (self.proj / ".claude" / "settings.json").write_text(json.dumps({"env": {"ACE_PROJECT_ID": PROJECT_ID, "ACE_ORG_ID": ORG_ID}}))
         ignore = shutil.ignore_patterns("__pycache__", "node_modules", ".pytest_cache", ".ace-cache", "tests", "engine", "mod")
         for sub in ("shared-hooks", "scripts", "hooks", ".claude-plugin", "utils"):
             if (PLUGIN / sub).is_dir():

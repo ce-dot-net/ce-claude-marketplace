@@ -62,7 +62,7 @@ class Env:
         for d in (self.home, self.data, self.project / ".claude", self.bin):
             d.mkdir(parents=True, exist_ok=True)
         (self.project / ".claude" / "settings.json").write_text(
-            json.dumps({"projectId": PROJECT_ID, "orgId": ORG_ID}))
+            json.dumps({"env": {"ACE_PROJECT_ID": PROJECT_ID, "ACE_ORG_ID": ORG_ID}}))
         self.cli_log.touch()
         self.npm_log.touch()
         # python3 on PATH = the interpreter running the tests; no jq/ace-cli/npm leak in

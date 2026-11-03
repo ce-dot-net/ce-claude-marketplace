@@ -40,7 +40,7 @@
    "exit": 7,
    "code": "no_access",
    "status": 403,
-   "when": "plain 403; subscription 403s (account_blocked, feature_not_available) keep their subscription error type and exit 1"
+   "when": "plain 403 incl. insufficient_permissions; subscription 403s (account_blocked, feature_not_available) keep their subscription error type and exit 1"
   },
   {
    "exit": 8,

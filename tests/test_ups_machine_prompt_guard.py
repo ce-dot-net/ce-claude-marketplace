@@ -73,7 +73,7 @@ def project(tmp_path, monkeypatch):
     proj = tmp_path / "proj"
     (proj / ".claude" / "data" / "logs").mkdir(parents=True)
     (proj / ".claude" / "settings.json").write_text(
-        json.dumps({"orgId": ORG, "projectId": PROJECT}))
+        json.dumps({"env": {"ACE_PROJECT_ID": PROJECT, "ACE_ORG_ID": ORG}}))
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     for var in ("ACE_PROJECT_ID", "ACE_ORG_ID", "ACE_MIN_PROMPT_CHARS",

@@ -24,6 +24,8 @@ export type ResolveOpts = {
   read: Reader
   defaultOrgId?: string | null
   globalProjectId?: string | null                                              // never used, only warned about
+  realpath?: (p: string) => string | Promise<string>                           // HOME compare (spec 9500190); default: as given
+  osHome?: string | null                                                       // when env HOME is unset
 }
 
 export const SECRET_KEYS = ['apiToken', 'serverUrl', 'api_token', 'server_url']
@@ -136,7 +138,8 @@ const settingsEntry: Parse = (text, path) => {
 }
 
 // Spec 1.1/7: the first existing file in the walk ends it; the main checkout is checked only without a projectId yet.
-// lenient (a --project flag): a refused/invalid file contributes nothing and only warns (spec 9c049a0).
+// lenient (projectId already decided: a --project flag or a higher source): a refused/invalid file contributes
+// nothing and only warns (spec 9500190).
 async function search(source: Source, rel: string, dirs: string[], mainRoot: string | null, home: string | null, read: Reader,
   tried: Tried[], parse: Parse, warnings: string[], lenient: boolean): Promise<Entry[]> {
   const found: Entry[] = []
@@ -163,29 +166,32 @@ async function search(source: Source, rel: string, dirs: string[], mainRoot: str
 export async function resolve(cwd: string, env: Record<string, string | undefined>, opts: ResolveOpts): Promise<Result> {
   try { return await resolveInner(normPath(cwd), env ?? {}, opts) } catch (e) {
     if (!(e instanceof Refused)) throw e
-    if (opts.globalProjectId) e.result.warnings = ['global_project_id_ignored', ...(e.result.warnings ?? [])]
-    return e.result
+    return e.result  // spec 9500190: only its own warning
   }
 }
 
 async function resolveInner(cwd: string, env: Record<string, string | undefined>, o: ResolveOpts): Promise<Result> {
   const flags = o.flags ?? {}
   const read = o.read
-  const warnings: string[] = o.globalProjectId ? ['global_project_id_ignored'] : []
-  const home = env.HOME ? normPath(env.HOME) : null
+  const warnings: string[] = typeof o.globalProjectId === 'string' && o.globalProjectId ? ['global_project_id_ignored'] : []
+  const rp = o.realpath ?? ((p: string) => p)
+  const homeRaw = env.HOME || o.osHome
+  const homeReal = homeRaw ? await rp(normPath(homeRaw)) : null
+  const isHome = async (d: string | null) => d !== null && homeReal !== null && await rp(d) === homeReal
+  const home = null
   const { root, mainRoot, config } = await git(cwd, read)
 
   const dirs: string[] = []
   for (let d = cwd; ; d = dirname(d)) {
-    if (d !== home) dirs.push(d)
+    if (!await isHome(d)) dirs.push(d)
     if (root === null || d === root) break
   }
 
   const tried: Tried[] = []
   const entries: Entry[] = [{ source: 'flag', path: null, org: flags.org || null, prj: flags.project || null }]
-  const lenient = !!flags.project
-  entries.push(...await search('repo_file', '.ace/config.json', dirs, mainRoot, home, read, tried, repoEntry, warnings, lenient))
-  entries.push(...await search('settings_file', '.claude/settings.json', dirs, mainRoot, home, read, tried, settingsEntry, warnings, lenient))
+  const main = await isHome(mainRoot) ? null : mainRoot
+  entries.push(...await search('repo_file', '.ace/config.json', dirs, main, home, read, tried, repoEntry, warnings, entries.some(e => e.prj)))
+  entries.push(...await search('settings_file', '.claude/settings.json', dirs, main, home, read, tried, settingsEntry, warnings, entries.some(e => e.prj)))
   entries.push({ source: 'env', path: null, org: env.ACE_ORG_ID || null, prj: env.ACE_PROJECT_ID || null })
   tried.push({ source: 'env', path: null, key: null })
   const key = config ? normalizeRemote(originUrl(await quiet(read, config))) : null

@@ -149,12 +149,18 @@ def _text(b) -> str:
     return b.decode('utf-8', errors='replace') if isinstance(b, bytes) else b
 
 
+def _ids(org, project):
+    """--org/--project for every spawn (8.1.0): the CLI never picks its own binding (4.3.4 reads settings.json)."""
+    return (['--org', org] if org else []) + (['--project', project] if project else [])
+
+
 def _env(org, project):
     env = os.environ.copy()
-    if org:
-        env['ACE_ORG_ID'] = org
-    if project:
-        env['ACE_PROJECT_ID'] = project
+    for k, v in (('ACE_ORG_ID', org), ('ACE_PROJECT_ID', project)):  # the core's ids only: no leaked env reaches the CLI
+        if v:
+            env[k] = v
+        else:
+            env.pop(k, None)
     if not env.get('ACE_CLIENT_ID'):  # X-ACE-Client attribution for every search/learn
         try:
             from ace_env import client_id, plugin_version
@@ -310,7 +316,7 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
 
         def spawn(with_pin, to):
             argv, stdin = ace_engine.search_command(query, session_id=session_id, pin=bool(with_pin and pin),
-                                                    top_k=top_k, cli=_cmd())
+                                                    top_k=top_k, cli=_cmd(), ids=_ids(org, project))
             return subprocess.run(argv, input=stdin, capture_output=True, timeout=to, env=_env(org, project))
 
         result = spawn(True, timeout)
@@ -407,7 +413,8 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
             json.dump(trace, f, default=str)
         def spawn(node, to):
             cmd = ace_engine.learn_command(path, retrieval_id=retrieval_id, applied_log_ids=applied_log_ids,
-                                           verbosity=verbosity, timeout=timeout, node=node, cli=None if node else _cmd())
+                                           verbosity=verbosity, timeout=timeout, node=node, cli=None if node else _cmd(),
+                                           ids=_ids(org, project))
             r = subprocess.run(cmd, text=True, capture_output=True, timeout=to, env=_env(org, project))
             retries.extend(learn_retries(r.stderr, 'lib' if node else 'cli'))
             return r

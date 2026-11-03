@@ -124,6 +124,7 @@ def _run_main(tmp_path, monkeypatch, event,
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
 
     if write_state_under is not None:
@@ -400,6 +401,7 @@ class TestStage2DegenerateSkip:
         # Write a state file under 'None' agent (the '-main' suffix) to verify it gets reaped
         monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
+        monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
         pus.append_patterns_used(
             SESSION, None, [PID_A],
             project_id="prj-1",
@@ -533,6 +535,7 @@ class TestPartialAnchorNotSkipped:
         # Build state with retrieval_id but no task_session_id
         monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
+        monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
         pus.append_patterns_used(
             SESSION, WORK_UUID, [PID_A],
             project_id="prj-1",
@@ -572,6 +575,7 @@ class TestMainStopNotAffected:
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
         monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
         monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
+        monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
         monkeypatch.chdir(tmp_path)
 
         transcript = tmp_path / "transcript.jsonl"
