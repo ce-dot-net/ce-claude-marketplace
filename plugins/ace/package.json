@@ -1,6 +1,6 @@
 {
   "private": true,
   "dependencies": {
-    "@ace-sdk/cli": "4.4.0"
+    "@ace-sdk/cli": "4.4.1"
   }
 }
