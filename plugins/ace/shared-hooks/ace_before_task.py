@@ -402,7 +402,7 @@ def main():
 
         # 8.1.0: the one core. Once per session: resolve, adopt, log, verify in the background; at most one line.
         try:
-            _notice = session_notice(event.get('session_id') or '', os.getcwd())
+            _notice = session_notice(event.get('session_id') or '', os.getcwd(), bound=_ctx)
         except Exception:
             _notice = None
         context = _ctx or get_context()

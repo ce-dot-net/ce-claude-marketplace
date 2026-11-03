@@ -697,11 +697,15 @@ def _save(p, d):
     plugin_data_dir.private_write(p, json.dumps(d))
 
 
-def session_notice(sid, cwd=None, env=None, spawn_verify=True):
+def session_notice(sid, cwd=None, env=None, spawn_verify=True, bound=None):
     """The Python chain's once-per-session context step (first UserPromptSubmit while the mod is not running):
-    resolve, remember, adopt, log once, verify in the background; returns at most one line to show, once."""
+    resolve, remember, adopt, log once, verify in the background; returns at most one line to show, once.
+    bound: the hook's own get_context() result, when it has one (one lookup per hook)."""
     cwd = os.path.abspath(cwd or os.getcwd())
     r = context(cwd, env)
+    if bound and not r.get('bound'):
+        r = {'bound': True, 'orgId': bound.get('org'), 'projectId': bound.get('project'), 'source': bound.get('source'),
+             'path': bound.get('path'), 'root': bound.get('root') or r.get('root'), 'via': 'hook'}
     p = _state_path(sid, r.get('projectId'))
     st = _load(p)
     if st is None:

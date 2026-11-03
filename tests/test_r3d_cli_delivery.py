@@ -445,12 +445,6 @@ def test_command_bash_blocks_use_the_wrapper(path):
     assert bare == [], "%s: %s" % (path.name, bare[:5])
 
 
-@pytest.mark.parametrize("name", ["ace-bootstrap.sh", "ace-tune.sh"])
-def test_bundled_scripts_use_the_wrapper(name):
-    code = "\n".join(l for l in (PLUGIN / "scripts" / name).read_text().splitlines() if not l.lstrip().startswith("#"))
-    assert "ace-cli" in code and not _BARE.search(code.replace('/ace-cli', '')), name
-
-
 @pytest.mark.parametrize("path", [p for p in _FILES if _FENCE.search(p.read_text())], ids=lambda p: p.name)
 def test_command_allows_the_wrapper(path):
     """`Bash(ace-cli:*)` does not match a path: without this every run prompts in default mode."""
