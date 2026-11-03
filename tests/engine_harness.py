@@ -145,22 +145,29 @@ def real_core_dir():
     return None
 
 
-def _write_fake_core(core: Path, version: str, missing=None, no_export=False):
+def _write_fake_core(core: Path, version: str, missing=None, no_export=False, public=False):
+    """public=True: core >= 3.4.0 layout with the "./client" and "./config" exports (standalone index files,
+    so `missing` can delete a deep file without breaking them)."""
     (core / "dist" / "cjs" / "client").mkdir(parents=True)
     (core / "dist" / "cjs" / "config").mkdir(parents=True)
+    exports = {".": {"require": {"default": "./dist/cjs/index.js"}}}
+    client = _FAKE_ACE_CLIENT % {"resp": json.dumps(CORE_RESPONSE), "exports": "{}" if no_export else "{ AceClient }"}
+    if public:
+        exports["./client"] = {"require": {"default": "./dist/cjs/client/index.js"}}
+        exports["./config"] = {"require": {"default": "./dist/cjs/config/index.js"}}
+        (core / "dist" / "cjs" / "client" / "index.js").write_text(client)
+        (core / "dist" / "cjs" / "config" / "index.js").write_text(_FAKE_CONTEXT)
     (core / "package.json").write_text(json.dumps({
-        "name": "@ace-sdk/core", "version": version, "main": "./dist/cjs/index.js",
-        "exports": {".": {"require": {"default": "./dist/cjs/index.js"}}}}))
+        "name": "@ace-sdk/core", "version": version, "main": "./dist/cjs/index.js", "exports": exports}))
     (core / "dist" / "cjs" / "index.js").write_text("module.exports = {};\n")
-    (core / "dist" / "cjs" / "client" / "ace-client.js").write_text(_FAKE_ACE_CLIENT % {
-        "resp": json.dumps(CORE_RESPONSE), "exports": "{}" if no_export else "{ AceClient }"})
+    (core / "dist" / "cjs" / "client" / "ace-client.js").write_text(client)
     (core / "dist" / "cjs" / "config" / "context.js").write_text(_FAKE_CONTEXT)
     if missing:
         (core / "dist" / "cjs" / missing).unlink()
 
 
 def make_prefix(root: Path, core="fake", version="3.3.2", layout="nested", missing=None,
-                no_export=False, with_node=True, with_cli=True) -> Path:
+                no_export=False, with_node=True, with_cli=True, public=False) -> Path:
     """Fake npm global prefix. core: 'fake' | 'real' | None. Returns <prefix>/bin."""
     prefix = root / "npm-prefix"
     nm = prefix / "lib" / "node_modules" / "@ace-sdk"
@@ -183,7 +190,7 @@ def make_prefix(root: Path, core="fake", version="3.3.2", layout="nested", missi
         if core == "real":
             os.symlink(str(real_core_dir()), str(core_dir))
         else:
-            _write_fake_core(core_dir, version, missing=missing, no_export=no_export)
+            _write_fake_core(core_dir, version, missing=missing, no_export=no_export, public=public)
     return bin_dir
 
 
