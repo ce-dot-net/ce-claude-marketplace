@@ -817,6 +817,9 @@ test('item D/H1: Haiku self-eval (not blocking the turn) writes the review and i
   expect(t.applied_log_ids).toEqual([st8.retrieval_log_ids[b]])  // the non-injected id is dropped
   const row = execRow(h)
   expect([row.used_ids_count, row.used_source]).toEqual([1, 'model'])
+  expect([row.used_ids_model, row.used_ids_tokens]).toEqual([1, 0])  // item 2: per-source counts for the server team
+  const disp = h.rows().find((x: any) => x.event === 'learn_dispatched')!
+  expect([disp.used_ids_model, disp.used_ids_tokens]).toEqual([1, 0])
   expect(h.files.has(EVAL_REQ)).toBe(false)  // no HTML-comment self-eval request while the mod is active
 })
 
@@ -889,6 +892,7 @@ test('item 1a: a non-interactive session (-p, SDK) skips the Haiku wait: the lea
   expect(h.modelCalls.length).toBe(0)
   expect(h.trace(h.learns()[0]!).applied_log_ids).toEqual([st8.retrieval_log_ids[a]])
   expect(execRow(h).used_source).toBe('tokens')
+  expect([execRow(h).used_ids_model, execRow(h).used_ids_tokens]).toEqual([0, 1])
 })
 
 test('item 1b: a self-eval still pending at session.end dispatches once with H2 ids; Haiku answering later sends no second learn', async ($, on) => {

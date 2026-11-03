@@ -137,6 +137,7 @@ def test_applied_log_ids_only_the_used_ones_for_every_variant(box, variant):
     assert flag_value(learn["argv"], "--retrieval-id") == "ret-31"
     (row,) = box.relevance_rows("execution")
     assert row["used_ids_count"] == 1 and row["used_source"] == "tokens"
+    assert row["used_ids_tokens"] == 1 and row["used_ids_model"] == 0  # item 2: per-source counts, parity with the mod
 
 
 def test_nothing_used_sends_empty_applied_ids_in_the_trace(box):
