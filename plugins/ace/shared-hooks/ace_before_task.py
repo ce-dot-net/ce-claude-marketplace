@@ -616,9 +616,10 @@ def main():
 
         # v5.4.2 / C5: log AFTER render with the real injected count + hook latency.
         try:
-            domains = list(set(p.get('domain', 'unknown') for p in original_pattern_list if p.get('domain')))
             _injected = set(_pattern_ids)
             _injected_dicts = [p for p in original_pattern_list if p.get('id') in _injected]
+            # 8.1.0 audit: the domains of the INJECTED patterns (what the model got), as the mod's searchRow
+            domains = list(dict.fromkeys(p.get('domain') for p in _injected_dicts if p.get('domain')))
             log_search_metrics(
                 hook='UserPromptSubmit',
                 session_id=session_id,

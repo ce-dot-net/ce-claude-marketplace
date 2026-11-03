@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   subfolders and worktrees share one log.
 - `/ace:ace-configure` writes the tracked `.ace/config.json`, never `.claude/settings.json`; `/ace:ace-graph` takes the ids
   from the core (no newest-DB fallback) and reads the host-keyed cache name first.
-- The statusline script is deprecated (the mod's ▼ replaces the ACE part); kept for standalone installs.
+- Statusline: task = the newest main prompt search, `used N/M` (evidenced use) instead of prior confidence, domains of the injected patterns, absent rate-limit windows hidden (floored, colored per window, spend_limit), `ACE ▼ <state>` on a binding problem.
 
 ### Removed
 - `shared-hooks/utils/ace_context.py` (replaced by the core), `scripts/ace-tune.sh`, `scripts/ace-bootstrap.sh`, every

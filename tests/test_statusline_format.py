@@ -64,14 +64,14 @@ class TestFloatRateLimitPercentages:
     }
 
     def test_5h_percentage_rounded_to_integer(self):
-        """LINE3 must show '5h:29%', not '5h:28.9…%'."""
+        """8.1.0: floored, LINE3 shows '5h:28%' for 28.999 (never the raw float)."""
         stdout, _, rc = _run_statusline(self.RL_INPUT)
         assert rc == 0, f"Script exited {rc}: {stdout}"
         lines = _lines(stdout)
         line3 = next((l for l in lines if "5h:" in l), None)
         assert line3 is not None, f"No LINE3 with '5h:' in output: {lines}"
-        assert "5h:29%" in line3, (
-            f"Expected '5h:29%' (rounded) in LINE3 but got: {line3!r}"
+        assert "5h:28%" in line3, (
+            f"Expected '5h:28%' (floored) in LINE3 but got: {line3!r}"
         )
         # Must NOT contain the raw float
         assert "28.999" not in line3, (
@@ -144,7 +144,7 @@ class TestFloatContextWindowPercentage:
         )
 
     def test_float_used_pct_rendered_as_integer(self):
-        """LINE1 must show '29%' not '28.999…%'."""
+        """8.1.0: floored: LINE1 shows '28%' for 28.999."""
         cc_json = {
             "model": {"display_name": "claude-sonnet-4-5"},
             "context_window": {"used_percentage": 28.999999999999996},
@@ -152,8 +152,8 @@ class TestFloatContextWindowPercentage:
         stdout, _, rc = _run_statusline(cc_json)
         assert rc == 0
         line1 = _lines(stdout)[0] if _lines(stdout) else ""
-        assert "29%" in line1, (
-            f"Expected '29%' (rounded) in LINE1 but got: {line1!r}"
+        assert "28%" in line1, (
+            f"Expected '28%' (floored) in LINE1 but got: {line1!r}"
         )
         assert "28.999" not in line1, (
             f"Raw float must not appear in LINE1: {line1!r}"
@@ -189,36 +189,19 @@ class TestAbsentRateLimits:
         )
 
     def test_explicit_zero_rate_limits_no_line3(self):
-        """LINE3 suppressed when both percentages are explicitly 0."""
-        cc_json = {
-            "model": {"display_name": "claude-sonnet-4-5"},
-            "context_window": {"used_percentage": 30},
-            "rate_limits": {
-                "five_hour": {"used_percentage": 0, "resets_at": 1781271000},
-                "seven_day": {"used_percentage": 0, "resets_at": 1781524800},
-            },
-        }
+        """8.1.0: an explicit 0 is a reading and is shown; only an ABSENT window is hidden."""
+        cc_json = {"model": {"display_name": "m"}, "context_window": {"used_percentage": 30},
+                   "rate_limits": {"five_hour": {"used_percentage": 0}}}
         stdout, _, rc = _run_statusline(cc_json)
-        assert rc == 0
         lines = _lines(stdout)
-        has_limits_line = any("5h:" in l or "7d:" in l for l in lines)
-        assert not has_limits_line, (
-            f"LINE3 should be suppressed when both pcts are 0 but got: {lines}"
-        )
+        assert rc == 0 and any(l.startswith("limits 5h:0%") for l in lines) and not any("7d:" in l for l in lines), lines
 
-
-# ── FIX B: printf "00" hardening — non-numeric input must yield "0" not "00" ──
-
-class TestPrintfNonNumericHardening:
-    """FIX B: `printf '%.0f' "N/A"` emits "" (failure) then `|| echo 0` produces "0",
-    but on some shells the compound produces "00" (printf empty-string + echo 0 concat).
-    The fix `x=$(printf ...); x=${x:-0}` is immune — always yields "0" or a valid integer.
-
-    Also covers the case where jq passes a string through unchanged (e.g. "N/A" from
-    unusual CC payloads): `jq -r '... // 0'` returns "N/A" if the value IS "N/A"
-    (jq only applies the default for null/missing).  The rounding idiom must not
-    produce "00%" in the rendered output.
-    """
+    def test_absent_window_hidden_and_floor(self):
+        cc_json = {"model": {"display_name": "m"}, "rate_limits": {"seven_day": {"used_percentage": 99.6},
+                   "spend_limit": {"used_percentage": 0.4}}}
+        stdout, _, rc = _run_statusline(cc_json)
+        line3 = [l for l in _lines(stdout) if l.startswith("limits")]
+        assert line3 == ["limits 7d:99%  spend:0%"], _lines(stdout)
 
     def test_bash_rounding_idiom_non_numeric_no_double_zero(self):
         """FIX B: printf rounding idiom with non-numeric input must not yield '00'.
