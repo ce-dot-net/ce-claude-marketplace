@@ -52,6 +52,23 @@ def test_search_stdout_is_exactly_the_core_result(fake_core):
     assert json.loads(r.stdout) == E.CORE_RESPONSE
 
 
+def test_search_uses_the_core_result_switches_as_is(fake_core):
+    """core >= 3.4.0 passes render_full_pct/feedback_downvote through: the result wins over the raw wrap."""
+    bin_dir, log = fake_core
+    r = _search_js(bin_dir, {"query": "q", "org": "o", "project": "p"}, ACE_FAKE_CORE_MODE="raw_new")
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert (out["feedback_downvote"], out["render_full_pct"]) == (True, 0)
+
+
+def test_search_recovers_switches_from_the_raw_body_on_older_core(fake_core):
+    bin_dir, log = fake_core
+    r = _search_js(bin_dir, {"query": "q", "org": "o", "project": "p"}, ACE_FAKE_CORE_MODE="raw_old")
+    assert r.returncode == 0, r.stderr
+    out = json.loads(r.stdout)
+    assert (out["feedback_downvote"], out["render_full_pct"]) == (False, 9)
+
+
 def test_search_passes_query_session_topk_and_context(fake_core):
     bin_dir, log = fake_core
     r = _search_js(bin_dir, {"query": "fix hook json", "org": "org_a", "project": "prj_b",
