@@ -3,7 +3,7 @@ disable-model-invocation: true
 model: claude-haiku-4-5
 description: Show ACE log sizes and delete old rotated logs and v7 leftovers
 argument-hint: "[--days N] [--status] [--legacy [--yes] [--sessions-db]]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(rm:*), Bash(ls:*), Bash(python3:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(rm:*), Bash(ls:*), Bash(python3:*), Read
 ---
 
 # ACE Log Cleanup

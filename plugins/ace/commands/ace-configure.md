@@ -2,7 +2,7 @@
 disable-model-invocation: true
 description: Configure ACE server connection settings interactively
 argument-hint: "[--global] [--project]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(mkdir:*), Bash(cat:*), Bash(git:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(mkdir:*), Bash(cat:*), Bash(git:*), Read
 ---
 
 # Configure ACE Connection (8.1.0)
@@ -36,17 +36,6 @@ When the user runs `/ace-configure`, follow these steps:
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Check for jq (required for JSON parsing)
-if ! command -v jq >/dev/null 2>&1; then
-  echo "jq not found (required for JSON parsing)"
-  echo ""
-  echo "Installation instructions:"
-  echo "  macOS:   brew install jq"
-  echo "  Linux:   apt-get install jq  or  yum install jq"
-  echo "  Windows: Download from https://stedolan.github.io/jq/download/"
-  exit 1
-fi
-
 # Check for ace-cli
 if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
   echo "ACE CLI not found"
@@ -65,7 +54,7 @@ echo ""
 
 ```bash
 AUTH_STATUS=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json 2>&1 || echo '{"authenticated": false}')
-AUTHENTICATED=$(echo "$AUTH_STATUS" | jq -r '.authenticated // false')
+AUTHENTICATED=$(printf '%s' "$AUTH_STATUS" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get authenticated false 2>/dev/null || echo false)
 ```
 
 **If NOT authenticated** (most common case for new users):
@@ -100,7 +89,7 @@ Proceeding with configuration...
 ```bash
 # Fetch FRESH organization list from server (not cached)
 ORGS_JSON=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli orgs --json 2>&1)
-ORG_COUNT=$(echo "$ORGS_JSON" | jq -r '.count // 0')
+ORG_COUNT=$(printf '%s' "$ORGS_JSON" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get count 0 2>/dev/null || echo 0)
 ```
 
 **If no organizations** (rare edge case):
@@ -115,7 +104,7 @@ Exit here.
 **If organizations found**, parse them for display:
 ```bash
 # Extract organization list
-ORGS=$(echo "$ORGS_JSON" | jq -r '.organizations[] | "\(.org_id)|\(.org_name)|\(.role)"')
+ORGS=$(printf '%s' "$ORGS_JSON" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --rows organizations org_id,org_name,role)
 ```
 
 ### Step 4: Organization Selection
@@ -153,8 +142,7 @@ Extract the selected org_id from user's choice.
 ```bash
 # Fetch FRESH project list from server (not cached)
 PROJECTS_JSON=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli projects --org "$SELECTED_ORG_ID" --json 2>&1)
-PROJECT_LIST=$(echo "$PROJECTS_JSON" | jq -r '.projects // []')
-PROJECT_COUNT=$(echo "$PROJECT_LIST" | jq 'length')
+PROJECT_COUNT=$(printf '%s' "$PROJECTS_JSON" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get projects.# 0 2>/dev/null || echo 0)
 ```
 
 **If no projects** in selected organization:
@@ -168,7 +156,7 @@ Or select a different organization.
 **If projects found**, parse for display:
 ```bash
 # Extract project list
-PROJECTS=$(echo "$PROJECT_LIST" | jq -r '.[] | "\(.project_id)|\(.project_name)"')
+PROJECTS=$(printf '%s' "$PROJECTS_JSON" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --rows projects project_id,project_name)
 ```
 
 ### Step 6: Project Selection
@@ -233,11 +221,12 @@ echo "Verifying configuration..."
 CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1  # 8.1.0: the one binding lookup
 eval "$CTX"
 STATUS=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli status --json --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" 2>&1 || echo '{"error": true}')
-if echo "$STATUS" | jq -e '.error' >/dev/null 2>&1; then
+if ! printf '%s' "$STATUS" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get . >/dev/null 2>&1 \
+   || printf '%s' "$STATUS" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get error >/dev/null 2>&1; then
   echo "Configuration saved but verification failed."
   echo "This may be normal if the project is new."
 else
-  PATTERN_COUNT=$(echo "$STATUS" | jq -r '.playbook.total_patterns // 0')
+  PATTERN_COUNT=$(printf '%s' "$STATUS" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get playbook.total_patterns 0)
   echo "ACE connected successfully!"
   echo "  Patterns in playbook: $PATTERN_COUNT"
 fi

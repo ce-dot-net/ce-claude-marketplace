@@ -3,7 +3,7 @@ disable-model-invocation: true
 model: claude-haiku-4-5
 description: Install, update, or uninstall ACE statusline. Use '/ace-statusline-setup' to install, '/ace-statusline-setup update' to update, '/ace-statusline-setup uninstall' to remove.
 argument-hint: "[update|uninstall]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(cp:*), Bash(chmod:*), Bash(rm:*), Bash(mv:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(cp:*), Bash(chmod:*), Bash(rm:*), Bash(mv:*), Bash(python3:*), Read
 ---
 
 # ACE Statusline Management
@@ -24,8 +24,20 @@ chmod +x ~/.claude/ace_statusline.sh
 
 2. Configure statusLine in `~/.claude/settings.json`:
 ```bash
-jq '.statusLine = {"type": "command", "command": "~/.claude/ace_statusline.sh", "refreshInterval": 5}' ~/.claude/settings.json > ~/.claude/settings.json.tmp \
-  && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
+python3 - ~/.claude/settings.json set <<'PY'
+import json, os, sys
+path, op = sys.argv[1], sys.argv[2]
+try:
+    d = json.load(open(path))
+except FileNotFoundError:
+    d = {}
+if op == 'set':
+    d['statusLine'] = {'type': 'command', 'command': '~/.claude/ace_statusline.sh', 'refreshInterval': 5}
+else:
+    d.pop('statusLine', None)
+open(path + '.tmp', 'w').write(json.dumps(d, indent=2) + '\n')
+os.replace(path + '.tmp', path)
+PY
 ```
 
 3. Tell the user: "ACE statusline installed. Restart Claude Code to see it."
@@ -44,8 +56,14 @@ Tell the user: "ACE statusline updated to latest version."
 
 1. Remove statusLine from `~/.claude/settings.json`:
 ```bash
-jq 'del(.statusLine)' ~/.claude/settings.json > ~/.claude/settings.json.tmp \
-  && mv ~/.claude/settings.json.tmp ~/.claude/settings.json
+python3 - ~/.claude/settings.json del <<'PY'
+import json, os, sys
+path = sys.argv[1]
+d = json.load(open(path))
+d.pop('statusLine', None)
+open(path + '.tmp', 'w').write(json.dumps(d, indent=2) + '\n')
+os.replace(path + '.tmp', path)
+PY
 ```
 
 2. Remove the script:

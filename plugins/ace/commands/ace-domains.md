@@ -3,7 +3,7 @@ disable-model-invocation: true
 model: claude-haiku-4-5
 description: List available pattern domains for filtering
 argument-hint: "[--min-patterns N]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Read
 ---
 
 # List Available Domains
@@ -31,12 +31,6 @@ done
 # CLI detection: ace-cli
 if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
   echo "ACE CLI not found - Install: /ace:ace-install-cli"
-  exit 1
-fi
-
-# Check for jq (required for JSON formatting)
-if ! command -v jq >/dev/null 2>&1; then
-  echo "jq not found - Install: brew install jq (macOS) or apt-get install jq (Linux)"
   exit 1
 fi
 
@@ -71,7 +65,7 @@ if [ $EXIT_CODE -ne 0 ]; then
 fi
 
 # Verify we got valid JSON
-if ! echo "$DOMAINS_OUTPUT" | jq empty 2>/dev/null; then
+if ! printf '%s' "$DOMAINS_OUTPUT" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get . >/dev/null 2>&1; then
   echo "Invalid response from ACE CLI (not valid JSON)"
   echo ""
   echo "Response:"
@@ -83,17 +77,16 @@ fi
 echo "Available Pattern Domains"
 echo ""
 
-TOTAL_DOMAINS=$(echo "$DOMAINS_OUTPUT" | jq -r '.total_domains // (.domains | length)')
-TOTAL_PATTERNS=$(echo "$DOMAINS_OUTPUT" | jq -r '.total_patterns // 0')
+TOTAL_DOMAINS=$(printf '%s' "$DOMAINS_OUTPUT" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get total_domains '')
+[ -n "$TOTAL_DOMAINS" ] || TOTAL_DOMAINS=$(printf '%s' "$DOMAINS_OUTPUT" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get domains.# 0)
+TOTAL_PATTERNS=$(printf '%s' "$DOMAINS_OUTPUT" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get total_patterns 0)
 
 echo "Total: $TOTAL_DOMAINS domains, $TOTAL_PATTERNS patterns"
 echo ""
 
 # Output domains sorted by count (descending)
-echo "$DOMAINS_OUTPUT" | jq -r '
-  .domains | sort_by(-.count) | .[] |
-  "  \(.name): \(.count) patterns"
-'
+printf '%s' "$DOMAINS_OUTPUT" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --rows domains name,count | sort -t'|' -k2,2nr \
+  | while IFS='|' read -r name count; do echo "  $name: $count patterns"; done
 
 echo ""
 echo "Use with /ace-search:"

@@ -3,7 +3,7 @@ disable-model-invocation: true
 model: claude-haiku-4-5
 description: Report which ace-cli ACE uses and repair a missing or broken install
 argument-hint:
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(node:*), Bash(claude:*), Bash(test:*), Bash(ls:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(node:*), Bash(claude:*), Bash(test:*), Bash(ls:*), Read
 ---
 
 # ACE CLI Repair
@@ -15,10 +15,10 @@ Node.js is required. Run the steps in order and stop at the first one that fixes
 ## Step 1: Report
 
 ```bash
-PIN=$(jq -r '.dependencies["@ace-sdk/cli"]' "${CLAUDE_PLUGIN_ROOT}/package.json")
+PIN=$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get dependencies.@ace-sdk/cli '' < "${CLAUDE_PLUGIN_ROOT}/package.json")
 echo "pinned in package.json: $PIN"
 if test -f "${CLAUDE_PLUGIN_ROOT}/node_modules/@ace-sdk/cli/dist/cli.js"; then
-  echo "source: plugin-local $(jq -r .version "${CLAUDE_PLUGIN_ROOT}/node_modules/@ace-sdk/cli/package.json")"
+  echo "source: plugin-local $("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get version '' < "${CLAUDE_PLUGIN_ROOT}/node_modules/@ace-sdk/cli/package.json")"
 else
   echo "source: none plugin-local (packages not installed)"
 fi

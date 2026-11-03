@@ -3,7 +3,7 @@ disable-model-invocation: true
 model: claude-haiku-4-5
 description: Verify ACE plugin is properly configured and operational
 argument-hint:
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Read
 ---
 
 # ACE Test
@@ -87,14 +87,15 @@ if [ $DOCTOR_EXIT_CODE -ne 0 ]; then
 fi
 
 # Parse results
-PASSED=$(echo "$DOCTOR_RESULT" | jq -r '.summary.passed // 0')
-FAILED=$(echo "$DOCTOR_RESULT" | jq -r '.summary.failed // 0')
+PASSED=$(printf '%s' "$DOCTOR_RESULT" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get summary.passed 0)
+FAILED=$(printf '%s' "$DOCTOR_RESULT" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get summary.failed 0)
 
 if [ "$FAILED" -eq 0 ]; then
   echo "✅ Server connectivity: $PASSED/$((PASSED + FAILED)) checks passed"
 else
   echo "⚠️  Server connectivity: $FAILED checks failed"
-  echo "$DOCTOR_RESULT" | jq -r '.results[] | select(.status != "pass") | "   - \(.check): \(.message)"'
+  printf '%s' "$DOCTOR_RESULT" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --rows results check,status,message \
+    | while IFS='|' read -r check status message; do [ "$status" = pass ] || echo "   - $check: $message"; done
 fi
 echo ""
 ```
@@ -106,7 +107,7 @@ echo ""
 echo "[3/4] Checking hooks configuration..."
 
 # Resolve plugin root dynamically (installPath from installed_plugins.json, mirrors ace-doctor)
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(jq -r '.plugins["ace@ce-dot-net-marketplace"][0].installPath // empty' ~/.claude/plugins/installed_plugins.json 2>/dev/null)}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 
 if [ -z "$PLUGIN_ROOT" ]; then
   echo "❌ Plugin root not found — is the ACE plugin installed?"
@@ -128,7 +129,7 @@ else
 
   # Check hooks.json
   if [ -f "$PLUGIN_ROOT/hooks/hooks.json" ]; then
-    HOOK_COUNT=$(jq -r '.hooks | length' "$PLUGIN_ROOT/hooks/hooks.json")
+    HOOK_COUNT=$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get hooks.# < "$PLUGIN_ROOT/hooks/hooks.json")
     echo "✅ hooks.json: $HOOK_COUNT hook events registered"
   else
     echo "❌ hooks.json not found at $PLUGIN_ROOT/hooks/hooks.json"
@@ -154,7 +155,7 @@ if [ $STATUS_EXIT_CODE -ne 0 ]; then
   echo "$STATUS_RESULT"
 fi
 
-TOTAL_BULLETS=$(echo "$STATUS_RESULT" | jq -r '.total_bullets // 0')
+TOTAL_BULLETS=$(printf '%s' "$STATUS_RESULT" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get total_bullets 0)
 echo "✅ Status command: Playbook has $TOTAL_BULLETS patterns"
 
 echo ""

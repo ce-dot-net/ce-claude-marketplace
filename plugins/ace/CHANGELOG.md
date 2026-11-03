@@ -38,7 +38,9 @@ Requires: Claude Code >= 2.1.311, ace-cli 4.4.0 (pinned exactly; @ace-sdk/core >
 
 ### Removed
 - `shared-hooks/utils/ace_context.py` (replaced by the core), `scripts/ace-tune.sh`, `scripts/ace-bootstrap.sh`, every
-  settings.json/jq parse in the markdown commands.
+  settings.json read and every jq call in the markdown commands: jq is no longer needed by any of them (JSON fields
+  via `scripts/ace-context --get PATH [DEFAULT]` / `--rows PATH F1,F2`, multi-line formatting and the statusline
+  settings edit via `python3`; `tests/test_md_commands_no_jq.py` keeps it that way).
 
 ### Fixed
 - `handlers/turn.ts` could store an undefined turn anchor; the SubagentHandback tool (not in this build's typed tool

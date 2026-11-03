@@ -38,7 +38,7 @@ def _jq_block() -> str:
     fences = list(re.finditer(r"```bash(.*?)```", content, re.DOTALL))
     for fence in reversed(fences):
         block = fence.group(1)
-        if "jq -r" in block:
+        if "python3 -c" in block:  # 8.1.0: the formatter is Python (no jq)
             return block
     return ""
 
@@ -115,6 +115,7 @@ def test_avg_confidence_displayed_as_percentage():
         "avg_confidence" in jq
         and (
             "avg_confidence * 100" in jq
+            or 'g("avg_confidence") * 100' in jq
             or "(.avg_confidence" in jq          # jq arithmetic context
             or "avg_confidence) * 100" in jq
             or "avg_confidence | . * 100" in jq
@@ -154,7 +155,7 @@ def test_at_risk_count_in_jq_block():
     content = _content()
     # The jq block starts with 'jq -r' and ends before the next ```
     # A simple heuristic: at_risk_count must follow a dot (jq field accessor)
-    assert ".at_risk_count" in content, (
+    assert '"at_risk_count"' in content, (
         "'.at_risk_count' (with leading dot) not found in ace-status.md — the field must "
         "be accessed via jq path '.at_risk_count', not just mentioned in prose"
     )
@@ -163,7 +164,7 @@ def test_at_risk_count_in_jq_block():
 def test_patterns_with_v15_reward_in_jq_block():
     """patterns_with_v15_reward must appear inside a jq expression."""
     content = _content()
-    assert ".patterns_with_v15_reward" in content, (
+    assert '"patterns_with_v15_reward"' in content, (
         "'.patterns_with_v15_reward' (with leading dot) not found in ace-status.md — "
         "the field must be accessed via jq path, not just mentioned in prose"
     )

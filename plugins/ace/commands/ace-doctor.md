@@ -2,7 +2,7 @@
 disable-model-invocation: true
 model: claude-haiku-4-5
 description: Comprehensive ACE installation and health diagnostic
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(uname:*), Bash(bash:*), Bash(node:*), Bash(ls:*), Bash(test:*), Bash(claude:*), Bash(cat:*), Bash(tail:*), Bash(sort:*), Bash(python3:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(uname:*), Bash(bash:*), Bash(node:*), Bash(ls:*), Bash(test:*), Bash(claude:*), Bash(cat:*), Bash(tail:*), Bash(sort:*), Bash(python3:*), Read
 ---
 
 # ACE Doctor - Installation & Health Diagnostic
@@ -65,7 +65,7 @@ CLAUDE_PLUGIN_DATA="$DATA" python3 -c 'import sys; sys.path.insert(0, sys.argv[1
 **What to Check**:
 ```bash
 # Verify plugin directory structure (installPath from installed_plugins.json is authoritative)
-ls -la "${CLAUDE_PLUGIN_ROOT:-$(jq -r '.plugins["ace@ce-dot-net-marketplace"][0].installPath // empty' ~/.claude/plugins/installed_plugins.json 2>/dev/null)}"
+ls -la "${CLAUDE_PLUGIN_ROOT}"
 ```
 
 **Expected Structure**:
@@ -119,10 +119,10 @@ CONFIG_PATH="$XDG_HOME/ace/config.json"
 test -f "$CONFIG_PATH" && echo "EXISTS" || echo "MISSING"
 
 # If exists, check for authenticated device-code token (ace-cli 4.x format)
-jq -e '.auth.token' "$CONFIG_PATH" >/dev/null 2>&1 && echo "AUTH: device-code token present" || echo "AUTH: token missing — run /ace:ace-login"
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get auth.token < "$CONFIG_PATH" >/dev/null 2>&1 && echo "AUTH: device-code token present" || echo "AUTH: token missing — run /ace:ace-login"
 
 # Detect stale apiToken format (ace-cli v1.x) and warn
-jq -e '.apiToken' "$CONFIG_PATH" >/dev/null 2>&1 && echo "WARN: stale apiToken field detected — run /ace:ace-login to migrate"
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get apiToken < "$CONFIG_PATH" >/dev/null 2>&1 && echo "WARN: stale apiToken field detected — run /ace:ace-login to migrate"
 ```
 
 **Expected** (ace-cli 4.x device-code format):
@@ -202,14 +202,14 @@ Claude Code into `${CLAUDE_PLUGIN_ROOT}/node_modules` on plugin install/update. 
 
 **What to Check**:
 ```bash
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(jq -r '.plugins["ace@ce-dot-net-marketplace"][0].installPath // empty' ~/.claude/plugins/installed_plugins.json 2>/dev/null)}"
-PIN=$(jq -r '.dependencies["@ace-sdk/cli"]' "$PLUGIN_ROOT/package.json")
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+PIN=$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get dependencies.@ace-sdk/cli '' < "$PLUGIN_ROOT/package.json")
 echo "pinned (package.json): $PIN"
 
 # CLI source: plugin-local first
 LOCAL="$PLUGIN_ROOT/node_modules/@ace-sdk/cli"
 if test -f "$LOCAL/dist/cli.js"; then
-  echo "CLI source: plugin-local $(jq -r .version "$LOCAL/package.json")"
+  echo "CLI source: plugin-local $("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get version '' < "$LOCAL/package.json")"
 else
   echo "packages not installed in $PLUGIN_ROOT/node_modules"
 fi
@@ -316,7 +316,7 @@ Recommended Actions:
 **What to Check**:
 ```bash
 # Check if hook scripts exist (installPath from installed_plugins.json)
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(jq -r '.plugins["ace@ce-dot-net-marketplace"][0].installPath // empty' ~/.claude/plugins/installed_plugins.json 2>/dev/null)}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 
 # Check all hook wrappers in scripts/
 test -f "$PLUGIN_ROOT/scripts/ace_install_cli.sh" && echo "install_cli: EXISTS" || echo "install_cli: MISSING"
@@ -391,14 +391,14 @@ XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 test -f "$XDG_HOME/ace/config.json" && echo "CONFIG: EXISTS" || echo "CONFIG: MISSING"
 
 # Verify authenticated via whoami
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json 2>/dev/null | jq -e '.authenticated == true' >/dev/null 2>&1 \
+[ "$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json 2>/dev/null | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get authenticated false)" = true ] \
   && echo "AUTH: authenticated" \
   || echo "AUTH: not authenticated — run /ace:ace-login"
 
 # Detect stale formats and warn
-jq -e '.organizations' "$XDG_HOME/ace/config.json" >/dev/null 2>&1 \
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get organizations < "$XDG_HOME/ace/config.json" >/dev/null 2>&1 \
   && echo "WARN: stale organizations array detected — run /ace:ace-login to migrate"
-jq -e '.apiToken' "$XDG_HOME/ace/config.json" >/dev/null 2>&1 \
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get apiToken < "$XDG_HOME/ace/config.json" >/dev/null 2>&1 \
   && echo "WARN: stale apiToken field detected — run /ace:ace-login to migrate"
 ```
 
@@ -435,16 +435,16 @@ Recommended Actions:
 **What to Check**:
 ```bash
 # Get plugin version (installPath from installed_plugins.json)
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(jq -r '.plugins["ace@ce-dot-net-marketplace"][0].installPath // empty' ~/.claude/plugins/installed_plugins.json 2>/dev/null)}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 PLUGIN_JSON="$PLUGIN_ROOT/.claude-plugin/plugin.json"
 if [ -f "$PLUGIN_JSON" ]; then
-    jq -r '.version' "$PLUGIN_JSON"
+    "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get version < "$PLUGIN_JSON"
 else
     echo "unknown"
 fi
 
 # ace-cli: the pin this plugin version was tested with, and the one that actually runs
-jq -r '.dependencies["@ace-sdk/cli"]' "$PLUGIN_ROOT/package.json"
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get dependencies.@ace-sdk/cli < "$PLUGIN_ROOT/package.json"
 ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version 2>/dev/null || echo "not installed"
 
 # Check for Python hooks (shared-hooks/)
