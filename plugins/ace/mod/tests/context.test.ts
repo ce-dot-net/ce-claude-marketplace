@@ -261,3 +261,11 @@ test('seam: the CLI result still meets our id strictness (a metacharacter id is 
   await tick()
   expect(h.band()?.state).toBe('config_invalid')
 })
+
+test('unbound: the export tells the Python chain the mod owns this root (no ids)', async ($, on) => {
+  const h = host(on, { noSettings: true })
+  await start($)
+  await tick()
+  expect(JSON.parse(h.env.ACE_CONTEXT!)).toMatchObject({ root: CWD, bound: false })
+  expect(h.env.ACE_PROJECT_ID).toBe(undefined)
+})
