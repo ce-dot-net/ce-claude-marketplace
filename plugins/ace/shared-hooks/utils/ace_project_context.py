@@ -129,11 +129,20 @@ def _parse_json(text, source, path):
     return data
 
 
-def _id(value, source, path):
+# strict (production, the default): every id from a file, the env or a remote map must look like org_... / prj_...,
+# so an id can never carry path or argv metacharacters (security review 8.1.0). The SDK spec fixtures use ids like
+# proj_a, so ONLY the spec conformance runner passes strict=False. ponytail: a module flag, the resolver is single-threaded.
+_STRICT = [True]
+_ID_RE = {'org': re.compile(r'^org_[A-Za-z0-9_-]+$'), 'prj': re.compile(r'^prj_[A-Za-z0-9_-]+$')}
+
+
+def _id(value, source, path, kind='prj'):
     if value is None or value == '':
         return None
     if not isinstance(value, str):
         raise _Refused('config_invalid', source, path, 'id is not a string')
+    if _STRICT[0] and not _ID_RE[kind].match(value):
+        raise _Refused('config_invalid', source, path, 'id must look like %s_...' % kind)
     return value
 
 
@@ -146,14 +155,14 @@ def _repo_entry(text, path):
     org = data.get('orgId', data.get('org_id'))
     prj = data.get('projectId', data.get('project_id'))
     return {'source': 'repo_file', 'path': path,
-            'org': _id(org, 'repo_file', path), 'prj': _id(prj, 'repo_file', path)}
+            'org': _id(org, 'repo_file', path, 'org'), 'prj': _id(prj, 'repo_file', path)}
 
 
 def _settings_entry(text, path):
     data = _parse_json(text, 'settings_file', path)
     env = data.get('env') if isinstance(data.get('env'), dict) else {}
     return {'source': 'settings_file', 'path': path,
-            'org': _id(env.get('ACE_ORG_ID'), 'settings_file', path),
+            'org': _id(env.get('ACE_ORG_ID'), 'settings_file', path, 'org'),
             'prj': _id(env.get('ACE_PROJECT_ID'), 'settings_file', path)}
 
 
@@ -191,18 +200,21 @@ def _search(source, rel, dirs, main_root, home, read, tried, parse, warnings, le
 
 
 def resolve(cwd, env, flags=None, remote_map=None, organizations=None, read=read_file,
-            default_org_id=None, global_project_id=None, realpath=None):
+            default_org_id=None, global_project_id=None, realpath=None, strict=True):
     """Resolve {orgId, projectId} for an absolute `cwd`. Never falls back to a default project.
 
     remote_map: global config `projects` ({normalized remote: {orgId?, projectId}}).
     organizations: global config auth.organizations ([{org_id}]); None skips the membership check.
     default_org_id / global_project_id: global config keys (the latter is never used, only warned about).
     """
+    _STRICT[0] = strict
     try:
         return _resolve(os.path.normpath(cwd), env or {}, flags or {}, remote_map or {}, organizations,
                         read, default_org_id, global_project_id, realpath or os.path.realpath)
     except _Refused as r:
         return r.result  # spec 9500190: only its own warning
+    finally:
+        _STRICT[0] = True
 
 
 def _resolve(cwd, env, flags, remote_map, organizations, read, default_org_id, global_project_id, realpath):
@@ -232,14 +244,20 @@ def _resolve(cwd, env, flags, remote_map, organizations, read, default_org_id, g
                        _repo_entry, warnings, any(e['prj'] for e in entries))
     entries += _search('settings_file', os.path.join('.claude', 'settings.json'), dirs, main_root, home, read,
                        tried, _settings_entry, warnings, any(e['prj'] for e in entries))
-    entries.append({'source': 'env', 'path': None,
-                    'org': env.get('ACE_ORG_ID') or None, 'prj': env.get('ACE_PROJECT_ID') or None})
+    def soft(v, kind):  # a malformed env / remote-map id is dropped with a warning (never blocks a file binding)
+        try:
+            return _id(v, 'env', None, kind)
+        except _Refused:
+            if 'invalid_id_ignored' not in warnings:
+                warnings.append('invalid_id_ignored')
+            return None
+    entries.append({'source': 'env', 'path': None, 'org': soft(env.get('ACE_ORG_ID'), 'org'), 'prj': soft(env.get('ACE_PROJECT_ID'), 'prj')})
     tried.append({'source': 'env', 'path': None, 'key': None})
     key = normalize_remote(origin_url(_quiet(read, git_config))) if git_config else None
     hit = remote_map.get(key) if key else None
     if isinstance(hit, dict):
         entries.append({'source': 'remote_map', 'path': None,
-                        'org': hit.get('orgId') or None, 'prj': hit.get('projectId') or None})
+                        'org': soft(hit.get('orgId'), 'org'), 'prj': soft(hit.get('projectId'), 'prj')})
     tried.append({'source': 'remote_map', 'path': None, 'key': key})
 
     def done(r):
@@ -754,12 +772,44 @@ def _shell(r):
         ('ACE_CONTEXT_ROOT', r['root'])))
 
 
+def _bind_cli(cwd, org, prj, yes):
+    root, main_root = repo_roots(cwd)
+    main = main_root or root
+    if not main:
+        print('Not a git repo: there is no tracked file to write. Set ACE_ORG_ID / ACE_PROJECT_ID in the env instead.')
+        return 1
+    if not (ORG_ID.match(org) and PRJ_ID.match(prj)):
+        print('ids must look like org_... / prj_...')
+        return 1
+    path = os.path.join(main, '.ace', 'config.json')
+    if not yes:
+        print('Would write %s:\n%s' % (path, json.dumps({'orgId': org, 'projectId': prj}, indent=2)))
+        if ignored(main):
+            before = read_file(os.path.join(main, '.gitignore')) or ''
+            after, _ = fix_gitignore(before)
+            b, n = set(before.splitlines()), set(after.splitlines())
+            print('.gitignore ignores it; this change makes it trackable:')
+            print('\n'.join(['- ' + l for l in before.splitlines() if l and l not in n] + ['+ ' + l for l in after.splitlines() if l and l not in b]))
+        print('Nothing written. Re-run with --yes after the user confirmed.')
+        return 0
+    try:
+        r = write_binding(main, org, prj)
+    except WriteRefused as e:
+        print('Refused: %s' % e)
+        return 1
+    print('Wrote %s (gitignore: %s). Nothing staged or committed: commit it to bind every clone.' % (r['path'], r['gitignore']))
+    return 0
+
+
 def main(argv=None):
     """scripts/ace-context: the markdown commands' only binding lookup.
       ace-context [--cwd DIR] [--json]   the result as JSON (exit 0 bound, 5 not)
       ace-context --shell                export lines for eval (nothing printed when not bound; exit 5)
       ace-context --verify               plus `state` from one status call
       ace-context --line                 the one problem line, empty when ok
+      ace-context --logs                 <log root>/.claude/data/logs (main checkout of a worktree, git root, else cwd)
+      ace-context --bind ORG PRJ [--yes] the tracked <main checkout>/.ace/config.json: a preview (with the .gitignore
+                                         diff when the file is ignored); written only with --yes. Never settings.json.
     """
     import argparse
     ap = argparse.ArgumentParser(prog='ace-context')
@@ -770,10 +820,18 @@ def main(argv=None):
     g.add_argument('--json', action='store_true')
     g.add_argument('--shell', action='store_true')
     g.add_argument('--line', action='store_true')
+    g.add_argument('--logs', action='store_true')
     ap.add_argument('--verify', action='store_true')
     ap.add_argument('--verify-session')
+    ap.add_argument('--bind', nargs=2, metavar=('ORG', 'PRJ'))
+    ap.add_argument('--yes', action='store_true')
     a = ap.parse_args(argv)
     cwd = os.path.abspath(a.cwd or os.getcwd())
+    if a.bind:
+        return _bind_cli(cwd, a.bind[0], a.bind[1], a.yes)
+    if a.logs:  # the repo root's log dir (worktrees and subfolders share it)
+        print(logs_dir(cwd))
+        return 0
     if a.verify_session:
         verify_session(a.verify_session, cwd)
         return 0

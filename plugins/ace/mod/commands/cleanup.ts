@@ -6,6 +6,9 @@ export async function cleanupCmd($: any, { c, args }: Kit): Promise<string> {
     const days = args.trim() || '7'
     if (!/^\d+$/.test(days)) return 'Usage: /ace:ace-cleanup [days]'
     const dir = `${c.root}/.claude/data/logs`
+    for (const [d, e] of [[c.root, '.claude'], [`${c.root}/.claude`, 'data'], [`${c.root}/.claude/data`, 'logs']]) {
+      if (((await $.fs.list(d).catch(() => [])) as any[]).some(f => f.name === e && f.isLink)) return `ACE ▼ cleanup refused: symlink ${d}/${e}`
+    }
     const now = await $.clock.now()
     const list: any[] = await $.fs.list(dir).catch(() => [])
     const old = list.filter(f => !f.isLink && (CLEANUP_NAMES.includes(f.name) || /^ace-(posttooluse|stop|errors).*\.jsonl$/.test(f.name))

@@ -53,7 +53,7 @@ class HookEnv:
     """tmp layout: home/, pd/ (CLAUDE_PLUGIN_DATA), proj/ (hook cwd), elsewhere/
     (process cwd), bin/ace-cli (fake)."""
 
-    def __init__(self, tmp_path, project_id="prj-wpd-test", org_id="org-wpd-test"):
+    def __init__(self, tmp_path, project_id="prj_wpd-test", org_id="org_wpd-test"):
         self.tmp = Path(tmp_path)
         self.project_id = project_id
         self.home = self.tmp / "home"

@@ -136,7 +136,7 @@ SAMPLE_PATTERNS_RESPONSE = {
     "retrieval_id": "ret-abc-001",
 }
 
-GOOD_CONTEXT = {"org": "org-test-01", "project": "prj-test-01"}
+GOOD_CONTEXT = {"org": "org_test-01", "project": "prj_test-01"}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -865,7 +865,7 @@ def test_org_and_project_passed_to_run_search_from_context(tmp_path, monkeypatch
     context_used = {}
 
     def fake_get_context():
-        return {"org": "org-from-context", "project": "prj-from-context"}
+        return {"org": "org_from-context", "project": "prj_from-context"}
 
     def fake_run_search(query, org=None, project=None, **kwargs):
         context_used["org"] = org
@@ -881,10 +881,10 @@ def test_org_and_project_passed_to_run_search_from_context(tmp_path, monkeypatch
     except SystemExit:
         pass
 
-    assert context_used.get("org") == "org-from-context", (
+    assert context_used.get("org") == "org_from-context", (
         f"org passed to run_search should come from get_context(); got {context_used.get('org')!r}"
     )
-    assert context_used.get("project") == "prj-from-context", (
+    assert context_used.get("project") == "prj_from-context", (
         f"project passed to run_search should come from get_context(); got {context_used.get('project')!r}"
     )
 
@@ -1366,7 +1366,7 @@ def _v8_tool_use_line(name, tool_input, i=0):
 
 
 def _v8_env(tmp_path):
-    env = HookEnv(tmp_path, project_id="prj-wpd-sa-%s" % _uuid_v8.uuid4().hex[:8])
+    env = HookEnv(tmp_path, project_id="prj_wpd-sa-%s" % _uuid_v8.uuid4().hex[:8])
     env.set_search_response(SAMPLE_PATTERNS_RESPONSE)
     return env
 

@@ -78,7 +78,7 @@ def _read_event(env, file_path, agent_id=None, tool="Read", tool_input=None):
 
 @pytest.fixture
 def env(tmp_path):
-    e = HookEnv(tmp_path, project_id="prj-wpd-ds-%s" % uuid.uuid4().hex[:8])
+    e = HookEnv(tmp_path, project_id="prj_wpd-ds-%s" % uuid.uuid4().hex[:8])
     e.write_domains({"auth:local": {"count": 3}, "database:local": {"count": 1}})
     e.set_search_response(RESPONSE)
     return e

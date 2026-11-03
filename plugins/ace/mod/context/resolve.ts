@@ -26,6 +26,7 @@ export type ResolveOpts = {
   globalProjectId?: string | null                                              // never used, only warned about
   realpath?: (p: string) => string | Promise<string>                           // HOME compare (spec 9500190); default: as given
   osHome?: string | null                                                       // when env HOME is unset
+  strict?: boolean                                                             // id format check; default true
 }
 
 export const SECRET_KEYS = ['apiToken', 'serverUrl', 'api_token', 'server_url']
@@ -116,32 +117,37 @@ function parseJson(text: string, source: Source, path: string): Record<string, u
   return data as Record<string, unknown>
 }
 
-function id(v: unknown, source: Source, path: string): string | null {
+// strict (production, the default): every id from a file, the env or a remote map must look like org_... / prj_...,
+// so an id can never carry path or argv metacharacters (security review 8.1.0). Only the spec runner passes strict:false
+// (the SDK fixtures use ids like proj_a).
+const ID_RE = { org: /^org_[A-Za-z0-9_-]+$/, prj: /^prj_[A-Za-z0-9_-]+$/ }
+function id(v: unknown, source: Source, path: string | null, kind: 'org' | 'prj', strict: boolean): string | null {
   if (v === undefined || v === null || v === '') return null
-  if (typeof v !== 'string') throw invalid(source, path, 'id is not a string')
+  if (typeof v !== 'string') throw invalid(source, path as string, 'id is not a string')
+  if (strict && !ID_RE[kind].test(v)) throw invalid(source, path as string, `id must look like ${kind}_...`)
   return v
 }
 
-type Parse = (text: string, path: string) => Entry
+type Parse = (text: string, path: string, strict: boolean) => Entry
 
-const repoEntry: Parse = (text, path) => {
+const repoEntry: Parse = (text, path, strict) => {
   const d = parseJson(text, 'repo_file', path)
   if (SECRET_KEYS.some(k => k in d)) throw new Refused({ bound: false, reason: 'config_refused', source: 'repo_file', path,
     message: 'repo .ace/config.json contains apiToken/serverUrl; remove them', warnings: ['repo_file_contains_secret'] })
-  return { source: 'repo_file', path, org: id(d.orgId ?? d.org_id, 'repo_file', path), prj: id(d.projectId ?? d.project_id, 'repo_file', path) }
+  return { source: 'repo_file', path, org: id(d.orgId ?? d.org_id, 'repo_file', path, 'org', strict), prj: id(d.projectId ?? d.project_id, 'repo_file', path, 'prj', strict) }
 }
 
-const settingsEntry: Parse = (text, path) => {
+const settingsEntry: Parse = (text, path, strict) => {
   const d = parseJson(text, 'settings_file', path)
   const env = (d.env && typeof d.env === 'object' && !Array.isArray(d.env) ? d.env : {}) as Record<string, unknown>
-  return { source: 'settings_file', path, org: id(env.ACE_ORG_ID, 'settings_file', path), prj: id(env.ACE_PROJECT_ID, 'settings_file', path) }
+  return { source: 'settings_file', path, org: id(env.ACE_ORG_ID, 'settings_file', path, 'org', strict), prj: id(env.ACE_PROJECT_ID, 'settings_file', path, 'prj', strict) }
 }
 
 // Spec 1.1/7: the first existing file in the walk ends it; the main checkout is checked only without a projectId yet.
 // lenient (projectId already decided: a --project flag or a higher source): a refused/invalid file contributes
 // nothing and only warns (spec 9500190).
 async function search(source: Source, rel: string, dirs: string[], mainRoot: string | null, home: string | null, read: Reader,
-  tried: Tried[], parse: Parse, warnings: string[], lenient: boolean): Promise<Entry[]> {
+  tried: Tried[], parse: Parse, warnings: string[], lenient: boolean, strict = true): Promise<Entry[]> {
   const found: Entry[] = []
   const probe = async (path: string) => {
     tried.push({ source, path, key: null })
@@ -149,7 +155,7 @@ async function search(source: Source, rel: string, dirs: string[], mainRoot: str
       let text: string | null
       try { text = await read(path) } catch (e) { throw invalid(source, path, String((e as Error)?.message ?? e)) }
       if (text === null) return false
-      found.push(parse(text, path))
+      found.push(parse(text, path, strict))
     } catch (e) {
       if (!(e instanceof Refused) || !lenient) throw e
       const w = e.result.reason === 'config_refused' ? 'repo_file_contains_secret' : 'config_invalid'
@@ -190,13 +196,21 @@ async function resolveInner(cwd: string, env: Record<string, string | undefined>
   const tried: Tried[] = []
   const entries: Entry[] = [{ source: 'flag', path: null, org: flags.org || null, prj: flags.project || null }]
   const main = await isHome(mainRoot) ? null : mainRoot
-  entries.push(...await search('repo_file', '.ace/config.json', dirs, main, home, read, tried, repoEntry, warnings, entries.some(e => e.prj)))
-  entries.push(...await search('settings_file', '.claude/settings.json', dirs, main, home, read, tried, settingsEntry, warnings, entries.some(e => e.prj)))
-  entries.push({ source: 'env', path: null, org: env.ACE_ORG_ID || null, prj: env.ACE_PROJECT_ID || null })
+  const strict = o.strict ?? true
+  entries.push(...await search('repo_file', '.ace/config.json', dirs, main, home, read, tried, repoEntry, warnings, entries.some(e => e.prj), strict))
+  entries.push(...await search('settings_file', '.claude/settings.json', dirs, main, home, read, tried, settingsEntry, warnings, entries.some(e => e.prj), strict))
+  // a malformed env / remote-map id is dropped with a warning (never blocks a file binding)
+  const soft = (v: unknown, kind: 'org' | 'prj') => {
+    try { return id(v, 'env', null, kind, strict) } catch {
+      if (!warnings.includes('invalid_id_ignored')) warnings.push('invalid_id_ignored')
+      return null
+    }
+  }
+  entries.push({ source: 'env', path: null, org: soft(env.ACE_ORG_ID, 'org'), prj: soft(env.ACE_PROJECT_ID, 'prj') })
   tried.push({ source: 'env', path: null, key: null })
   const key = config ? normalizeRemote(originUrl(await quiet(read, config))) : null
   const hit = key ? o.remoteMap?.[key] : undefined
-  if (hit && typeof hit === 'object') entries.push({ source: 'remote_map', path: null, org: hit.orgId || null, prj: hit.projectId || null })
+  if (hit && typeof hit === 'object') entries.push({ source: 'remote_map', path: null, org: soft(hit.orgId, 'org'), prj: soft(hit.projectId, 'prj') })
   tried.push({ source: 'remote_map', path: null, key })
 
   const done = <T extends Result>(r: T): T => {

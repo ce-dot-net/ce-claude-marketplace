@@ -301,5 +301,5 @@ def test_doctor_connectivity_probe_uses_ace_cli_not_dead_endpoints():
     check5 = re.search(r"### Check 5:.*?(?=^### Check 6)", text, re.S | re.M).group(0)
     for dead in ("/api/health", "/playbook", "curl"):
         assert dead not in text if dead != "curl" else dead not in check5, dead
-    assert re.search(r"\$\{CLAUDE_PLUGIN_ROOT\}/scripts/ace-cli .*status --json", check5)
+    assert "scripts/ace-context\" --line" in check5 and "status" in check5  # 8.1.0: the core runs the one status call
     assert "(HTTP 200)" not in text

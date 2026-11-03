@@ -1,6 +1,6 @@
 ---
 description: Capture learning from completed work interactively
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(git:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(git:*), Read
 ---
 
 # ACE Learn
@@ -142,9 +142,9 @@ if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
   exit 1
 fi
 
-# Read context from .claude/settings.json (env-first: .env.ACE_PROJECT_ID is authoritative in ACE 1.5)
-ORG_ID=$(jq -r '.env.ACE_ORG_ID // .orgId // empty' .claude/settings.json 2>/dev/null || echo "")
-PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // .projectId // empty' .claude/settings.json 2>/dev/null || echo "")
+# 8.1.0: the one binding lookup (scripts/ace-context, the plugin core); never read binding files here
+CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1
+eval "$CTX"; ORG_ID="$ACE_ORG_ID"; PROJECT_ID="$ACE_PROJECT_ID"
 
 if [ -z "$PROJECT_ID" ]; then
   echo "❌ Run /ace:configure first"

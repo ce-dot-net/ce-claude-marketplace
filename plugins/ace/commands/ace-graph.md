@@ -71,16 +71,20 @@ if builder_path is None:
 sys.path.insert(0, str(builder_path.parent))
 from ace_graph_builder import resolve_graph_db, load_graph, build_graph_html
 
-# -- resolve DB ---------------------------------------------------------------
-settings_path = Path('.claude/settings.json')
+# -- resolve DB (8.1.0: the ids come from the one core; never another project's newest DB) -----------------
+import subprocess as _sp
+_ctx = _sp.run([os.path.join('${CLAUDE_PLUGIN_ROOT}', 'scripts', 'ace-context'), '--json'], capture_output=True, text=True)
+try:
+    ctx = json.loads(_ctx.stdout or '{}')
+except ValueError:
+    ctx = {}
+if not ctx.get('bound'):
+    print(_ctx.stderr.strip() or 'ACE is not bound here. Run /ace:ace-configure.')
+    sys.exit(0)
 cache_dir = Path.home() / '.ace-cache'
-
-db_path = resolve_graph_db(
-    str(settings_path) if settings_path.exists() else None,
-    str(cache_dir),
-)
+db_path = resolve_graph_db(ctx['orgId'], ctx['projectId'], str(cache_dir), os.environ.get('ACE_SERVER_URL'))
 if db_path is None:
-    print('No ACE cache DB found.')
+    print('No ACE cache DB for this project yet.')
     print('')
     print('The local cache is populated after patterns are searched. Run a few')
     print('tasks with ACE enabled, then try again.')
@@ -100,7 +104,7 @@ project_id = meta.get('project', '')
 project_name = None
 try:
     result = subprocess.run(
-        [os.path.join('${CLAUDE_PLUGIN_ROOT}', 'scripts', 'ace-cli'), 'projects', '--json'],
+        [os.path.join('${CLAUDE_PLUGIN_ROOT}', 'scripts', 'ace-cli'), 'projects', '--json', '--org', ctx['orgId']],
         capture_output=True, text=True, timeout=8,
     )
     if result.returncode == 0 and result.stdout.strip():

@@ -2,7 +2,7 @@
 disable-model-invocation: true
 description: Clear ACE playbook (reset all learned bullets)
 argument-hint: "[--confirm]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Clear
@@ -20,8 +20,9 @@ if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
   exit 1
 fi
 
-ORG_ID=$(jq -r '.env.ACE_ORG_ID // .orgId // empty' .claude/settings.json 2>/dev/null || echo "")
-PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // .projectId // empty' .claude/settings.json 2>/dev/null || echo "")
+# 8.1.0: the one binding lookup (scripts/ace-context, the plugin core); never read binding files here
+CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1
+eval "$CTX"; ORG_ID="$ACE_ORG_ID"; PROJECT_ID="$ACE_PROJECT_ID"
 
 if [ -z "$ORG_ID" ] || [ -z "$PROJECT_ID" ]; then
   echo "❌ Run /ace-configure first"
@@ -36,7 +37,7 @@ if [ "$CONFIRMATION" != "yes" ]; then
   exit 1
 fi
 
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --org "$ORG_ID" --project "$PROJECT_ID" clear --confirm
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --org "$ORG_ID" --project "$PROJECT_ID" clear --yes
 ```
 
 ## What Gets Deleted

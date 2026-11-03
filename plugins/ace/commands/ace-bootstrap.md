@@ -4,7 +4,7 @@ description: Bootstrap ACE playbook from docs, git history, and/or current code
 argument-hint: "[--mode hybrid|both|local-files|git-history|docs-only] [--thoroughness light|medium|deep] [--commits N] [--days N]"
 context: fork
 effort: high
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(find:*), Bash(wc:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(find:*), Bash(wc:*), Read
 ---
 
 # ACE Bootstrap
@@ -13,17 +13,17 @@ Bootstrap ACE playbook by analyzing your current codebase files and/or git commi
 
 ## Instructions for Claude
 
-When user runs `/ace-bootstrap`, execute the bootstrap script:
+When user runs `/ace-bootstrap` (where mods run, the ACE mod answers it with a preview and a confirm button instead), run:
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Get plugin root directory
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-
-# Execute bootstrap script with all arguments
-exec "${PLUGIN_ROOT}/scripts/ace-bootstrap.sh" "$@"
+CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1  # 8.1.0: the one binding lookup
+eval "$CTX"
+MODE="${1:-hybrid}"; THOROUGHNESS="${2:-medium}"
+echo "Bootstrapping ACE playbook (mode=$MODE, thoroughness=$THOROUGHNESS)..."
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli" bootstrap --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --mode "$MODE" --thoroughness "$THOROUGHNESS"
 ```
 
 **Data Flow**:
@@ -45,27 +45,27 @@ Command: generates dynamic report for user
 
 ## Usage
 
-Use `${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap` to initialize your playbook from the codebase.
+Use `${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID"` to initialize your playbook from the codebase.
 
 **Basic usage**:
 ```bash
 # CLI reads org/project from environment variables or config automatically
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --json
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --json
 ```
 
 **With options**:
 ```bash
 # Hybrid mode (recommended) - docs → git → files
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --json --mode hybrid --thoroughness deep
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --json --mode hybrid --thoroughness deep
 
 # Git history only
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --json --mode git-history --commit-limit 1000 --days-back 180
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --json --mode git-history --commit-limit 1000 --days-back 180
 
 # Local files only
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --json --mode local-files --max-files 5000
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --json --mode local-files --max-files 5000
 
 # Docs only
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --json --mode docs-only
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --json --mode docs-only
 ```
 
 **Parameters**:

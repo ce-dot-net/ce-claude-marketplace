@@ -2,7 +2,7 @@
 model: claude-haiku-4-5
 description: Show ACE playbook statistics and learning status
 argument-hint:
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Status
@@ -70,14 +70,14 @@ fi
 
 # The ACE CLI version is pinned by this plugin version (package.json); updates arrive with the plugin.
 
-# Optional: Export environment variables if available from .claude/settings.json
+# 8.1.0: the one binding lookup (scripts/ace-context, the plugin core); never read binding files here
+CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1
+eval "$CTX"; ORG_ID="$ACE_ORG_ID"; PROJECT_ID="$ACE_PROJECT_ID"
 # ace-cli will use these if provided, otherwise fallback to global config
-export ACE_ORG_ID="${ACE_ORG_ID:-}"
-export ACE_PROJECT_ID="${ACE_PROJECT_ID:-}"
 
 # Run ace-cli status and capture output
 # Filter out CLI update notifications (💡 lines) that break JSON parsing
-RAW_OUTPUT=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli status --json 2>&1)
+RAW_OUTPUT=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli status --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --json 2>&1)
 EXIT_CODE=$?
 STATUS_OUTPUT=$(echo "$RAW_OUTPUT" | grep -v '^💡' | grep -v '^$')
 

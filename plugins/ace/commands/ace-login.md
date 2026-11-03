@@ -1,7 +1,7 @@
 ---
 disable-model-invocation: true
 description: Login to ACE using browser-based device code authentication
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(mkdir:*), Bash(cat:*), Bash(rm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(mkdir:*), Bash(cat:*), Bash(rm:*), Read
 ---
 
 # ACE Login
@@ -87,7 +87,7 @@ The new format uses `auth.token` with user tokens from device code flow.
 
 **Migration Path**:
 1. Run `/ace-login` → Creates/updates config at `~/.config/ace/config.json` with `auth.token`
-2. Run `/ace-configure` → Saves org/project to `.claude/settings.json`
+2. Run `/ace-configure` → writes the tracked `.ace/config.json` (orgId/projectId) at the repo root
 3. Remove old config: `rm ~/.ace/config.json` (if it exists)
 
 ### Step 3: Check Current Authentication Status (New Config)
@@ -171,22 +171,13 @@ fi
 
 ### Step 6: Smart Auto-Configure (First Time Only)
 
-**v5.4.18**: First-time login now auto-configures org/project to streamline setup.
+**v5.4.18**: First-time login now auto-configures org/project to streamline setup. Where mods run, the ACE mod
+answers /ace:ace-login itself and starts the device login only when the [Anmelden] button is pressed.
 
 ```bash
-# Check if project is already configured
-CONFIG_FILE=".claude/settings.json"
-OLD_CONFIG="$HOME/.ace/config.json"
+# Is this repo bound? (8.1.0: the one core, never a settings.json read here)
 IS_FIRST_TIME="false"
-
-if [ -f "$CONFIG_FILE" ]; then
-  PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
-  if [ -z "$PROJECT_ID" ]; then
-    IS_FIRST_TIME="true"
-  fi
-else
-  IS_FIRST_TIME="true"
-fi
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --json >/dev/null 2>&1 || IS_FIRST_TIME="true"
 ```
 
 **If already configured** (has ACE_PROJECT_ID):
@@ -247,19 +238,9 @@ Please create a project at https://ace.code-engine.app and run /ace-configure.
 #### Step 6c: Save Configuration
 
 ```bash
-# Ensure .claude directory exists
-mkdir -p .claude
-
-# Write settings.json
-cat > "$CONFIG_FILE" << EOF
-{
-  "env": {
-    "ACE_ORG_ID": "$SELECTED_ORG_ID",
-    "ACE_PROJECT_ID": "$SELECTED_PROJECT_ID",
-    "ACE_VERBOSITY": "detailed"
-  }
-}
-EOF
+# Preview first, then write only after the user confirmed (AskUserQuestion "Write this binding?")
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --bind "$SELECTED_ORG_ID" "$SELECTED_PROJECT_ID"
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --bind "$SELECTED_ORG_ID" "$SELECTED_PROJECT_ID" --yes
 
 echo ""
 echo "✅ ACE configured successfully!"

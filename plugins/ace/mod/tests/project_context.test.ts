@@ -33,7 +33,7 @@ async function runCase(c: any): Promise<any> {
   const res: any = await resolve(`${ROOT}/${c.cwd}`, env, {
     flags: c.flags, remoteMap: gc.projects, organizations: gc.auth?.organizations,
     defaultOrgId: gc.default_org_id, globalProjectId: gc.projectId,
-    read: reader(c.layout, c.unreadable),
+    read: reader(c.layout, c.unreadable), strict: c.strict ?? false,
   })
   if ('message' in res) {
     expect(typeof res.message === 'string' && res.message.length > 0).toBe(true)
@@ -49,7 +49,7 @@ test('project-context fixtures: 70 spec cases plus the plugin extras are loaded'
   expect((EXTRA as any[]).length >= 4).toBe(true)
 })
 
-for (const c of [...(SPEC as any[]), ...(EXTRA as any[])]) {
+for (const c of [...(SPEC as any[]), ...(EXTRA as any[]).map((x: any) => ({ strict: true, ...x }))]) {
   test(`project-context: ${c.name}`, async () => {
     expect(await runCase(c)).toEqual(c.expect)
   })

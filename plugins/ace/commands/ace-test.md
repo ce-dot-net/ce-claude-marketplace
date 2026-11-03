@@ -3,7 +3,7 @@ disable-model-invocation: true
 model: claude-haiku-4-5
 description: Verify ACE plugin is properly configured and operational
 argument-hint:
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
 ---
 
 # ACE Test
@@ -66,8 +66,8 @@ echo ""
 # Test 2: Server Connectivity
 echo "[2/4] Testing ACE server connectivity..."
 
-export ACE_ORG_ID=$(jq -r '.env.ACE_ORG_ID // .orgId // empty' .claude/settings.json 2>/dev/null || echo "")
-export ACE_PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // .projectId // empty' .claude/settings.json 2>/dev/null || echo "")
+# 8.1.0: the one binding lookup (scripts/ace-context, the plugin core)
+CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" && eval "$CTX"
 
 if [ -z "$ACE_PROJECT_ID" ]; then
   echo "❌ No project configured"
@@ -75,9 +75,9 @@ if [ -z "$ACE_PROJECT_ID" ]; then
   exit 1
 fi
 
-# Run doctor command - CLI reads org/project from env vars automatically
+# Run doctor command with the core's ids
 # Filter out CLI update notifications (💡 lines) that break JSON parsing
-RAW_DOCTOR=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli doctor --json 2>&1)
+RAW_DOCTOR=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli doctor --json --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" 2>&1)
 DOCTOR_EXIT_CODE=$?
 DOCTOR_RESULT=$(echo "$RAW_DOCTOR" | grep -v '^💡' | grep -v '^$')
 
@@ -145,7 +145,7 @@ echo "[4/4] Testing basic ACE operations..."
 
 # Test status command - CLI reads org/project from env vars automatically
 # Filter out CLI update notifications (💡 lines) that break JSON parsing
-RAW_STATUS=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli status --json 2>&1)
+RAW_STATUS=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli status --json --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" 2>&1)
 STATUS_EXIT_CODE=$?
 STATUS_RESULT=$(echo "$RAW_STATUS" | grep -v '^💡' | grep -v '^$')
 
@@ -202,7 +202,7 @@ echo "  - Capture learning: /ace:ace-learn"
    ```
    Error: 404 Project not found
    → Project ID doesn't exist or ACE_PROJECT_ID not configured
-   → Action: Verify ACE_PROJECT_ID in .claude/settings.json (.env.ACE_PROJECT_ID)
+   → Action: Run ${CLAUDE_PLUGIN_ROOT}/scripts/ace-context --json (exit 5 = not bound)
    → Fallback: Run /ace:ace-configure to reconfigure
    ```
 
@@ -225,9 +225,9 @@ echo "  - Capture learning: /ace:ace-learn"
 7. **Missing Configuration**
    ```
    Error: Config file not found
-   → ~/.config/ace/config.json (global, device-code token) or .claude/settings.json missing
+   → ~/.config/ace/config.json (global, device-code token) missing, or the repo is not bound (scripts/ace-context exit 5)
    → Action: Run /ace:ace-login (creates ~/.config/ace/config.json with auth.token)
-   →         Run /ace:ace-configure (writes ACE_PROJECT_ID to .claude/settings.json)
+   →         Run /ace:ace-configure (writes the tracked .ace/config.json)
    ```
 
 ## Available ACE Commands
@@ -277,7 +277,7 @@ All ACE operations use ace-cli:
 
 Display the current ACE configuration (ACE 1.5 / ace-cli 4.x model):
 - Auth status: verify with `ace-cli whoami --json` (device-code token at `~/.config/ace/config.json` under `auth.token`)
-- Project ID: `ACE_PROJECT_ID` from `.claude/settings.json` (`.env.ACE_PROJECT_ID`)
+- Project ID: from `scripts/ace-context` (`.ace/config.json`, legacy `.claude/settings.json` env, env, remote map)
 - Server URL override (if set): `ACE_SERVER_URL` environment variable (baked into binary by default)
 - Plugin version (resolved via `$CLAUDE_PLUGIN_ROOT` or `~/.claude/plugins/cache/ce-dot-net-marketplace/ace/<version>/plugin.json`)
 - Learning mode (automatic/manual)
@@ -286,7 +286,7 @@ Display the current ACE configuration (ACE 1.5 / ace-cli 4.x model):
 
 1. **Configuration File Read Error**
    ```
-   Error: Cannot read ~/.config/ace/config.json or .claude/settings.json
+   Error: Cannot read ~/.config/ace/config.json or the repo binding
    → Permission denied or file corrupted
    → Action: Check file permissions (global config should be 600)
    → Fallback: Recreate config with /ace:ace-login and /ace:ace-configure
@@ -350,7 +350,7 @@ Learning Mode: Automatic (hook-based)
 Plugin Version: 7.x
 Config Files:
   - Global: ~/.config/ace/config.json (auth.token — device-code, ace-cli 4.x)
-  - Project: .claude/settings.json (env.ACE_PROJECT_ID, env.ACE_ORG_ID)
+  - Project: .ace/config.json (orgId, projectId), resolved by scripts/ace-context
 
 🎯 Everything looks good! ACE automatic learning is ready.
 ```
@@ -383,7 +383,7 @@ Troubleshooting Steps:
 **Solution**:
 1. Verify auth: `ace-cli whoami --json` (device-code token in `~/.config/ace/config.json` under `auth.token`)
 2. Re-authenticate if needed: `ace-cli login`
-3. Verify project is configured: `ACE_PROJECT_ID` in `.claude/settings.json` (`.env.ACE_PROJECT_ID`)
+3. Verify project is configured: `${CLAUDE_PLUGIN_ROOT}/scripts/ace-context --json`
 4. Check network connectivity
 5. Run full diagnostics: `/ace:ace-doctor`
 

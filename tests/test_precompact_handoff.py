@@ -34,7 +34,7 @@ RENDERED = ('<ace-patterns shown="2" of="9">\n{"similar_patterns": [{"id": '
 
 @pytest.fixture
 def env(tmp_path):
-    return HookEnv(tmp_path, project_id="prj-wpd-cmp-%s" % uuid.uuid4().hex[:8])
+    return HookEnv(tmp_path, project_id="prj_wpd-cmp-%s" % uuid.uuid4().hex[:8])
 
 
 def _event(env, source="compact", session_id=SID):

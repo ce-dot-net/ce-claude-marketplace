@@ -63,56 +63,12 @@ class TestDoctorCheck5ProjectConfig:
         return bash_match.group(1)
 
     def test_doctor_check5_reads_project_settings(self):
-        """
-        Check 5 must read ACE_PROJECT_ID from .claude/settings.json
-        using the jq fallback pattern:
-          .env.ACE_PROJECT_ID // .projectId // empty
-        This ensures it prefers the env var format (new) and falls back
-        to the legacy projectId field.
-        """
+        """8.1.0: Check 5 gets the binding and the status call from the one core (scripts/ace-context --line)."""
         bash = self._extract_check5_bash()
-
-        # Must use the fallback pattern that reads env.ACE_PROJECT_ID first
-        assert ".env.ACE_PROJECT_ID" in bash, (
-            "Check 5 must read .env.ACE_PROJECT_ID from .claude/settings.json. "
-            "Currently it reads projectId from the wrong location."
-        )
-
-        # Verify the full jq fallback pattern
-        assert ".env.ACE_PROJECT_ID // .projectId // empty" in bash, (
-            "Check 5 must use jq fallback: "
-            "'.env.ACE_PROJECT_ID // .projectId // empty' "
-            "to handle both new and legacy config formats."
-        )
+        assert "scripts/ace-context" in bash
+        assert "settings.json" not in bash
 
     def test_doctor_check5_does_not_read_global_projectid(self):
-        """
-        Check 5 must NOT read projectId from the global config
-        (~/.config/ace/config.json). The projectId is per-project
-        and belongs in .claude/settings.json only.
-        """
+        """The global config projectId is never a binding (spec: global_project_id_ignored); Check 5 reads none."""
         bash = self._extract_check5_bash()
-
-        # The PROJECT_ID assignment line must NOT reference global config
-        # Find the line that sets PROJECT_ID
-        project_id_lines = [
-            line for line in bash.splitlines()
-            if "PROJECT_ID" in line and "=" in line and not line.strip().startswith("#")
-        ]
-        assert len(project_id_lines) >= 1, (
-            "Check 5 must have a PROJECT_ID assignment line"
-        )
-
-        for line in project_id_lines:
-            assert "config.json" not in line, (
-                f"Check 5 must NOT read PROJECT_ID from global config.json. "
-                f"Found: {line.strip()}"
-            )
-            assert "XDG_HOME" not in line and "XDG_CONFIG_HOME" not in line, (
-                f"Check 5 must NOT use XDG paths for PROJECT_ID. "
-                f"Found: {line.strip()}"
-            )
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+        assert "config.json" not in bash and "projectId" not in bash
