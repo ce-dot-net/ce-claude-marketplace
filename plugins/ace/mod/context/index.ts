@@ -1,16 +1,16 @@
 // The one core of the mod (8.1.0): binding, verify, export, adopt, the context log row. Every handler and every
 // command takes its ids from here; nothing else reads settings.json, .ace/config.json or ACE_* binding env.
 // Mirror: shared-hooks/utils/ace_project_context.py (same states, same lines: ./lines.ts).
-import { git, normPath, originUrl, normalizeRemote, resolve, type Reader, type Result } from './resolve.ts'
-import { LINES, ADOPT_LINE } from './lines.ts'
-import { REPO_WRITE_SH, REPO_WRITE_WHY } from '../lib/sh.ts'
+import { dirname, git, join, normPath, originUrl, normalizeRemote, resolve, type Reader, type Result } from './resolve.ts'
+import { LINES, ADOPT_LINE, WARN_LINES } from './lines.ts'
+import { REALPATH_SH, REPO_WRITE_SH, REPO_WRITE_WHY } from '../lib/sh.ts'
 
 export type State = 'ok' | 'unbound' | 'not_logged_in' | 'expired' | 'project_not_found' | 'no_access' | 'server_error'
   | 'cli_missing' | 'config_refused' | 'config_invalid'
 export type Ctx = Result & { root: string, mainRoot: string | null, gitRoot: string | null, via: 'resolver' | 'cli' }
 export type Env = { HOME?: string, ACE_ORG_ID?: string, ACE_PROJECT_ID?: string, ACE_CONTEXT?: string, ACE_CONFIG_PATH?: string,
   XDG_CONFIG_HOME?: string, ACE_AUTO_ADOPT?: string, ACE_CONTEXT_ENGINE?: string, ACE_BIND_ROOT?: string }
-export { LINES, ADOPT_LINE }
+export { LINES, ADOPT_LINE, WARN_LINES }
 export const PROBLEM_STATES: State[] = ['unbound', 'not_logged_in', 'expired', 'project_not_found', 'no_access', 'server_error',
   'cli_missing', 'config_refused', 'config_invalid']
 export const FILE_SOURCES = ['repo_file', 'settings_file'], ADOPT_SOURCES = ['settings_file', 'remote_map']
@@ -207,13 +207,96 @@ export async function writeBinding($: any, main: string, orgId: string, projectI
   }
   return { path, gitignore: await ignored() ? 'still_ignored' : 'fixed' }
 }
+// ---- cli 4.4.1: `ace-cli init --json` writes the binding (spec §9); our writer only for a CLI without it ----
+export type InitOut = { path: string, gitignore: string, warnings: string[], mainCheckout?: boolean, shadowedBy?: string, via: 'cli' | 'fallback' }
+export type CliRun = (argv: string[], o?: { cwd?: string, timeoutMs?: number }) => Promise<any>
+// `ace-cli init --json --fix-gitignore [--org --project]` in cwd (every caller is past a confirm press, or auto-adopt).
+// Its JSON result; null = the CLI has no init --json (missing, unknown command, no JSON: feature-detected like the
+// context seam); WriteRefused = it refused (exit 1, stderr {"error":{...}}: symlink, outside the root), final.
+// ids null: the CLI reuses the existing binding (a refused file: it strips the secrets where that file is).
+export async function cliInit(cli: CliRun, cwd: string, ids: { orgId: string, projectId: string } | null): Promise<InitOut | null> {
+  const r = await cli(['init', '--json', '--fix-gitignore', ...(ids ? ['--org', ids.orgId, '--project', ids.projectId] : [])], { cwd, timeoutMs: 15_000 })
+  let j: any = null
+  try { j = JSON.parse(String(r?.stdout ?? '')) } catch { /* no JSON */ }
+  if (r?.exitCode === 0 && j && typeof j === 'object' && typeof j.path === 'string')
+    return { ...j, warnings: Array.isArray(j.warnings) ? j.warnings : [], via: 'cli' }
+  for (const line of String(r?.stderr ?? '').split('\n')) {
+    let e: any
+    try { e = JSON.parse(line) } catch { continue }
+    if (e && typeof e.error === 'object' && e.error) throw new WriteRefused(String(e.error.message ?? e.error.code ?? 'refused'))
+  }
+  return null
+}
+// realpath through the shell ($.fs has none); the path as given when it does not resolve (the in-memory test host).
+export const realpathVia = (run: Run) => async (p: string) => String((await run(['/bin/sh', '-c', REALPATH_SH, 'sh', p], { timeoutMs: 5000 }).catch(() => null))?.stdout ?? '').trim() || p
+// Where init writes (spec §9, mirror of ace_project_context.init_target): a linked worktree's MAIN checkout, only when
+// the topology verifies like git does it; else the worktree root, untrusted. Plain repo / submodule: its root; no git: cwd.
+export async function initTarget(cwd: string, read: Reader, realpath: (p: string) => Promise<string> = async p => p) {
+  const rp = async (p: string) => normPath(await realpath(p))
+  const quiet = async (p: string) => { try { return await read(p) } catch { return null } }
+  const exists = async (p: string) => { try { return await read(p) !== null } catch { return true } }
+  let d = normPath(cwd)
+  for (;;) {
+    const dotgit = join(d, '.git')
+    let txt: string | null
+    try { txt = await read(dotgit) } catch { return { root: d, mainCheckout: false, untrusted: false } }  // .git dir
+    if (txt !== null) {
+      const m = /^\s*gitdir:\s*(.+?)\s*$/.exec(txt)
+      if (!m) return { root: d, mainCheckout: false, untrusted: false }
+      const gitdir = join(d, m[1])
+      const cd = await quiet(join(gitdir, 'commondir'))
+      if (cd === null) return { root: d, mainCheckout: false, untrusted: false }  // submodule
+      const common = join(gitdir, cd.trim())
+      const back = await quiet(join(gitdir, 'gitdir'))
+      const ok = await rp(gitdir) === await rp(join(common, `worktrees/${gitdir.split('/').pop()}`))
+        && back !== null && await rp(join(gitdir, back.trim())) === await rp(dotgit)
+        && await exists(join(common, 'HEAD')) && await exists(join(common, 'config'))
+        && (await rp(common)).split('/').pop() === '.git'
+      return ok ? { root: dirname(common), mainCheckout: true, untrusted: false } : { root: d, mainCheckout: false, untrusted: true }
+    }
+    const parent = dirname(d)
+    if (parent === d) return { root: normPath(cwd), mainCheckout: false, untrusted: false }
+    d = parent
+  }
+}
+// The first worktree-local .ace/config.json on the walk-up from cwd to the worktree root.
+async function findShadow($: any, cwd: string): Promise<string | null> {
+  const read = fsReader($), top = (await git(normPath(cwd), read)).root
+  for (let d = normPath(cwd); ; d = dirname(d)) {
+    const f = `${d}/.ace/config.json`
+    if (typeof await read(f).catch(() => null) === 'string') return f
+    if (d === top || dirname(d) === d) return null
+  }
+}
+// Our writer for a CLI without `init --json`: the same target, warnings and shadowedBy as the CLI.
+// It can go once the CLI floor (the pin AND an accepted global ace-cli) is >= 4.4.1.
+export async function fallbackInit($: any, cwd: string, orgId: string, projectId: string, run: Run,
+  refused?: (what: string, reason: string) => Promise<unknown>): Promise<InitOut> {
+  const t = await initTarget(cwd, fsReader($), realpathVia(run))
+  const w = await writeBinding($, t.root, orgId, projectId, run, refused)
+  const shadow = t.mainCheckout ? await findShadow($, cwd) : null
+  const warnings = [...(t.mainCheckout ? ['written_to_main_checkout'] : []), ...(t.untrusted ? ['worktree_topology_untrusted'] : []),
+    ...(shadow ? ['worktree_file_shadows_main'] : [])]
+  return { ...w, warnings, via: 'fallback', ...(t.mainCheckout ? { mainCheckout: true } : {}), ...(shadow ? { shadowedBy: shadow } : {}) }
+}
+// The binding write for cwd: the CLI's init --json, else our writer. Throws WriteRefused (logged through `refused`).
+export async function bindInit($: any, cwd: string, orgId: string, projectId: string, cli: CliRun, run: Run,
+  refused: (what: string, reason: string) => Promise<unknown> = async () => {}): Promise<InitOut> {
+  if (!ORG_ID.test(orgId) || !PRJ_ID.test(projectId)) throw new Error('ids must look like org_... / prj_...')
+  let r: InitOut | null
+  try { r = await cliInit(cli, cwd, { orgId, projectId }) } catch (e) { await refused('.ace/config.json', String((e as Error).message)); throw e }
+  return r ?? fallbackInit($, cwd, orgId, projectId, run, refused)
+}
 // Automatic adoption: a settings_file / remote_map binding becomes a tracked .ace/config.json in the main checkout.
-// Only in git, only when missing, never for flag/env, opt-out ACE_AUTO_ADOPT=0.
-export async function adopt($: any, c: Ctx, env: Env, run: Run, refused?: (what: string, reason: string) => Promise<unknown>) {
+// Only in git, only when missing, never for flag/env, never on an untrusted worktree topology (checked BEFORE the
+// write: the CLI would already have written to the worktree root), opt-out ACE_AUTO_ADOPT=0.
+export async function adopt($: any, c: Ctx, env: Env, cwd: string, cli: CliRun, run: Run, refused?: (what: string, reason: string) => Promise<unknown>) {
   if (env.ACE_AUTO_ADOPT === '0' || !c.bound || !ADOPT_SOURCES.includes(c.source)) return null
-  const main = c.mainRoot ?? c.gitRoot
-  if (!main || await $.fs.exists(`${main}/.ace/config.json`).catch(() => true)) return null
-  try { return await writeBinding($, main, c.orgId, c.projectId, run, refused) } catch { return null }
+  if (!(c.mainRoot ?? c.gitRoot)) return null
+  const t = await initTarget(cwd, fsReader($), realpathVia(run))
+  if (t.untrusted) return { path: null, warnings: ['worktree_topology_untrusted'] }
+  if (await $.fs.exists(`${t.root}/.ace/config.json`).catch(() => true)) return null
+  try { return await bindInit($, cwd, c.orgId, c.projectId, cli, run, refused) } catch { return null }
 }
 export async function untracked(main: string, run: Run) {
   return (await run(['git', '-C', main, 'ls-files', '--error-unmatch', '.ace/config.json']))?.exitCode !== 0

@@ -46,8 +46,8 @@ export function normPath(p: string): string {
   }
   return '/' + out.join('/')
 }
-const join = (a: string, b: string) => normPath(b.startsWith('/') ? b : `${a}/${b}`)
-const dirname = (p: string) => normPath(p + '/..')
+export const join = (a: string, b: string) => normPath(b.startsWith('/') ? b : `${a}/${b}`)
+export const dirname = (p: string) => normPath(p + '/..')
 
 async function quiet(read: Reader, p: string): Promise<string | null> {
   try { return await read(p) } catch { return null }

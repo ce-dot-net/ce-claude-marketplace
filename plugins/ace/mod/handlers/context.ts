@@ -1,6 +1,6 @@
 // The session's context step (8.1.0), started by session.start: export the core's ids, adopt a legacy binding,
 // remember the remote, then ONE background `status` (verify), the ONE `context` row, the ▼ status and the band.
-import { ADOPT_LINE, type Ctx, type State, adopt, cliIds, contextRow, exportEnv, localState, problemLine, remember, untracked, verify } from '../context/index.ts'
+import { ADOPT_LINE, WARN_LINES, type Ctx, type State, adopt, cliIds, contextRow, exportEnv, localState, problemLine, remember, untracked, verify } from '../context/index.ts'
 import { run, writePrivate } from '../io/fs.ts'
 import { cliRun } from '../io/cli.ts'
 import { nowIso } from '../io/log.ts'
@@ -58,8 +58,9 @@ export async function startContext($: any, L: Load, cwd: string) {
     const refused = async (what: string, reason: string) => contextLog($, c, { timestamp: await nowIso($), event: 'write_refused', what, reason, chain: 'mod' }, 'ok')
     const root = await dataRoot($)
     await remember($, c, cwd, root, (p, t) => writePrivate($, p, t), now).catch(() => false)
-    const a = await adopt($, c, L.env0 ?? {}, git, refused)
-    if (a && await untracked(c.mainRoot ?? c.gitRoot ?? c.root, git)) $.ui.log(ADOPT_LINE)
+    const a = await adopt($, c, L.env0 ?? {}, cwd, (argv, o) => cliRun($, null, argv, o), git, refused)
+    if (a && !a.path) $.ui.log(WARN_LINES.worktree_topology_untrusted)
+    else if (a?.path && await untracked(a.path.replace(/\/\.ace\/config\.json$/, ''), git)) $.ui.log(ADOPT_LINE)
     const local = localState(c)
     if (local) {
       await publish($, L, c, local)

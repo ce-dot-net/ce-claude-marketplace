@@ -215,6 +215,15 @@ Show the user the output (the file and, when `.gitignore` ignores it, the diff) 
 
 Nothing is staged or committed. Tell the user to commit `.ace/config.json`: then every clone and worktree is bound.
 
+It writes through `ace-cli init --json --fix-gitignore` (in a linked worktree: the MAIN checkout's file). Show every
+`ACE ▼` line it prints. When it names a worktree-local `.ace/config.json` that overrides the main checkout's binding
+(`--remove-shadow <path>`), **use AskUserQuestion** "Remove that file?" with "Entfernen" / "Keep"; only after
+"Entfernen":
+
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --remove-shadow "$SHADOW_PATH"
+```
+
 ### Step 10: Verify Configuration
 
 ```bash

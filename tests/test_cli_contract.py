@@ -34,6 +34,7 @@ FLAGS = {
     "learn": ["--transcript", "--stdin", "--no-stream", "--timeout", "--verbosity", "--retrieval-id", "--applied-log-ids"],
     "whoami": [],
     "projects": [],
+    "init": ["--fix-gitignore"],  # bind/configure/auto-adopt (ace_project_context.cli_init, mod context/index.ts cliInit)
 }
 GLOBAL_FLAGS = ["--json", "--version", "--org", "--project"]
 
@@ -245,3 +246,95 @@ def test_notifier_text_still_matches_our_filter():
     checker = CLI_JS.parent / "utils" / "version-checker.js"
     t = checker.read_text()
     assert "Update available" in t and "npm install -g" in t
+
+
+# ---- 4.4.1: `ace-cli init --json` write target (spec §9, fixture init-target.json), the same as our fallback ----
+
+def _init(cwd, home, *extra):
+    env = {"HOME": str(home), "XDG_CONFIG_HOME": str(home / "xdg"), "PATH": os.pathsep.join([os.path.dirname(NODE), "/usr/bin", "/bin"]),
+           "NO_COLOR": "1"}
+    return subprocess.run([NODE, str(CLI_JS), "init", "--json", "--org", "org_a", "--project", "prj_a", *extra],
+                          capture_output=True, text=True, timeout=60, cwd=str(cwd), env=env)
+
+
+def _init_cases():
+    return json.loads((PLUGIN / "tests-fixtures/project-context/init-target.json").read_text())["cases"]
+
+
+@pytest.mark.parametrize("case", _init_cases(), ids=[c["name"] for c in _init_cases()])
+def test_cli_init_target_matches_the_spec_and_our_fallback(tmp_path, case):
+    from test_init_target import build, check
+    base = build(tmp_path / "a", case["layout"])
+    p = _init(base / case["cwd"], tmp_path / "home")
+    assert p.returncode == 0, p.stderr[-500:]
+    check(base, case, json.loads(p.stdout))
+
+
+def _real_worktree(tmp_path):
+    main = Path(os.path.realpath(tmp_path)) / "main"
+    main.mkdir()
+    g = lambda *a: subprocess.run(["git", "-C", str(main), *a], capture_output=True, text=True, check=True)
+    g("init", "-q")
+    g("-c", "user.email=t@example.invalid", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "i")
+    (main / ".gitignore").write_text(".ace/\n")
+    g("worktree", "add", "-q", str(main.parent / "wt"), "-b", "wt")
+    return main, main.parent / "wt"
+
+
+def test_cli_init_in_a_real_worktree_writes_the_main_checkout_and_fixes_gitignore(tmp_path):
+    main, wt = _real_worktree(tmp_path)
+    j = json.loads(_init(wt, tmp_path / "home", "--fix-gitignore").stdout)
+    assert j["path"] == str(main / ".ace/config.json") and j["mainCheckout"] is True and j["gitignore"] == "fixed"
+    assert "written_to_main_checkout" in j["warnings"] and not (wt / ".ace").exists()
+    assert (main / ".gitignore").read_text().splitlines() == [".ace/*", "!.ace/config.json"]
+
+
+def test_cli_init_reports_the_shadowing_worktree_file_and_leaves_it(tmp_path):
+    main, wt = _real_worktree(tmp_path)
+    (wt / ".ace").mkdir()
+    (wt / ".ace/config.json").write_text('{"orgId": "org_a", "projectId": "prj_old"}')
+    j = json.loads(_init(wt, tmp_path / "home").stdout)
+    assert j["shadowedBy"] == str(wt / ".ace/config.json") and "worktree_file_shadows_main" in j["warnings"]
+    assert "prj_old" in (wt / ".ace/config.json").read_text()
+
+
+@pytest.mark.parametrize("what", ["ace_dir", "config", "gitignore"])
+def test_cli_init_refuses_symlinks_exit_1_json(tmp_path, what):
+    """The refusal the plugin treats as final (no fallback write): exit 1, stderr {"error":{"message"}} naming the path."""
+    main, wt = _real_worktree(tmp_path)
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    if what == "ace_dir":
+        (main / ".ace").symlink_to(victim)
+    elif what == "config":
+        (main / ".ace").mkdir()
+        (main / ".ace/config.json").symlink_to(victim / "x.json")
+    else:
+        (victim / "gi").write_text(".ace/\n")
+        (main / ".gitignore").unlink()
+        (main / ".gitignore").symlink_to(victim / "gi")
+    p = _init(wt, tmp_path / "home", "--fix-gitignore")
+    if what == "gitignore":  # git does not read a symlinked .gitignore: nothing ignored, the target is never written
+        assert p.returncode == 0 and (victim / "gi").read_text() == ".ace/\n"
+        return
+    assert p.returncode == 1 and "symlink" in json.loads(p.stderr.strip().splitlines()[-1])["error"]["message"]
+    assert not (victim / "x.json").exists() and [f.name for f in victim.iterdir()] in ([], ["gi"])
+
+
+def test_python_chain_binds_through_the_real_cli(tmp_path, monkeypatch):
+    """ace_project_context.bind with the real pinned CLI: via cli, the main checkout, the shadow left for [Entfernen]."""
+    import sys
+    sys.path.insert(0, str(PLUGIN / "shared-hooks/utils"))
+    import ace_cli
+    import ace_project_context as apc
+    monkeypatch.setattr(ace_cli, "_cmd", lambda *a: [NODE, str(CLI_JS), *a])
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    main, wt = _real_worktree(tmp_path)
+    (wt / "src").mkdir()
+    r = apc.bind(str(wt / "src"), "org_a", "prj_a")
+    assert r["via"] == "cli" and r["path"] == str(main / ".ace/config.json") and r["mainCheckout"] is True
+    (wt / ".ace").mkdir()
+    (wt / ".ace/config.json").write_text("{}")
+    r = apc.bind(str(wt / "src"), "org_a", "prj_a")
+    assert r["shadowedBy"] == str(wt / ".ace/config.json")
+    assert apc.remove_shadow(str(wt / "src"), r["shadowedBy"]) and not (wt / ".ace/config.json").exists()

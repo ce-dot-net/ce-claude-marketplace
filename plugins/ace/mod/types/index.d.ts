@@ -20,8 +20,9 @@ export type AcePending = {
   orgId?: string
   projectId?: string
 } | null
+export type AceShadow = { path: string; root: string } | null  // band [Entfernen] (cli 4.4.1 worktree_file_shadows_main)
 declare module 'claude-code' {
   interface PluginState {
-    ace: { band: AceBand; pending: AcePending }
+    ace: { band: AceBand; pending: AcePending; shadow: AceShadow }
   }
 }

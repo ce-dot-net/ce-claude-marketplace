@@ -251,7 +251,9 @@ def test_lines_match_the_mod():
     text = (PLUGIN / 'mod/context/lines.ts').read_text()
     body = text.split('export const LINES = ', 1)[1].split('\nexport const ADOPT_LINE = ')
     assert json.loads(body[0]) == apc.LINES
-    assert json.loads(body[1].strip()) == apc.ADOPT_LINE
+    adopt, warn = body[1].split('\nexport const WARN_LINES = ')
+    assert json.loads(adopt.strip()) == apc.ADOPT_LINE
+    assert json.loads(warn) == apc.WARN_LINES  # the `ace-cli init` warnings (shadowing file, untrusted topology)
 
 
 # ---- security review: no repo write ever follows a symlink out of the main checkout ----

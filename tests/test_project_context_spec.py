@@ -97,7 +97,8 @@ def test_default_reader_on_real_fs(tmp_path):
                    'path': str(tmp_path / '.ace/config.json')}
 
 
-@pytest.mark.parametrize('src,dst', [('cases', 'project_context_cases'), ('extra-cases', 'project_context_extra')])
+@pytest.mark.parametrize('src,dst', [('cases', 'project_context_cases'), ('extra-cases', 'project_context_extra'),
+                                     ('init-target', 'init_target_cases')])
 def test_ts_fixture_wrappers_match_json(src, dst):
     """Mods load only .ts, so the TS runner imports generated wrappers. Regenerate: see the wrapper's header."""
     text = (REPO / f'plugins/ace/mod/tests/fixtures/{dst}.ts').read_text()
