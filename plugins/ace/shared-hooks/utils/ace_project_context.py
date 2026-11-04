@@ -83,8 +83,10 @@ def _git(cwd, read, realpath=os.path.realpath):
     The one worktree topology check of the Python chain (resolver, log root, init target, auto-adopt): a linked
     worktree's main checkout counts only when it verifies like git does it, because commondir is untrusted input:
     realpath(gitdir) == <common>/worktrees/<name>, <gitdir>/gitdir points back at this .git file, <common> has HEAD
-    and config, and is a `.git` dir (a bare repo has no main checkout). Else the worktree's own root, no main
-    checkout, no common config (no remote key from a forged one), untrusted=True. Mirror: mod/context/resolve.ts git()."""
+    and config, is a `.git` dir (a bare repo has no main checkout), and (e, cli 4.4.2) this .git file is no symlink (one
+    to a foreign worktree's .git passes the rest; tested via realpath, the one injected FS hook). Else the worktree's
+    own root, no main checkout, no common config (no remote key from a forged one), untrusted=True; spec §9 (a)-(e).
+    Mirror: mod/context/resolve.ts git()."""
     d = cwd
     while True:
         dotgit = os.path.join(d, '.git')
@@ -106,7 +108,8 @@ def _git(cwd, read, realpath=os.path.realpath):
             ok = (rp(gitdir) == rp(os.path.join(common, 'worktrees', os.path.basename(gitdir)))
                   and back is not None and rp(os.path.join(gitdir, back.strip())) == rp(dotgit)
                   and _exists(read, os.path.join(common, 'HEAD')) and _exists(read, os.path.join(common, 'config'))
-                  and os.path.basename(rp(common)) == '.git')
+                  and os.path.basename(rp(common)) == '.git'
+                  and rp(dotgit) == os.path.join(rp(d), '.git'))
             if not ok:
                 return d, None, None, True
             return d, os.path.dirname(common), os.path.join(common, 'config'), False

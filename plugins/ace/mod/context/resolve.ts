@@ -63,8 +63,10 @@ async function quiet(read: Reader, p: string): Promise<string | null> {
 // The one worktree topology check of the mod (resolver, log root, init target, auto-adopt, the CLI seam): a linked
 // worktree's main checkout counts only when it verifies like git does it, because commondir is untrusted input:
 // realpath(gitdir) == <common>/worktrees/<name>, <gitdir>/gitdir points back at this .git file, <common> has HEAD and
-// config, and is a `.git` dir (a bare repo has no main checkout). Else the worktree's own root, no main checkout, no
-// common config (no remote key from a forged one), untrusted. Mirror: ace_project_context._git.
+// config, is a `.git` dir (a bare repo has no main checkout), and (e, cli 4.4.2) this .git file is no symlink (one to a
+// foreign worktree's .git passes the rest; tested via realpath, so callers that need (e) pass a real one). Else the
+// worktree's own root, no main checkout, no common config (no remote key from a forged one), untrusted; spec §9 (a)-(e).
+// Mirror: ace_project_context._git.
 export type Git = { root: string | null, mainRoot: string | null, config: string | null, untrusted: boolean }
 export async function git(cwd: string, read: Reader, realpath: (p: string) => string | Promise<string> = p => p): Promise<Git> {
   const rp = async (p: string) => normPath(await realpath(p))
@@ -86,6 +88,7 @@ export async function git(cwd: string, read: Reader, realpath: (p: string) => st
         && back !== null && await rp(join(gitdir, back.trim())) === await rp(dotgit)
         && await exists(join(cd, 'HEAD')) && await exists(join(cd, 'config'))
         && (await rp(cd)).split('/').pop() === '.git'
+        && await rp(dotgit) === join(await rp(d), '.git')
       if (!ok) return { root: d, mainRoot: null, config: null, untrusted: true }
       return { root: d, mainRoot: dirname(cd), config: join(cd, 'config'), untrusted: false }
     }

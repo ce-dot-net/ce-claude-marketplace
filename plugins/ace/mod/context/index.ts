@@ -296,7 +296,7 @@ export async function untracked(main: string, run: Run) {
 // Per-machine remote map (shared with the Python chain): a file-bound repo teaches its origin.
 export async function remember($: any, c: Ctx, cwd: string, dataRoot: string, write: (path: string, text: string) => Promise<unknown>, now: number) {
   if (!c.bound || !FILE_SOURCES.includes(c.source)) return false
-  const g = await git(normPath(cwd), fsReader($))
+  const g = await git(normPath(cwd), fsReader($), realpathVia((argv, init) => $.process.run(argv, init)))  // §9 (e) needs a real realpath
   if (!g.config) return false
   let cfg: string | null = null
   try { cfg = await fsReader($)(g.config) } catch { return false }

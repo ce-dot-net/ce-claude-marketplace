@@ -61,8 +61,9 @@
    "main/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"proj_a\"}",
    "wt/.git": "gitdir: ../main/.git/worktrees/wt\n",
    "main/.git/worktrees/wt/commondir": "../..\n",
-   "main/.git/worktrees/wt/gitdir": "x\n",
-   "wt/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"proj_wt\"}"
+   "main/.git/worktrees/wt/gitdir": "../../../../wt/.git\n",
+   "wt/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"proj_wt\"}",
+   "main/.git/HEAD": "ref: refs/heads/main\n"
   },
   "cwd": "wt",
   "env": {},
@@ -83,8 +84,9 @@
    "main/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"proj_a\"}",
    "wt/.git": "gitdir: ../main/.git/worktrees/wt\n",
    "main/.git/worktrees/wt/commondir": "../..\n",
-   "main/.git/worktrees/wt/gitdir": "x\n",
-   "wt/src": null
+   "main/.git/worktrees/wt/gitdir": "../../../../wt/.git\n",
+   "wt/src": null,
+   "main/.git/HEAD": "ref: refs/heads/main\n"
   },
   "cwd": "wt/src",
   "env": {},
@@ -105,7 +107,9 @@
    "main/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"proj_main\"}",
    "main/.claude/worktrees/x/.git": "gitdir: ../../../.git/worktrees/x\n",
    "main/.git/worktrees/x/commondir": "../..\n",
-   "main/.claude/worktrees/x/src": null
+   "main/.claude/worktrees/x/src": null,
+   "main/.git/worktrees/x/gitdir": "../../../.claude/worktrees/x/.git\n",
+   "main/.git/HEAD": "ref: refs/heads/main\n"
   },
   "cwd": "main/.claude/worktrees/x/src",
   "env": {},
@@ -126,7 +130,9 @@
    "main/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"proj_main\"}",
    "main/.claude/worktrees/x/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"proj_x\"}",
    "main/.claude/worktrees/x/.git": "gitdir: ../../../.git/worktrees/x\n",
-   "main/.git/worktrees/x/commondir": "../..\n"
+   "main/.git/worktrees/x/commondir": "../..\n",
+   "main/.git/worktrees/x/gitdir": "../../../.claude/worktrees/x/.git\n",
+   "main/.git/HEAD": "ref: refs/heads/main\n"
   },
   "cwd": "main/.claude/worktrees/x",
   "env": {},
@@ -146,7 +152,9 @@
    "main/.git/config": "[core]\n\trepositoryformatversion = 0\n",
    "main/.ace/config.json": "{\"orgId\": \"org_a\", \"projectId\": \"proj_a\"}",
    "views/agent-1/.git": "gitdir: ../../main/.git/worktrees/agent-1\n",
-   "main/.git/worktrees/agent-1/commondir": "../..\n"
+   "main/.git/worktrees/agent-1/commondir": "../..\n",
+   "main/.git/worktrees/agent-1/gitdir": "../../../../views/agent-1/.git\n",
+   "main/.git/HEAD": "ref: refs/heads/main\n"
   },
   "cwd": "views/agent-1",
   "env": {},
@@ -409,7 +417,8 @@
    "main/.git/config": "[core]\n\trepositoryformatversion = 0\n[remote \"origin\"]\n\turl = git@github.com-ce:ce-dot-net/ace-web.git\n\tfetch = +refs/heads/*:refs/remotes/origin/*\n",
    "wt/.git": "gitdir: ../main/.git/worktrees/wt\n",
    "main/.git/worktrees/wt/commondir": "../..\n",
-   "main/.git/worktrees/wt/gitdir": "x\n"
+   "main/.git/worktrees/wt/gitdir": "../../../../wt/.git\n",
+   "main/.git/HEAD": "ref: refs/heads/main\n"
   },
   "cwd": "wt",
   "env": {},
@@ -752,8 +761,9 @@
    "main/.claude/settings.json": "{\"env\": {\"ACE_ORG_ID\": \"org_s\", \"ACE_PROJECT_ID\": \"proj_s\"}}",
    "wt/.git": "gitdir: ../main/.git/worktrees/wt\n",
    "main/.git/worktrees/wt/commondir": "../..\n",
-   "main/.git/worktrees/wt/gitdir": "x\n",
-   "wt/src": null
+   "main/.git/worktrees/wt/gitdir": "../../../../wt/.git\n",
+   "wt/src": null,
+   "main/.git/HEAD": "ref: refs/heads/main\n"
   },
   "cwd": "wt/src",
   "env": {},
@@ -1436,8 +1446,9 @@
    "main/.ace/config.json": "{\"projectId\": \"proj_main\"}",
    "wt/.git": "gitdir: ../main/.git/worktrees/wt\n",
    "main/.git/worktrees/wt/commondir": "../..\n",
-   "main/.git/worktrees/wt/gitdir": "x\n",
-   "wt/.ace/config.json": "{\"orgId\": \"org_wt\"}"
+   "main/.git/worktrees/wt/gitdir": "../../../../wt/.git\n",
+   "wt/.ace/config.json": "{\"orgId\": \"org_wt\"}",
+   "main/.git/HEAD": "ref: refs/heads/main\n"
   },
   "cwd": "wt",
   "env": {},
@@ -1458,8 +1469,9 @@
    "main/.ace/config.json": "{\"orgId\": \"org_m\"}",
    "wt/.git": "gitdir: ../main/.git/worktrees/wt\n",
    "main/.git/worktrees/wt/commondir": "../..\n",
-   "main/.git/worktrees/wt/gitdir": "x\n",
-   "wt/.ace/config.json": "{\"orgId\": \"org_wt\"}"
+   "main/.git/worktrees/wt/gitdir": "../../../../wt/.git\n",
+   "wt/.ace/config.json": "{\"orgId\": \"org_wt\"}",
+   "main/.git/HEAD": "ref: refs/heads/main\n"
   },
   "cwd": "wt",
   "env": {
@@ -1745,6 +1757,284 @@
    "projectId": "proj_r",
    "source": "remote_map",
    "path": null
+  }
+ },
+ {
+  "name": "forged commondir: foreign .git (HEAD+config) with binding is NOT used, stays at worktree root, warning worktree_topology_untrusted",
+  "layout": {
+   "victim/.git/HEAD": "ref: refs/heads/main\n",
+   "victim/.git/config": "[core]\n\trepositoryformatversion = 0\n[remote \"origin\"]\n\turl = git@github.com:victim/repo.git\n",
+   "victim/.ace/config.json": "{\"orgId\": \"org_victim\", \"projectId\": \"proj_victim\"}",
+   "victim/.claude/settings.json": "{\"env\": {\"ACE_ORG_ID\": \"org_victim\", \"ACE_PROJECT_ID\": \"proj_victim\"}}",
+   "evil/.git": "gitdir: .gd\n",
+   "evil/.gd/commondir": "../../victim/.git\n",
+   "evil/src": null
+  },
+  "cwd": "evil/src",
+  "env": {},
+  "flags": {},
+  "globalConfig": {
+   "projects": {
+    "github.com/victim/repo": {
+     "orgId": "org_victim",
+     "projectId": "proj_victim"
+    }
+   }
+  },
+  "expect": {
+   "bound": false,
+   "reason": "no_binding",
+   "warnings": [
+    "worktree_topology_untrusted"
+   ],
+   "tried": [
+    {
+     "source": "repo_file",
+     "path": "evil/src/.ace/config.json",
+     "key": null
+    },
+    {
+     "source": "repo_file",
+     "path": "evil/.ace/config.json",
+     "key": null
+    },
+    {
+     "source": "settings_file",
+     "path": "evil/src/.claude/settings.json",
+     "key": null
+    },
+    {
+     "source": "settings_file",
+     "path": "evil/.claude/settings.json",
+     "key": null
+    },
+    {
+     "source": "env",
+     "path": null,
+     "key": null
+    },
+    {
+     "source": "remote_map",
+     "path": null,
+     "key": null
+    }
+   ]
+  }
+ },
+ {
+  "name": "bare-repo worktree: common is not named .git, no main checkout, binding next to bare repo NOT used",
+  "layout": {
+   "srv/bare.git/HEAD": "ref: refs/heads/main\n",
+   "srv/bare.git/config": "[core]\n\tbare = true\n",
+   "srv/bare.git/worktrees/wt/commondir": "../..\n",
+   "srv/bare.git/worktrees/wt/gitdir": "../../../../wt/.git\n",
+   "srv/.ace/config.json": "{\"orgId\": \"org_victim\", \"projectId\": \"proj_srv\"}",
+   "wt/.git": "gitdir: ../srv/bare.git/worktrees/wt\n"
+  },
+  "cwd": "wt",
+  "env": {},
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "no_binding",
+   "warnings": [
+    "worktree_topology_untrusted"
+   ],
+   "tried": [
+    {
+     "source": "repo_file",
+     "path": "wt/.ace/config.json",
+     "key": null
+    },
+    {
+     "source": "settings_file",
+     "path": "wt/.claude/settings.json",
+     "key": null
+    },
+    {
+     "source": "env",
+     "path": null,
+     "key": null
+    },
+    {
+     "source": "remote_map",
+     "path": null,
+     "key": null
+    }
+   ]
+  }
+ },
+ {
+  "name": "worktree back-pointer names another checkout: untrusted, main binding NOT used",
+  "layout": {
+   "main/.git/HEAD": "ref: refs/heads/main\n",
+   "main/.git/config": "[core]\n",
+   "main/.ace/config.json": "{\"orgId\": \"org_victim\", \"projectId\": \"proj_main\"}",
+   "main/.git/worktrees/wt/commondir": "../..\n",
+   "main/.git/worktrees/wt/gitdir": "../../../../other/.git\n",
+   "wt/.git": "gitdir: ../main/.git/worktrees/wt\n"
+  },
+  "cwd": "wt",
+  "env": {},
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "no_binding",
+   "warnings": [
+    "worktree_topology_untrusted"
+   ],
+   "tried": [
+    {
+     "source": "repo_file",
+     "path": "wt/.ace/config.json",
+     "key": null
+    },
+    {
+     "source": "settings_file",
+     "path": "wt/.claude/settings.json",
+     "key": null
+    },
+    {
+     "source": "env",
+     "path": null,
+     "key": null
+    },
+    {
+     "source": "remote_map",
+     "path": null,
+     "key": null
+    }
+   ]
+  }
+ },
+ {
+  "name": "worktree common lacks HEAD: untrusted, main binding NOT used",
+  "layout": {
+   "main/.git/config": "[core]\n",
+   "main/.ace/config.json": "{\"orgId\": \"org_victim\", \"projectId\": \"proj_main\"}",
+   "main/.git/worktrees/wt/commondir": "../..\n",
+   "main/.git/worktrees/wt/gitdir": "../../../../wt/.git\n",
+   "wt/.git": "gitdir: ../main/.git/worktrees/wt\n"
+  },
+  "cwd": "wt",
+  "env": {},
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "no_binding",
+   "warnings": [
+    "worktree_topology_untrusted"
+   ],
+   "tried": [
+    {
+     "source": "repo_file",
+     "path": "wt/.ace/config.json",
+     "key": null
+    },
+    {
+     "source": "settings_file",
+     "path": "wt/.claude/settings.json",
+     "key": null
+    },
+    {
+     "source": "env",
+     "path": null,
+     "key": null
+    },
+    {
+     "source": "remote_map",
+     "path": null,
+     "key": null
+    }
+   ]
+  }
+ },
+ {
+  "name": "untrusted worktree topology still resolves from env, with warning",
+  "layout": {
+   "victim/.git/HEAD": "ref: refs/heads/main\n",
+   "victim/.git/config": "[core]\n\trepositoryformatversion = 0\n[remote \"origin\"]\n\turl = git@github.com:victim/repo.git\n",
+   "victim/.ace/config.json": "{\"orgId\": \"org_victim\", \"projectId\": \"proj_victim\"}",
+   "victim/.claude/settings.json": "{\"env\": {\"ACE_ORG_ID\": \"org_victim\", \"ACE_PROJECT_ID\": \"proj_victim\"}}",
+   "evil/.git": "gitdir: .gd\n",
+   "evil/.gd/commondir": "../../victim/.git\n"
+  },
+  "cwd": "evil",
+  "env": {
+   "ACE_ORG_ID": "org_e",
+   "ACE_PROJECT_ID": "proj_e"
+  },
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": true,
+   "orgId": "org_e",
+   "projectId": "proj_e",
+   "source": "env",
+   "path": null,
+   "warnings": [
+    "worktree_topology_untrusted"
+   ]
+  }
+ },
+ {
+  "name": "symlinked .git to a foreign linked worktree's .git file is NOT trusted, binding not used, stays at root, warning worktree_topology_untrusted",
+  "layout": {
+   "foreign/.git/HEAD": "ref: refs/heads/main\n",
+   "foreign/.git/config": "[core]\n\trepositoryformatversion = 0\n",
+   "foreign/.git/worktrees/wt/HEAD": "ref: refs/heads/feat\n",
+   "foreign/.git/worktrees/wt/commondir": "../..\n",
+   "foreign/.git/worktrees/wt/gitdir": "../../../../foreignwt/.git\n",
+   "foreign/.ace/config.json": "{\"orgId\": \"org_victim\", \"projectId\": \"proj_victim\"}",
+   "foreignwt/.git": "gitdir: ../foreign/.git/worktrees/wt\n",
+   "evil/.git": "@symlink:foreignwt/.git",
+   "evil/src": null
+  },
+  "cwd": "evil/src",
+  "env": {},
+  "flags": {},
+  "globalConfig": null,
+  "expect": {
+   "bound": false,
+   "reason": "no_binding",
+   "warnings": [
+    "worktree_topology_untrusted"
+   ],
+   "tried": [
+    {
+     "source": "repo_file",
+     "path": "evil/src/.ace/config.json",
+     "key": null
+    },
+    {
+     "source": "repo_file",
+     "path": "evil/.ace/config.json",
+     "key": null
+    },
+    {
+     "source": "settings_file",
+     "path": "evil/src/.claude/settings.json",
+     "key": null
+    },
+    {
+     "source": "settings_file",
+     "path": "evil/.claude/settings.json",
+     "key": null
+    },
+    {
+     "source": "env",
+     "path": null,
+     "key": null
+    },
+    {
+     "source": "remote_map",
+     "path": null,
+     "key": null
+    }
+   ]
   }
  }
 ]

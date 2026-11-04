@@ -11,7 +11,7 @@ Requires: Claude Code >= 2.1.311, ace-cli 4.4.2 (pinned exactly; @ace-sdk/core >
 
 ### Added
 - One binding core for both chains: `mod/context/` and `shared-hooks/utils/ace_project_context.py`, conformant to the SDK
-  spec `project-context` (ce-ace-clients 9500190, 70 cases) plus our strict id check (`org_`/`prj_`). Precedence flag >
+  spec `project-context` (ce-ace-clients main 3f0e6dd, 76 cases; worktree topology check spec §9 (a)-(e), (e) = a symlinked `.git` is untrusted) plus our strict id check (`org_`/`prj_`). Precedence flag >
   `.ace/config.json` (walk-up, then the worktree's main checkout) > `.claude/settings.json` env > env > remote map >
   unbound; never a default project. `scripts/ace-context` is the one entrypoint for the markdown commands.
 - Verify: one background `ace-cli status --org --project` per session, classified by exit code + stderr (pinned 4.3.4
