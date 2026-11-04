@@ -32,8 +32,8 @@ for p in (str(SHARED), str(UTILS), str(PLUGIN / "utils")):
 import plugin_data_dir  # noqa: E402
 import ace_relevance_logger  # noqa: E402
 
-PROJECT = "prj-wpb-test"
-ORG = "org-wpb-test"
+PROJECT = "prj_wpb-test"
+ORG = "org_wpb-test"
 CC_SESSION = "cc-sess-wpb-0001"
 HUMAN_PROMPT = "refactor the authentication middleware to use JSON web tokens"
 
@@ -73,7 +73,7 @@ def project(tmp_path, monkeypatch):
     proj = tmp_path / "proj"
     (proj / ".claude" / "data" / "logs").mkdir(parents=True)
     (proj / ".claude" / "settings.json").write_text(
-        json.dumps({"orgId": ORG, "projectId": PROJECT}))
+        json.dumps({"env": {"ACE_PROJECT_ID": PROJECT, "ACE_ORG_ID": ORG}}))
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
     for var in ("ACE_PROJECT_ID", "ACE_ORG_ID", "ACE_MIN_PROMPT_CHARS",
@@ -392,7 +392,7 @@ def test_before_task_wrapper_is_thin_shim():
     assert "jq" not in code
     assert "$(cat" not in code and "cat " not in code
     assert "cd " not in code.replace("$(cd \"$(dirname", "")  # ROOT fallback only
-    assert "python_path" in code
+    assert "scripts/ace-python" in code  # 8.1.0: the picker reads python_path
     assert "exec " in code and "ace_before_task.py" in code
 
 
@@ -431,4 +431,6 @@ def test_control_arm_clears_stale_rendered_context(project, fake_cli, monkeypatc
 def test_no_project_context_message_is_json(project, fake_cli, monkeypatch, capsys):
     (project / ".claude" / "settings.json").write_text("{}")
     out = _run(monkeypatch, capsys, HUMAN_PROMPT, project)
-    assert out is None  # silent exit: /ace:ace-doctor reports a missing project context
+    # 8.1.0: one line per session (JSON systemMessage), then silent
+    assert out == {"systemMessage": "ACE ▼ Repo nicht verbunden: /ace:ace-configure"}
+    assert _run(monkeypatch, capsys, HUMAN_PROMPT, project) is None

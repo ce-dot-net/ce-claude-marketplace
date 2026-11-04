@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# The one binding lookup for the markdown commands (8.1.0): shared-hooks/utils/ace_project_context.py, nothing else.
+#   ace-context [--json]     the resolver result (exit 0 bound, 5 not)
+#   ace-context --shell      eval-able exports of ACE_ORG_ID / ACE_PROJECT_ID (exit 5 + one line on stderr when not bound)
+#   ace-context --verify     plus `state` from one `ace-cli status` call;  --line: only the problem line
+ROOT="$(cd "${BASH_SOURCE[0]%/*}/.." && pwd)"
+. "$ROOT/scripts/ace-python"; PY="$(ace_python)" || { echo "ACE: Python >= 3.10 needed (the fallback hooks and this entrypoint)" >&2; exit 1; }
+exec "$PY" "$ROOT/shared-hooks/utils/ace_project_context.py" "$@"

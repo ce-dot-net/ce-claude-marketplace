@@ -22,7 +22,7 @@ def _pattern(pid, content, rank, domain="auth"):
 
 @pytest.fixture
 def env(tmp_path):
-    return HookEnv(tmp_path, project_id="prj-wpd-fix-%s" % uuid.uuid4().hex[:8])
+    return HookEnv(tmp_path, project_id="prj_wpd-fix-%s" % uuid.uuid4().hex[:8])
 
 
 def _compact_event(env):

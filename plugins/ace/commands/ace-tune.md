@@ -1,7 +1,7 @@
 ---
 disable-model-invocation: true
 description: View and update ACE project configuration dynamically at runtime
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Read
 ---
 
 # ACE Configuration Management (Project-Level)
@@ -39,7 +39,7 @@ Allows you to **fetch and update ACE project configuration** in real-time:
 
 ## Instructions for Claude
 
-When the user runs `/ace-tune [action] [params]`, execute the tune script:
+When the user runs `/ace-tune [action] [params]` (where mods run, the ACE mod answers it model-free; writes need its confirm button), first run the binding lookup below; every later `ace-cli` call in this command uses the exported `ACE_ORG_ID` / `ACE_PROJECT_ID`:
 
 ### 1. View Current Configuration
 
@@ -47,11 +47,9 @@ When the user runs `/ace-tune [action] [params]`, execute the tune script:
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Get plugin root directory
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-
-# Execute tune script - shows current config
-exec "${PLUGIN_ROOT}/scripts/ace-tune.sh" show
+CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1  # 8.1.0: the one binding lookup
+eval "$CTX"
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli" tune show --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID"
 ```
 
 **Display format:**
@@ -89,7 +87,7 @@ When user runs `/ace-tune` without arguments, use AskUserQuestion tool for inter
 
 ```python
 # Step 1: Show current config first
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune show
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune show --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID"
 
 # Step 2: Ask what they want to change
 AskUserQuestion({
@@ -135,17 +133,17 @@ AskUserQuestion({
 })
 
 # Step 4: Apply with CLI
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --constitution-threshold 0.45
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --constitution-threshold 0.45
 ```
 
 ### 3. Non-Interactive Mode (Direct)
 
 ```bash
 # Single setting
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --constitution-threshold 0.6
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --constitution-threshold 0.6
 
 # Multiple settings
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune \
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" \
   --constitution-threshold 0.5 \
   --search-top-k 15 \
   --dedup-enabled true
@@ -163,10 +161,10 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune \
 **Adjust Search Threshold**:
 ```bash
 # Lower threshold for broader matches
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --constitution-threshold 0.35
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --constitution-threshold 0.35
 
 # Higher threshold for stricter matches
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --constitution-threshold 0.8
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --constitution-threshold 0.8
 ```
 
 **Effect on `/ace-search`**:
@@ -177,27 +175,27 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --constitution-threshold 0.8
 **Adjust Multiple Settings**:
 ```bash
 # Configure search behavior
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune \
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" \
   --constitution-threshold 0.5 \
   --search-top-k 15
 
 # Configure deduplication
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --dedup-similarity-threshold 0.9
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --dedup-similarity-threshold 0.9
 
 # Configure pruning
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --pruning-threshold 0.4
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --pruning-threshold 0.4
 
 # Enable token budget
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --token-budget-enforcement true --max-playbook-tokens 50000
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --token-budget-enforcement true --max-playbook-tokens 50000
 ```
 
 **Reset to Defaults**:
 ```bash
 # Reset project to org/server defaults
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --reset
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --reset
 
 # Verify reset
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune show
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune show --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID"
 ```
 
 ## Configuration Options Reference
@@ -278,22 +276,22 @@ Claude: "✅ Search threshold updated to 0.45 for this project"
 
 ```bash
 # 1. Check current settings
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune show
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune show --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID"
 
 # 2. Adjust search for broader matches
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --constitution-threshold 0.35
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --constitution-threshold 0.35
 
 # 3. Increase max results
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --search-top-k 15
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --search-top-k 15
 
 # 4. Enable token budget
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --token-budget-enforcement true --max-playbook-tokens 50000
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --token-budget-enforcement true --max-playbook-tokens 50000
 
 # 5. Verify changes
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune show
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune show --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID"
 
 # 6. Later, reset to org/server defaults
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --reset
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --reset
 ```
 
 ## Output Format

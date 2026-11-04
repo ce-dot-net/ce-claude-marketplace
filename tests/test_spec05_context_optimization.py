@@ -326,7 +326,7 @@ class TestRefreshInterval:
         source = _read_source(STATUSLINE_SETUP)
 
         has_refresh_in_jq = bool(
-            re.search(r'jq.*refreshInterval', source, re.DOTALL)
+            re.search(r"python3 - ~/.claude/settings.json set.*'refreshInterval': 5", source, re.DOTALL)
         )
         assert has_refresh_in_jq, (
             "The jq command in ace-statusline-setup.md should set "

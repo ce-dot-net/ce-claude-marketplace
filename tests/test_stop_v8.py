@@ -90,7 +90,7 @@ class Box:
             d.mkdir(parents=True, exist_ok=True)
         (self.xdg / "ace" / "config.json").write_text(json.dumps({"apiToken": "x"}))
         (self.project / ".claude" / "settings.json").write_text(
-            json.dumps({"orgId": ORG_ID, "projectId": PROJECT_ID}))
+            json.dumps({"env": {"ACE_PROJECT_ID": PROJECT_ID, "ACE_ORG_ID": ORG_ID}}))
         cli = self.bin / "ace-cli"
         cli.write_text(FAKE_CLI.replace("#!/usr/bin/env python3", "#!" + sys.executable, 1))
         cli.chmod(0o755)
@@ -724,7 +724,7 @@ def test_record_tool_c4_api(tmp_path, monkeypatch):
     project = tmp_path / "project"
     (project / ".claude").mkdir(parents=True)
     (project / ".claude" / "settings.json").write_text(
-        json.dumps({"orgId": ORG_ID, "projectId": PROJECT_ID}))
+        json.dumps({"env": {"ACE_PROJECT_ID": PROJECT_ID, "ACE_ORG_ID": ORG_ID}}))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     monkeypatch.chdir(project)
     sid = "sess-c4"

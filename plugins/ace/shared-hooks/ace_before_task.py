@@ -54,7 +54,7 @@ def sanitize_response(obj: Any) -> Any:
         return obj
 
 from ace_cli import run_search, check_auth_status
-from ace_context import get_context
+from ace_project_context import get_context, logs_dir, session_notice
 from ace_relevance_logger import log_search_metrics, log_search_skipped
 from machine_prompts import is_machine_prompt
 import plugin_data_dir
@@ -141,7 +141,7 @@ def build_session_title(pattern_list, pattern_count, agent_type, review_file=Non
     # File format: {"helpful_pct": N, "time_saved": "15m"}
     roi_suffix = ''
     try:
-        rf = Path(review_file) if review_file else Path('.claude/data/logs/ace-review-result.json')
+        rf = Path(review_file) if review_file else Path(logs_dir()) / 'ace-review-result.json'
         if rf.exists():
             review_data = json.loads(rf.read_text())
             ts = review_data.get('time_saved', '').strip()
@@ -224,7 +224,7 @@ def check_eval_request_and_review():
     2. If ace-review-result.json needs updating (future: parse from transcript), handle it.
     Returns: (eval_context_str or None)
     """
-    eval_request_file = Path('.claude/data/logs/ace-eval-request.json')
+    eval_request_file = Path(logs_dir()) / 'ace-eval-request.json'
     eval_context = None
 
     # Check if eval request exists from previous task's Stop hook
@@ -334,7 +334,7 @@ def _format_bullet_token(pattern):
 
 
 def status_line(injected, returned, cohort, injected_patterns):
-    """The visible per-prompt notice, one line (parity with the mod's statusLine in mod/core.ts)."""
+    """The visible per-prompt notice, one line (parity with the mod's statusLine in mod/ui/status.ts)."""
     if not returned:
         return "ACE · no patterns for this prompt"
     arm = "full" if cohort == "full" else "budget"
@@ -348,6 +348,13 @@ def status_line(injected, returned, cohort, injected_patterns):
     doms = [d for d, _ in sorted(counts.items(), key=lambda kv: -kv[1])]
     d = ", ".join(doms[:2]) + (f" +{len(doms) - 2}" if len(doms) > 2 else "")
     return f"ACE · {what} · {arm}" + (f" · {d}" if d else "")
+
+def _with_notice(output, notice):
+    """The session's one context line rides in front of this prompt's systemMessage (one line, never two rows)."""
+    if notice:
+        output["systemMessage"] = notice + (" · " + output["systemMessage"] if output.get("systemMessage") else "")
+    return output
+
 
 def main():
     try:
@@ -393,10 +400,16 @@ def main():
         if prompt_lower.startswith('/ace-') or prompt_lower.startswith('/ace:'):
             sys.exit(0)
 
-        # Get project context from .claude/settings.json
+        # 8.1.0: the one core. Once per session: resolve, adopt, log, verify in the background; at most one line.
+        try:
+            _notice = session_notice(event.get('session_id') or '', os.getcwd(), bound=_ctx)
+        except Exception:
+            _notice = None
         context = _ctx or get_context()
         if not context:
-            sys.exit(0)  # silent: /ace:ace-doctor reports a missing project context
+            if _notice:
+                print(json.dumps({"systemMessage": _notice}))
+            sys.exit(0)
 
         # Use Claude's session_id for state file consistency (Issue #16)
         # ace_after_task.py reads event.get('session_id') — we must use the same key
@@ -482,6 +495,7 @@ def main():
             else:
                 # Generic search failure
                 output = {"systemMessage": "❌ [ACE] Search failed or returned no results"}
+            _with_notice(output, _notice)
             print(json.dumps(output))
             sys.exit(0)
 
@@ -501,6 +515,7 @@ def main():
             else:
                 output = {"systemMessage": f"❌ [ACE] {error_msg}"}
 
+            _with_notice(output, _notice)
             print(json.dumps(output))
             sys.exit(0)
 
@@ -601,9 +616,10 @@ def main():
 
         # v5.4.2 / C5: log AFTER render with the real injected count + hook latency.
         try:
-            domains = list(set(p.get('domain', 'unknown') for p in original_pattern_list if p.get('domain')))
             _injected = set(_pattern_ids)
             _injected_dicts = [p for p in original_pattern_list if p.get('id') in _injected]
+            # 8.1.0 audit: the domains of the INJECTED patterns (what the model got), as the mod's searchRow
+            domains = list(dict.fromkeys(p.get('domain') for p in _injected_dicts if p.get('domain')))
             log_search_metrics(
                 hook='UserPromptSubmit',
                 session_id=session_id,
@@ -660,6 +676,7 @@ def main():
             if not event.get('session_title'):
                 hso["sessionTitle"] = session_title
             output = {"systemMessage": user_message, "hookSpecificOutput": hso}
+        _with_notice(output, _notice)
         print(json.dumps(output))
         sys.exit(0)
 

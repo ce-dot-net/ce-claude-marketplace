@@ -63,7 +63,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 from ace_cli import run_search  # noqa: E402
 import ace_search_cache  # noqa: E402
-from ace_context import get_context                              # noqa: E402
+from ace_project_context import get_context                              # noqa: E402
 from patterns_used_state import append_patterns_used, injected_contents, load_state  # noqa: E402
 import plugin_data_dir                                           # noqa: E402
 from ace_relevance_logger import log_search, log_error, log_search_skipped           # noqa: E402
@@ -472,7 +472,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         log_search(hook='SubagentStart', session_id=session_id, user_prompt=query,
                    search_query=query, patterns_returned=pattern_list,
                    patterns_injected=[_by_id[i] for i in pattern_ids or [] if i in _by_id],
-                   domains=list(dict.fromkeys(p.get('domain') for p in pattern_list if isinstance(p, dict) and p.get('domain'))),
+                   domains=list(dict.fromkeys(_by_id[i].get('domain') for i in pattern_ids or [] if i in _by_id and _by_id[i].get('domain'))),
                    hook_ms=int((time.monotonic() - t_start) * 1000),
                    project_id=context['project'], org_id=context['org'],
                    agent_type=agent_type, render_cohort=_cohort, parent_task_id=parent_task_id,

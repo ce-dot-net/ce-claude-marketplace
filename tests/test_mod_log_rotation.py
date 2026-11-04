@@ -1,6 +1,6 @@
-"""§24 addendum: the mod's APPEND_SH (core.ts) never follows a planted symlink/dir while rotating the relevance log.
+"""§24 addendum: the mod's APPEND_SH (lib/sh.ts) never follows a planted symlink/dir while rotating the relevance log.
 
-The mod test runner forbids node imports, so the real shell string is extracted from core.ts and run with sh.
+The mod test runner forbids node imports, so the real shell string is extracted from lib/sh.ts and run with sh.
 """
 import os
 import re
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-CORE = Path(__file__).resolve().parent.parent / "plugins" / "ace" / "mod" / "core.ts"
+CORE = Path(__file__).resolve().parent.parent / "plugins" / "ace" / "mod" / "lib" / "sh.ts"
 
 
 def _append_sh():

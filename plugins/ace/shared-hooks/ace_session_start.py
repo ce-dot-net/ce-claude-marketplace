@@ -16,7 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 
 import plugin_data_dir                         # noqa: E402
-from ace_context import get_context            # noqa: E402
+from ace_project_context import get_context            # noqa: E402
 from ace_relevance_logger import log_error     # noqa: E402
 from patterns_used_state import load_rendered_context     # noqa: E402
 

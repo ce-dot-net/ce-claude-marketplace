@@ -26,7 +26,7 @@ SQLITE_BINARY = PLUGIN / "node_modules" / "better-sqlite3" / "build" / "Release"
 pytestmark = pytest.mark.skipif(not (CLI_JS.is_file() and NODE),
                                 reason="pinned CLI not installed: npm ci --ignore-scripts in plugins/ace")
 
-ORG, PROJECT, TOKEN = "org_contract", "prj_contract", "ace_contract_token"
+ORG, PROJECT, TOKEN = "org_contract", "prj_contract", "ace_user_contract_token"  # 4.4.0: only ace_user_* tokens
 
 # What the plugin passes (ace_cli.py/ace_engine.py: run_search/run_learn/check_auth_status; ace_graph_builder; commands).
 FLAGS = {
@@ -34,6 +34,7 @@ FLAGS = {
     "learn": ["--transcript", "--stdin", "--no-stream", "--timeout", "--verbosity", "--retrieval-id", "--applied-log-ids"],
     "whoami": [],
     "projects": [],
+    "init": ["--fix-gitignore"],  # bind/configure/auto-adopt (ace_project_context.cli_init, mod context/index.ts cliInit)
 }
 GLOBAL_FLAGS = ["--json", "--version", "--org", "--project"]
 
@@ -219,9 +220,18 @@ def test_whoami_fields(run):
 
 
 def test_whoami_unauthenticated_is_rc_zero_json(run, tmp_path):
+    """4.4.0: not logged in = exit 3, stderr {"error":{"code":"not_logged_in",...}} (the verify classifier's input)."""
     (tmp_path / "xdg" / "ace" / "config.json").write_text("{}")
     p = run("whoami", "--json")
-    assert p.returncode == 0 and json.loads(p.stdout)["authenticated"] is False
+    assert p.returncode == 3 and json.loads(p.stderr.strip().splitlines()[-1])["error"]["code"] == "not_logged_in"
+
+
+def test_context_json_is_the_seam_shape(run, tmp_path):
+    """4.4.0: `context --json` (offline) gives the resolver result the mod's seam parses; unbound = exit 5."""
+    p = run("context", "--json")
+    j = json.loads(p.stdout)
+    assert isinstance(j.get("bound"), bool)
+    assert p.returncode == (0 if j["bound"] else 5)
 
 
 def test_projects_fields(run):
@@ -236,3 +246,137 @@ def test_notifier_text_still_matches_our_filter():
     checker = CLI_JS.parent / "utils" / "version-checker.js"
     t = checker.read_text()
     assert "Update available" in t and "npm install -g" in t
+
+
+# ---- 4.4.1: `ace-cli init --json` write target (spec §9, fixture init-target.json), the same as our fallback ----
+
+def _init(cwd, home, *extra):
+    env = {"HOME": str(home), "XDG_CONFIG_HOME": str(home / "xdg"), "PATH": os.pathsep.join([os.path.dirname(NODE), "/usr/bin", "/bin"]),
+           "NO_COLOR": "1"}
+    return subprocess.run([NODE, str(CLI_JS), "init", "--json", "--org", "org_a", "--project", "prj_a", *extra],
+                          capture_output=True, text=True, timeout=60, cwd=str(cwd), env=env)
+
+
+def _init_cases():
+    return json.loads((PLUGIN / "tests-fixtures/project-context/init-target.json").read_text())["cases"]
+
+
+@pytest.mark.parametrize("case", _init_cases(), ids=[c["name"] for c in _init_cases()])
+def test_cli_init_target_matches_the_spec_and_our_fallback(tmp_path, case):
+    from test_init_target import build, check
+    base = build(tmp_path / "a", case["layout"])
+    p = _init(base / case["cwd"], tmp_path / "home")
+    assert p.returncode == 0, p.stderr[-500:]
+    check(base, case, json.loads(p.stdout))
+
+
+def _real_worktree(tmp_path):
+    main = Path(os.path.realpath(tmp_path)) / "main"
+    main.mkdir()
+    g = lambda *a: subprocess.run(["git", "-C", str(main), *a], capture_output=True, text=True, check=True)
+    g("init", "-q")
+    g("-c", "user.email=t@example.invalid", "-c", "user.name=t", "commit", "-q", "--allow-empty", "-m", "i")
+    (main / ".gitignore").write_text(".ace/\n")
+    g("worktree", "add", "-q", str(main.parent / "wt"), "-b", "wt")
+    return main, main.parent / "wt"
+
+
+def test_cli_init_in_a_real_worktree_writes_the_main_checkout_and_fixes_gitignore(tmp_path):
+    main, wt = _real_worktree(tmp_path)
+    j = json.loads(_init(wt, tmp_path / "home", "--fix-gitignore").stdout)
+    assert j["path"] == str(main / ".ace/config.json") and j["mainCheckout"] is True and j["gitignore"] == "fixed"
+    assert "written_to_main_checkout" in j["warnings"] and not (wt / ".ace").exists()
+    assert (main / ".gitignore").read_text().splitlines() == [".ace/*", "!.ace/config.json"]
+
+
+def test_cli_init_reports_the_shadowing_worktree_file_and_leaves_it(tmp_path):
+    main, wt = _real_worktree(tmp_path)
+    (wt / ".ace").mkdir()
+    (wt / ".ace/config.json").write_text('{"orgId": "org_a", "projectId": "prj_old"}')
+    j = json.loads(_init(wt, tmp_path / "home").stdout)
+    assert j["shadowedBy"] == str(wt / ".ace/config.json") and "worktree_file_shadows_main" in j["warnings"]
+    assert "prj_old" in (wt / ".ace/config.json").read_text()
+
+
+@pytest.mark.parametrize("what", ["ace_dir", "config", "gitignore"])
+def test_cli_init_refuses_symlinks_exit_1_json(tmp_path, what):
+    """The refusal the plugin treats as final (no fallback write): exit 1, stderr {"error":{"message"}} naming the path."""
+    main, wt = _real_worktree(tmp_path)
+    victim = tmp_path / "victim"
+    victim.mkdir()
+    if what == "ace_dir":
+        (main / ".ace").symlink_to(victim)
+    elif what == "config":
+        (main / ".ace").mkdir()
+        (main / ".ace/config.json").symlink_to(victim / "x.json")
+    else:
+        (victim / "gi").write_text(".ace/\n")
+        (main / ".gitignore").unlink()
+        (main / ".gitignore").symlink_to(victim / "gi")
+    p = _init(wt, tmp_path / "home", "--fix-gitignore")
+    if what == "gitignore":  # git does not read a symlinked .gitignore: nothing ignored, the target is never written
+        assert p.returncode == 0 and (victim / "gi").read_text() == ".ace/\n"
+        return
+    assert p.returncode == 1 and "symlink" in json.loads(p.stderr.strip().splitlines()[-1])["error"]["message"]
+    assert not (victim / "x.json").exists() and [f.name for f in victim.iterdir()] in ([], ["gi"])
+
+
+def test_python_chain_binds_through_the_real_cli(tmp_path, monkeypatch):
+    """ace_project_context.bind with the real pinned CLI: via cli, the main checkout, the shadow left for [Entfernen]."""
+    import sys
+    sys.path.insert(0, str(PLUGIN / "shared-hooks/utils"))
+    import ace_cli
+    import ace_project_context as apc
+    monkeypatch.setattr(ace_cli, "_cmd", lambda *a: [NODE, str(CLI_JS), *a])
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    main, wt = _real_worktree(tmp_path)
+    (wt / "src").mkdir()
+    r = apc.bind(str(wt / "src"), "org_a", "prj_a")
+    assert r["via"] == "cli" and r["path"] == str(main / ".ace/config.json") and r["mainCheckout"] is True
+    (wt / ".ace").mkdir()
+    (wt / ".ace/config.json").write_text("{}")
+    r = apc.bind(str(wt / "src"), "org_a", "prj_a")
+    assert r["shadowedBy"] == str(wt / ".ace/config.json")
+    assert apc.remove_shadow(str(wt / "src"), r["shadowedBy"]) and not (wt / ".ace/config.json").exists()
+
+
+# ---- 4.4.2: `ace-cli context --json` on all spec cases (cases.json, §9 (a)-(e)), the same as both our chains ----
+
+def _spec_cases():
+    return json.loads((PLUGIN / "tests-fixtures/project-context/cases.json").read_text())
+
+
+@pytest.mark.parametrize("case", _spec_cases(), ids=[c["name"] for c in _spec_cases()])
+def test_cli_context_matches_the_spec_cases(tmp_path, case):
+    """The real pinned CLI on the fixture laid out on disk ("@symlink:<rel>" = a real symlink); the in-memory runners
+    (tests/test_project_context_spec.py, mod/tests/project_context.test.ts) assert the same `expect`."""
+    base = Path(os.path.realpath(tmp_path)) / "r"
+    sub = lambda v: v.replace("$ROOT", str(base)) if isinstance(v, str) else v
+    for rel, content in case["layout"].items():
+        p = base / rel
+        if content is None:
+            p.mkdir(parents=True, exist_ok=True)
+            continue
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if content.startswith("@symlink:"):
+            p.symlink_to(base / content[len("@symlink:"):])
+        else:
+            p.write_text(sub(content))
+    (base / case["cwd"]).mkdir(parents=True, exist_ok=True)
+    cfg = tmp_path / "xdg" / "ace" / "config.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(json.dumps(case.get("globalConfig") or {}))
+    env = {"HOME": str(tmp_path / "home"), "XDG_CONFIG_HOME": str(tmp_path / "xdg"), "NO_COLOR": "1",
+           "PATH": os.pathsep.join([os.path.dirname(NODE), "/usr/bin", "/bin"]), **{k: sub(v) for k, v in case["env"].items()}}
+    flags = [x for k in ("org", "project") if (case.get("flags") or {}).get(k) for x in (f"--{k}", case["flags"][k])]
+    p = subprocess.run([NODE, str(CLI_JS), "context", "--json", *flags], capture_output=True, text=True, timeout=60,
+                       cwd=str(base / case["cwd"]), env=env)
+    got = json.loads(p.stdout)
+    rel = lambda v: os.path.relpath(v, base) if isinstance(v, str) else v
+    for k in ("projectName", "auth", "message"):
+        got.pop(k, None)
+    if "path" in got:
+        got["path"] = rel(got["path"])
+    for t in got.get("tried", []):
+        t["path"] = rel(t["path"])
+    assert got == case["expect"], p.stderr[-500:]

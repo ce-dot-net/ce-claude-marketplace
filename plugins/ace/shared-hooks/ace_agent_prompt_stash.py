@@ -27,7 +27,7 @@ def main() -> None:
         if cwd and os.path.isdir(cwd):
             os.chdir(cwd)
         import plugin_data_dir
-        from ace_context import get_context
+        from ace_project_context import get_context
         ctx = get_context()
         if not ctx:
             return

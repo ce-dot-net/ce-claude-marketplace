@@ -3,7 +3,7 @@ disable-model-invocation: true
 model: claude-haiku-4-5
 description: Show top patterns + last session summary on return to a session
 argument-hint: "[--hours N]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(python3:*), Bash(jq:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(python3:*), Read
 ---
 
 # ACE Recap
@@ -15,19 +15,20 @@ Complements Claude Code's built-in `/recap` with ACE-specific pattern context.
 
 ## Steps
 
-1. **Locate relevance log.** Resolve `${CLAUDE_PLUGIN_DATA}/projects/<id>/ace-relevance.jsonl`,
-   falling back to `.claude/data/logs/ace-relevance.jsonl` for backward-compat.
+1. **The log** is the repo root's `.claude/data/logs/ace-relevance.jsonl` (the main checkout of a worktree; the
+   analyzer finds it through the plugin core, `scripts/ace-context --logs`). Nothing to resolve here.
 
 2. **Build recap.** Invoke the local analyzer with `--mode recap`:
    ```bash
    ANALYZER="${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils/ace_insights_analyzer.py"
-   python3 "$ANALYZER" --mode recap --hours "${HOURS:-12}"
+   python3 "$ANALYZER" --mode text --hours "${HOURS:-12}"
    ```
 
 3. **Output structure** (rendered by the analyzer):
-   - **Last task summary** — task description + outcome from the most recent `execution` event
-   - **Top 5 patterns** — by helpful-score from the preceding `search` events
-   - **Session-level totals** — patterns injected, average relevance, domains touched
+   - **Last task** — its prompt, `used N/M` (evidenced use), outcome, whether the learn was sent
+   - **Evidenced use per arm** (budget / full), **learn health** (unsent learns, 0 applied ids, retries, engine lib/cli),
+     **skips, rejections, binding states, domain-shift cache hits**. The same text as `/ace:ace-insights` Step 1 and the
+     mod's model-free answer.
 
 4. **Be terse.** This is a returning-user view. No analysis, no recommendations.
    If `--hours` produced 0 events, say so in one sentence and stop.

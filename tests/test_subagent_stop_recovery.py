@@ -88,7 +88,7 @@ def _write_state(tmp_path, agent_id, pattern_ids=None, task_session_id=None,
         SESSION,
         agent_id,
         pattern_ids or [PID_A],
-        project_id="prj-1",
+        project_id="prj_1",
         task_session_id=task_session_id,
         retrieval_id=retrieval_id,
         retrieval_log_ids=retrieval_log_ids or {},
@@ -145,7 +145,8 @@ def _run_main(tmp_path, monkeypatch, event, write_state_under=None):
     """Wire up mocks and run main(), returning all subagent_stop_keymap records."""
     monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
-    monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
+    monkeypatch.setenv("ACE_PROJECT_ID", "prj_1")
+    monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
     monkeypatch.chdir(tmp_path)
 
     if write_state_under is not None:
@@ -159,7 +160,7 @@ def _run_main(tmp_path, monkeypatch, event, write_state_under=None):
 
     mod = _load_after_task()
     monkeypatch.setattr(mod, "get_context",
-                        lambda: {"org": "org-1", "project": "prj-1"})
+                        lambda: {"org": "org_1", "project": "prj_1"})
     monkeypatch.setattr(mod, "build_trajectory_from_accumulated_tools",
                         lambda *a, **k: ([], [
                             ("Edit", "{}", "{}", "tu-01", None, None, None, None),
@@ -452,7 +453,8 @@ class TestSubagentStopGracefulDegradation:
         """agent_transcript_path pointing to nonexistent file → no raise."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
         monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
-        monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
+        monkeypatch.setenv("ACE_PROJECT_ID", "prj_1")
+        monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
         monkeypatch.chdir(tmp_path)
         event = {
             "hook_event_name": "SubagentStop",
@@ -478,7 +480,8 @@ class TestMainStopNoKeymap:
         """Stop (main) must not emit subagent_stop_keymap."""
         monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(tmp_path))
         monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-plugin-data"))
-        monkeypatch.setenv("ACE_PROJECT_ID", "prj-1")
+        monkeypatch.setenv("ACE_PROJECT_ID", "prj_1")
+        monkeypatch.setenv("ACE_ORG_ID", "org_test")  # 8.1.0: a project needs an org (spec no_org)
         monkeypatch.chdir(tmp_path)
         event = {
             "hook_event_name": "Stop",
@@ -492,7 +495,7 @@ class TestMainStopNoKeymap:
 
         mod = _load_after_task()
         monkeypatch.setattr(mod, "get_context",
-                            lambda: {"org": "org-1", "project": "prj-1"})
+                            lambda: {"org": "org_1", "project": "prj_1"})
         monkeypatch.setattr(mod, "build_trajectory_from_accumulated_tools",
                             lambda *a, **k: ([], [
                                 ("Edit", "{}", "{}", "tu-01", None, None, None, None),

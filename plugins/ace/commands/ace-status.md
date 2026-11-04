@@ -2,7 +2,7 @@
 model: claude-haiku-4-5
 description: Show ACE playbook statistics and learning status
 argument-hint:
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(python3:*), Read
 ---
 
 # ACE Status
@@ -29,7 +29,7 @@ fi
 
 # Check authentication status
 AUTH_JSON=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json 2>/dev/null || echo '{"authenticated":false}')
-IS_AUTH=$(echo "$AUTH_JSON" | jq -r '.authenticated // false')
+IS_AUTH=$(printf '%s' "$AUTH_JSON" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get authenticated false)
 
 if [ "$IS_AUTH" != "true" ]; then
   echo "ACE_STATUS=not_authenticated"
@@ -62,22 +62,16 @@ Based on the output:
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Check for jq (required for JSON formatting)
-if ! command -v jq >/dev/null 2>&1; then
-  echo "❌ jq not found - Install: brew install jq (macOS) or apt-get install jq (Linux)"
-  exit 1
-fi
-
 # The ACE CLI version is pinned by this plugin version (package.json); updates arrive with the plugin.
 
-# Optional: Export environment variables if available from .claude/settings.json
+# 8.1.0: the one binding lookup (scripts/ace-context, the plugin core); never read binding files here
+CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1
+eval "$CTX"; ORG_ID="$ACE_ORG_ID"; PROJECT_ID="$ACE_PROJECT_ID"
 # ace-cli will use these if provided, otherwise fallback to global config
-export ACE_ORG_ID="${ACE_ORG_ID:-}"
-export ACE_PROJECT_ID="${ACE_PROJECT_ID:-}"
 
 # Run ace-cli status and capture output
 # Filter out CLI update notifications (💡 lines) that break JSON parsing
-RAW_OUTPUT=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli status --json 2>&1)
+RAW_OUTPUT=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli status --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --json 2>&1)
 EXIT_CODE=$?
 STATUS_OUTPUT=$(echo "$RAW_OUTPUT" | grep -v '^💡' | grep -v '^$')
 
@@ -96,7 +90,7 @@ if [ $EXIT_CODE -ne 0 ]; then
 fi
 
 # Verify we got valid JSON
-if ! echo "$STATUS_OUTPUT" | jq empty 2>/dev/null; then
+if ! printf '%s' "$STATUS_OUTPUT" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get . >/dev/null 2>&1; then
   echo "❌ Invalid response from ACE CLI (not valid JSON)"
   echo ""
   echo "Response:"
@@ -105,24 +99,34 @@ if ! echo "$STATUS_OUTPUT" | jq empty 2>/dev/null; then
 fi
 
 # Format output for readability
-echo "$STATUS_OUTPUT" | jq -r '
-  "📊 ACE Playbook Status",
-  "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-  "",
-  "📚 Total Patterns: \(.playbook.total_patterns // 0)",
-  "",
-  "By Section:",
-  "  • Strategies & Rules: \(.playbook.by_section.strategies_and_hard_rules // 0)",
-  "  • Code Snippets: \(.playbook.by_section.useful_code_snippets // 0)",
-  "  • Troubleshooting: \(.playbook.by_section.troubleshooting_and_pitfalls // 0)",
-  "  • APIs to Use: \(.playbook.by_section.apis_to_use // 0)",
-  "",
-  "📈 Helpful: \(.playbook.helpful_total // 0) | Harmful: \(.playbook.harmful_total // 0)",
-  "📈 Confidence: \((if (.playbook.helpful_total // 0) + (.playbook.harmful_total // 0) > 0 then ((.playbook.helpful_total // 0) * 100 / ((.playbook.helpful_total // 0) + (.playbook.harmful_total // 0))) else ((.avg_confidence // 0) * 100) end) | floor)%",
-  "⚠️  At Risk: \(.at_risk_count // 0) | V15 Rewarded: \(.patterns_with_v15_reward // 0)",
-  "",
-  "💼 Plan: \(.subscription.plan // "unknown")",
-  "📊 Patterns Used: \(.subscription.usage.patterns.used // 0)/\(.subscription.usage.patterns.limit // 0)"
+printf '%s' "$STATUS_OUTPUT" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+def g(*keys, default=0):
+    v = d
+    for k in keys:
+        v = v.get(k) if isinstance(v, dict) else None
+    return default if v is None else v
+pb = lambda *k: g("playbook", *k)
+h, x = pb("helpful_total"), pb("harmful_total")
+conf = int(h * 100 / (h + x)) if h + x > 0 else int(g("avg_confidence") * 100)
+print("📊 ACE Playbook Status")
+print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+print()
+print("📚 Total Patterns: %s" % pb("total_patterns"))
+print()
+print("By Section:")
+print("  • Strategies & Rules: %s" % pb("by_section", "strategies_and_hard_rules"))
+print("  • Code Snippets: %s" % pb("by_section", "useful_code_snippets"))
+print("  • Troubleshooting: %s" % pb("by_section", "troubleshooting_and_pitfalls"))
+print("  • APIs to Use: %s" % pb("by_section", "apis_to_use"))
+print()
+print("📈 Helpful: %s | Harmful: %s" % (h, x))
+print("📈 Confidence: %d%%" % conf)
+print("⚠️  At Risk: %s | V15 Rewarded: %s" % (g("at_risk_count"), g("patterns_with_v15_reward")))
+print()
+print("💼 Plan: %s" % g("subscription", "plan", default="unknown"))
+print("📊 Patterns Used: %s/%s" % (g("subscription", "usage", "patterns", "used"), g("subscription", "usage", "patterns", "limit")))
 '
 ```
 

@@ -33,7 +33,7 @@ def test_rejection_cases(case):
 
 
 def test_phrase_list_parity_with_the_mod():
-    src = (MOD / "core.ts").read_text()
+    src = (MOD / "lib" / "evidence.ts").read_text()
     m = re.search(r"export const REJECTION_PHRASES = (\[.*?\])", src, re.S)
     assert m and json.loads(m.group(1)) == list(REJECTION_PHRASES)
 

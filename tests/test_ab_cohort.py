@@ -578,7 +578,7 @@ class TestObservabilityRenderCohort:
                 patterns_injected=[],
                 domains=[],
                 project_id="proj-001",
-                org_id="org-001",
+                org_id="org_001",
                 agent_type="main",
                 render_cohort="budget",
             )
@@ -681,7 +681,7 @@ class TestBeforeTaskControlArm:
             return fake_resp, 0
 
         def fake_get_context():
-            return {"org": "org-001", "project": "proj-001"}
+            return {"org": "org_001", "project": "proj-001"}
 
         def fake_check_auth(warn_threshold_hours=2.0):
             return None
@@ -739,7 +739,7 @@ class TestBeforeTaskControlArm:
             return fake_resp, 0
 
         def fake_get_context():
-            return {"org": "org-001", "project": "proj-001"}
+            return {"org": "org_001", "project": "proj-001"}
 
         def fake_check_auth(warn_threshold_hours=2.0):
             return None

@@ -1,4 +1,4 @@
-"""Renderer parity harness: the mod's TypeScript renderer (plugins/ace/mod/core.ts) vs the Python
+"""Renderer parity harness: the mod's TypeScript renderer (plugins/ace/mod/lib/render.ts) vs the Python
 chain (ace_pattern_render), per-pattern bytes of the sorted-key dump (DESIGN §13.1, §9 G9).
 
 Runs on the committed synthetic fixtures (tests/e2e/fixtures/mod) and, when present, on the m1
@@ -54,7 +54,7 @@ def node_out():
            "variants": VARIANTS}
     p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", str(HERE / "mod_parity_node.mjs")],
                        input=json.dumps(job), capture_output=True, text=True, timeout=120)
-    assert p.returncode == 0, "mod renderer did not run (plugins/ace/mod/core.ts):\n" + p.stderr[-2000:]
+    assert p.returncode == 0, "mod renderer did not run (plugins/ace/mod/lib/render.ts):\n" + p.stderr[-2000:]
     return json.loads(p.stdout)
 
 

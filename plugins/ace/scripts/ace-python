@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# The python the fallback hooks run with: Python >= 3.10 (8.1.0 floor). Order: the cached python_path (when >= 3.10),
+# python3.15 ... python3.10 on PATH, python3 if >= 3.10. None (e.g. only the macOS system 3.9): exit 1 and one
+# hook-error line; the shims then exit 0 silently (the mod chain is unaffected).
+# Sourced by the shims (bash builtins only: PATH may hold nothing else); executable for the markdown commands.
+ace_python() {
+  local data="${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/ace-ce-dot-net-marketplace}" py="" c v
+  _ace_ok() { [ -x "$1" ] && "$1" -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null; }
+  [ -r "$data/python_path" ] && read -r py < "$data/python_path"
+  if [ -n "$py" ] && _ace_ok "$py"; then printf '%s\n' "$py"; return 0; fi
+  for v in 3.15 3.14 3.13 3.12 3.11 3.10; do
+    c="$(command -v "python$v" 2>/dev/null)" && _ace_ok "$c" && { printf '%s\n' "$c"; return 0; }
+  done
+  c="$(command -v python3 2>/dev/null)" && _ace_ok "$c" && { printf '%s\n' "$c"; return 0; }
+  { mkdir -p "$data/logs" && printf 'ACE: no Python >= 3.10 found; the fallback hooks are off (the mod chain is unaffected)\n' \
+      >> "$data/logs/ace-hook-errors.log"; } 2>/dev/null
+  return 1
+}
+[ "${BASH_SOURCE[0]}" = "$0" ] && { ace_python; exit $?; }
+true

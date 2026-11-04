@@ -140,8 +140,10 @@ def test_e2e_human_prompt_makes_exactly_one_search():
     """DESIGN §5 C2 / WP-B(2): a human prompt costs exactly ONE ace-cli spawn, a search
     (no --version probe, no whoami pre-check)."""
     r = result("UserPromptSubmit_human")
-    calls = r["cli_calls"]
+    # 8.1.0: besides the search, the session's ONE background verify (`status`) may land; never a second search
+    calls = [c for c in r["cli_calls"] if c["argv"][:1] != ["status"]]
     assert len(calls) == 1 and calls[0]["argv"][:1] == ["search"], _cli_summary(r)
+    assert len([c for c in r["cli_calls"] if c["argv"][:1] == ["status"]]) <= 1
 
 
 def test_e2e_subagentstop_empty_agent_type_makes_zero_cli_calls():

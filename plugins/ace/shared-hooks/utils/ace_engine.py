@@ -65,7 +65,7 @@ def select():
     return out
 
 
-def search_command(query, *, org=None, project=None, session_id=None, top_k=None, node=None, cli=None, pin=True):
+def search_command(query, *, org=None, project=None, session_id=None, top_k=None, node=None, cli=None, pin=True, ids=()):
     """(argv, stdin_bytes). node=None -> the CLI head `cli`, else the engine.
 
     CLI: session_id (the TASK session) is always sent as --session-id (cli >= 4.3.1: request field, no
@@ -81,12 +81,13 @@ def search_command(query, *, org=None, project=None, session_id=None, top_k=None
         argv += ['--session-id', str(session_id)[:512]]
     if top_k:
         argv += ['--top-k', str(top_k)]
-    return argv, query.encode('utf-8', errors='replace')
+    return argv + list(ids), query.encode('utf-8', errors='replace')  # ids: --org/--project after the subcommand
 
 
 def learn_command(trace_path, *, retrieval_id=None, applied_log_ids=None, verbosity='detailed',
-                  timeout=300, node=None, cli=None):
-    """argv for the same flags on either engine (org/project travel via ACE_ORG_ID/ACE_PROJECT_ID)."""
+                  timeout=300, node=None, cli=None, ids=()):
+    """argv for the same flags on either engine (org/project travel via ACE_ORG_ID/ACE_PROJECT_ID, and as
+    --org/--project for the CLI)."""
     head = [node, str(ENGINE_DIR / 'learn.js')] if node else list(cli or (CLI_BIN,)) + ['learn']
     # --no-stream: stream mode exits 0 on server 401/500 (m3)
     argv = head + ['--transcript', trace_path, '--json', '--timeout', str(int(timeout * 1000)),
@@ -95,7 +96,7 @@ def learn_command(trace_path, *, retrieval_id=None, applied_log_ids=None, verbos
         argv += ['--retrieval-id', retrieval_id]
     if applied_log_ids:
         argv += ['--applied-log-ids', ','.join(str(x) for x in applied_log_ids)]
-    return argv
+    return argv + list(ids)
 
 
 if __name__ == '__main__':

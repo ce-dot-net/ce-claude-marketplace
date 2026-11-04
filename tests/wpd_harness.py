@@ -53,7 +53,7 @@ class HookEnv:
     """tmp layout: home/, pd/ (CLAUDE_PLUGIN_DATA), proj/ (hook cwd), elsewhere/
     (process cwd), bin/ace-cli (fake)."""
 
-    def __init__(self, tmp_path, project_id="prj-wpd-test", org_id="org-wpd-test"):
+    def __init__(self, tmp_path, project_id="prj_wpd-test", org_id="org_wpd-test"):
         self.tmp = Path(tmp_path)
         self.project_id = project_id
         self.home = self.tmp / "home"
@@ -64,7 +64,7 @@ class HookEnv:
         for d in (self.home, self.pd, self.proj / ".claude", self.elsewhere, self.bin):
             d.mkdir(parents=True, exist_ok=True)
         (self.proj / ".claude" / "settings.json").write_text(
-            json.dumps({"projectId": project_id, "orgId": org_id}))
+            json.dumps({"env": {"ACE_PROJECT_ID": project_id, "ACE_ORG_ID": org_id}}))
         cli = self.bin / "ace-cli"
         cli.write_text(_FAKE_CLI)
         cli.chmod(0o755)
@@ -175,6 +175,6 @@ def shim_violations(script_path, entry):
         problems.append("uses cd")
     if not re.search(r"exec\s+\"?\$PY\"?\s+\"?\$ROOT/shared-hooks/%s" % re.escape(entry), code):
         problems.append("does not `exec \"$PY\" \"$ROOT/shared-hooks/%s\"`" % entry)
-    if "python_path" not in code:
-        problems.append("does not read the cached python_path (DESIGN §3.1)")
+    if "scripts/ace-python" not in code:  # 8.1.0: the picker reads the cached python_path, Python >= 3.10
+        problems.append("does not take its python from scripts/ace-python (DESIGN §3.1, 8.1.0)")
     return problems

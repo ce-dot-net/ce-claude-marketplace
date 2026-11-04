@@ -20,7 +20,7 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
 
 
-def archive_relevance_log(log_dir: str = ".claude/data/logs") -> None:
+def archive_relevance_log(log_dir: Optional[str] = None) -> None:
     """Size-based rotation only (50 MB, .1-.3 chain), never a startup wipe.
     Delegates to the logger's single rotation scheme. Never raises."""
     try:
@@ -36,7 +36,16 @@ class ACERelevanceLogger:
     MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB (v8)
     MAX_BACKUP_FILES = 3  # Keep 3 rotated files
 
-    def __init__(self, log_dir: str = ".claude/data/logs"):
+    def __init__(self, log_dir: Optional[str] = None):
+        """log_dir None = <log root>/.claude/data/logs (8.1.0: the repo's main checkout, never a subfolder or worktree)."""
+        self.base = None
+        if log_dir is None:
+            try:
+                from ace_project_context import log_root
+                self.base = log_root()
+                log_dir = os.path.join(self.base, '.claude', 'data', 'logs')
+            except Exception:
+                log_dir = '.claude/data/logs'
         self.log_dir = Path(log_dir)
         self.log_path = self.log_dir / "ace-relevance.jsonl"  # the dir is created on the first (checked) write
 
@@ -71,11 +80,11 @@ class ACERelevanceLogger:
         """Write a log entry to the JSONL file with rotation."""
         try:
             from plugin_data_dir import open_project_log, project_log_unsafe
-            if project_log_unsafe(self.log_path):  # §24: never write through a symlink out of the project
+            if project_log_unsafe(self.log_path, self.base):  # §24: never write through a symlink out of the project
                 return
             if not self._rotate_if_needed():
                 return
-            f = open_project_log(self.log_path)  # creates the dir (relative: cwd may change after init)
+            f = open_project_log(self.log_path, base=self.base)  # creates the dir (relative: cwd may change after init)
             if f is None:
                 return
             with f:
@@ -282,6 +291,9 @@ class ACERelevanceLogger:
         used_source: Optional[str] = None,
         hook: str = 'Stop',
         used_ids_capped: bool = False,
+        agent_id: Optional[str] = None,
+        task_session_id: Optional[str] = None,
+        render_cohort: Optional[str] = None,
     ) -> None:
         """
         Log task execution metrics for correlation with pattern usage.
@@ -301,7 +313,8 @@ class ACERelevanceLogger:
             'state_changing_tools': state_changing_tools,
             'success': success,
             'execution_time_seconds': round(execution_time_seconds, 2),
-            'learning_sent': learning_sent
+            'learning_sent': learning_sent,
+            'source': 'python', 'agent_id': agent_id, 'task_session_id': task_session_id, 'render_cohort': render_cohort,
         }
         if used_ids_count is not None:  # item H: how many injected ids the task evidenced, and by what
             entry['used_ids_count'] = used_ids_count
@@ -362,9 +375,17 @@ _logger = None
 def get_relevance_logger() -> ACERelevanceLogger:
     """Get singleton relevance logger instance."""
     global _logger
-    if _logger is None:
-        _logger = ACERelevanceLogger()
+    if _logger is None or (_logger.base is not None and _logger.base != _current_root()):
+        _logger = ACERelevanceLogger()  # the hooks chdir to the event cwd: the log follows that repo's root
     return _logger
+
+
+def _current_root():
+    try:
+        from ace_project_context import log_root
+        return log_root()
+    except Exception:
+        return None
 
 
 def log_event(event, **fields) -> None:

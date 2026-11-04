@@ -19,14 +19,14 @@ RED="\033[31m"
 # (v8: replaces 13 jq spawns + a second python3; CC debounces statusline at 300 ms.)
 # Python prints shlex-quoted VAR=value lines; bash evals them. Missing python3 => defaults.
 cwd=""; used_pct=0; model_name=""; effort_level=""; thinking_enabled=false; git_worktree=""
-rl_5h_pct=0; rl_5h_resets=""; rl_7d_pct=0; rl_7d_resets=""
-patterns_injected=0; avg_relevance=0; domains_count=0; domain_shifts=0; quality_pct=0; time_saved=""
+rl_5h_pct=""; rl_5h_resets=""; rl_7d_pct=""; rl_7d_resets=""; rl_sp_pct=""; used_n=""; used_m=""; ctx_state=""
+patterns_injected=0; domains_count=0; domain_shifts=0; quality_pct=0; time_saved=""
 INPUT_JSON=$(cat 2>/dev/null || echo "{}")
 PYOUT=$(python3 -c '
 import json, os, shlex, sys
-def num(v):
-    try: return "%.0f" % float(v)   # CC used_percentage can be a float e.g. 28.999
-    except Exception: return "0"
+def num(v):  # floor (0.4 -> 0, 99.6 -> 99); absent -> "" (a missing window is hidden, never 0%)
+    try: return str(max(0, int(float(v))))
+    except Exception: return ""
 def get(d, *ks):
     for k in ks:
         d = d.get(k) if isinstance(d, dict) else None
@@ -35,16 +35,27 @@ try: j = json.loads(sys.stdin.read() or "{}")
 except Exception: j = {}
 if not isinstance(j, dict): j = {}
 out = {
- "cwd": get(j, "cwd") or "", "used_pct": num(get(j, "context_window", "used_percentage") or 0),
+ "cwd": get(j, "cwd") or "", "used_pct": num(get(j, "context_window", "used_percentage")) or "0",
  "model_name": get(j, "model", "display_name") or "", "effort_level": get(j, "effort", "level") or "",
  "thinking_enabled": "true" if get(j, "thinking", "enabled") is True else "false",
  "git_worktree": get(j, "workspace", "git_worktree") or "",
- "rl_5h_pct": num(get(j, "rate_limits", "five_hour", "used_percentage") or 0),
+ "rl_5h_pct": num(get(j, "rate_limits", "five_hour", "used_percentage")),
  "rl_5h_resets": get(j, "rate_limits", "five_hour", "resets_at") or "",
- "rl_7d_pct": num(get(j, "rate_limits", "seven_day", "used_percentage") or 0),
+ "rl_7d_pct": num(get(j, "rate_limits", "seven_day", "used_percentage")),
  "rl_7d_resets": get(j, "rate_limits", "seven_day", "resets_at") or "",
+ "rl_sp_pct": num(get(j, "rate_limits", "spend_limit", "used_percentage")),
+ "used_n": "", "used_m": "", "ctx_state": "",
 }
-logs = os.path.join(out["cwd"], ".claude", "data", "logs") if out["cwd"] else ""
+def _log_root(cwd):  # 8.1.0: the plugin core keys logs to the repo root (worktrees + subfolders share one log)
+    try:
+        ip = json.load(open(os.path.expanduser("~/.claude/plugins/installed_plugins.json")))["plugins"]
+        p = [v[0]["installPath"] for k, v in ip.items() if k.startswith("ace@")][0]
+        sys.path.insert(0, os.path.join(p, "shared-hooks", "utils"))
+        import ace_project_context
+        return ace_project_context.log_root(cwd)
+    except Exception:
+        return cwd
+logs = os.path.join(_log_root(out["cwd"]), ".claude", "data", "logs") if out["cwd"] else ""
 # Task boundary: events of this session since its last "execution" event (Stop hook writes these)
 try:
     events = []
@@ -59,13 +70,23 @@ try:
     sid = j.get("session_id")
     # this session only (rows of a parallel session, its execution rows too, would leak in); no session_id -> all
     events = [e for e in events if isinstance(e, dict) and (not sid or e.get("session_id") == sid)]
-    last = max([i for i, e in enumerate(events) if isinstance(e, dict) and e.get("event") == "execution"] or [-1])
-    cur = [e for e in events[last + 1:] if isinstance(e, dict)]
-    s = [e for e in cur if e.get("event") == "search"]
+    main = lambda e: (e.get("agent_type") or "main") == "main"
+    # Task boundary (8.1.0): the newest MAIN prompt search (hook UserPromptSubmit; no SubagentStart, no cache hit;
+    # machine prompts never log a search). Its patterns and the domain shifts since are the current task.
+    ups = [i for i, e in enumerate(events) if e.get("event") == "search" and e.get("hook") == "UserPromptSubmit"
+           and main(e) and e.get("engine") != "cache"]
+    cur = events[ups[-1]:] if ups else []
+    s = cur[:1]
     out["patterns_injected"] = sum(e.get("patterns_injected", 0) for e in s)
-    out["avg_relevance"] = int(sum(e.get("avg_confidence", 0) for e in s) / len(s) * 100) if s else 0
-    out["domains_count"] = len(set(d for e in s for d in e.get("domains", [])))
+    out["domains_count"] = len(set(d for e in s for d in e.get("domains", [])))  # domains of the INJECTED patterns
     out["domain_shifts"] = len([e for e in cur if e.get("event") == "domain_shift"])
+    # evidenced use of the last finished main task: used N/M (never prior confidence as "relevance")
+    ex = [e for e in events if e.get("event") == "execution" and main(e) and e.get("patterns_used_count")]
+    if ex:
+        out["used_n"], out["used_m"] = ex[-1].get("used_ids_count") or 0, ex[-1].get("patterns_used_count")
+    ctx = [e for e in events if e.get("event") == "context"]
+    if ctx:
+        out["ctx_state"] = ctx[-1].get("state") or ""
 except Exception: pass
 # Self-eval review result (no fake helpfulness). jq-equivalent: .quality_pct // .helpful_pct // 0
 try:
@@ -76,7 +97,7 @@ except Exception: pass
 for k, v in out.items(): print("%s=%s" % (k, shlex.quote(str(v))))
 ' <<<"$INPUT_JSON" 2>/dev/null || true)
 eval "$PYOUT"
-used_pct=${used_pct:-0}; rl_5h_pct=${rl_5h_pct:-0}; rl_7d_pct=${rl_7d_pct:-0}
+used_pct=${used_pct:-0}
 
 # ── Format Unix epoch resets_at to human-readable local time ──
 # Cross-platform: date -r (BSD/macOS) with GNU/Linux fallback (--date=@); pure-integer guard.
@@ -109,10 +130,6 @@ bar_empty=""
 for (( i=0; i<filled; i++ )); do bar_filled+="█"; done
 for (( i=0; i<empty; i++ )); do bar_empty+="░"; done
 
-# ── Relevance % color ──
-if [ "$avg_relevance" -ge 70 ] 2>/dev/null; then REL_C="$GRN"
-elif [ "$avg_relevance" -ge 40 ] 2>/dev/null; then REL_C="$YEL"
-else REL_C="$RED"; fi
 
 # ═══════════════════════════════════════
 # BUILD OUTPUT — Line 1: Model · context bar · context%
@@ -151,9 +168,9 @@ if [ "$patterns_injected" != "0" ]; then
   LINE2+="  ${D}⋮${R} ${B}${BLU}${patterns_injected}${R}${D} injected${R}"
 fi
 
-# Relevance %
-if [ "$avg_relevance" != "0" ] && [ "$avg_relevance" != "" ]; then
-  LINE2+=" ${REL_C}${B}${avg_relevance}%${R}"
+# Evidenced use of the last finished main task
+if [ -n "$used_m" ]; then
+  LINE2+=" ${D}used${R} ${B}${used_n}/${used_m}${R}"
 fi
 
 # Domains
@@ -177,24 +194,28 @@ if [ "$quality_pct" != "0" ] && [ "$quality_pct" != "" ]; then
   fi
 fi
 
-# v6.5.0 Item #3: rate-limit LINE3 (suppressed when both percentages are 0 — backward-compat).
-LINE3=""
-if [ "$rl_5h_pct" != "0" ] || [ "$rl_7d_pct" != "0" ]; then
-  RL_C="$GRN"
-  if [ "$rl_5h_pct" -ge 80 ] 2>/dev/null || [ "$rl_7d_pct" -ge 80 ] 2>/dev/null; then
-    RL_C="$RED"
-  elif [ "$rl_5h_pct" -ge 50 ] 2>/dev/null || [ "$rl_7d_pct" -ge 50 ] 2>/dev/null; then
-    RL_C="$YEL"
-  fi
-  LINE3="${D}limits${R} 5h:${RL_C}${B}${rl_5h_pct}%${R}"
-  if [ -n "$rl_5h_resets" ] && [ "$rl_5h_resets" != "null" ]; then
-    LINE3+="${D} →${rl_5h_resets}${R}"
-  fi
-  LINE3+="  7d:${RL_C}${B}${rl_7d_pct}%${R}"
-  if [ -n "$rl_7d_resets" ] && [ "$rl_7d_resets" != "null" ]; then
-    LINE3+="${D} →${rl_7d_resets}${R}"
-  fi
+# 8.1.0: a problem state of this session's binding replaces the stats line (the mod's ▼, for standalone use)
+if [ -n "$ctx_state" ] && [ "$ctx_state" != "ok" ]; then
+  LINE2="${RED}${B}ACE ▼${R} ${D}${ctx_state}${R}"
 fi
+
+# Rate limits: each window only when the payload has it (absent != 0%), each colored by its own value.
+rl_color() { if [ "$1" -ge 80 ] 2>/dev/null; then printf '%s' "$RED"; elif [ "$1" -ge 50 ] 2>/dev/null; then printf '%s' "$YEL"; else printf '%s' "$GRN"; fi; }
+LINE3=""
+if [ -n "$rl_5h_pct" ]; then
+  LINE3+="5h:$(rl_color "$rl_5h_pct")${B}${rl_5h_pct}%${R}"
+  [ -n "$rl_5h_resets" ] && [ "$rl_5h_resets" != "null" ] && LINE3+="${D} →${rl_5h_resets}${R}"
+fi
+if [ -n "$rl_7d_pct" ]; then
+  [ -n "$LINE3" ] && LINE3+="  "
+  LINE3+="7d:$(rl_color "$rl_7d_pct")${B}${rl_7d_pct}%${R}"
+  [ -n "$rl_7d_resets" ] && [ "$rl_7d_resets" != "null" ] && LINE3+="${D} →${rl_7d_resets}${R}"
+fi
+if [ -n "$rl_sp_pct" ]; then
+  [ -n "$LINE3" ] && LINE3+="  "
+  LINE3+="spend:$(rl_color "$rl_sp_pct")${B}${rl_sp_pct}%${R}"
+fi
+[ -n "$LINE3" ] && LINE3="${D}limits${R} ${LINE3}"
 
 echo -e "$LINE1"
 echo -e "$LINE2"

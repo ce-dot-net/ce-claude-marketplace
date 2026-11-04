@@ -2,7 +2,7 @@
 disable-model-invocation: true
 model: claude-haiku-4-5
 description: Comprehensive ACE installation and health diagnostic
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(uname:*), Bash(bash:*), Bash(node:*), Bash(ls:*), Bash(test:*), Bash(claude:*), Bash(cat:*), Bash(tail:*), Bash(sort:*), Bash(python3:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(uname:*), Bash(bash:*), Bash(node:*), Bash(ls:*), Bash(test:*), Bash(claude:*), Bash(cat:*), Bash(tail:*), Bash(sort:*), Bash(python3:*), Read
 ---
 
 # ACE Doctor - Installation & Health Diagnostic
@@ -65,7 +65,7 @@ CLAUDE_PLUGIN_DATA="$DATA" python3 -c 'import sys; sys.path.insert(0, sys.argv[1
 **What to Check**:
 ```bash
 # Verify plugin directory structure (installPath from installed_plugins.json is authoritative)
-ls -la "${CLAUDE_PLUGIN_ROOT:-$(jq -r '.plugins["ace@ce-dot-net-marketplace"][0].installPath // empty' ~/.claude/plugins/installed_plugins.json 2>/dev/null)}"
+ls -la "${CLAUDE_PLUGIN_ROOT}"
 ```
 
 **Expected Structure**:
@@ -119,10 +119,10 @@ CONFIG_PATH="$XDG_HOME/ace/config.json"
 test -f "$CONFIG_PATH" && echo "EXISTS" || echo "MISSING"
 
 # If exists, check for authenticated device-code token (ace-cli 4.x format)
-jq -e '.auth.token' "$CONFIG_PATH" >/dev/null 2>&1 && echo "AUTH: device-code token present" || echo "AUTH: token missing — run /ace:ace-login"
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get auth.token < "$CONFIG_PATH" >/dev/null 2>&1 && echo "AUTH: device-code token present" || echo "AUTH: token missing — run /ace:ace-login"
 
 # Detect stale apiToken format (ace-cli v1.x) and warn
-jq -e '.apiToken' "$CONFIG_PATH" >/dev/null 2>&1 && echo "WARN: stale apiToken field detected — run /ace:ace-login to migrate"
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get apiToken < "$CONFIG_PATH" >/dev/null 2>&1 && echo "WARN: stale apiToken field detected — run /ace:ace-login to migrate"
 ```
 
 **Expected** (ace-cli 4.x device-code format):
@@ -166,33 +166,21 @@ Recommended Actions:
 
 ### Check 3: Project Configuration
 
-**What to Check**:
+**What to Check** (the one core: `scripts/ace-context`, the same resolver every hook uses):
 ```bash
-# Get project root
-PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-
-# Check project settings
-test -f "$PROJECT_ROOT/.claude/settings.json" && echo "EXISTS" || echo "MISSING"
-
-# If exists, validate ACE_PROJECT_ID env var (written by ace-configure)
-jq -e '.env.ACE_PROJECT_ID' "$PROJECT_ROOT/.claude/settings.json"
-```
-
-**Expected**:
-```json
-{
-  "env": {
-    "ACE_ORG_ID": "org_xxxxx",
-    "ACE_PROJECT_ID": "prj_xxxxx",
-    "ACE_VERBOSITY": "normal"
-  }
-}
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --json; echo "exit: $?"
 ```
 
 **Report**:
-- ✅ Project config valid with ACE_PROJECT_ID set
-- ⚠️ Project config exists but ACE_PROJECT_ID missing
-- ❌ Project config missing
+- ✅ exit 0: bound. Show `projectId`, `orgId`, `source` (`repo_file` = tracked `.ace/config.json`, `settings_file` =
+  legacy `.claude/settings.json` env, `env`, `remote_map`) and `path`.
+- ⚠️ `source: settings_file`: legacy binding; it is adopted into `.ace/config.json` automatically (commit it).
+- ⚠️ `warnings` contains `global_project_id_ignored`: the global ace-cli config has a top-level `projectId`. It is
+  never used; bind each repo with `.ace/config.json` (/ace:ace-configure) and remove it from the global config.
+- ❌ exit 5, `reason: no_binding`: not bound; show the `tried` paths. Fix: /ace:ace-configure
+- ❌ `reason: config_refused` (`warnings: repo_file_contains_secret`): `.ace/config.json` holds `apiToken`/`serverUrl`.
+  Rewrite it with only `orgId`/`projectId` and revoke the token; it is in git history.
+- ❌ `reason: config_invalid`: the named file is not valid JSON.
 
 **Note**: ace-cli is used for all ACE operations.
 
@@ -214,14 +202,14 @@ Claude Code into `${CLAUDE_PLUGIN_ROOT}/node_modules` on plugin install/update. 
 
 **What to Check**:
 ```bash
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(jq -r '.plugins["ace@ce-dot-net-marketplace"][0].installPath // empty' ~/.claude/plugins/installed_plugins.json 2>/dev/null)}"
-PIN=$(jq -r '.dependencies["@ace-sdk/cli"]' "$PLUGIN_ROOT/package.json")
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
+PIN=$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get dependencies.@ace-sdk/cli '' < "$PLUGIN_ROOT/package.json")
 echo "pinned (package.json): $PIN"
 
 # CLI source: plugin-local first
 LOCAL="$PLUGIN_ROOT/node_modules/@ace-sdk/cli"
 if test -f "$LOCAL/dist/cli.js"; then
-  echo "CLI source: plugin-local $(jq -r .version "$LOCAL/package.json")"
+  echo "CLI source: plugin-local $("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get version '' < "$LOCAL/package.json")"
 else
   echo "packages not installed in $PLUGIN_ROOT/node_modules"
 fi
@@ -266,12 +254,12 @@ Recommended Actions:
 ### Check 5: ACE Server Connectivity
 
 **What to Check** (one authenticated round trip through the same ace-cli the hooks use; org and project come from
-`.claude/settings.json`, the token from the device-code login):
+the one core, `scripts/ace-context`, the token from the device-code login):
 ```bash
-PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // .projectId // empty' .claude/settings.json)
-OUT=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli ${PROJECT_ID:+--project "$PROJECT_ID"} status --json 2>&1); RC=$?
-echo "exit: $RC"; printf '%s\n' "$OUT" | head -c 600
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --line; echo "exit: $?"
 ```
+(One `ace-cli status` with explicit `--org`/`--project`, classified by exit code and stderr; prints the one problem
+line, nothing when ok.)
 
 **Report** (exit code first, then the error text):
 - ✅ exit 0: server reachable, authenticated, project found (show the pattern count from the JSON if present)
@@ -328,7 +316,7 @@ Recommended Actions:
 **What to Check**:
 ```bash
 # Check if hook scripts exist (installPath from installed_plugins.json)
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(jq -r '.plugins["ace@ce-dot-net-marketplace"][0].installPath // empty' ~/.claude/plugins/installed_plugins.json 2>/dev/null)}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 
 # Check all hook wrappers in scripts/
 test -f "$PLUGIN_ROOT/scripts/ace_install_cli.sh" && echo "install_cli: EXISTS" || echo "install_cli: MISSING"
@@ -403,14 +391,14 @@ XDG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 test -f "$XDG_HOME/ace/config.json" && echo "CONFIG: EXISTS" || echo "CONFIG: MISSING"
 
 # Verify authenticated via whoami
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json 2>/dev/null | jq -e '.authenticated == true' >/dev/null 2>&1 \
+[ "$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json 2>/dev/null | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get authenticated false)" = true ] \
   && echo "AUTH: authenticated" \
   || echo "AUTH: not authenticated — run /ace:ace-login"
 
 # Detect stale formats and warn
-jq -e '.organizations' "$XDG_HOME/ace/config.json" >/dev/null 2>&1 \
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get organizations < "$XDG_HOME/ace/config.json" >/dev/null 2>&1 \
   && echo "WARN: stale organizations array detected — run /ace:ace-login to migrate"
-jq -e '.apiToken' "$XDG_HOME/ace/config.json" >/dev/null 2>&1 \
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get apiToken < "$XDG_HOME/ace/config.json" >/dev/null 2>&1 \
   && echo "WARN: stale apiToken field detected — run /ace:ace-login to migrate"
 ```
 
@@ -447,16 +435,16 @@ Recommended Actions:
 **What to Check**:
 ```bash
 # Get plugin version (installPath from installed_plugins.json)
-PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(jq -r '.plugins["ace@ce-dot-net-marketplace"][0].installPath // empty' ~/.claude/plugins/installed_plugins.json 2>/dev/null)}"
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT}"
 PLUGIN_JSON="$PLUGIN_ROOT/.claude-plugin/plugin.json"
 if [ -f "$PLUGIN_JSON" ]; then
-    jq -r '.version' "$PLUGIN_JSON"
+    "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get version < "$PLUGIN_JSON"
 else
     echo "unknown"
 fi
 
 # ace-cli: the pin this plugin version was tested with, and the one that actually runs
-jq -r '.dependencies["@ace-sdk/cli"]' "$PLUGIN_ROOT/package.json"
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get dependencies.@ace-sdk/cli < "$PLUGIN_ROOT/package.json"
 ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version 2>/dev/null || echo "not installed"
 
 # Check for Python hooks (shared-hooks/)
@@ -465,6 +453,8 @@ if [ -d "${PLUGIN_ROOT}/shared-hooks" ]; then
 else
     echo "Python hooks: missing"
 fi
+# The fallback hooks need Python >= 3.10 (8.1.0)
+"${PLUGIN_ROOT}/scripts/ace-python" || echo "Python >= 3.10 needed for the fallback hooks; the mod chain is unaffected"
 ```
 
 **Expected Versions**:
@@ -501,15 +491,32 @@ db = os.path.expanduser("~/.ace-cache/sessions.db")
 if os.path.exists(db) and os.path.getsize(db) > 100 * MB:
     warned = True
     print("WARN: %s is %d MB (over 100 MB)" % (db, os.path.getsize(db) // MB))
-log = os.path.join(os.getcwd(), ".claude", "data", "logs", "ace-relevance.jsonl")
+import subprocess
+try:
+    logs = subprocess.run([os.path.join(os.environ.get("CLAUDE_PLUGIN_ROOT", ""), "scripts", "ace-context"), "--logs"],
+                          capture_output=True, text=True).stdout.strip()
+except OSError:
+    logs = ""
+logs = logs or os.path.join(os.getcwd(), ".claude", "data", "logs")
+log = os.path.join(logs, "ace-relevance.jsonl")  # 8.1.0: the repo root's log (log_root)
 cutoff = time.time() - 24 * 3600
 locked = 0
-for path in (log, log + ".1"):  # also the rotated file
+counts = {"learn_retry": 0, "learn_failed": 0}
+ctx = {}
+for path in (log, os.path.join(logs, "ace-relevance.1.jsonl")):  # also the rotated file (ace-relevance.1.jsonl)
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 try:
                     row = json.loads(line)
+                    ev = row.get("event")
+                    if ev == "learn_retry":
+                        counts["learn_retry"] += 1
+                    elif ev == "execution" and row.get("learning_sent") is False:
+                        counts["learn_failed"] += 1
+                    elif ev == "context":
+                        k = "%s/%s" % (row.get("source"), row.get("state"))
+                        ctx[k] = ctx.get(k, 0) + 1
                     # stderr_sample is cut at 300 chars, so also count pin-drop rows
                     if not ("database is locked" in line or row.get("pin_failed") is True
                             or row.get("pin_skipped") == "backoff"):
@@ -522,6 +529,8 @@ for path in (log, log + ".1"):  # also the rotated file
                     locked += 1
     except OSError:
         pass
+print("INFO: learn retries %d, failed learns %d; binding source/state: %s" % (
+    counts["learn_retry"], counts["learn_failed"], ", ".join("%s %d" % kv for kv in ctx.items()) or "none"))
 if locked:
     warned = True
     print("WARN: %d lock incident(s) ('database is locked' / pin_failed / pin backoff) in ace-relevance.jsonl in the last 24 h" % locked)
@@ -617,7 +626,7 @@ After running all checks, present results in this format:
 [1] Plugin Installation................... ✅ PASS
 [2] Global Configuration................. ✅ PASS
 [3] Project Configuration................ ✅ PASS
-[4] CLI Availability..................... ✅ PASS (v4.3.4)
+[4] CLI Availability..................... ✅ PASS (v4.4.2)
 [5] ACE Server Connectivity.............. ✅ PASS (ace-cli status)
 [6] Hooks Registered..................... ✅ PASS (11/11)
 [7] CLI Configuration.................... ✅ PASS (device-code)
@@ -637,7 +646,7 @@ ACE is properly configured and ready to use.
 System Information:
 
 Plugin Version: v7.0.0
-CLI Version: v4.3.4
+CLI Version: v4.4.2
 Architecture: Hook-based (v7.x)
 Project ID: prj_d3a244129d62c198
 Organization: org_34fYIlitYk4nyFuTvtsAzA6uUJF
@@ -674,7 +683,7 @@ Report issues: https://github.com/ce-dot-net/ce-claude-marketplace/issues
 [1] Plugin Installation................... ✅ PASS
 [2] Global Configuration................. ✅ PASS
 [3] Project Configuration................ ⚠️  WARN
-[4] CLI Availability..................... ✅ PASS (v4.3.4)
+[4] CLI Availability..................... ✅ PASS (v4.4.2)
 [5] ACE Server Connectivity.............. ✅ PASS (ace-cli status)
 [6] Hooks Registered..................... ⚠️  WARN (8/11)
 [7] CLI Configuration.................... ✅ PASS
@@ -688,7 +697,7 @@ Overall Health: 🟡 NEEDS ATTENTION (3 warnings)
 ⚠️  Warnings Found:
 
 [3] Project Configuration
-    Issue: ACE_PROJECT_ID missing in .claude/settings.json (env.ACE_PROJECT_ID)
+    Issue: not bound (scripts/ace-context exit 5, reason no_binding)
     Impact: Hooks cannot determine which project to use
     Fix: Run /ace:ace-configure
 
@@ -717,7 +726,7 @@ Run these commands in order:
 System Information:
 
 Plugin Version: v7.0.0
-CLI Version: v4.3.4
+CLI Version: v4.4.2
 Architecture: Hook-based (v7.x)
 Project ID: (not configured)
 

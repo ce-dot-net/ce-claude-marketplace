@@ -1,6 +1,6 @@
 """Item H2: a pattern counts as used when >= 2 of its distinctive tokens appear in the TOOL CALL inputs of the
 task (Bash commands, file paths, Grep patterns, Edit targets), or its id appears in the final message / report.
-The same fixture drives the mod (plugins/ace/mod/tests/ace_mod.test.ts): parity."""
+The same fixture drives the mod (plugins/ace/mod/tests/*.test.ts): parity."""
 import json
 from pathlib import Path
 

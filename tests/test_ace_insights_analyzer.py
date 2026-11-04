@@ -4103,68 +4103,40 @@ class TestAceStatusCommand:
         / "ace-status.md"
     )
 
+    SAMPLE = {"playbook": {"total_patterns": 4127, "helpful_total": 7, "harmful_total": 3,
+                           "by_section": {"strategies_and_hard_rules": 11, "useful_code_snippets": 12,
+                                          "troubleshooting_and_pitfalls": 13, "apis_to_use": 14}},
+              "subscription": {"plan": "pro-x"}}
+
     @pytest.fixture()
-    def jq_block(self) -> str:
-        """Extract the jq formatting block from ace-status.md (Step 3 only)."""
-        content = self.ACE_STATUS_MD.read_text()
-        # Target the STATUS_OUTPUT formatting jq block, not the auth jq line
-        in_jq = False
-        lines: list[str] = []
-        for line in content.splitlines():
-            if "STATUS_OUTPUT" in line and "jq -r" in line:
-                in_jq = True
-                lines.append(line)
-                continue
-            if in_jq:
-                lines.append(line)
-                # jq block ends at the closing single-quote line
-                if line.strip() == "'":
-                    break
-        return "\n".join(lines)
+    def code(self) -> str:
+        """The Step 3 formatter (python3 -c, 8.1.0: no jq) of ace-status.md."""
+        import re
+        return re.search(r"STATUS_OUTPUT\" \| python3 -c '\n(.*?)\n'", self.ACE_STATUS_MD.read_text(), re.S).group(1)
 
-    # -- 1. Total patterns must use nested path --------------------------
+    @pytest.fixture()
+    def out(self, code) -> str:
+        import json
+        import subprocess
+        import sys
+        return subprocess.run([sys.executable, "-c", code], input=json.dumps(self.SAMPLE), capture_output=True,
+                              text=True, check=True).stdout
 
-    def test_status_jq_references_playbook_total_patterns(self, jq_block: str):
-        """jq must reference ``.playbook.total_patterns``, not ``.total_bullets``."""
-        assert ".playbook.total_patterns" in jq_block, (
-            "jq template should reference .playbook.total_patterns"
-        )
+    def test_status_jq_references_playbook_total_patterns(self, out: str):
+        """The total comes from ``playbook.total_patterns``, not ``total_bullets``."""
+        assert "Total Patterns: 4127" in out
 
-    # -- 2. Section counts must be under .playbook.by_section ------------
+    def test_status_jq_references_playbook_by_section(self, out: str):
+        """Section counts are nested under ``playbook.by_section``."""
+        for n in ("11", "12", "13", "14"):
+            assert f": {n}" in out
 
-    def test_status_jq_references_playbook_by_section(self, jq_block: str):
-        """Section counts must be nested under ``.playbook.by_section``."""
-        assert ".playbook.by_section.strategies_and_hard_rules" in jq_block, (
-            "jq template should reference .playbook.by_section.strategies_and_hard_rules"
-        )
-        assert ".playbook.by_section.useful_code_snippets" in jq_block
-        assert ".playbook.by_section.troubleshooting_and_pitfalls" in jq_block
-        assert ".playbook.by_section.apis_to_use" in jq_block
+    def test_status_jq_no_flat_total_bullets(self, code: str):
+        assert "total_bullets" not in code
 
-    # -- 3. No legacy flat .total_bullets --------------------------------
+    def test_status_jq_no_flat_org_id(self, code: str):
+        assert "org_id" not in code
 
-    def test_status_jq_no_flat_total_bullets(self, jq_block: str):
-        """``.total_bullets`` must NOT appear -- it was never in the API."""
-        assert ".total_bullets" not in jq_block, (
-            "jq template must not reference the non-existent .total_bullets field"
-        )
-
-    # -- 4. No flat .org_id (not in API response) ------------------------
-
-    def test_status_jq_no_flat_org_id(self, jq_block: str):
-        """``.org_id`` must NOT appear -- the status API does not return it."""
-        assert ".org_id" not in jq_block, (
-            "jq template must not reference .org_id (not in ace-cli status response)"
-        )
-
-    # -- 5. Helpful / harmful for confidence calculation -----------------
-
-    def test_status_jq_references_helpful_harmful(self, jq_block: str):
-        """Confidence should be computed from ``.playbook.helpful_total`` and
-        ``.playbook.harmful_total``."""
-        assert ".playbook.helpful_total" in jq_block, (
-            "jq template should reference .playbook.helpful_total"
-        )
-        assert ".playbook.harmful_total" in jq_block, (
-            "jq template should reference .playbook.harmful_total"
-        )
+    def test_status_jq_references_helpful_harmful(self, out: str):
+        """Confidence from ``playbook.helpful_total`` / ``playbook.harmful_total``."""
+        assert "Helpful: 7 | Harmful: 3" in out and "Confidence: 70%" in out and "Plan: pro-x" in out

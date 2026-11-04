@@ -40,9 +40,13 @@ def test_step3_renders_root_cause_only_when_present(tmp_path):
     w = root / "scripts" / "ace-cli"
     w.write_text("#!/bin/sh\necho \"$*\" > %s/argv\ncat <<'EOF'\n%s\nEOF\n" % (tmp_path, json.dumps(RESP)))
     w.chmod(0o755)
+    real = Path(__file__).resolve().parents[1] / "plugins/ace"
+    for n in ("ace-context", "ace-python"):  # the one core, as installed
+        shutil.copy(real / "scripts" / n, root / "scripts" / n)
+    (root / "shared-hooks").symlink_to(real / "shared-hooks")
     cwd = tmp_path / "repo"
     (cwd / ".claude").mkdir(parents=True)
-    (cwd / ".claude" / "settings.json").write_text(json.dumps({"orgId": "o", "projectId": "p"}))
+    (cwd / ".claude" / "settings.json").write_text(json.dumps({"env": {"ACE_PROJECT_ID": "prj_p", "ACE_ORG_ID": "org_o"}}))
     script = _step3().replace("${CLAUDE_PLUGIN_ROOT}", str(root))
     r = subprocess.run(["bash", "-c", script, "bash", "jq", "hook", "json"], cwd=cwd, capture_output=True, text=True, timeout=30)
     assert r.returncode == 0, r.stderr

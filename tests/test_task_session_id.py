@@ -85,7 +85,7 @@ def _make_transcript(tmp_path, blocks):
     return str(transcript)
 
 
-GOOD_CONTEXT = {"org": "org-test-01", "project": "prj-test-01"}
+GOOD_CONTEXT = {"org": "org_test-01", "project": "prj_test-01"}
 
 SAMPLE_PATTERNS_RESPONSE = {
     "similar_patterns": [

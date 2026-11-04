@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 'use strict';
 // `node learn.js --transcript F --json [--retrieval-id R] [--applied-log-ids a,b] [--verbosity V]
-// [--timeout MS] [--no-stream]`: the same requests as `ace-cli learn --no-stream`.
+// [--timeout MS] [--no-stream] [--org O] [--project P]`: the same requests as `ace-cli learn --no-stream`.
 // Always a sync POST, so --verbosity/--timeout/--no-stream are accepted and have no effect.
 // Exit 3 = nothing was sent (safe to fall back to ace-cli). Exit 1 = the POST may have reached the
 // server: a retry could duplicate the trace and double F-080 credit.
@@ -26,7 +26,7 @@ const logger = { warn: (m) => process.stderr.write(m + '\n'), error: () => {}, i
   else if (!Array.isArray(trace.applied_log_ids)) trace.applied_log_ids = []; // server contract: [] when nothing was used
   // server 5.15.8: more than 20 applied_log_ids in one trace count as "all shown" (the whole trace falls to COLD)
   trace.applied_log_ids = trace.applied_log_ids.slice(0, APPLIED_CAP);
-  const ctx = await createContext({});
+  const ctx = await createContext({ org: opt('--org'), project: opt('--project') });  // 8.1.0: the core's ids, as ace-cli gets them
   const client = new AceClient(ctx, { customHeaders: clientHeaders(), logger });
   try {
     const config = await client.getConfig();
