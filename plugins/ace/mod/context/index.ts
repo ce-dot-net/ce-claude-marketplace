@@ -57,8 +57,9 @@ export function stripOwnExport(env: Env, root: string): Env {
   return out
 }
 // The seam (8.1.0): the SDK's `ace-cli context --json` (PR #211) replaces our resolver once the CLI has it.
-// Feature-detected, never by version (the prerelease still reports 4.3.4): the probe IS the call, once per load
-// (resolveContextOnce caches the result). "unknown command" / a usage error / no JSON = old CLI -> our resolver.
+// Feature-detected, not by version (the prerelease still reported 4.3.4): the probe IS the call, once per load
+// (resolveContextOnce caches the result); only an untrusted worktree topology also needs `--version` >= 4.4.2 (below).
+// "unknown command" / a usage error / no JSON = old CLI -> our resolver.
 // Only stdout's JSON counts (with config_refused/config_invalid the CLI prints a generic unbound line on stderr).
 // ACE_CONTEXT_ENGINE=resolver forces ours, =cli insists on the CLI's (still our resolver when it has none).
 const ID = { org: /^org_[A-Za-z0-9_-]+$/, prj: /^prj_[A-Za-z0-9_-]+$/ }
@@ -79,7 +80,16 @@ async function cliIdentity($: any): Promise<string> {
 export const CLI_CONTEXT_UNKNOWN = /unknown command|error: unknown|Usage: ace-cli|too many arguments/i
 
 // Our own guards the SDK's spec resolver does not have (8.1.0 review): when ours trips one, the CLI is never asked.
-const OWN_GUARDS = ['worktree_topology_untrusted', 'config_too_large', 'repo_file_outside_root']
+const OWN_GUARDS = ['config_too_large', 'repo_file_outside_root']
+// An untrusted worktree topology: cli >= 4.4.2 checks it itself (spec §9 (a)-(e)); older ones would climb a forged commondir.
+const TOPOLOGY_CLI = [4, 4, 2]
+export function cliChecksTopology(version: string | null | undefined): boolean {
+  const m = /(\d+)\.(\d+)\.(\d+)/.exec(String(version ?? ''))
+  if (!m) return false
+  const v = m.slice(1).map(Number)
+  const i = v.findIndex((x, k) => x !== TOPOLOGY_CLI[k])
+  return i < 0 || v[i] > TOPOLOGY_CLI[i]
+}
 export async function resolveContext($: any, cwd: string, envIn: Env, o: { dataRoot?: string, flags?: { org?: string, project?: string },
   cli?: (argv: string[], opts?: any) => Promise<any> } = {}): Promise<Ctx> {
   const read = fsReader($)
@@ -94,19 +104,27 @@ export async function resolveContext($: any, cwd: string, envIn: Env, o: { dataR
   const r = await resolve(cwd, env, { flags: o.flags ?? null, remoteMap, organizations: orgs, read, realpath,
     defaultOrgId: gc.default_org_id ?? gc.defaultOrgId ?? null, globalProjectId: gc.projectId ?? null })
   const ours = { ...r, ...base, via: 'resolver' } as Ctx
-  // an untrusted worktree topology, an oversized or out-of-repo binding file never reach the CLI (its spec resolver
-  // would climb a forged commondir, parse the file, follow the symlink)
-  if (g.untrusted || ((r as any).warnings ?? []).some((w: string) => OWN_GUARDS.includes(w))) return ours
+  // an oversized or out-of-repo binding file never reaches the CLI (its spec resolver would parse the file, follow the
+  // symlink); an untrusted worktree topology only a CLI that checks it itself (>= 4.4.2; this check stays the offline path)
+  const warned = ((r as any).warnings ?? []) as string[]
+  if (warned.some(w => OWN_GUARDS.includes(w))) return ours
+  const untrusted = g.untrusted
   const capPath = o.dataRoot ? `${o.dataRoot}/cli-context-cap.json` : null
   const capKey = await cliIdentity($)
   const cap = capPath ? await readJsonObj($, capPath) : {}
   const known = cap.key === capKey ? cap.has : undefined  // an old CLI is probed once per CLI build, not per session
+  let version: string | null = cap.key === capKey && typeof cap.version === 'string' ? cap.version : null
   if (o.cli && env.ACE_CONTEXT_ENGINE !== 'resolver' && (known !== false || env.ACE_CONTEXT_ENGINE === 'cli')) {
+    if (untrusted && !version) {  // once per CLI build, only on this rare path
+      version = /\d+\.\d+\.\d+/.exec(String((await o.cli(['--version'], { timeoutMs: 10_000 }))?.stdout ?? ''))?.[0] ?? null
+      if (capPath && version) await $.fs.write(capPath, JSON.stringify({ ...(cap.key === capKey ? cap : {}), key: capKey, version })).catch(() => undefined)
+    }
+    if (untrusted && !cliChecksTopology(version)) return ours
     const c = await o.cli(['context', '--json', ...(o.flags?.org ? ['--org', o.flags.org] : []), ...(o.flags?.project ? ['--project', o.flags.project] : [])],
       { cwd, env: { ACE_ORG_ID: env.ACE_ORG_ID ?? '', ACE_PROJECT_ID: env.ACE_PROJECT_ID ?? '', ACE_BIND_ROOT: env.ACE_BIND_ROOT ?? '' }, timeoutMs: 10_000 })
     const parsed = parseCliContext(c?.stdout)
     const old = !parsed && CLI_CONTEXT_UNKNOWN.test(`${c?.stderr ?? ''}\n${c?.stdout ?? ''}`)
-    if (capPath && (parsed || old) && known !== !!parsed) await $.fs.write(capPath, JSON.stringify({ key: capKey, has: !!parsed })).catch(() => undefined)
+    if (capPath && (parsed || old) && known !== !!parsed) await $.fs.write(capPath, JSON.stringify({ key: capKey, has: !!parsed, ...(version ? { version } : {}) })).catch(() => undefined)
     if (parsed) return { ...parsed, ...base, via: 'cli' } as Ctx
   }
   return ours
