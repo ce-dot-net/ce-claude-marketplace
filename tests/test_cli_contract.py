@@ -338,3 +338,45 @@ def test_python_chain_binds_through_the_real_cli(tmp_path, monkeypatch):
     r = apc.bind(str(wt / "src"), "org_a", "prj_a")
     assert r["shadowedBy"] == str(wt / ".ace/config.json")
     assert apc.remove_shadow(str(wt / "src"), r["shadowedBy"]) and not (wt / ".ace/config.json").exists()
+
+
+# ---- 4.4.2: `ace-cli context --json` on all spec cases (cases.json, §9 (a)-(e)), the same as both our chains ----
+
+def _spec_cases():
+    return json.loads((PLUGIN / "tests-fixtures/project-context/cases.json").read_text())
+
+
+@pytest.mark.parametrize("case", _spec_cases(), ids=[c["name"] for c in _spec_cases()])
+def test_cli_context_matches_the_spec_cases(tmp_path, case):
+    """The real pinned CLI on the fixture laid out on disk ("@symlink:<rel>" = a real symlink); the in-memory runners
+    (tests/test_project_context_spec.py, mod/tests/project_context.test.ts) assert the same `expect`."""
+    base = Path(os.path.realpath(tmp_path)) / "r"
+    sub = lambda v: v.replace("$ROOT", str(base)) if isinstance(v, str) else v
+    for rel, content in case["layout"].items():
+        p = base / rel
+        if content is None:
+            p.mkdir(parents=True, exist_ok=True)
+            continue
+        p.parent.mkdir(parents=True, exist_ok=True)
+        if content.startswith("@symlink:"):
+            p.symlink_to(base / content[len("@symlink:"):])
+        else:
+            p.write_text(sub(content))
+    (base / case["cwd"]).mkdir(parents=True, exist_ok=True)
+    cfg = tmp_path / "xdg" / "ace" / "config.json"
+    cfg.parent.mkdir(parents=True)
+    cfg.write_text(json.dumps(case.get("globalConfig") or {}))
+    env = {"HOME": str(tmp_path / "home"), "XDG_CONFIG_HOME": str(tmp_path / "xdg"), "NO_COLOR": "1",
+           "PATH": os.pathsep.join([os.path.dirname(NODE), "/usr/bin", "/bin"]), **{k: sub(v) for k, v in case["env"].items()}}
+    flags = [x for k in ("org", "project") if (case.get("flags") or {}).get(k) for x in (f"--{k}", case["flags"][k])]
+    p = subprocess.run([NODE, str(CLI_JS), "context", "--json", *flags], capture_output=True, text=True, timeout=60,
+                       cwd=str(base / case["cwd"]), env=env)
+    got = json.loads(p.stdout)
+    rel = lambda v: os.path.relpath(v, base) if isinstance(v, str) else v
+    for k in ("projectName", "auth", "message"):
+        got.pop(k, None)
+    if "path" in got:
+        got["path"] = rel(got["path"])
+    for t in got.get("tried", []):
+        t["path"] = rel(t["path"])
+    assert got == case["expect"], p.stderr[-500:]
