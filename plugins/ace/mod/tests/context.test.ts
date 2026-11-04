@@ -300,6 +300,23 @@ test('forged .git commondir: no climb into the victim, the CLI is not asked, not
   expect([...h.files.keys()].some(k => k.startsWith('/victim/.ace'))).toBe(false)
 })
 
+// cli >= 4.4.2 checks the topology itself (spec §9 (a)-(e)): the seam is asked again on an untrusted topology,
+// gated by `ace-cli --version` (probed once per CLI build, cached beside `has`). Older or unknown: our resolver only.
+const UNTRUSTED_OUT = JSON.stringify({ bound: false, reason: 'no_binding', tried: [], warnings: ['worktree_topology_untrusted'] })
+const topoCli = (v: string) => (a: string[]) => a[0] === 'context' ? { exitCode: 5, stdout: UNTRUSTED_OUT } : a[0] === '--version' ? { stdout: `${v}\n` } : undefined
+for (const [v, asked] of [['4.4.2', true], ['4.10.0', true], ['4.4.1', false], ['garbage', false]] as const) {
+  test(`forged .git commondir, ace-cli --version ${v}: the CLI is ${asked ? '' : 'not '}asked`, async ($, on) => {
+    const h = host(on, { noSettings: true, root: '/a', cwd: '/a', files: forgedFiles(), cli: topoCli(v) })
+    await start($, '/a')
+    await tick()
+    expect(askedCli(h)).toBe(asked)
+    expect(h.env.ACE_PROJECT_ID).toBe(undefined)
+    expect(ctxRows(h, '/a/.claude/data/logs/ace-relevance.jsonl')[0]).toMatchObject({ state: 'unbound', via: asked ? 'cli' : 'resolver',
+      warnings: ['worktree_topology_untrusted'] })
+    expect(JSON.parse(h.files.get(`${ROOT}/cli-context-cap.json`) ?? '{}').version ?? null).toBe(v === 'garbage' ? null : v)
+  })
+}
+
 const GIT = { [`${CWD}/.git/config`]: '[core]\n', [`${CWD}/.claude/data/logs/.keep`]: '' }
 const ACE = JSON.stringify({ orgId: 'org_a', projectId: 'prj_a' })
 for (const [rel, body] of [['.ace/config.json', ACE], ['.claude/settings.json', JSON.stringify({ env: { ACE_ORG_ID: 'org_a', ACE_PROJECT_ID: 'prj_a' } })]] as const) {
