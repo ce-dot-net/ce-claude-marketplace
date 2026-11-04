@@ -334,7 +334,4 @@ class TestProjectConfigKey:
         bash_match = re.search(r"```bash\n(.*?)```", check3, re.DOTALL)
         assert bash_match is not None, "No bash block in Check 3"
         bash = bash_match.group(1)
-        assert ".env.ACE_PROJECT_ID" in bash, (
-            "Check 3 bash block must use '.env.ACE_PROJECT_ID' (not '.projectId') "
-            "to match what ace-configure.md actually writes to settings.json."
-        )
+        assert "scripts/ace-context" in bash, "8.1.0: Check 3 uses the one core (scripts/ace-context)"

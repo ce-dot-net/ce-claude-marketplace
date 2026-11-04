@@ -1,7 +1,7 @@
 ---
 disable-model-invocation: true
 description: Login to ACE using browser-based device code authentication
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(mkdir:*), Bash(cat:*), Bash(rm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(mkdir:*), Bash(cat:*), Bash(rm:*), Read
 ---
 
 # ACE Login
@@ -43,7 +43,7 @@ DEPRECATED_FORMAT_FOUND=""
 # Check OLD location: ~/.ace/config.json
 OLD_LOCATION="$HOME/.ace/config.json"
 if [ -f "$OLD_LOCATION" ]; then
-  OLD_TOKEN=$(jq -r '.apiToken // empty' "$OLD_LOCATION" 2>/dev/null || echo "")
+  OLD_TOKEN=$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get apiToken '' < "$OLD_LOCATION" 2>/dev/null || echo "")
   if [ -n "$OLD_TOKEN" ]; then
     echo "⚠️  Found deprecated config at ~/.ace/config.json"
     echo "   Format: apiToken (org token)"
@@ -55,8 +55,8 @@ fi
 NEW_LOCATION="$HOME/.config/ace/config.json"
 if [ -f "$NEW_LOCATION" ]; then
   # Check if it has apiToken (old format) instead of auth.token (new format)
-  API_TOKEN=$(jq -r '.apiToken // empty' "$NEW_LOCATION" 2>/dev/null || echo "")
-  AUTH_TOKEN=$(jq -r '.auth.token // empty' "$NEW_LOCATION" 2>/dev/null || echo "")
+  API_TOKEN=$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get apiToken '' < "$NEW_LOCATION" 2>/dev/null || echo "")
+  AUTH_TOKEN=$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get auth.token '' < "$NEW_LOCATION" 2>/dev/null || echo "")
 
   if [ -n "$API_TOKEN" ] && [ -z "$AUTH_TOKEN" ]; then
     echo "⚠️  Found deprecated format at ~/.config/ace/config.json"
@@ -87,15 +87,15 @@ The new format uses `auth.token` with user tokens from device code flow.
 
 **Migration Path**:
 1. Run `/ace-login` → Creates/updates config at `~/.config/ace/config.json` with `auth.token`
-2. Run `/ace-configure` → Saves org/project to `.claude/settings.json`
+2. Run `/ace-configure` → writes the tracked `.ace/config.json` (orgId/projectId) at the repo root
 3. Remove old config: `rm ~/.ace/config.json` (if it exists)
 
 ### Step 3: Check Current Authentication Status (New Config)
 
 ```bash
 AUTH_STATUS=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json 2>&1 || echo '{"authenticated": false}')
-AUTHENTICATED=$(echo "$AUTH_STATUS" | jq -r '.authenticated // false')
-TOKEN_STATUS=$(echo "$AUTH_STATUS" | jq -r '.token_status // empty')
+AUTHENTICATED=$(printf '%s' "$AUTH_STATUS" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get authenticated false)
+TOKEN_STATUS=$(printf '%s' "$AUTH_STATUS" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get token_status '')
 ```
 
 **If already authenticated with valid token**:
@@ -147,12 +147,12 @@ sleep 1
 
 # Verify login succeeded
 AUTH_STATUS=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json 2>&1)
-AUTHENTICATED=$(echo "$AUTH_STATUS" | jq -r '.authenticated // false')
+AUTHENTICATED=$(printf '%s' "$AUTH_STATUS" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get authenticated false)
 
 if [ "$AUTHENTICATED" = "true" ]; then
-  EMAIL=$(echo "$AUTH_STATUS" | jq -r '.user.email // "unknown"')
-  ORG_COUNT=$(echo "$AUTH_STATUS" | jq -r '.user.organizations | length // 0')
-  TOKEN_STATUS=$(echo "$AUTH_STATUS" | jq -r '.token_status // "unknown"')
+  EMAIL=$(printf '%s' "$AUTH_STATUS" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get user.email 'unknown')
+  ORG_COUNT=$(printf '%s' "$AUTH_STATUS" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get user.organizations.# 0)
+  TOKEN_STATUS=$(printf '%s' "$AUTH_STATUS" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get token_status 'unknown')
 
   echo ""
   echo "Login successful!"
@@ -171,22 +171,13 @@ fi
 
 ### Step 6: Smart Auto-Configure (First Time Only)
 
-**v5.4.18**: First-time login now auto-configures org/project to streamline setup.
+**v5.4.18**: First-time login now auto-configures org/project to streamline setup. Where mods run, the ACE mod
+answers /ace:ace-login itself and starts the device login only when the [Anmelden] button is pressed.
 
 ```bash
-# Check if project is already configured
-CONFIG_FILE=".claude/settings.json"
-OLD_CONFIG="$HOME/.ace/config.json"
+# Is this repo bound? (8.1.0: the one core, never a settings.json read here)
 IS_FIRST_TIME="false"
-
-if [ -f "$CONFIG_FILE" ]; then
-  PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // empty' "$CONFIG_FILE" 2>/dev/null || echo "")
-  if [ -z "$PROJECT_ID" ]; then
-    IS_FIRST_TIME="true"
-  fi
-else
-  IS_FIRST_TIME="true"
-fi
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --json >/dev/null 2>&1 || IS_FIRST_TIME="true"
 ```
 
 **If already configured** (has ACE_PROJECT_ID):
@@ -202,14 +193,14 @@ You're all set! ACE will now work with your tasks.
 
 ```bash
 ORGS_JSON=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli orgs --json 2>&1)
-ORG_COUNT=$(echo "$ORGS_JSON" | jq -r '.count // 0')
+ORG_COUNT=$(printf '%s' "$ORGS_JSON" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get count 0)
 ```
 
 **If 1 organization**: Auto-select it
 ```bash
 if [ "$ORG_COUNT" = "1" ]; then
-  SELECTED_ORG_ID=$(echo "$ORGS_JSON" | jq -r '.organizations[0].org_id')
-  SELECTED_ORG_NAME=$(echo "$ORGS_JSON" | jq -r '.organizations[0].name')
+  SELECTED_ORG_ID=$(printf '%s' "$ORGS_JSON" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get organizations.0.org_id '')
+  SELECTED_ORG_NAME=$(printf '%s' "$ORGS_JSON" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get organizations.0.name '')
   echo "You have 1 organization. Auto-selecting: $SELECTED_ORG_NAME"
 fi
 ```
@@ -222,14 +213,14 @@ fi
 
 ```bash
 PROJECTS_JSON=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli projects --org "$SELECTED_ORG_ID" --json 2>&1)
-PROJECT_COUNT=$(echo "$PROJECTS_JSON" | jq -r '.projects | length // 0')
+PROJECT_COUNT=$(printf '%s' "$PROJECTS_JSON" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get projects.# 0)
 ```
 
 **If 1 project**: Auto-select it
 ```bash
 if [ "$PROJECT_COUNT" = "1" ]; then
-  SELECTED_PROJECT_ID=$(echo "$PROJECTS_JSON" | jq -r '.projects[0].project_id')
-  SELECTED_PROJECT_NAME=$(echo "$PROJECTS_JSON" | jq -r '.projects[0].name')
+  SELECTED_PROJECT_ID=$(printf '%s' "$PROJECTS_JSON" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get projects.0.project_id '')
+  SELECTED_PROJECT_NAME=$(printf '%s' "$PROJECTS_JSON" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get projects.0.name '')
   echo "You have 1 project. Auto-selecting: $SELECTED_PROJECT_NAME"
 fi
 ```
@@ -247,19 +238,9 @@ Please create a project at https://ace.code-engine.app and run /ace-configure.
 #### Step 6c: Save Configuration
 
 ```bash
-# Ensure .claude directory exists
-mkdir -p .claude
-
-# Write settings.json
-cat > "$CONFIG_FILE" << EOF
-{
-  "env": {
-    "ACE_ORG_ID": "$SELECTED_ORG_ID",
-    "ACE_PROJECT_ID": "$SELECTED_PROJECT_ID",
-    "ACE_VERBOSITY": "detailed"
-  }
-}
-EOF
+# Preview first, then write only after the user confirmed (AskUserQuestion "Write this binding?")
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --bind "$SELECTED_ORG_ID" "$SELECTED_PROJECT_ID"
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --bind "$SELECTED_ORG_ID" "$SELECTED_PROJECT_ID" --yes
 
 echo ""
 echo "✅ ACE configured successfully!"

@@ -52,9 +52,9 @@ def test_dead_file_deleted(name):
 
 @pytest.mark.parametrize("name", WPA_SHIMS)
 def test_wpa_shim_execs_python_with_cached_path(name):
-    """§3.1: read <data>/python_path, fall back to `command -v python3`, `exec` the hook."""
+    """§3.1 + 8.1.0: the python comes from scripts/ace-python (cached python_path first, Python >= 3.10), `exec` the hook."""
     src = (SCRIPTS / name).read_text()
-    assert "python_path" in src, "%s must read the cached python_path" % name
+    assert 'scripts/ace-python' in src and "python_path" in (SCRIPTS / "ace-python").read_text(), name
     assert re.search(r'^exec "\$PY" ', src, re.M), "%s must exec the python hook" % name
 
 

@@ -5,13 +5,14 @@ ACE Graph Builder - Render the local ACE knowledge-graph as an interactive HTML 
 NO side effects on import.
 
 Public API:
-    resolve_graph_db(settings_path, cache_dir) -> str or None
+    resolve_graph_db(org_id, project_id, cache_dir, server_url=None) -> str or None
     load_graph(db_path, min_weight=2, max_edges=1500) -> dict
     build_graph_html(graph_dict) -> str
 """
 
 import html as _html
 import json
+import sys
 import os
 import shutil
 import sqlite3
@@ -23,21 +24,19 @@ from typing import Dict, List, Optional
 # DB resolution
 # ---------------------------------------------------------------------------
 
-def _read_settings_env(settings_path):
-    """Return (org_id, project_id) from settings.json or (None, None)."""
-    if settings_path is None:
-        return None, None
-    p = Path(settings_path)
-    if not p.exists():
-        return None, None
+def cache_host(server_url):
+    """Spec §8: lowercase host of the server URL, plus _port when non-default ('' when unknown)."""
+    from urllib.parse import urlparse
     try:
-        data = json.loads(p.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return None, None
-    env = data.get("env", {})
-    org = env.get("ACE_ORG_ID") or None
-    proj = env.get("ACE_PROJECT_ID") or None
-    return org, proj
+        u = urlparse(server_url or '')
+        host = (u.hostname or '').lower()
+        port = u.port
+    except ValueError:
+        return ''
+    if not host:
+        return ''
+    default = {'http': 80, 'https': 443}.get(u.scheme)
+    return '%s_%s' % (host, port) if port and port != default else host
 
 
 def _db_has_patterns(db_path):
@@ -54,45 +53,21 @@ def _db_has_patterns(db_path):
         return False
 
 
-def resolve_graph_db(settings_path, cache_dir):
-    """
-    Locate the best ACE cache DB to use.
+def resolve_graph_db(org_id, project_id, cache_dir, server_url=None):
+    """The cache DB of exactly this binding (ids from ace_project_context), or None. Never another project's.
 
-    1. If settings_path exists and contains ACE_ORG_ID + ACE_PROJECT_ID,
-       look for '<org>__<project>.db' in cache_dir.
-    2. Fallback: pick the most-recently-modified *.db in cache_dir that has
-       a non-empty patterns table.
-    3. Return None if nothing usable is found.
-
-    Args:
-        settings_path: path to .claude/settings.json (str or None)
-        cache_dir: path to ~/.ace-cache or equivalent (str)
-
-    Returns:
-        str path to the chosen DB, or None.
-    """
+    Names: `<org>__<project>__<host>.db` (spec §8, the upcoming CLI; host as cache_host) first, then the pinned
+    CLI's `<org>__<project>.db`. Without a known server, any `<org>__<project>__*.db` counts. Empty DBs are skipped."""
     cache = Path(cache_dir) if cache_dir else None
-
-    # --- env-first ---
-    org_id, project_id = _read_settings_env(settings_path)
-    if org_id and project_id and cache and cache.is_dir():
-        candidate = cache / "{}__{}.db".format(org_id, project_id)
+    if not (org_id and project_id and cache and cache.is_dir()):
+        return None
+    base = "{}__{}".format(org_id, project_id)
+    host = cache_host(server_url)
+    names = [cache / "{}__{}.db".format(base, host)] if host else sorted(
+        cache.glob(base + "__*.db"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for candidate in names + [cache / (base + ".db")]:
         if candidate.exists() and _db_has_patterns(str(candidate)):
             return str(candidate)
-
-    # --- fallback: most-recently-modified non-empty DB ---
-    if cache is None or not cache.is_dir():
-        return None
-
-    dbs = sorted(
-        cache.glob("*.db"),
-        key=lambda p: p.stat().st_mtime,
-        reverse=True,
-    )
-    for db in dbs:
-        if _db_has_patterns(str(db)):
-            return str(db)
-
     return None
 
 
@@ -699,3 +674,40 @@ applyFilters();
     )
 
     return html
+
+
+def main(argv=None):
+    """`python3 ace_graph_builder.py --org O --project P [--server-url U] [--name N] [--min-weight W] [--max-edges M]`:
+    the graph of exactly this binding (ids from ace_project_context), written to ~/.claude/usage-data/ace-graph.html."""
+    import argparse
+    ap = argparse.ArgumentParser(prog="ace-graph")
+    ap.add_argument("--org", required=True)
+    ap.add_argument("--project", required=True)
+    ap.add_argument("--server-url")
+    ap.add_argument("--name")
+    ap.add_argument("--min-weight", type=int, default=1)
+    ap.add_argument("--max-edges", type=int, default=2000)
+    ap.add_argument("--cache-dir", default=str(Path.home() / ".ace-cache"))
+    ap.add_argument("--out", default=str(Path.home() / ".claude" / "usage-data" / "ace-graph.html"))
+    a = ap.parse_args(argv)
+    db = resolve_graph_db(a.org, a.project, a.cache_dir, a.server_url)
+    if db is None:
+        print("No ACE cache DB for %s / %s yet. The cache fills after a few searches." % (a.org, a.project))
+        return 0
+    g = load_graph(db, min_weight=a.min_weight, max_edges=a.max_edges)
+    out = Path(a.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(build_graph_html(g, project_name=a.name), encoding="utf-8")
+    meta = g["meta"]
+    hubs = sorted(g["nodes"], key=lambda n: n["degree"], reverse=True)[:5]
+    print("ACE Knowledge Graph: %s (%s)" % (a.name or a.project, a.project))
+    print("  Patterns : %s" % meta.get("total_patterns", len(g["nodes"])))
+    print("  Edges    : %s rendered (min_weight=%s)" % (meta.get("rendered_edges", len(g["edges"])), a.min_weight))
+    for n in hubs:
+        print("  hub      : %s (degree %s)" % (str(n.get("label") or n.get("id"))[:80], n.get("degree")))
+    print("  Report   : %s" % out)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

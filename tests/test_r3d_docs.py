@@ -310,7 +310,7 @@ def test_ci_rebuilds_sqlite_so_the_pinned_contract_case_runs():
 
 def test_ci_setup_node_comes_before_the_suite():
     t = TESTS_YML.read_text()
-    assert t.index("setup-node") < t.index("pytest tests")
+    assert t.index("setup-node") < t.index("rstest tests")
 
 
 def test_ci_runs_on_the_release_branch():

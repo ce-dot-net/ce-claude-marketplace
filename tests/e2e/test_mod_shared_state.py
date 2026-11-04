@@ -1,7 +1,7 @@
 """Shared on-disk contract between the v8 mod and the Python hooks (DESIGN §13.1, §4/C1, §12, §11 A3).
 
 - The mod's main-agent state output (fixture `state_main_8`, the exact bytes the mod must write;
-  plugins/ace/mod/tests/ace_mod.test.ts asserts the mod writes them) is readable by
+  plugins/ace/mod/tests/*.test.ts asserts the mod writes them) is readable by
   patterns_used_state.load_state / load_* and re-injected by the SessionStart compact hook.
 - The mod is registered in plugin.json beside the classic hooks, TypeScript only, no build step.
 - The mod's detached learn launcher survives SIGHUP of the session's process group, appends the
@@ -87,7 +87,7 @@ def test_rendered_context_survives_the_python_reap_into_the_sidecar(data_root):
 def _run_compact(root, tmp_path):
     proj = tmp_path / "proj"
     (proj / ".claude").mkdir(parents=True)
-    (proj / ".claude" / "settings.json").write_text(json.dumps({"projectId": PRJ, "orgId": "org_shared"}))
+    (proj / ".claude" / "settings.json").write_text(json.dumps({"env": {"ACE_PROJECT_ID": PRJ, "ACE_ORG_ID": "org_shared"}}))
     env = dict(os.environ, CLAUDE_PLUGIN_DATA=str(root), CLAUDE_PROJECT_DIR=str(proj))
     event = {"hook_event_name": "SessionStart", "source": "compact", "session_id": SID, "cwd": str(proj)}
     p = subprocess.run([sys.executable, str(R.PLUGIN / "shared-hooks" / "ace_session_start.py"), "--compact"],
@@ -104,7 +104,7 @@ def test_sessionstart_compact_reinjects_the_mod_rendered_context(data_root, tmp_
 
 
 def test_sessionstart_compact_reinjects_the_mod_sidecar_after_its_learn(data_root, tmp_path):
-    """The mod reaps patterns-used-main.json at turn.complete and keeps rendered-main.txt (ace_mod.test.ts)."""
+    """The mod reaps patterns-used-main.json at turn.complete and keeps rendered-main.txt (mod tests/turn.test.ts)."""
     sdir = data_root / "projects" / PRJ / "sessions" / SID
     sdir.mkdir(parents=True)
     rc = json.loads(_mod_state_text())["rendered_context"]
@@ -133,7 +133,7 @@ def test_mod_is_registered_in_plugin_json_beside_the_classic_hooks():
     assert "./hooks/hooks.json" not in hooks  # loaded by convention; listing it again is a duplicate
     assert json.loads((R.MOD / "hooks.json").read_text()) == {"modules": ["./register.ts"]}
     assert (R.PLUGIN / "hooks" / "hooks.json").exists()
-    assert (R.MOD / "register.ts").exists() and (R.MOD / "core.ts").exists()
+    assert (R.MOD / "register.ts").exists() and (R.MOD / "lib" / "render.ts").exists()
 
 
 def test_mod_is_typescript_without_build_step_or_dependencies():
@@ -162,7 +162,7 @@ def _launcher_argv(job):
     p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", str(HERE / "mod_parity_node.mjs")],
                        input=json.dumps({"fixtures": [], "sids": [], "envs": [], "roots": [], "learnJob": job}),
                        capture_output=True, text=True, timeout=60)
-    assert p.returncode == 0, "mod core.ts did not run:\n" + p.stderr[-2000:]
+    assert p.returncode == 0, "mod lib/trace.ts did not run:\n" + p.stderr[-2000:]
     return json.loads(p.stdout)["learnArgv"]
 
 

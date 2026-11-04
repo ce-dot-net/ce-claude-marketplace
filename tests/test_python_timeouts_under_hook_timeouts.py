@@ -56,7 +56,7 @@ def test_sessionend_has_no_timeout():
 def proj(tmp_path, monkeypatch):
     p = tmp_path / "proj"
     (p / ".claude").mkdir(parents=True)
-    (p / ".claude" / "settings.json").write_text(json.dumps({"projectId": "prj_to", "orgId": "org_to"}))
+    (p / ".claude" / "settings.json").write_text(json.dumps({"env": {"ACE_PROJECT_ID": "prj_to", "ACE_ORG_ID": "org_to"}}))
     monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "ace-pd"))
     monkeypatch.chdir(p)
     try:

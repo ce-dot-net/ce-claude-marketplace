@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
-# thin shim: resolve python once (cached by SessionStart), exec the python hook with stdin untouched
+# thin shim: the python >= 3.10 the fallback hooks need (scripts/ace-python), exec the python hook, stdin untouched
 ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
-PY=""; [ -r "${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/ace-ce-dot-net-marketplace}/python_path" ] && read -r PY < "${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/ace-ce-dot-net-marketplace}/python_path"
-[ -x "$PY" ] || PY="$(command -v python3)"
-[ -n "$PY" ] || exit 0
+. "$ROOT/scripts/ace-python"; PY="$(ace_python)" || exit 0  # Python >= 3.10 (8.1.0), else silent: the mod chain is unaffected
 exec "$PY" "$ROOT/shared-hooks/ace_permission_denied.py" "$@"

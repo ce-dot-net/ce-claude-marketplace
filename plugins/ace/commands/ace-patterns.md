@@ -2,7 +2,7 @@
 model: claude-haiku-4-5
 description: View ACE playbook organized by section (strategies, snippets, troubleshooting, APIs)
 argument-hint: "[section] [min-reward]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Read
 ---
 
 # ACE Playbook
@@ -32,9 +32,9 @@ if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
   exit 1
 fi
 
-# Get context and export as env vars (support both formats)
-export ACE_ORG_ID=$(jq -r '.orgId // .env.ACE_ORG_ID // empty' .claude/settings.json 2>/dev/null || echo "")
-export ACE_PROJECT_ID=$(jq -r '.projectId // .env.ACE_PROJECT_ID // empty' .claude/settings.json 2>/dev/null || echo "")
+# 8.1.0: the one binding lookup (scripts/ace-context, the plugin core); never read binding files here
+CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1
+eval "$CTX"; ORG_ID="$ACE_ORG_ID"; PROJECT_ID="$ACE_PROJECT_ID"
 
 if [ -z "$ACE_ORG_ID" ] || [ -z "$ACE_PROJECT_ID" ]; then
   echo "❌ Run /ace-configure first"
@@ -46,7 +46,7 @@ SECTION="${1:-}"  # Optional section filter
 MIN_REWARD="${2:-0}"  # Optional min reward score
 
 # Call ace-cli patterns - CLI reads org/project from env vars automatically
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli patterns \
+${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli patterns --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" \
   ${SECTION:+--section "$SECTION"} \
   --min-reward "$MIN_REWARD"
 ```

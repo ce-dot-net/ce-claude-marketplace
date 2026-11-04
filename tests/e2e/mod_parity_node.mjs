@@ -1,8 +1,15 @@
 // Mod side of the renderer parity harness (tests/e2e/test_mod_render_parity.py).
-// Runs the SAME core.ts the mod imports (node --experimental-strip-types), one JSON job on stdin:
+// Runs the SAME lib/*.ts the mod imports (node --experimental-strip-types), one JSON job on stdin:
 // {"fixtures": [paths], "sids": [...], "envs": [{...}], "learnJob": {...}|null, "roots": [[home, root, name], ...]}
 import { readFileSync } from 'node:fs'
-import * as M from '../../plugins/ace/mod/core.ts'
+import * as J from '../../plugins/ace/mod/lib/pyjson.ts'
+import * as R from '../../plugins/ace/mod/lib/render.ts'
+import * as C from '../../plugins/ace/mod/lib/cohort.ts'
+import * as S from '../../plugins/ace/mod/lib/state.ts'
+import * as T from '../../plugins/ace/mod/lib/trace.ts'
+import * as E from '../../plugins/ace/mod/lib/evidence.ts'
+import * as SH from '../../plugins/ace/mod/lib/sh.ts'
+const M = { ...J, ...R, ...C, ...S, ...T, ...E, ...SH }
 
 const job = JSON.parse(readFileSync(0, 'utf8'))
 const out = { fixtures: {}, cohorts: [], roots: [], learnArgv: null }

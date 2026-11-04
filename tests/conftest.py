@@ -36,7 +36,7 @@ _STRIP_EXACT = (
 )
 
 # Test-harness switches, not plugin config: survive the ACE_* strip.
-_KEEP = ("ACE_E2E", "ACE_PLUGIN_ROOT_UNDER_TEST")
+_KEEP = ("ACE_E2E", "ACE_PLUGIN_ROOT_UNDER_TEST", "ACE_E2E_CLI", "ACE_PRERELEASE_PREFIX")
 
 FAKE_SEARCH_OUTPUT = {"count": 0, "similar_patterns": []}
 
@@ -169,7 +169,8 @@ def _hermetic_test(request, monkeypatch, tmp_path):
     if request.node.get_closest_marker("real_ace_cli"):
         fake = str(_state["fake_bin"])
         monkeypatch.setenv(
-            "PATH", os.pathsep.join(p for p in os.environ["PATH"].split(os.pathsep) if p != fake)
+            "PATH", os.pathsep.join(p for p in os.environ["PATH"].split(os.pathsep)
+                                   if p != fake and not (Path(p).name == "fake-bin" and "ace-tests-" in p))  # xdist: the controller's too
         )
     yield
 

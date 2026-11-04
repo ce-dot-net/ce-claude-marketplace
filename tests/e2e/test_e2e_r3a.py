@@ -75,7 +75,7 @@ class World:
         self.project_id, self.session_id, self.agent_id = "prj_r3a" + tok, "r3a" + tok + "-session", "a" + tok + "c0ffee"
         self.prompt_id = str(uuid.uuid4())
         (self.proj / ".claude" / "settings.json").write_text(
-            json.dumps({"projectId": self.project_id, "orgId": "org_r3a"}))
+            json.dumps({"env": {"ACE_PROJECT_ID": self.project_id, "ACE_ORG_ID": "org_r3a"}}))
         (self.proj / "src" / "auth" / "login.py").write_text("def login(): pass\n")
         (self.root / "xdg-config" / "ace" / "config.json").write_text(json.dumps({"apiToken": "e2e"}))
         (self.data / "python_path").write_text(sys.executable + "\n")

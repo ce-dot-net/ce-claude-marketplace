@@ -5,6 +5,57 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.1.0] - 2026-11-04
+
+Requires: Claude Code >= 2.1.311, ace-cli 4.4.2 (pinned exactly; @ace-sdk/core >= 3.8.2), Python >= 3.10 for the fallback hooks (the mod chain needs none).
+
+### Added
+- One binding core for both chains: `mod/context/` and `shared-hooks/utils/ace_project_context.py`, conformant to the SDK
+  spec `project-context` (ce-ace-clients main 3f0e6dd, 76 cases; worktree topology check spec §9 (a)-(e), (e) = a symlinked `.git` is untrusted) plus our strict id check (`org_`/`prj_`). Precedence flag >
+  `.ace/config.json` (walk-up, then the worktree's main checkout) > `.claude/settings.json` env > env > remote map >
+  unbound; never a default project. `scripts/ace-context` is the one entrypoint for the markdown commands.
+- Verify: one background `ace-cli status --org --project` per session, classified by exit code + stderr (pinned 4.3.4
+  and the upcoming exit codes 3-9); states ok / unbound / not_logged_in / expired / project_not_found / no_access /
+  server_error / cli_missing / config_refused / config_invalid. One `context` row (source, path, state) per session.
+- UI: nothing when ok; `ACE ▼ <state>` via the status area and one AbovePrompt band with exactly one action per state;
+  the device login starts only on the button press. Python chain: one systemMessage line per session.
+- Every ACE command is answered model-free by the mod (`mod/commands/`, one table, `/ace` overview); writing commands
+  (clear, delta, import, learn, bootstrap, tune writes, cleanup, export, configure) show a preview and run only after
+  the band's confirm button. Output capped at about 60 KB; argv only, the search query on stdin.
+- Automatic adoption of a legacy or remote-map binding into `.ace/config.json` at the main checkout root (never staged,
+  `ACE_AUTO_ADOPT=0` opts out), the `.gitignore` fix (`.ace/*` + `!.ace/config.json`), a per-machine remote map.
+- Context seam: `ace-cli context --json` (SDK PR #211) replaces our resolver once the CLI has it, feature-detected
+  (probed once per CLI build), stdout JSON only.
+
+### Changed
+- Every `ace-cli` spawn (search, learn, status, commands) and the engine learn pass `--org/--project` explicitly; the
+  child env carries only the resolved ids (a leaked `ACE_*` binding never reaches the CLI).
+- Relevance log, eval/review files and the statusline are keyed to the repo root (the main checkout of a worktree), so
+  subfolders and worktrees share one log.
+- `/ace:ace-configure` writes the tracked `.ace/config.json`, never `.claude/settings.json`; `/ace:ace-graph` takes the ids
+  from the core (no newest-DB fallback) and reads the host-keyed cache name first.
+- Statusline: task = the newest main prompt search, `used N/M` (evidenced use) instead of prior confidence, domains of the injected patterns, absent rate-limit windows hidden (floored, colored per window, spend_limit), `ACE ▼ <state>` on a binding problem.
+
+### Removed
+- `shared-hooks/utils/ace_context.py` (replaced by the core), `scripts/ace-tune.sh`, `scripts/ace-bootstrap.sh`, every
+  settings.json read and every jq call in the markdown commands: jq is no longer needed by any of them (JSON fields
+  via `scripts/ace-context --get PATH [DEFAULT]` / `--rows PATH F1,F2`, multi-line formatting and the statusline
+  settings edit via `python3`; `tests/test_md_commands_no_jq.py` keeps it that way).
+
+### Fixed
+- `handlers/turn.ts` could store an undefined turn anchor; the SubagentHandback tool (not in this build's typed tool
+  table) is matched by name.
+- Security review: repo writes refuse symlinks and paths outside the main checkout (random O_EXCL temp + rename);
+  export goes through the confirm and stays inside the repo; import reads only inside the repo; argv values checked.
+- Review: a forged `.git` commondir (a `.git` file naming another repo's `.git`) no longer binds to, logs into or adopts
+  into that repo. One topology check per chain (`_git` / `git()`: gitdir under `<common>/worktrees/<name>`, the gitdir
+  back-pointer, HEAD and config in common, common named `.git`) serves the resolver, the log root, init target and
+  auto-adopt; untrusted = the worktree's own root, no main-checkout climb, warning `worktree_topology_untrusted`, and the
+  mod never asks `ace-cli context` for it.
+- Review: `.ace/config.json` and `.claude/settings.json` over 64 KiB are never parsed (size checked before the read):
+  `config_invalid` (exit 5, no fallback) with warning `config_too_large`. A symlinked `.ace` or `config.json` whose
+  realpath leaves the repo root is never read: `config_refused` with warning `repo_file_outside_root`.
+
 ## [8.0.1] - 2026-11-03
 
 ### Changed

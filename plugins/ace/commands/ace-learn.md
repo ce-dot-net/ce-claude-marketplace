@@ -1,6 +1,6 @@
 ---
 description: Capture learning from completed work interactively
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(git:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(git:*), Bash(python3:*), Read
 ---
 
 # ACE Learn
@@ -117,16 +117,9 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
   COMMIT_HASH=$(git rev-parse --short HEAD 2>/dev/null || echo "")
   COMMIT_MSG=$(git log -1 --format=%s 2>/dev/null || echo "")
 
-  # Get changed files (staged + unstaged) - returns List[str] per Issue #7
-  CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | head -20 | jq -R -s -c 'split("\n") | map(select(length > 0))' || echo "[]")
-
-  # Build git context JSON
-  GIT_CONTEXT=$(jq -n \
-    --arg branch "$BRANCH" \
-    --arg commit "$COMMIT_HASH" \
-    --arg message "$COMMIT_MSG" \
-    --argjson files "$CHANGED_FILES" \
-    '{branch: $branch, commit_hash: $commit, commit_message: $message, files_changed: $files}')
+  # Get changed files (staged + unstaged) - a List[str] per Issue #7, one per line here
+  CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null | head -20 || true)
+  IN_GIT=1
 
   echo "   Branch: $BRANCH"
   echo "   Commit: $COMMIT_HASH"
@@ -142,9 +135,9 @@ if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
   exit 1
 fi
 
-# Read context from .claude/settings.json (env-first: .env.ACE_PROJECT_ID is authoritative in ACE 1.5)
-ORG_ID=$(jq -r '.env.ACE_ORG_ID // .orgId // empty' .claude/settings.json 2>/dev/null || echo "")
-PROJECT_ID=$(jq -r '.env.ACE_PROJECT_ID // .projectId // empty' .claude/settings.json 2>/dev/null || echo "")
+# 8.1.0: the one binding lookup (scripts/ace-context, the plugin core); never read binding files here
+CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1
+eval "$CTX"; ORG_ID="$ACE_ORG_ID"; PROJECT_ID="$ACE_PROJECT_ID"
 
 if [ -z "$PROJECT_ID" ]; then
   echo "❌ Run /ace:configure first"
@@ -166,12 +159,14 @@ else
 fi
 
 # Build JSON payload for --stdin (includes optional git context)
-LEARN_PAYLOAD=$(jq -n \
-  --arg task "$TASK_DESCRIPTION" \
-  --arg output "$LESSONS_LEARNED" \
-  --argjson success "$([ "$SUCCESS_FLAG" = "--success" ] && echo true || echo false)" \
-  --argjson git "${GIT_CONTEXT:-null}" \
-  '{task: $task, output: $output, success: $success, git: $git}')
+LEARN_PAYLOAD=$(TASK="$TASK_DESCRIPTION" OUT="$LESSONS_LEARNED" OK="$SUCCESS_FLAG" IN_GIT="${IN_GIT:-}" \
+  BRANCH="${BRANCH:-}" COMMIT="${COMMIT_HASH:-}" MSG="${COMMIT_MSG:-}" FILES="${CHANGED_FILES:-}" python3 -c '
+import json, os
+e = os.environ
+git = {"branch": e["BRANCH"], "commit_hash": e["COMMIT"], "commit_message": e["MSG"],
+       "files_changed": [f for f in e["FILES"].split("\n") if f]} if e["IN_GIT"] else None
+print(json.dumps({"task": e["TASK"], "output": e["OUT"], "success": e["OK"] == "--success", "git": git}))
+')
 
 # Call ace-cli learn with --stdin for richer payload
 if [ -n "$ORG_ID" ]; then

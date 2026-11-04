@@ -216,7 +216,7 @@ def test_a5_counts_pin_failed_and_backoff_rows(tmp_path):
     logs = proj / ".claude" / "data" / "logs"; logs.mkdir(parents=True)
     ts = _iso(datetime.now(timezone.utc))
     (logs / "ace-relevance.jsonl").write_text(json.dumps({"timestamp": ts, "event": "search", "pin_failed": True}) + "\n")
-    (logs / "ace-relevance.jsonl.1").write_text(json.dumps({"timestamp": ts, "event": "search", "pin_skipped": "backoff"}) + "\n")
+    (logs / "ace-relevance.1.jsonl").write_text(json.dumps({"timestamp": ts, "event": "search", "pin_skipped": "backoff"}) + "\n")  # 8.1.0: the real rotation name
     script = tmp_path / "a5.py"; script.write_text(_a5_block(), encoding="utf-8")
     r = subprocess.run([sys.executable, str(script)], cwd=str(proj), env=dict(os.environ, HOME=str(home)),
                        capture_output=True, text=True, timeout=30)

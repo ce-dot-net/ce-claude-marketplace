@@ -82,7 +82,7 @@ def test_no_gnu_only_flock_or_proc_in_python_hooks():
 
 def test_tests_ci_workflow_has_both_oses_and_python_floor():
     wf = (REPO / ".github" / "workflows" / "tests.yml").read_text()
-    assert "ubuntu-latest" in wf and "macos-latest" in wf and '"3.9"' in wf
+    assert "ubuntu-latest" in wf and "macos-latest" in wf and '"3.10"' in wf and '"3.15"' in wf  # 8.1.0: floor + latest
 
 
 def test_lint_scan_covers_the_expected_files():

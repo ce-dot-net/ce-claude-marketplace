@@ -2,12 +2,13 @@
 disable-model-invocation: true
 description: Configure ACE server connection settings interactively
 argument-hint: "[--global] [--project]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(mkdir:*), Bash(cat:*), Bash(git:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(mkdir:*), Bash(cat:*), Bash(git:*), Read
 ---
 
-# Configure ACE Connection (v5.4.18)
+# Configure ACE Connection (8.1.0)
 
-Interactive configuration wizard using the new user token authentication model.
+Interactive configuration wizard. Where mods run, the ACE mod answers this command itself (a name-matched
+suggestion and one [Verbinden] button); this markdown is the fallback.
 
 **IMPORTANT**: This command requires prior authentication via `/ace-login`.
 
@@ -17,7 +18,9 @@ Interactive configuration wizard using the new user token authentication model.
 2. **Shows current configuration** (if exists)
 3. **Fetches FRESH** organization and project lists (not cached)
 4. Lets user select organization and project
-5. Saves project config to `.claude/settings.json`
+5. Writes the tracked binding `.ace/config.json` (`{orgId, projectId}`, nothing else) at the MAIN checkout root,
+   fixing `.gitignore` (`.ace/*` + `!.ace/config.json`) only after the user confirmed the shown diff.
+   `.claude/settings.json` is never written.
 
 **v5.4.18 Changes**:
 - Always shows current config before prompting
@@ -32,17 +35,6 @@ When the user runs `/ace-configure`, follow these steps:
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
-
-# Check for jq (required for JSON parsing)
-if ! command -v jq >/dev/null 2>&1; then
-  echo "jq not found (required for JSON parsing)"
-  echo ""
-  echo "Installation instructions:"
-  echo "  macOS:   brew install jq"
-  echo "  Linux:   apt-get install jq  or  yum install jq"
-  echo "  Windows: Download from https://stedolan.github.io/jq/download/"
-  exit 1
-fi
 
 # Check for ace-cli
 if ! ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version >/dev/null 2>&1; then
@@ -62,7 +54,7 @@ echo ""
 
 ```bash
 AUTH_STATUS=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli whoami --json 2>&1 || echo '{"authenticated": false}')
-AUTHENTICATED=$(echo "$AUTH_STATUS" | jq -r '.authenticated // false')
+AUTHENTICATED=$(printf '%s' "$AUTH_STATUS" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get authenticated false 2>/dev/null || echo false)
 ```
 
 **If NOT authenticated** (most common case for new users):
@@ -97,7 +89,7 @@ Proceeding with configuration...
 ```bash
 # Fetch FRESH organization list from server (not cached)
 ORGS_JSON=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli orgs --json 2>&1)
-ORG_COUNT=$(echo "$ORGS_JSON" | jq -r '.count // 0')
+ORG_COUNT=$(printf '%s' "$ORGS_JSON" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get count 0 2>/dev/null || echo 0)
 ```
 
 **If no organizations** (rare edge case):
@@ -112,7 +104,7 @@ Exit here.
 **If organizations found**, parse them for display:
 ```bash
 # Extract organization list
-ORGS=$(echo "$ORGS_JSON" | jq -r '.organizations[] | "\(.org_id)|\(.org_name)|\(.role)"')
+ORGS=$(printf '%s' "$ORGS_JSON" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --rows organizations org_id,org_name,role)
 ```
 
 ### Step 4: Organization Selection
@@ -150,8 +142,7 @@ Extract the selected org_id from user's choice.
 ```bash
 # Fetch FRESH project list from server (not cached)
 PROJECTS_JSON=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli projects --org "$SELECTED_ORG_ID" --json 2>&1)
-PROJECT_LIST=$(echo "$PROJECTS_JSON" | jq -r '.projects // []')
-PROJECT_COUNT=$(echo "$PROJECT_LIST" | jq 'length')
+PROJECT_COUNT=$(printf '%s' "$PROJECTS_JSON" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get projects.# 0 2>/dev/null || echo 0)
 ```
 
 **If no projects** in selected organization:
@@ -165,7 +156,7 @@ Or select a different organization.
 **If projects found**, parse for display:
 ```bash
 # Extract project list
-PROJECTS=$(echo "$PROJECT_LIST" | jq -r '.[] | "\(.project_id)|\(.project_name)"')
+PROJECTS=$(printf '%s' "$PROJECTS_JSON" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --rows projects project_id,project_name)
 ```
 
 ### Step 6: Project Selection
@@ -195,66 +186,30 @@ PROJECTS=$(echo "$PROJECT_LIST" | jq -r '.[] | "\(.project_id)|\(.project_name)"
 
 Extract the selected project_id.
 
-### Step 7: Set Default Organization
+### Step 7: Preview the binding (nothing written yet)
 
 ```bash
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli switch-org "$SELECTED_ORG_ID"
-echo "Default organization set: $SELECTED_ORG_ID"
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --bind "$SELECTED_ORG_ID" "$SELECTED_PROJECT_ID"
 ```
 
-### Step 8: Verbosity Selection (Optional)
+Show the user the output (the file and, when `.gitignore` ignores it, the diff) and **use AskUserQuestion**:
+"Write this binding?" with "Write" / "Cancel".
 
-**Use AskUserQuestion** to let user choose display mode:
-
-```javascript
-{
-  questions: [
-    {
-      question: "How should ACE display learning results?",
-      header: "Verbosity",
-      multiSelect: false,
-      options: [
-        {
-          label: "Detailed (recommended)",
-          description: "Full stats: patterns created, updated, quality scores, timing"
-        },
-        {
-          label: "Compact",
-          description: "Single line summary"
-        }
-      ]
-    }
-  ]
-}
-```
-
-Map selection:
-- "Detailed" → `VERBOSITY="detailed"`
-- "Compact" → `VERBOSITY="compact"`
-
-### Step 9: Save Project Configuration
+### Step 8: Write it (only after "Write")
 
 ```bash
-PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-PROJECT_CONFIG="$PROJECT_ROOT/.claude/settings.json"
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --bind "$SELECTED_ORG_ID" "$SELECTED_PROJECT_ID" --yes
+```
 
-mkdir -p "$PROJECT_ROOT/.claude"
+Nothing is staged or committed. Tell the user to commit `.ace/config.json`: then every clone and worktree is bound.
 
-cat > "$PROJECT_CONFIG" <<EOF
-{
-  "env": {
-    "ACE_ORG_ID": "$SELECTED_ORG_ID",
-    "ACE_PROJECT_ID": "$SELECTED_PROJECT_ID",
-    "ACE_VERBOSITY": "$VERBOSITY"
-  }
-}
-EOF
+It writes through `ace-cli init --json --fix-gitignore` (in a linked worktree: the MAIN checkout's file). Show every
+`ACE ▼` line it prints. When it names a worktree-local `.ace/config.json` that overrides the main checkout's binding
+(`--remove-shadow <path>`), **use AskUserQuestion** "Remove that file?" with "Entfernen" / "Keep"; only after
+"Entfernen":
 
-echo "Project configuration saved:"
-echo "  Location: $PROJECT_CONFIG"
-echo "  Organization: $SELECTED_ORG_ID"
-echo "  Project: $SELECTED_PROJECT_ID"
-echo "  Verbosity: $VERBOSITY"
+```bash
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --remove-shadow "$SHADOW_PATH"
 ```
 
 ### Step 10: Verify Configuration
@@ -263,12 +218,15 @@ echo "  Verbosity: $VERBOSITY"
 echo ""
 echo "Verifying configuration..."
 
-STATUS=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli status --json 2>&1 || echo '{"error": true}')
-if echo "$STATUS" | jq -e '.error' >/dev/null 2>&1; then
+CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1  # 8.1.0: the one binding lookup
+eval "$CTX"
+STATUS=$(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli status --json --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" 2>&1 || echo '{"error": true}')
+if ! printf '%s' "$STATUS" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get . >/dev/null 2>&1 \
+   || printf '%s' "$STATUS" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get error >/dev/null 2>&1; then
   echo "Configuration saved but verification failed."
   echo "This may be normal if the project is new."
 else
-  PATTERN_COUNT=$(echo "$STATUS" | jq -r '.playbook.total_patterns // 0')
+  PATTERN_COUNT=$(printf '%s' "$STATUS" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --get playbook.total_patterns 0)
   echo "ACE connected successfully!"
   echo "  Patterns in playbook: $PATTERN_COUNT"
 fi
@@ -283,7 +241,6 @@ echo ""
 echo "Configured:"
 echo "  Organization: $SELECTED_ORG_NAME"
 echo "  Project: $SELECTED_PROJECT_NAME"
-echo "  Verbosity: $VERBOSITY"
 echo ""
 echo "Next steps:"
 echo "1. Optional: /ace-bootstrap to populate playbook from codebase"
@@ -299,26 +256,13 @@ echo "  /ace-learn   - Manually capture learning"
 
 **v5.4.18**: Always show current config, then proceed to selection.
 
-**If `.claude/settings.json` already exists with ACE config:**
+**Show the current binding (from the one core):**
 
-1. Read and display existing values:
+1. Read and display it:
 ```bash
-PROJECT_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
-PROJECT_CONFIG="$PROJECT_ROOT/.claude/settings.json"
-
-if [ -f "$PROJECT_CONFIG" ]; then
-  EXISTING_ORG=$(jq -r '.env.ACE_ORG_ID // empty' "$PROJECT_CONFIG" 2>/dev/null || echo "")
-  EXISTING_PROJECT=$(jq -r '.env.ACE_PROJECT_ID // empty' "$PROJECT_CONFIG" 2>/dev/null || echo "")
-
-  if [ -n "$EXISTING_ORG" ] && [ -n "$EXISTING_PROJECT" ]; then
-    echo ""
-    echo "Current Configuration:"
-    echo "  Organization: $EXISTING_ORG"
-    echo "  Project: $EXISTING_PROJECT"
-    echo ""
-  fi
-fi
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --json
 ```
+(`source` says where it came from: `repo_file`, `settings_file` (legacy), `env`, `remote_map`; exit 5 = not bound.)
 
 2. **Use AskUserQuestion** to ask what to do:
 ```javascript
@@ -356,22 +300,15 @@ Run /ace-status to verify connection.
 
 ## Project Config Format
 
-The `.claude/settings.json` file contains environment variables for ACE hooks:
+The tracked `.ace/config.json` at the repo's main checkout root:
 
 ```json
-{
-  "env": {
-    "ACE_ORG_ID": "org_xxxxx",
-    "ACE_PROJECT_ID": "prj_xxxxx",
-    "ACE_VERBOSITY": "detailed"
-  }
-}
+{"orgId": "org_xxxxx", "projectId": "prj_xxxxx"}
 ```
 
-**Fields:**
-- `ACE_ORG_ID`: Organization identifier (from whoami)
-- `ACE_PROJECT_ID`: Project identifier (from projects list)
-- `ACE_VERBOSITY`: Display mode (`detailed` or `compact`)
+Nothing else: a file with `apiToken` / `serverUrl` is refused. `.gitignore` must not ignore it (`.ace/*` plus
+`!.ace/config.json`; a bare `.ace/` rule blocks the negation). Legacy `.claude/settings.json` `env.ACE_*` bindings
+still resolve and are adopted into `.ace/config.json` automatically (opt out: `ACE_AUTO_ADOPT=0`).
 
 ## Error Handling
 

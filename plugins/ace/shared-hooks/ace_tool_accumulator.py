@@ -33,7 +33,7 @@ for _p in (_HERE, os.path.join(_HERE, 'utils')):
         sys.path.insert(0, _p)
 
 import plugin_data_dir  # noqa: E402
-from ace_context import get_context  # noqa: E402
+from ace_project_context import get_context  # noqa: E402
 
 SCHEMA_VERSION = 1
 _COLUMNS = [("agent_id", "TEXT"), ("start_ms", "INTEGER"), ("end_ms", "INTEGER"),

@@ -3,7 +3,7 @@ disable-model-invocation: true
 model: claude-haiku-4-5
 description: Show ACE log sizes and delete old rotated logs and v7 leftovers
 argument-hint: "[--days N] [--status] [--legacy [--yes] [--sessions-db]]"
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(rm:*), Bash(ls:*), Bash(python3:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(rm:*), Bash(ls:*), Bash(python3:*), Read
 ---
 
 # ACE Log Cleanup
@@ -27,7 +27,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-LOG_DIR=".claude/data/logs"
+LOG_DIR="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --logs)"  # 8.1.0: the repo root's log dir
 ERR_LOG="${CLAUDE_PLUGIN_DATA:-$HOME/.claude/plugins/data/ace-ce-dot-net-marketplace}/logs/ace-hook-errors.log"
 
 if [ "$SHOW_STATUS" = true ]; then

@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 import plugin_data_dir                                    # noqa: E402
 from ace_cli import run_search                            # noqa: E402
 import ace_search_cache                                  # noqa: E402
-from ace_context import get_context                       # noqa: E402
+from ace_project_context import get_context                       # noqa: E402
 from ace_relevance_logger import log_domain_shift, log_error  # noqa: E402
 from patterns_used_state import (append_patterns_used, injected_contents, load_task_session_id,  # noqa: E402
                                  strip_and_gate, task_session_id_for)

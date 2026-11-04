@@ -9,7 +9,8 @@ build/
 .ace-cache/
 
 # ACE configuration with credentials and project settings
-.ace/
+.ace/*
+!.ace/config.json
 
 # Claude Code data and logs
 .claude/data/
@@ -69,3 +70,9 @@ __pycache__/
 .agent/
 dummy_work.txt
 CLAUDE.md.ace-backup-*
+
+# local tool state, never tracked
+.claude/worktrees/
+.codex/
+.cursor/
+.playwright-cli/

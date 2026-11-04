@@ -35,7 +35,7 @@ from datetime import datetime, timezone
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent / 'utils'))
 
-from ace_context import get_context
+from ace_project_context import get_context
 from utils.git_utils import get_git_context, detect_commits_in_session
 from ace_relevance_logger import log_event, log_execution_metrics, log_hook_error, log_stop_telemetry
 from patterns_used_state import (load_playbook_used, reap_patterns_used,
@@ -139,7 +139,7 @@ def has_substantial_work_from_accumulated(tools: list) -> bool:
 
     Returns:
         True if ANY state-changing tool was used, or (v8) the task made >= MIN_RESEARCH_CALLS
-        tool calls of any kind: research/analysis tasks carry learnings too. Parity: mod/core.ts.
+        tool calls of any kind: research/analysis tasks carry learnings too. Parity: mod/lib/trace.ts.
     """
     if len(tools) >= MIN_RESEARCH_CALLS:
         return True
@@ -156,7 +156,7 @@ def has_substantial_work_from_accumulated(tools: list) -> bool:
 
 def tool_failed(resp) -> bool:
     """A failed step: error / stderr, or (fix 5a) a non-zero exit code - structured or the transcript's
-    "Exit code N" text - unless the tool interpreted it (grep exit 1 = no matches). Parity: mod/core.ts toolRec."""
+    "Exit code N" text - unless the tool interpreted it (grep exit 1 = no matches). Parity: mod/lib/trace.ts toolRec."""
     if not isinstance(resp, dict):
         return False
     if resp.get('error') or resp.get('stderr'):
@@ -682,7 +682,7 @@ def learn_line(review):
     return line
 
 
-def parse_ace_review(message, review_file='.claude/data/logs/ace-review-result.json'):
+def parse_ace_review(message, review_file=None):
     """`ACE_REVIEW: N% | Xm saved | ...` in the last assistant message -> review file
     (read by the statusline). Pure Python: a message without a time phrase used to
     abort the old bash parse (set -eo pipefail) before learning ran."""
@@ -690,7 +690,9 @@ def parse_ace_review(message, review_file='.claude/data/logs/ace-review-result.j
     if not r:
         return
     try:
-        f = plugin_data_dir.open_project_log(review_file, append=False)  # §24: no symlink out of the project
+        from ace_project_context import log_root, logs_dir
+        f = plugin_data_dir.open_project_log(review_file or os.path.join(logs_dir(), 'ace-review-result.json'),
+                                             append=False, base=None if review_file else log_root())  # §24
         if f is not None:
             with f:
                 f.write(json.dumps(r))
@@ -698,10 +700,12 @@ def parse_ace_review(message, review_file='.claude/data/logs/ace-review-result.j
         pass
 
 
-def write_eval_request(patterns_injected, tools_executed, stats=None, path='.claude/data/logs/ace-eval-request.json'):
+def write_eval_request(patterns_injected, tools_executed, stats=None, path=None):
     """Next UserPromptSubmit (ace_before_task.check_eval_request_and_review) turns this into a silent self-eval."""
     try:
-        f = plugin_data_dir.open_project_log(path, append=False)  # §24: no symlink out of the project
+        from ace_project_context import log_root, logs_dir
+        f = plugin_data_dir.open_project_log(path or os.path.join(logs_dir(), 'ace-eval-request.json'),
+                                             append=False, base=None if path else log_root())  # §24
         if f is not None:
             with f:
                 f.write(json.dumps({
@@ -747,14 +751,14 @@ def run_learn_job(job):
     except Exception as e:
         log_hook_exception('AfterTask.learn', e)
     finally:
+        try:  # the metrics row first, the lock last (as the mod's learn child): a released lock means the row is there
+            log_execution_metrics(learning_sent=response is not None, hook=job.get('hook_event_name') or 'Stop', **job['metrics'])
+        except Exception:
+            pass
         try:
             lock.unlink()
         except OSError:
             pass
-    try:
-        log_execution_metrics(learning_sent=response is not None, hook=job.get('hook_event_name') or 'Stop', **job['metrics'])
-    except Exception:
-        pass
 
 
 def dispatch_learn(job, session_id):
@@ -1266,6 +1270,9 @@ def main():
                     "project_id": context.get('project'), "agent_type": agent_type,
                     "used_ids_count": len(_used), "used_source": "tokens" if _used else "none",
                     **({"used_ids_capped": True} if _capped else {}),
+                    # 8.1.0 audit: the same correlation fields as the mod's execution row
+                    "agent_id": agent_id or None, "task_session_id": task_session_id or None,
+                    "render_cohort": _render_variant,
                 },
             }
         except Exception as e:

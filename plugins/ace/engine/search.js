@@ -15,7 +15,11 @@ const { AceClient, createContext } = loadCoreOrExit();
   if (!query) throw new Error('query is required');
   const ctx = await createContext({ org: input.org, project: input.project });
   // Default cacheDir on purpose: the graph sqlite feeds result.expanded (CLI parity) and /ace:ace-graph.
-  const client = new AceClient(ctx, { customHeaders: clientHeaders() });
+  // 8.1.0 audit: the core's default logger writes to stdout ("Cache hit ..."), which broke the one JSON line the hooks
+  // parse ("lib failed: no similar_patterns list" -> needless ace-cli fallback). Its lines go to stderr, as in learn.js.
+  const toErr = (m) => process.stderr.write(String(m) + '\n');
+  const logger = { warn: toErr, error: toErr, info: () => {}, success: () => {}, debug: () => {}, trace: () => {}, isTrace: () => false };
+  const client = new AceClient(ctx, { customHeaders: clientHeaders(), logger });
   // Cores < 3.4.0 rebuild the search result from a fixed field list and drop the server switches
   // (render_full_pct, feedback_downvote): capture the raw /patterns/search body as the fallback.
   // 3.4.0+ passes them through, so the result wins and the capture is unused.

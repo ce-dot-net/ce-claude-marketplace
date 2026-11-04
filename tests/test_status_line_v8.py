@@ -1,4 +1,4 @@
-"""The visible per-prompt notice is ONE line, identical in both chains (mod statusLine in mod/core.ts)."""
+"""The visible per-prompt notice is ONE line, identical in both chains (mod statusLine in mod/ui/status.ts)."""
 import importlib.util, sys
 from pathlib import Path
 

@@ -3,7 +3,7 @@
 RED tests for ace_graph_builder.py and the ace-graph.md command.
 
 Covers:
-  1. resolve_graph_db  - env-first, fallback most-recent, None when absent
+  1. resolve_graph_db  - exactly the core's binding (host-keyed name first), None when absent
   2. load_graph        - synthetic DB: nodes/edges, min_weight filter, max_edges
                          truncation+flag, missing-endpoint edges dropped,
                          malformed payload skipped, empty DB is safe
@@ -36,6 +36,7 @@ from ace_graph_builder import (
     build_graph_html,
     load_graph,
     resolve_graph_db,
+    cache_host,
 )
 
 # ---------------------------------------------------------------------------
@@ -107,107 +108,47 @@ def _make_db(patterns, edges):
 # 1. resolve_graph_db
 # ===========================================================================
 
+def _db(path, rows=1):
+    con = sqlite3.connect(str(path))
+    con.execute("CREATE TABLE patterns (pattern_id TEXT, payload_json TEXT, cumulative_reward REAL, "
+                "fetched_at_ms INTEGER, expires_at_ms INTEGER)")
+    for i in range(rows):
+        con.execute("INSERT INTO patterns VALUES (?, '{}', 1.0, 0, 0)", ("p%d" % i,))
+    con.commit()
+    con.close()
+    return path
+
+
 class TestResolveGraphDb:
-    def test_env_first_double_underscore(self, tmp_path, monkeypatch):
-        """
-        When settings.json has ACE_ORG_ID + ACE_PROJECT_ID, the function
-        resolves '<org>__<project>.db' from cache_dir.
-        """
-        settings = tmp_path / "settings.json"
-        settings.write_text(
-            json.dumps(
-                {"env": {"ACE_ORG_ID": "org_ABC", "ACE_PROJECT_ID": "prj_123"}}
-            )
-        )
-        cache_dir = tmp_path / "cache"
-        cache_dir.mkdir()
-        db_file = cache_dir / "org_ABC__prj_123.db"
-        # DB must have a patterns table with at least one row
-        con = sqlite3.connect(str(db_file))
-        con.execute(
-            "CREATE TABLE patterns "
-            "(pattern_id TEXT PRIMARY KEY, payload_json TEXT, "
-            "cumulative_reward REAL, fetched_at_ms INTEGER, expires_at_ms INTEGER)"
-        )
-        con.execute(
-            "INSERT INTO patterns VALUES ('p1', '{}', 1.0, 0, 0)"
-        )
-        con.commit()
-        con.close()
+    """8.1.0: the ids come from the core; no newest-DB fallback to another project."""
 
-        result = resolve_graph_db(str(settings), str(cache_dir))
-        assert result is not None
-        assert Path(result).name == "org_ABC__prj_123.db"
+    def test_exact_binding(self, tmp_path):
+        _db(tmp_path / "org_ABC__prj_123.db")
+        assert Path(resolve_graph_db("org_ABC", "prj_123", str(tmp_path))).name == "org_ABC__prj_123.db"
 
-    def test_fallback_most_recent_nonempty(self, tmp_path):
-        """
-        When settings.json is missing, fall back to the most-recently-modified
-        *.db in cache_dir that has a non-empty patterns table.
-        """
-        cache_dir = tmp_path / "cache"
-        cache_dir.mkdir()
+    def test_host_keyed_name_first(self, tmp_path):
+        _db(tmp_path / "org_A__prj_1.db")
+        _db(tmp_path / "org_A__prj_1__localhost_8080.db")
+        _db(tmp_path / "org_A__prj_1__ace.example.com.db")
+        assert Path(resolve_graph_db("org_A", "prj_1", str(tmp_path), "http://LocalHost:8080")).name == "org_A__prj_1__localhost_8080.db"
+        assert Path(resolve_graph_db("org_A", "prj_1", str(tmp_path), "https://ace.example.com:443/x")).name == "org_A__prj_1__ace.example.com.db"
 
-        # Create an older DB (empty patterns)
-        old_db = cache_dir / "old__prj.db"
-        con = sqlite3.connect(str(old_db))
-        con.execute(
-            "CREATE TABLE patterns "
-            "(pattern_id TEXT, payload_json TEXT, "
-            "cumulative_reward REAL, fetched_at_ms INTEGER, expires_at_ms INTEGER)"
-        )
-        con.commit()
-        con.close()
-        import time
-        time.sleep(0.01)
+    def test_never_another_projects_db(self, tmp_path):
+        _db(tmp_path / "org_X__prj_other.db")
+        assert resolve_graph_db("org_A", "prj_1", str(tmp_path)) is None
 
-        # Create a newer DB (has data)
-        new_db = cache_dir / "new__prj.db"
-        con = sqlite3.connect(str(new_db))
-        con.execute(
-            "CREATE TABLE patterns "
-            "(pattern_id TEXT, payload_json TEXT, "
-            "cumulative_reward REAL, fetched_at_ms INTEGER, expires_at_ms INTEGER)"
-        )
-        con.execute("INSERT INTO patterns VALUES ('p1', '{}', 1.0, 0, 0)")
-        con.commit()
-        con.close()
+    def test_empty_db_skipped(self, tmp_path):
+        _db(tmp_path / "org_A__prj_1.db", rows=0)
+        assert resolve_graph_db("org_A", "prj_1", str(tmp_path)) is None
 
-        result = resolve_graph_db(None, str(cache_dir))
-        assert result is not None
-        assert Path(result).name == "new__prj.db"
+    def test_unbound_or_missing_cache(self, tmp_path):
+        assert resolve_graph_db(None, None, str(tmp_path)) is None
+        assert resolve_graph_db("org_A", "prj_1", str(tmp_path / "nope")) is None
 
-    def test_returns_none_when_no_db(self, tmp_path):
-        """Returns None gracefully when cache_dir is empty."""
-        cache_dir = tmp_path / "cache"
-        cache_dir.mkdir()
-        result = resolve_graph_db(None, str(cache_dir))
-        assert result is None
-
-    def test_returns_none_when_cache_dir_missing(self, tmp_path):
-        """Returns None gracefully when cache_dir does not exist."""
-        result = resolve_graph_db(None, str(tmp_path / "nonexistent"))
-        assert result is None
-
-    def test_settings_missing_falls_back(self, tmp_path):
-        """
-        When settings_path doesn't exist, fall back to most-recent DB.
-        """
-        cache_dir = tmp_path / "cache"
-        cache_dir.mkdir()
-        db_file = cache_dir / "fallback__prj.db"
-        con = sqlite3.connect(str(db_file))
-        con.execute(
-            "CREATE TABLE patterns "
-            "(pattern_id TEXT, payload_json TEXT, "
-            "cumulative_reward REAL, fetched_at_ms INTEGER, expires_at_ms INTEGER)"
-        )
-        con.execute("INSERT INTO patterns VALUES ('p1', '{}', 1.0, 0, 0)")
-        con.commit()
-        con.close()
-
-        result = resolve_graph_db(str(tmp_path / "no_such.json"), str(cache_dir))
-        assert result is not None
-        assert "fallback__prj" in Path(result).name
+    def test_cache_host(self):
+        assert cache_host("https://ace-api.code-engine.app") == "ace-api.code-engine.app"
+        assert cache_host("http://127.0.0.1:9000/") == "127.0.0.1_9000"
+        assert cache_host("") == ""
 
 
 # ===========================================================================

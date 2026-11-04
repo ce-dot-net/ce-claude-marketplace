@@ -3,7 +3,7 @@ disable-model-invocation: true
 description: Generate LLM-evaluated HTML insights report — per-task helpfulness with reasoning
 argument-hint: "[--hours N]"
 effort: high
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(jq:*), Bash(npm:*), Bash(python3:*), Bash(uv:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(python3:*), Bash(uv:*), Read
 ---
 
 # ACE Insights
@@ -13,6 +13,14 @@ Generate a shareable interactive HTML report where Claude evaluates how helpful 
 ## Instructions for Claude
 
 When the user runs `/ace:ace-insights`, follow these three steps sequentially.
+
+### Step 0: The shared report (the same text the mod answers with, model-free)
+
+```bash
+python3 -c "import os, sys, runpy; root = os.environ.get('CLAUDE_PLUGIN_ROOT', ''); sys.path.insert(0, os.path.join(root, 'shared-hooks', 'utils')); sys.argv = ['ace_insights_analyzer', '--mode', 'text', '--hours', (sys.argv[1:] or ['24'])[0]]; runpy.run_path(os.path.join(root, 'shared-hooks', 'utils', 'ace_insights_analyzer.py'), run_name='__main__')" ${1:-24}
+```
+
+Show it verbatim first. Then continue with the per-task evaluation below.
 
 ### Step 1: Extract Task Data
 
@@ -24,7 +32,8 @@ import json, sys, os
 from pathlib import Path
 
 hours = int(sys.argv[1]) if len(sys.argv) > 1 else 24
-log_path = Path('.claude/data/logs/ace-relevance.jsonl')
+import subprocess
+log_path = Path(subprocess.run([os.path.join('${CLAUDE_PLUGIN_ROOT}', 'scripts', 'ace-context'), '--logs'], capture_output=True, text=True).stdout.strip() or '.claude/data/logs') / 'ace-relevance.jsonl'  # 8.1.0: the repo root's log
 
 if not log_path.exists():
     print('No relevance metrics found yet.')
@@ -132,7 +141,8 @@ import json, sys, os, subprocess, platform
 from pathlib import Path
 
 hours = int(sys.argv[1]) if len(sys.argv) > 1 else 24
-log_path = Path('.claude/data/logs/ace-relevance.jsonl')
+import subprocess
+log_path = Path(subprocess.run([os.path.join('${CLAUDE_PLUGIN_ROOT}', 'scripts', 'ace-context'), '--logs'], capture_output=True, text=True).stdout.strip() or '.claude/data/logs') / 'ace-relevance.jsonl'  # 8.1.0: the repo root's log
 
 def _resolve_analyzer():
     import glob
