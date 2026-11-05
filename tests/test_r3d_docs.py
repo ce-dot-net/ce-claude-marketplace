@@ -76,7 +76,7 @@ def test_c4_docs_are_marked_historical():
     "package.json",                 # the pin
     "claude plugin update",         # deps missing
     "packages not installed",
-    "better_sqlite3.node",          # sqlite binary present
+    "the `sqlite` field of the installer status",  # 8.1.2: the real probe, not a file-exists check
     "npm rm -g @ace-sdk/cli",       # both present
     "engine",                       # §15 which engine is active
     "ace-cli >= 4.2.1",             # P9 graph cache

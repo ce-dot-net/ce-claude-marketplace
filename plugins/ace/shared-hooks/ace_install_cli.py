@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """ACE SessionStart (v8, DESIGN §3/§23): slim presence check. Sync row (startup|clear|resume): no whoami, no
-network, no npm. The CLI is the one pinned in package.json and installed by Claude Code itself
+network, never waits on npm (when an install or sqlite repair is due it only starts the detached background installer;
+its node probe is bounded to 0.8 s, a slower node = "unknown" = schedule the background check). The CLI is the one pinned in package.json and installed by Claude Code itself
 (plugin-local); a global ace-cli >= the pin is the fallback; neither = one message naming
 /ace:ace-install-cli (never disabled.flag). 8.1.1: a missing/wrong plugin-local CLI is first installed in the
 background (utils/ace_cli_installer.py; ACE_AUTO_INSTALL=0 opts out); the message is for failure/opt-out only. The async row (flag kept: `--update-check`) runs the
@@ -97,42 +98,17 @@ def sweep_orphans(current_sid):
         pass
 
 
-# better-sqlite3 loads its native addon lazily (in the constructor), so `require` alone proves nothing.
-# First line out = the Node ABI, so the check also names a binary built for another Node.
-_SQLITE_PROBE = "console.log(process.versions.modules);new (require('better-sqlite3'))(':memory:').close()"
-
-
-def _sqlite_loads(root):
-    try:
-        return subprocess.run(["node", "-e", _SQLITE_PROBE], cwd=root, capture_output=True, timeout=30).returncode == 0
-    except Exception:
-        return False
-
-
 def rebuild_sqlite():
-    """Async, every startup: CC installs deps with --ignore-scripts, so better-sqlite3 has no binary and
-    ace-cli runs RAM-only (no pins, empty graph cache) until it is rebuilt (0.5 s, prebuilt). The only
-    state is the binary itself: if it loads (new Database) in the CURRENT node, nothing to do; otherwise
-    rebuild (scripts forced on, user .npmrc/env may say ignore-scripts) and verify the same way. That also
-    covers a Node switch (nvm/volta) and a reinstall at the same plugin version. Best-effort, silent."""
-    root = os.environ.get("CLAUDE_PLUGIN_ROOT")
-    if os.environ.get("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC") or not root or not (Path(root) / "node_modules" / "better-sqlite3").is_dir():
-        return
+    """Async row, every startup: CC installs deps with --ignore-scripts, so better-sqlite3 may have no binary and
+    ace-cli runs RAM-only (no pins, empty graph cache). 8.1.2: the ONE installer (utils/ace_cli_installer.py) owns
+    the probe (`new Database(':memory:')` in the CURRENT node, cached) and the repair (`npm rebuild better-sqlite3`
+    only, same lock, ACE_AUTO_INSTALL=0 opt-out, one attempt per plugin version per hour). Only when the pinned
+    CLI is already there: a missing CLI is the sync row's `ensure`. Best-effort, silent."""
     try:
         import ace_cli_installer
-        if ace_cli_installer.lock_held():  # the installer runs its own rebuild; node_modules is mid-install
-            return
-        if _sqlite_loads(root):
-            return
-        env = dict(os.environ, npm_config_ignore_scripts="false")
-        if subprocess.run(["npm", "rebuild", "better-sqlite3"], cwd=root, capture_output=True, timeout=120, env=env).returncode:
-            return
-        if _sqlite_loads(root):  # the early pin failure's backoff (first prompt raced this rebuild) is stale now
-            from plugin_data_dir import pin_backoff_file
-            try:
-                pin_backoff_file().unlink()
-            except OSError:
-                pass
+        r = ace_cli_installer.root()
+        if ace_cli_installer.installed_version(r) == ace_cli_installer.pin(r):
+            ace_cli_installer.run(auto=True)
     except Exception:
         pass
 

@@ -23,6 +23,7 @@ export async function doctorCmd($: any, { c, cli }: Kit): Promise<string> {
     out.push(v.exitCode === 0 ? `ace-cli  ✓ ${v.stdout.trim().split('\n')[0]}` : `ace-cli  ✗ ${problemLine('cli_missing')}`)
     const ai = await installer($, ['--status'], 15_000)  // 8.1.1: the background install of the pinned CLI
     out.push(`install  auto-install ${ai.state}${ai.detail ? ` (${ai.detail})` : ''}`)
+    if (ai.sqlite) out.push(`SQLite cache: ${ai.sqlite}`)  // 8.1.2: off = RAM-only, never a band
     if (cc.bound && v.exitCode === 0) {
       const s = await cli(['status', '--json'], { timeoutMs: 20_000 })
       const st = classify(s.exitCode, s.stderr, !!s.spawnError, !!s.timeout)

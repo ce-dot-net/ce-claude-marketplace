@@ -239,32 +239,32 @@ def test_update_check_machinery_is_gone():
         assert gone not in src, gone
 
 
-def test_only_npm_spawn_in_production_is_the_sqlite_rebuild():
+def test_only_npm_spawn_in_production_is_the_installer():
     spawns = []
     for p in PROD:
         if p.name == "ace_cli_installer.py":  # 8.1.1: the one installer, asserted below
             continue
         for m in re.finditer(r"\[\s*['\"]npm['\"][^\]]*\]", p.read_text()):
             spawns.append((p.name, re.sub(r"\s+", " ", m.group(0))))
-    assert spawns, "the §23 rebuild must exist"
-    assert all("rebuild" in s and "better-sqlite3" in s for _, s in spawns), spawns
+    assert spawns == [], "8.1.2: the sqlite rebuild is the installer's too (one place, one throttle): %s" % spawns
 
 
 def test_the_installer_runs_only_ci_and_the_sqlite_rebuild():
-    """8.1.1: the one other npm user. `npm ci` from the lock + the rebuild; never `npm install`; one place."""
+    """The one npm user. `npm ci` from the lock + the rebuild (and, 8.1.2, the rebuild alone when only the binding is
+    missing); never `npm install`; one place."""
     src = (PLUGIN / "shared-hooks" / "utils" / "ace_cli_installer.py").read_text()
     calls = re.findall(r"_npm\(\[([^\]]*)\]", src)
-    assert [re.sub(r"\s+", " ", c) for c in calls] == ['"ci", "--ignore-scripts", "--no-audit", "--no-fund"', '"rebuild", "better-sqlite3"'], calls
+    assert [re.sub(r"\s+", " ", c) for c in calls] == ['"rebuild", "better-sqlite3"', '"ci", "--ignore-scripts", "--no-audit", "--no-fund"', '"rebuild", "better-sqlite3"'], calls
     assert not re.search(r"""['"]install['"]""", src)
     assert "replace_registry_host" in src and "never" in src
     others = [p.name for p in PROD if p.name != "ace_cli_installer.py" and "ace_cli_installer" in p.read_text() and "subprocess" in p.read_text() and '"npm"' in p.read_text()]
-    assert others == ["ace_install_cli.py"], others  # only its sqlite rebuild (the pre-existing async row)
+    assert others == [], others
 
 
 def test_sync_sessionstart_never_touches_npm(tmp_path):
     for src in ("startup", "clear"):
         b = Box3d(tmp_path / src, local=True)
-        b.session_start(source=src)
+        b.session_start(source=src, FAKE_NODE_REQUIRE_RC=0)  # binding loads: nothing to repair
         assert b.npm_calls() == []
 
 
@@ -308,34 +308,39 @@ def test_binary_that_loads_is_not_rebuilt_again(tmp_path):
     b.session_start_async(sid="a")
     b.session_start_async(sid="b")
     assert len(_rebuilds(b)) == 1
-    assert len(b.node_evals()) == 3, "probe, verify after the rebuild, probe again: one cheap node spawn per startup"
+    assert len(b.node_evals()) == 2, "probe, verify after the rebuild; the 2nd start is a cache hit (no constructor probe)"
+    assert len(b.node_abi_calls()) == 3, "...but the cheap ABI query keys every check: first probe, verify, 2nd start"
 
 
 def test_binary_is_probed_on_every_startup_not_trusted_from_a_marker(tmp_path):
-    """Node switch (nvm/volta/brew) or a reinstall at the same plugin version: the old marker said 'done'."""
+    """A reinstall wiped the build dir, or Node switched (nvm/volta/asdf shims keep the path): the cached 'ok' must
+    not be served. The cache key = the .node file + the running node's ABI/version."""
     b = Box3d(tmp_path, local=True)
     b.session_start_async(sid="a")
-    b.session_start_async(sid="b", FAKE_NODE_REQUIRE_RC=1)  # new Node ABI: the binary no longer loads
+    node = b.root / "node_modules" / "better-sqlite3" / "build" / "Release" / "better_sqlite3.node"
+    node.unlink()  # reinstall wiped the build dir
+    b.session_start_async(sid="b")
     assert len(_rebuilds(b)) == 2
-    (b.tmp / "sqlite-built").unlink()  # reinstall wiped the build dir
-    b.session_start_async(sid="c")
-    assert len(_rebuilds(b)) == 3
+    b.session_start_async(sid="c", FAKE_NODE_ABI=115)  # same node path, another ABI: built binary no longer loads
+    assert len(_rebuilds(b)) == 3, "stale 'binding ok' served after a Node switch"
     assert not list(b.data.glob("sqlite-rebuilt*")), "no version marker any more"
 
 
-def test_no_rebuild_forever_marker_when_require_fails(tmp_path):
+def test_a_binary_that_still_does_not_load_is_throttled_not_retried_every_start(tmp_path):
+    """8.1.2: one attempt per plugin version per hour after a failure (was: every startup)."""
     b = Box3d(tmp_path, local=True)
     b.session_start_async(sid="a", FAKE_NODE_REQUIRE_RC=1)
     b.session_start_async(sid="b", FAKE_NODE_REQUIRE_RC=1)
-    assert len(_rebuilds(b)) == 2, "a binary node cannot load must not be marked done"
+    assert len(_rebuilds(b)) == 1
 
 
-def test_no_marker_when_rebuild_fails(tmp_path):
+def test_failed_rebuild_is_throttled_and_silent(tmp_path):
     b = Box3d(tmp_path, local=True)
     p = b.session_start_async(sid="a", FAKE_NPM_RC=1)
     assert p.returncode == 0 and p.stdout == ""
     b.session_start_async(sid="b", FAKE_NPM_RC=1)
-    assert len(_rebuilds(b)) == 2
+    assert len(_rebuilds(b)) == 1
+    assert "FAILED" in (b.data / "logs" / "ace-hook-errors.log").read_text()
 
 
 def test_rebuild_overrides_ignore_scripts_from_env_or_npmrc(tmp_path):
@@ -354,6 +359,7 @@ def test_successful_rebuild_clears_the_pin_backoff(tmp_path):
     b.session_start_async(sid="a", FAKE_NODE_REQUIRE_RC=1)
     assert bo.exists(), "a rebuild that still does not load keeps the backoff"
     (b.tmp / "sqlite-built").unlink()
+    (b.data / "cli-install.json").unlink()  # the hourly throttle has passed
     b.session_start_async(sid="b", FAKE_NODE_REQUIRE_RC=None)
     assert not bo.exists()
 

@@ -214,14 +214,14 @@ if test -f "$LOCAL/dist/cli.js"; then
 else
   echo "packages not installed in $PLUGIN_ROOT/node_modules"
 fi
-# sqlite binary (without it the CLI runs RAM-only: no pins, empty graph cache until SessionStart rebuilds it)
-test -f "$PLUGIN_ROOT/node_modules/better-sqlite3/build/Release/better_sqlite3.node" && echo "sqlite binary: present" || echo "sqlite binary: missing"
+# sqlite binding: see the `sqlite` field of the installer status below (a real `new Database(':memory:')` probe; a bare file-exists check misses a binary built for another Node)
 
 # A global ace-cli (fallback)
 GLOBAL_CLI="$(command -v 'ace-cli')"
 test -n "$GLOBAL_CLI" && echo "global ace-cli: $GLOBAL_CLI $("$GLOBAL_CLI" --version 2>/dev/null)"
 
-# auto-install state (ok | started | running | failed | off | unavailable + detail) and its last result
+# auto-install state (ok | started | running | failed | off | unavailable + detail) and its last result;
+# the JSON also carries "sqlite": "active" | "off (reason)" (8.1.2: does `new Database(':memory:')` work in the plugin dir)
 python3 "$PLUGIN_ROOT/shared-hooks/utils/ace_cli_installer.py" --status
 test -r "$DATA/cli-install.json" && cat "$DATA/cli-install.json"
 
@@ -237,7 +237,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version
 - ⚠️ only a global CLI: "untested" when its version differs from the pin (works, but this plugin version was not tested with it)
 - ⚠️ both present: suggest `npm rm -g @ace-sdk/cli` (the plugin-local one wins anyway)
 - ⚠️ packages not installed: run `claude plugin update ace@ce-dot-net-marketplace`; if still missing, `/ace:ace-install-cli`
-- ⚠️ sqlite binary missing: starts working after the next session start (SessionStart runs `npm rebuild better-sqlite3` once per plugin version)
+- **SQLite cache: active | off (reason)**: print the `sqlite` field of the installer status. `off` is not an error and never a band: ACE works RAM-only (no pins, empty graph cache). SessionStart repairs it by itself (8.1.2: ONLY `npm rebuild better-sqlite3`, never `npm ci`; one attempt per plugin version per hour after a failure; `ACE_AUTO_INSTALL=0` opts out). The reason names the last npm error; `/ace:ace-install-cli` repairs it now.
 - ❌ neither: run `/ace:ace-install-cli`
 - ℹ️ auto-install: `ok` nothing to do; `running`/`started` the install is in progress (no message by design); `failed` the detail is npm's error (one retry per plugin version per hour, `/ace:ace-install-cli` retries now); `off` = `ACE_AUTO_INSTALL=0`; `unavailable` = no npm/node, offline-managed (`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`), read-only plugin dir or a refused `node_modules` symlink, so only `/ace:ace-install-cli` or `claude plugin update` helps
 - ✅ Engine: lib (core version from the status JSON)
@@ -341,7 +341,7 @@ test -f "$PLUGIN_ROOT/scripts/ace_subagent_stop_wrapper.sh" && echo "subagent_st
 test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "hooks.json: EXISTS"
 ```
 
-**Expected Hooks** (v8 round 2: PostToolBatch + PreToolUse(Agent) included incl. the async row: orphan sweep + one-time sqlite rebuild):
+**Expected Hooks** (v8 round 2: PostToolBatch + PreToolUse(Agent) included incl. the async row: orphan sweep + the installer's sqlite repair, `npm rebuild better-sqlite3` only when the binding does not load, at most one failed attempt per hour):
 1. `SessionStart` → `ace_install_cli.sh` (startup|clear|resume; plus the async row, flag `--update-check`)
 2. `SessionStart` (compact) → `ace_sessionstart_compact.sh`
 3. `UserPromptSubmit` (sync) → `ace_before_task_wrapper.sh`
