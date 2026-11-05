@@ -53,49 +53,66 @@ All plugin state lives under `$CLAUDE_PLUGIN_DATA` (default `~/.claude/plugins/d
 
 Contract (agreed with the server team): every automatic trace, both chains (Python Stop/SubagentStop, mod
 turn.complete), carries `result.success` (bool) = the END outcome of the task and `result.failed_steps` (int >= 0) =
-the number of failed steps, informational only, never deciding success, plus `result.aborted: true` only when the run
-was aborted (the key is absent otherwise; an aborted run is always `success: false`). PermissionDenied traces (`agent_type`
+the number of failed steps, informational only, never deciding success. There is no `result.aborted` key: no aborted
+run sends a trace (the mod sees aborts through `turn.complete` `isAborted` / `reason` and on purpose sends no trace for
+them, turn.ts; the classic chain sees no abort, Stop does not fire on one). PermissionDenied traces (`agent_type`
 `permission_gate`) stay `success: false` with `failed_steps: 1`. The server stores `result` unchanged, and the trace
 reaches it unchanged via `ace-cli learn --transcript` / the engine, so the new key needs no SDK change.
 v8.0.0 to 8.1.2 sent `success = no step failed`: one grep without a match, one red test run in a TDD loop or one
 retried call failed the whole task (main-task success fell from about 90 % to about 60 %).
 
-The rule (one implementation per chain, identical semantics: `ace_after_task.task_outcome`,
-`mod/lib/trace.ts taskOutcome`; shared fixture `tests-fixtures/task-outcome/`, run by both suites):
+The rule (one implementation per chain, identical semantics: `ace_after_task.task_outcome` / `bash_step`,
+`mod/lib/trace.ts taskOutcome` / `bashStep`; shared fixture `tests-fixtures/task-outcome/` with 400 seeded random
+sequences, run by both suites; tables in ONE place per chain, a test keeps them equal to `tables.json`):
 
-1. Steps in order. Bash steps carry a command family: the first word of the last top-level segment (`&&`, `||`, `;`,
-   newline), its first pipe stage, `VAR=value` and wrappers (`sudo`, `time`, `env`, `nice`, `nohup`, `exec`, `npx`,
-   `bunx`, `timeout N`, `uv run`, `poetry run`) skipped, `python -m X` = `X`, plus the subcommand for git, npm, pnpm,
-   yarn, bun, cargo, go, gh, docker, uv, pip (two levels for `claude`, e.g. `claude plugin test`). A heredoc body is
-   ignored.
-2. A step fails on: a denial, an interrupt, a known non-zero Bash exit code (structured, or the `Exit code N` text),
-   or, without a known exit code, `error` / `is_error`. stderr alone never fails a step: a Bash step with exit 0 is a
-   success whatever stderr or stdout say. A code the tool interpreted itself (`returnCodeInterpretation`) is 0.
-3. Benign: exit 1 (only 1) of grep, egrep, fgrep, rg, diff, cmp, test, `[`, `[[`, git diff, git grep, `command -v`,
-   which, type, pgrep, pidof, jq is no failed step at all.
-4. Every other failed step counts in `failed_steps`, test runners included.
-5. A failed step is recovered by a LATER successful step with the same key: Bash = the same family; Edit, Write,
-   MultiEdit, NotebookEdit = the same path (across those tools, so a Write recovers a failed Edit of the file); any
-   other tool = the same tool name.
-6. `success` is false only when an unrecovered failed step is decisive (Bash outside the read-only family list, Edit,
-   Write, MultiEdit, NotebookEdit, Agent, Task, Workflow), or the run's last step was interrupted. Read, Glob, Grep,
-   WebFetch, WebSearch, MCP tools and read-only Bash (ls, cat, git status ...) never fail the task. A test run left red
-   (no later green run of the same family) is unrecovered. No failures or no tool data: `success: true`.
-7. `aborted` = the run's LAST recorded step was interrupted (Python: a PostToolUseFailure row with `is_interrupt`;
-   mod: a tool result with `interrupted: true`). A mid-run interrupt the task went on from is no abort; a user
-   rejection (denial) is a failed step, never an abort.
+1. Bash command parsing: the command splits into a chain at `&&`, `||`, `;` and newline, each chain item into pipe
+   stages at `|`. Separators inside single or double quotes, backticks, `$(...)`, `(...)` subshells and heredoc bodies
+   do not split. A `(...)` stage is analyzed as its own chain. Redirections (`2>&1`, `> log`), `!`, `VAR=value` and
+   wrappers (`sudo`, `time`, `env`, `nice`, `nohup`, `exec`, `bunx`, `timeout N`, `uv run`, `poetry run`) are skipped.
+   Unparsable input never raises: the first word is the family (`ponytail:`).
+2. A stage's family is its first word (basename), `python -m X` = `X`. For the tools in `SUBCOMMAND_TOOLS` the family
+   adds the first non-flag token (the subcommand or the script basename; `-c`/`-e` count as that token): python,
+   python3, bash, sh, node, bun, deno, ruby, perl, curl, wget, npm, npx, pnpm, yarn, cargo, go, make, terraform, uv, pip,
+   pip3 (`python3 deploy.py`, `python3 -c`, `npm publish`, `make test`). gh, git, docker, kubectl, aws, gcloud and
+   claude add up to TWO tokens, the second only when it directly follows the first (`gh pr merge`, `docker compose up`,
+   `claude plugin test`; `git commit -m x` = `git commit`).
+3. A pipeline's family is its LAST stage's (the stage whose exit code the shell reports; no pipefail). A chain's family
+   is its LAST NON-READ-ONLY item's (a trailing read-only item such as `&& echo done` usually never ran and never
+   decides), else its last item's. The step is non-read-only when any item is. Read-only = the family is in
+   `READ_ONLY_BASH` by prefix (`git diff HEAD~1` is in `git diff`); `cd`, `true`, `export`, `set`, `sleep` are in it.
+4. A step fails on: a denial, an interrupt, a known non-zero Bash exit code (structured, or the first line `Exit code
+   N` of the error text: PostToolUseFailure `error`, the mod's `tool.call` `text`), or, without a known exit code,
+   `error` / `is_error`. stderr alone never fails a step and no exit code is guessed from stderr. A code the tool
+   interpreted itself (`returnCodeInterpretation`) is 0.
+5. Benign: exit 1 (only 1) of a step whose family is grep, egrep, fgrep, rg, diff, cmp, test, `[`, `[[`, git diff, git
+   grep, `command -v`, which, type, pgrep, pidof or jq is no failed step at all (so `rstest tests | grep FAIL` with
+   exit 1 is none).
+6. Every other failed step counts in `failed_steps`, test runners included.
+7. A failed step is recovered by a LATER successful step with the same key: Bash = the same family; Edit, Write,
+   MultiEdit, NotebookEdit = the same path (across those tools); any other tool, MCP tools included = the same tool name.
+8. `success` is false only when an unrecovered failed step is decisive, or the run's last step was interrupted.
+   Decisive: non-read-only Bash, Edit, Write, MultiEdit, NotebookEdit, Agent, Task, Workflow, and a state-changing MCP
+   tool: its action name (after the last `__`, split at `_`, `-` and camelCase, case-insensitive) has a word in
+   `MCP_WRITE_VERBS` (save, create, update, delete, remove, send, post, publish, merge, push, comment, reply, upload,
+   write, set, add, assign, close, transfer). Read, Glob, Grep, WebFetch, WebSearch, read-only Bash and other MCP tools
+   (list, get, search, read, whoami, query) never fail the task. No failures or no tool data: `success: true`.
 
-Abort detection, what each chain can see (code.claude.com/docs/en/hooks): `Stop` does not fire on a user interrupt and
-API errors fire `StopFailure` (not registered), and the Stop/SubagentStop inputs carry no abort field, so the Python
-chain sees an abort only as an `is_interrupt` tool row (a user cancelling a running tool fires no PostToolUseFailure;
-the transcript's `[Request interrupted by user]` marker is undocumented and not used). The mod sees
-`turn.complete` `isAborted` / `reason` reliably, but an aborted turn abstains (no trace, F-080 credit withheld) in
-both chains, as before. So `aborted: true` reaches the server only for a turn that still completed after its last
-step was interrupted; a turn the user cut off sends nothing.
+Kept on purpose: a red `rstest` followed by a green `pytest` stays false (different families).
+
+Bash `trajectory[].action` (8.1.3, both chains): `<family> :: <command>`. The family (the one the rule uses, the
+deciding one for pipes and chains) comes first and is never cut; the command follows with whitespace collapsed, cut to
+200 characters; `unknown` when there is no command, never an empty string. The server can filter by the text before
+` :: `. The command is built from `tool_input.command` (complete in every hook input; the old empty or cut actions came
+from our own 60-char cut and from the accumulator's size caps). Secrets are replaced by `[redacted]` before any cut,
+in the action, every step `result`, the task and the summary (`redact`, both chains): values after
+`--token`/`--password`/`--secret`/`--api-key`, `Authorization:`/`Bearer`, `NAME=` assignments whose name holds
+TOKEN/SECRET/KEY/PASSWORD/PASS/CREDENTIAL, and ghp_/gho_/github_pat_/sk-/xoxb-/AKIA/ace_user_/npm_ tokens and JWTs.
+Claude Code does not redact hook inputs.
 
 The execution row in `ace-relevance.jsonl` carries `failed_steps` and `outcome_rule: "8.1.3"`; `/ace:ace-doctor` shows
 the rule of the newest row (`pre-8.1.3` for older rows). The user-rejection downvote and `applied_log_ids` are
-unchanged. Heuristics carry `ponytail:` comments (read-only list, MCP never decisive, the tokenizer).
+unchanged. Heuristics carry `ponytail:` comments (read-only list, MCP verb list, the tokenizer). The numbers behind the
+rule: `python3 tests/probe_success_rule.py --days 10` (local transcripts, counts only).
 
 ### Hook topology
 

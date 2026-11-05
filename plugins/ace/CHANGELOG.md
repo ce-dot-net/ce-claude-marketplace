@@ -10,28 +10,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - `result.success` is the END outcome of the task again. Since v8.0.0 any failed step failed the whole task: a grep
   without a match (exit 1), a red test run in the TDD phase, a diff, a retried call. Main-task success fell from about
-  90 % to about 60 % and the server learned negative rewards from it. Now (both chains, one rule, see
-  docs/technical/ARCHITECTURE.md "Task outcome (8.1.3)"): benign exit 1 of grep/rg/diff/cmp/test/`[`/git diff/git
-  grep/`command -v`/which/type/pgrep/pidof/jq is no failure; a failed step that a later step of the same command
-  family (Bash) or the same file (Edit/Write) or tool fixes is recovered; only an unrecovered failure of a
-  state-changing or verifying step (non-read-only Bash, Edit, Write, NotebookEdit, Agent/Task/Workflow, test runners)
-  or a run that ended interrupted makes `success: false`. Failed read-only steps (Read, Glob, Grep, WebFetch,
-  WebSearch, ls-like Bash) and MCP tools never do.
+  90 % to about 60 % and the server learned negative rewards from it. The rule (both chains, identical, full text in
+  docs/technical/ARCHITECTURE.md "Task outcome (8.1.3)"): `success` is false only when a DECISIVE step failed and no
+  LATER successful step with the same key recovered it, or the run's last step was interrupted. Decisive = non-read-only
+  Bash, Edit, Write, MultiEdit, NotebookEdit, Agent, Task, Workflow, and state-changing MCP tools (action name has
+  save/create/update/delete/remove/send/post/publish/merge/push/comment/reply/upload/write/set/add/assign/close/transfer).
+  Key = the Bash command family, the file path for Edit/Write/MultiEdit/NotebookEdit, else the tool name. A Bash family
+  is taken from the LAST pipe stage and the LAST NON-READ-ONLY `&&`/`||`/`;` item (a trailing `&& echo done` never
+  decides), with the subcommand or script for interpreters and multi-tool CLIs (`gh pr merge`, `python3 deploy.py`,
+  `python3 -c`); quotes, heredocs, `$(...)`, backticks and subshells do not split. Exit 1 of grep/rg/diff/cmp/test/`[`/
+  git diff/git grep/`command -v`/which/type/pgrep/pidof/jq (as the deciding family) is no failed step. Failed
+  read-only steps (Read, Glob, Grep, WebFetch, WebSearch, read-only Bash, read MCP tools) never fail the task.
 - stderr alone is no failure: a Bash step with exit code 0 succeeds whatever it wrote to stderr (git progress, npm/pip
-  notices, node warnings). Before, the mod counted any stderr as a failed step.
+  notices, node warnings). Before, the mod counted any stderr as a failed step. The mod reads a failed call's exit code
+  from the `tool.call` text (`Exit code N`), as the Python chain does from PostToolUseFailure.
+- Bash `trajectory[].action` is never empty, `...` or cut to 60 characters any more: it is `<family> :: <command>`,
+  the family first and never cut (the server can filter by it), the command after it with whitespace collapsed, cut to
+  200 characters; `unknown` when there is no command. Still a string, nothing the server reads changes shape.
+- Secrets never leave in a trace: token flags, `Authorization`/`Bearer` values, `*TOKEN*=`/`*KEY*=`/`*SECRET*=`/
+  `*PASS*=`/`*CREDENTIAL*=` assignments, GitHub/OpenAI/Slack/AWS/npm/ace tokens and JWTs are replaced by `[redacted]`
+  in the action, step results, the task and the summary, before any cut (both chains).
 
 ### Added
 - `result.failed_steps` (int, always present, informational, never decides success) on every automatic trace in both
   chains; PermissionDenied traces keep `success: false` and send `failed_steps: 1`. The server stores `result`
-  unchanged, so no SDK change.
-- `result.aborted: true` (only when true, absent otherwise) when the run's last recorded step was interrupted; such a
-  run is `success: false`. A mid-run interrupt the task went on from and a user rejection are no abort. Limit: Claude
-  Code fires no Stop on a user interrupt and the mod abstains on an aborted turn, so a turn the user cut off still
-  sends no trace in either chain (docs/technical/ARCHITECTURE.md "Task outcome (8.1.3)").
+  unchanged, so no SDK change. There is no `result.aborted`: the mod sees aborts via `turn.complete` and on purpose
+  sends no trace for them, and the classic chain sees no abort (Claude Code fires no Stop on a user interrupt).
 - The execution row carries `failed_steps` and `outcome_rule`; `/ace:ace-doctor` (mod and markdown) shows the outcome
   rule of the newest execution row.
-- Shared fixture `tests-fixtures/task-outcome/` (59 step sequences, the family tables), run by the Python and the mod
-  suite; a parity test keeps the two chains' tables equal.
+- Shared fixture `tests-fixtures/task-outcome/` (98 step sequences, 400 seeded random sequences, the family, action and
+  redaction tables), run by the Python and the mod suite; a parity test keeps the two chains' tables equal.
+- `tests/probe_success_rule.py --days N`: the old vs new rule over local transcripts, counts only.
 
 ## [8.1.2] - 2026-11-05
 
