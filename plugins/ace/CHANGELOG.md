@@ -5,6 +5,30 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.1.2] - 2026-11-05
+
+### Fixed
+- A `node_modules` with the pinned ace-cli but NO better-sqlite3 native binding (`npm ci --ignore-scripts` without the
+  rebuild, a killed install, a Node switch) was never repaired: the installer saw "CLI == pin" and stopped, so the CLI
+  logged "SQLite cache disabled (Could not locate the bindings file)" on every call and ran RAM-only forever. The 8.1.1
+  report that a later run retries the rebuild was wrong.
+  `ace_cli_installer.py` now also checks the binding (`new Database(':memory:')` via `node -e` in the plugin dir, 10 s
+  timeout). A bare file-exists check was rejected: it misses a binary built for another Node. A passing probe is cached
+  by the .node file's mtime/size + the running Node's ABI and version (one cheap `node -p` per check), so a Node switch
+  through a Volta/asdf/mise/nodenv shim or an in-place node upgrade, which keep the path, invalidates it and the
+  rebuild runs. When the CLI matches but the binding is missing or broken it
+  runs ONLY `npm rebuild better-sqlite3` (never `npm ci` again): same lock, same opt-out (`ACE_AUTO_INSTALL=0`), same
+  quiet background start at SessionStart (both chains), one attempt per plugin version per hour after a failure (its own
+  state key in `cli-install.json`, a failed `ci` does not throttle it). The async SessionStart row's separate unthrottled
+  rebuild now calls the same installer. A rebuild that exits 0 but leaves no loadable binding counts as failed.
+- The sync SessionStart row never waits on node: its probe is bounded to 0.8 s and a slower or hanging node means
+  "unknown", which starts the detached background check instead. The mod publishes the status/band first and runs the
+  installer `--ensure` after it.
+- A failed rebuild is not a band: ACE works RAM-only. One line in `ace-hook-errors.log`, and `/ace:ace-doctor` shows
+  `SQLite cache: active | off (reason)`. `--status` carries the same as a `sqlite` field.
+- `/ace:ace-install-cli` (mod and markdown) also repairs a missing binding; the confirm button says it runs only
+  `npm rebuild better-sqlite3`.
+
 ## [8.1.1] - 2026-11-05
 
 ### Added
