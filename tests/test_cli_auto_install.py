@@ -35,6 +35,10 @@ exit 0
 """
 
 
+# the sqlite probe: loads iff the .node file exists in the plugin dir (cwd)
+_FAKE_NODE = '#!/bin/sh\n[ -f node_modules/better-sqlite3/build/Release/better_sqlite3.node ]\n'
+
+
 @pytest.fixture
 def box(tmp_path, monkeypatch):
     """A throwaway plugin copy (no node_modules), a fake bin dir, its own plugin data."""
@@ -42,7 +46,7 @@ def box(tmp_path, monkeypatch):
     shutil.copytree(str(REPO_PLUGIN), str(root), ignore=shutil.ignore_patterns("node_modules", "__pycache__", ".pytest_cache"))
     bin_ = tmp_path / "bin"
     bin_.mkdir()
-    for name, body in (("npm", _FAKE_NPM), ("node", "#!/bin/sh\nexit 0\n")):
+    for name, body in (("npm", _FAKE_NPM), ("node", _FAKE_NODE)):
         (bin_ / name).write_text(body)
         (bin_ / name).chmod(0o755)
     log = tmp_path / "npm.log"
@@ -303,3 +307,123 @@ def test_notice_drops_stale_cli_missing_once_the_cli_arrived(box, tmp_path):
     assert box.inst.run(auto=True)["state"] == "ok"
     apc, line, st = _notice(box, tmp_path, "cli_missing")
     assert line is None and st["state"] is None
+
+
+# ---- 8.1.2: pinned CLI present but NO better-sqlite3 binding -> only `npm rebuild better-sqlite3` ----
+
+BINDING = Path("node_modules") / "better-sqlite3" / "build" / "Release" / "better_sqlite3.node"
+
+
+def _pinned_no_binding(box, binding=False):
+    d = box.root / "node_modules" / "@ace-sdk" / "cli"
+    (d / "dist").mkdir(parents=True)
+    (d / "dist" / "cli.js").write_text("")
+    (d / "package.json").write_text(json.dumps({"version": PIN}))
+    (box.root / "node_modules" / "better-sqlite3").mkdir(parents=True)
+    if binding:
+        (box.root / BINDING).parent.mkdir(parents=True)
+        (box.root / BINDING).write_text("elf")
+
+
+def _fake_rebuild_builds(box):
+    """The fake npm `rebuild` creates the .node file (as the real prebuilt download does)."""
+    (box.bin / "npm").write_text(_FAKE_NPM.replace(
+        'exit 0\n', 'if [ "$1" = rebuild ] && [ -z "$FAKE_NPM_NOBUILD" ]; then mkdir -p node_modules/better-sqlite3/build/Release; echo elf > node_modules/better-sqlite3/build/Release/better_sqlite3.node; fi\nexit 0\n'))
+
+
+def test_missing_binding_runs_only_rebuild(box):
+    _pinned_no_binding(box)
+    _fake_rebuild_builds(box)
+    assert box.inst.decide()[0] == "start"
+    assert box.inst.run(auto=True)["state"] == "ok"
+    assert [l.split("|")[1] for l in box.calls()] == ["rebuild better-sqlite3"]  # never ci / install
+    assert box.calls()[0].split("|")[3] == "false"  # scripts on, the rebuild needs them
+    assert (box.root / BINDING).is_file()
+    assert box.inst.decide()[0] == "ok" and box.inst.status()["sqlite"] == "active"
+
+
+def test_binding_present_does_nothing(box):
+    _pinned_no_binding(box, binding=True)
+    assert box.inst.decide()[0] == "ok"
+    assert box.inst.run(auto=True)["state"] == "ok" and box.calls() == []
+    assert box.inst.status()["sqlite"] == "active"
+
+
+def test_binding_that_does_not_load_is_rebuilt(box):
+    """A .node built for another Node: the file exists, `new Database(':memory:')` fails."""
+    _pinned_no_binding(box, binding=True)
+    (box.bin / "node").write_text("#!/bin/sh\nexit 1\n")
+    assert box.inst.decide()[0] == "start"
+
+
+def test_binding_probe_is_cached_by_mtime(box):
+    _pinned_no_binding(box, binding=True)
+    nlog = box.bin.parent / "node.log"
+    nlog.touch()
+    (box.bin / "node").write_text('#!/bin/sh\necho x >> "%s"\nexit 0\n' % nlog)
+    for _ in range(3):
+        assert box.inst.decide()[0] == "ok"
+    assert len(nlog.read_text().splitlines()) == 1
+
+
+def test_rebuild_opt_out_and_throttle(box, monkeypatch):
+    _pinned_no_binding(box)
+    monkeypatch.setenv("ACE_AUTO_INSTALL", "0")
+    assert box.inst.decide()[0] == "off" and box.inst.ensure()["state"] == "off" and box.calls() == []
+    monkeypatch.setenv("ACE_AUTO_INSTALL", "1")
+    monkeypatch.setenv("FAKE_NPM_FAIL", "1")
+    t0 = time.time()
+    assert box.inst.run(auto=True)["state"] == "failed"
+    n = len(box.calls())
+    assert box.inst.decide(True, now=t0 + 60)[0] == "failed"
+    assert box.inst.ensure(now=t0 + 60)["state"] == "failed" and len(box.calls()) == n
+    assert box.inst.decide(True, now=t0 + 3601)[0] == "start"
+    assert box.inst.decide(auto=False, now=t0 + 60)[0] == "start"  # the manual path is not throttled
+    assert all(l.split("|")[1] == "rebuild better-sqlite3" for l in box.calls())
+    st = box.inst.status(now=t0 + 60)
+    assert st["state"] == "ok" and st["sqlite"].startswith("off (") and "rebuild" in st["sqlite"]  # CLI fine: RAM-only, no band
+
+
+def test_rebuild_that_exits_0_but_builds_nothing_is_a_failure(box, monkeypatch):
+    _pinned_no_binding(box)
+    _fake_rebuild_builds(box)
+    monkeypatch.setenv("FAKE_NPM_NOBUILD", "1")
+    assert box.inst.run(auto=True)["state"] == "failed"
+    line = [l for l in (box.data / "logs" / "ace-hook-errors.log").read_text().splitlines() if "cli_auto_install" in l]
+    assert len(line) == 1 and "FAILED" in line[0] and "sqlite" in line[0]
+
+
+def test_sqlite_throttle_is_separate_from_cli_install_throttle(box, monkeypatch):
+    """A failed rebuild must not mask... and a failed `ci` record must not throttle the rebuild."""
+    _pinned_no_binding(box)
+    box.inst._pdd().private_write(box.inst._pdd().cli_install_state(),
+                                  json.dumps({"key": box.inst._key(box.root), "ok": False, "at": time.time(), "error": "x"}))
+    assert box.inst.decide()[0] == "start"
+
+
+def test_e2e_sessionstart_repairs_binding_quietly(e2e):
+    env, box = e2e
+    _pinned_no_binding(box)
+    _fake_rebuild_builds(box)
+    (env.bin / "npm").write_text((box.bin / "npm").read_text())
+    r, _ = _start(env, box)
+    assert parse_stdout(r.stdout) is None  # no band, no message
+    assert _wait(lambda: (box.root / BINDING).is_file())
+    assert [l.split("|")[1] for l in box.calls()] == ["rebuild better-sqlite3"]
+
+
+def test_e2e_failed_rebuild_is_never_a_message(e2e):
+    env, box = e2e
+    _pinned_no_binding(box)
+    _start(env, box, FAKE_NPM_FAIL="1")
+    assert _wait(lambda: (env.data / "cli-install.json").exists())
+    r2, _ = _start(env, box, sid="s2", FAKE_NPM_FAIL="1")
+    assert parse_stdout(r2.stdout) is None
+
+
+def test_status_reports_sqlite_without_side_effects(box, capsys):
+    _pinned_no_binding(box)
+    box.inst.main(["--status"])
+    out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
+    assert out["state"] == "ok" and out["sqlite"].startswith("off (") and "RAM-only" in out["sqlite"]
+    assert box.calls() == []

@@ -60,6 +60,8 @@ install), the next session start installs it in the background (`npm ci --ignore
 `npm rebuild better-sqlite3`, in the plugin directory; no message, no restart; one retry per plugin version per hour after
 a failure, with one band line and `[Erneut versuchen]`). `ACE_AUTO_INSTALL=0` turns that off: ACE then tells you and installs
 only after `/ace:ace-install-cli` and its confirm button. Without npm/node, offline-managed or read-only: the same message.
+If the CLI is there but better-sqlite3's native binding is missing or broken (8.1.2), the same background step runs only
+`npm rebuild better-sqlite3`; if that fails ACE works RAM-only, with no band: `/ace:ace-doctor` shows `SQLite cache: active | off (reason)`.
 
 **Requirements:** Claude Code >= 2.1.311, Node.js (for the CLI), macOS, Linux or WSL2. Windows is not supported (use WSL2).
 

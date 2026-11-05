@@ -73,8 +73,9 @@ export async function startContext($: any, L: Load, cwd: string) {
     L.verifying = (async () => {
       const probe = () => verify(c, argv => cliRun($, c as any, argv, { timeoutMs: 20_000 }))
       let st = await probe()
-      let retry: string | undefined
-      if (st === 'cli_missing') {  // 8.1.1: the pinned CLI is installed in the background; quiet while it runs, a band only on failure
+      let retry: string | undefined, installed = false
+      if (st === 'cli_missing') {
+        installed = true  // 8.1.1: the pinned CLI is installed in the background; quiet while it runs, a band only on failure
         const e = await installer($, ['--ensure'], 30_000)
         if (e.state === 'started' || e.state === 'running') {
           await publish($, L, c, null)
@@ -83,6 +84,7 @@ export async function startContext($: any, L: Load, cwd: string) {
           else retry = w.detail || w.state
         } else if (e.state === 'failed') retry = e.detail || 'failed'
       }
+      if (st === 'ok' && !installed) await installer($, ['--ensure'], 30_000)  // 8.1.2: quiet background `npm rebuild better-sqlite3` when only the binding is missing; never a band
       await publish($, L, c, st === 'ok' ? null : st, st === 'cli_missing' ? retry : undefined)
       await logOnce($, L, c, st)
     })().catch(() => undefined)

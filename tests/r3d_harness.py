@@ -134,6 +134,7 @@ class Box3d:
         self._exe(self.root / "node_modules" / ".bin" / "ace-cli",
                   '#!/bin/sh\nexec node "%s" "$@"\n' % self.cli_js)
         (self.root / "node_modules" / "better-sqlite3").mkdir(parents=True)
+        (self.root / "package-lock.json").write_text(json.dumps({"lockfileVersion": 3, "packages": {}}))  # 8.1.2: the installer's sqlite repair needs a lock
 
     def env(self, **extra):
         e = {"HOME": str(self.home), "PATH": str(self.bin), "CLAUDE_PLUGIN_ROOT": str(self.root),
