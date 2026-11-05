@@ -31,10 +31,13 @@ def test_probe_prints_no_transcript_text(tmp_path):
     lines += [{'type': 'user', 'timestamp': now, 'message': {'role': 'user', 'content': 'again %s' % CANARY}}]
     lines += _tool('t6', 'Bash', {'command': 'cat %s | kubectl apply -f %s' % (CANARY, CANARY)}, 'Exit code 1\n%s' % CANARY, True)
     (proj / ('%s.jsonl' % CANARY)).write_text('\n'.join(json.dumps(x) for x in lines) + '\n')
+    old = tmp_path / 'old_rule.py'  # an old rule that never fails a task: every new false is a flip (no git history needed)
+    old.write_text("from ace_after_task import *\nfrom ace_after_task import _step_status\n"
+                   "def task_outcome(tools):\n    return True, 0, False\n")
     p = subprocess.run([sys.executable, str(REPO / 'tests/probe_success_rule.py'), '--days', '3', '--root', str(tmp_path),
-                        '--old-ref', 'HEAD'], capture_output=True, text=True, timeout=120, cwd=str(REPO),
+                        '--old-file', str(old)], capture_output=True, text=True, timeout=120, cwd=str(REPO),
                        env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     out = p.stdout + p.stderr
     assert p.returncode == 0, out[-2000:]
-    assert 'total' in out and 'bash actions: 3 steps' in out and 'SF4 mcp write' in out and 'MF2' in out
+    assert 'total' in out and 'bash actions: 3 steps' in out and 'SF4 mcp write' in out and "('kubectl apply', 1)" in out
     assert CANARY.lower() not in out.lower(), 'the probe printed transcript text'
