@@ -36,6 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `[redacted]`; the same to the end of the line after `--password`/`--token`/`--secret`/`--api-key`, `mysql`/`sshpass
   -p`, curl `-u user:pass` and `Bearer`; plus URL userinfo and GitHub/OpenAI/Slack/AWS/npm/ace tokens and JWTs. It
   over-redacts on purpose (the rest of the line), never under-redacts.
+  Also: `Cookie`/`Set-Cookie`/`X-*-Token`/`X-API-Key` headers, `ssh-keygen -N`, `openssl -k/-pass/-passin/-passout`,
+  `7z -p`, `zip`/`unzip -P`, `htpasswd`, and the `echo`/`printf` piped into `--password-stdin`/`--with-token`. The
+  outcome rule always reads the raw command (it never leaves the plugin), so redaction never changes `success`.
+  Known limit: a secret without a keyword or known prefix (a bare value, a secret before its keyword) cannot be
+  recognized; do not write secrets into commands.
 
 ### Added
 - `result.failed_steps` (int, always present, informational, never decides success) on every automatic trace in both

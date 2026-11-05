@@ -433,7 +433,7 @@ def _analyze(cmd):
 
 def bash_step(cmd):
     """(family, decisive, key) of a Bash command; never raises."""
-    cmd = redact(cmd if isinstance(cmd, str) else ('' if cmd is None else str(cmd)))  # a family never holds a secret
+    cmd = cmd if isinstance(cmd, str) else ('' if cmd is None else str(cmd))  # the RAW command: it never leaves the plugin
     try:
         return _analyze(cmd)
     except Exception:  # ponytail: unparsable input falls back to the first word
@@ -465,9 +465,13 @@ def mcp_writes(tool):
 # ponytail: over-redacts on purpose (the rest of the line is lost), never under-redacts.
 REDACT_BLOCK = 500
 _SPAN_RES = (
-    (regex_module.compile(r'''(?:password|passwd|passphrase|pwd|secret|token|credential|authorization|api[-_]?key|_key(?![a-z0-9])|pass(?![a-z]))[A-Za-z0-9_-]*["']?[ \t]*[:=][ \t]*''', regex_module.I | regex_module.A), True),
+    (regex_module.compile(r'''(?:password|passwd|passphrase|pwd|secret|token|credential|authorization|cookie|api[-_]?key|_key(?![a-z0-9])|pass(?![a-z]))[A-Za-z0-9_-]*["']?[ \t]*[:=][ \t]*''', regex_module.I | regex_module.A), True),
     (regex_module.compile(r'''--[A-Za-z0-9-]*(?:token|password|passwd|secret|api[-_]?key|credential)[A-Za-z0-9-]*(?:=|[ \t]+)''', regex_module.I | regex_module.A), False),
-    (regex_module.compile(r'''\b(?:mysql(?:dump|admin|sh)?|sshpass)\b[^\n]*?[ \t]-p[ \t]*''', regex_module.A), False),
+    (regex_module.compile(r'''\b(?:mysql(?:dump|admin|sh)?|sshpass|7z[a-z]?)\b[^\n]*?[ \t]-p[ \t]*''', regex_module.A), False),
+    (regex_module.compile(r'''\b(?:unzip|zip)\b[^\n]*?[ \t]-P[ \t]*''', regex_module.A), False),
+    (regex_module.compile(r'''\bssh-keygen\b[^\n]*?[ \t]-N[ \t]*''', regex_module.A), False),
+    (regex_module.compile(r'''\bopenssl\b[^\n]*?[ \t]-(?:k|pass|passin|passout)[ \t]+''', regex_module.A), False),
+    (regex_module.compile(r'''\bhtpasswd\b[ \t]*''', regex_module.A), False),
     (regex_module.compile(r'''\b(?:curl|wget)\b[^\n]*?[ \t](?:-u|--user)(?:=|[ \t]+)?(?=["']?[^ \t\n\r"']*:)''', regex_module.A), False),
     (regex_module.compile(r'''\bBearer[ \t]+''', regex_module.I | regex_module.A), False),
 )
@@ -475,6 +479,8 @@ _BLANK_LINE = regex_module.compile(r'\n[ \t\r]*\n')
 _URL_VALUE_END = regex_module.compile(r'''[&# \t\n\r\x0b\x0c"']''')
 _TOKEN_SEP = ' \t\n\r\x0b\x0c"\''
 _SECRET_RES = (
+    # the echo/printf stage that pipes a secret into --password-stdin / --with-token
+    (regex_module.compile(r'''\b(echo|printf)\b[^\n]*\|(?=[^|\n]*--(?:password-stdin|with-token))''', regex_module.A), r'\1 [redacted] |'),
     (regex_module.compile(r'''(\b[A-Za-z][A-Za-z0-9+.-]*://)[^ \t\n\r\x0b\x0c"']*@''', regex_module.A), r'\1[redacted]@'),
     (regex_module.compile(r'''\b(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abprs]-|ace_user_|sk-)[A-Za-z0-9_-]{8,}|\bnpm_[A-Za-z0-9]{20,}|\bAKIA[0-9A-Z]{12,}|\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+)?''', regex_module.A), '[redacted]'),
 )
@@ -523,6 +529,17 @@ def redact(text):
 ACTION_MAX, FAMILY_MAX = 200, 60
 
 
+def visible_family(cmd):
+    """The family to SEND: computed from the raw command (as the rule uses it), kept only if every word of it is still in
+    the redacted command and holds no secret; else its first word under the same test; else 'unknown'."""
+    fam, red = command_family(cmd), redact(cmd)
+    ok = lambda w: w in red and redact(w) == w and not _suspicious(w)
+    if fam and all(ok(w) for w in fam.split(' ')):
+        return fam
+    first = fam.split(' ')[0] if fam else ''
+    return first if first and ok(first) else 'unknown'
+
+
 def bash_action(cmd):
     """The Bash trajectory action: '<family> :: <command>', the family first (cut to FAMILY_MAX), the redacted command
     with whitespace collapsed after it, the whole cut to ACTION_MAX chars; 'unknown' when there is no command."""
@@ -530,7 +547,7 @@ def bash_action(cmd):
     body = ' '.join(x for x in regex_module.split('[%s]+' % _WS, redact(cmd)) if x)
     if not body:
         return 'unknown'
-    fam = redact(command_family(cmd)) or 'unknown'
+    fam = visible_family(cmd)
     if len(fam) > FAMILY_MAX:
         fam = fam[:FAMILY_MAX - 3] + '...'
     room = ACTION_MAX - len(fam) - 4

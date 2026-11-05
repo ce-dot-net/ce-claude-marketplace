@@ -270,7 +270,7 @@ function analyze(cmd: string): [string, boolean, string] {
 
 // [family, decisive, key] of a Bash command (ace_after_task.bash_step); never throws.
 export function bashStep(cmd: unknown): [string, boolean, string] {
-  const c = redact(typeof cmd === 'string' ? cmd : cmd === null || cmd === undefined ? '' : String(cmd))  // a family never holds a secret
+  const c = typeof cmd === 'string' ? cmd : cmd === null || cmd === undefined ? '' : String(cmd)  // the RAW command: it never leaves the plugin
   try { return analyze(c) } catch {  // ponytail: unparsable input falls back to the first word
     const w = c.split(/[ \t\n\r\x0b\x0c]+/).filter(Boolean)
     let fam = w.length ? w[0].split('/').pop()! : ''
@@ -296,9 +296,13 @@ export function mcpWrites(tool: string): boolean {
 // line. ponytail: over-redacts on purpose (the rest of the line is lost), never under-redacts.
 export const REDACT_BLOCK = 500
 const SPAN_RES: [RegExp, boolean][] = [
-  [/(?:password|passwd|passphrase|pwd|secret|token|credential|authorization|api[-_]?key|_key(?![a-z0-9])|pass(?![a-z]))[A-Za-z0-9_-]*["']?[ \t]*[:=][ \t]*/gi, true],
+  [/(?:password|passwd|passphrase|pwd|secret|token|credential|authorization|cookie|api[-_]?key|_key(?![a-z0-9])|pass(?![a-z]))[A-Za-z0-9_-]*["']?[ \t]*[:=][ \t]*/gi, true],
   [/--[A-Za-z0-9-]*(?:token|password|passwd|secret|api[-_]?key|credential)[A-Za-z0-9-]*(?:=|[ \t]+)/gi, false],
-  [/\b(?:mysql(?:dump|admin|sh)?|sshpass)\b[^\n]*?[ \t]-p[ \t]*/g, false],
+  [/\b(?:mysql(?:dump|admin|sh)?|sshpass|7z[a-z]?)\b[^\n]*?[ \t]-p[ \t]*/g, false],
+  [/\b(?:unzip|zip)\b[^\n]*?[ \t]-P[ \t]*/g, false],
+  [/\bssh-keygen\b[^\n]*?[ \t]-N[ \t]*/g, false],
+  [/\bopenssl\b[^\n]*?[ \t]-(?:k|pass|passin|passout)[ \t]+/g, false],
+  [/\bhtpasswd\b[ \t]*/g, false],
   [/\b(?:curl|wget)\b[^\n]*?[ \t](?:-u|--user)(?:=|[ \t]+)?(?=["']?[^ \t\n\r"']*:)/g, false],
   [/\bBearer[ \t]+/gi, false],
 ]
@@ -306,6 +310,8 @@ const BLANK_LINE = /\n[ \t\r]*\n/g
 const URL_VALUE_END = /[&# \t\n\r\x0b\x0c"']/g
 const TOKEN_SEP = ' \t\n\r\x0b\x0c"\''
 const SECRET_RES: [RegExp, string][] = [
+  // the echo/printf stage that pipes a secret into --password-stdin / --with-token
+  [/\b(echo|printf)\b[^\n]*\|(?=[^|\n]*--(?:password-stdin|with-token))/g, '$1 [redacted] |'],
   [/(\b[A-Za-z][A-Za-z0-9+.-]*:\/\/)[^ \t\n\r\x0b\x0c"']*@/g, '$1[redacted]@'],
   [/\b(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abprs]-|ace_user_|sk-)[A-Za-z0-9_-]{8,}|\bnpm_[A-Za-z0-9]{20,}|\bAKIA[0-9A-Z]{12,}|\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+)?/g, '[redacted]'],
 ]
@@ -344,6 +350,16 @@ export function redact<T>(text: T): T {
   return s as any
 }
 
+// The family to SEND (ace_after_task.visible_family): from the raw command, kept only if every word is still in the
+// redacted command and holds no secret; else its first word under the same test; else 'unknown'.
+export function visibleFamily(c: string): string {
+  const fam = commandFamily(c), red = redact(c)
+  const ok = (w: string) => red.includes(w) && redact(w) === w && !suspicious(w)
+  if (fam && fam.split(' ').every(ok)) return fam
+  const first = fam ? fam.split(' ')[0] : ''
+  return first && ok(first) ? first : 'unknown'
+}
+
 export const ACTION_MAX = 200, FAMILY_MAX = 60
 // The Bash trajectory action (ace_after_task.bash_action): '<family> :: <command>', the family first (cut to FAMILY_MAX),
 // the redacted command with whitespace collapsed after it, the whole cut to ACTION_MAX chars; 'unknown' when there is none.
@@ -351,7 +367,7 @@ export function bashAction(cmd: unknown): string {
   const c = typeof cmd === 'string' ? cmd : cmd === null || cmd === undefined ? '' : String(cmd)
   let body = redact(c).split(/[ \t\n\r\x0b\x0c]+/).filter(Boolean).join(' ')
   if (!body) return 'unknown'
-  let fam = redact(commandFamily(c)) || 'unknown'
+  let fam = visibleFamily(c)
   if ([...fam].length > FAMILY_MAX) fam = cpSlice(fam, FAMILY_MAX - 3) + '...'
   const room = ACTION_MAX - [...fam].length - 4
   if ([...body].length > room) body = cpSlice(body, room - 3) + '...'
