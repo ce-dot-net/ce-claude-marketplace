@@ -158,25 +158,13 @@ else
   LESSONS_LEARNED="Partial success: $LESSONS_LEARNED"
 fi
 
-# Build JSON payload for --stdin (includes optional git context)
-LEARN_PAYLOAD=$(TASK="$TASK_DESCRIPTION" OUT="$LESSONS_LEARNED" OK="$SUCCESS_FLAG" IN_GIT="${IN_GIT:-}" \
-  BRANCH="${BRANCH:-}" COMMIT="${COMMIT_HASH:-}" MSG="${COMMIT_MSG:-}" FILES="${CHANGED_FILES:-}" python3 -c '
-import json, os
-e = os.environ
-git = {"branch": e["BRANCH"], "commit_hash": e["COMMIT"], "commit_message": e["MSG"],
-       "files_changed": [f for f in e["FILES"].split("\n") if f]} if e["IN_GIT"] else None
-print(json.dumps({"task": e["TASK"], "output": e["OUT"], "success": e["OK"] == "--success", "git": git}))
-')
-
-# Call ace-cli learn with --stdin for richer payload
-if [ -n "$ORG_ID" ]; then
-  echo "$LEARN_PAYLOAD" | ACE CLI --json --org "$ORG_ID" --project "$PROJECT_ID" \
-    learn --stdin
-else
-  # Single-org mode (no --org flag)
-  echo "$LEARN_PAYLOAD" | ACE CLI --json --project "$PROJECT_ID" \
-    learn --stdin
-fi
+# 8.1.1: same flags as the mod (/ace:ace-learn): ace-cli builds the complete trace itself
+# (trajectory, result:{success,output}, playbook_used:[], git context auto-detected).
+# A hand-built --stdin payload without those fields is rejected by the server.
+CLI="${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli"
+ORG_ARGS=(); [ -n "$ORG_ID" ] && ORG_ARGS=(--org "$ORG_ID")
+"$CLI" --json "${ORG_ARGS[@]}" --project "$PROJECT_ID" \
+  learn --task "${TASK_DESCRIPTION:0:500}" --output "$LESSONS_LEARNED" "$SUCCESS_FLAG" --no-stream
 
 if [ $? -eq 0 ]; then
   echo "✅ Patterns captured successfully!"
@@ -195,16 +183,15 @@ The `ace-cli learn` subcommand accepts the following flags for enriched trace co
 |------|-------------|
 | `--retrieval-id <uuid>` | UUID of the ACE search retrieval that preceded this task. Correlates the learn event back to the specific patterns that were retrieved, enabling the reinforcement loop. Supplied automatically by hooks (via #24/#25). |
 | `--applied-log-ids <ids>` | Comma-separated list of retrieval log IDs for patterns that were actually applied during the task. Used by the Curator to reinforce those specific patterns. Supplied automatically by hooks (via #24/#25). |
-| `--pin-session` | Pin this learn event to the current session ID so the ACE server can group all task events within one conversation. Useful when multiple learn calls occur in the same session. |
-| `--stdin` | Read the full learn payload as JSON from stdin (used by hooks for structured payloads). |
+| `--pin-session <sessionId>` | Recall `retrieval_id` + `applied_log_ids` from the pinned search session (the hooks use it; you rarely need it by hand). |
+| `--stdin` / `--transcript <file>` | Send a complete ExecutionTrace JSON (`task`, `trajectory`, `result`, `playbook_used`); hooks use `--transcript` (stdin breaks above ~64KB). |
 | `--success` / `--failure` | Mark the task outcome. |
 
-> **Note on `task_intent`:** `task_intent` is a **search-only** flag passed to `ace-cli search`.
-> It tells the search command what kind of task is being performed so the ACE server can weight
-> retrieval results accordingly. It is **not** part of the learn payload and is never sent as a
-> trace field — it belongs exclusively to the search/retrieval path.
+> **Note on `task_intent`:** `task_intent` is a **search-only** flag passed to `ace-cli search`; it is
+> never part of the learn payload. The server ignores a client-supplied `task_intent` by default
+> (it infers intent itself), so it does not change retrieval weighting.
 
-> **Hooks and enriched trace:** As of #24/#25, hooks automatically send enriched trace data — including `--retrieval-id` and `--applied-log-ids` — when calling `ace-cli learn` after a task completes. The manual `/ace:learn` command accepts the same flags so users can supply them explicitly when needed.
+> **Hooks and enriched trace:** As of #24/#25, hooks automatically send enriched trace data — including `--retrieval-id` and `--applied-log-ids` — when calling `ace-cli learn` after a task completes. `ace-cli learn` accepts the same flags (`--retrieval-id`, `--applied-log-ids`, `--pin-session`) when supplied explicitly; the `/ace:ace-learn` command itself sends only `--task/--output/--success|--failure`.
 
 ## Implementation Notes for Claude
 
