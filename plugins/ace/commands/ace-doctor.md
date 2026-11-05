@@ -214,8 +214,7 @@ if test -f "$LOCAL/dist/cli.js"; then
 else
   echo "packages not installed in $PLUGIN_ROOT/node_modules"
 fi
-# sqlite binary (without it the CLI runs RAM-only: no pins, empty graph cache until the installer rebuilds it)
-test -f "$PLUGIN_ROOT/node_modules/better-sqlite3/build/Release/better_sqlite3.node" && echo "sqlite binary: present" || echo "sqlite binary: missing"
+# sqlite binding: see the `sqlite` field of the installer status below (a real `new Database(':memory:')` probe; a bare file-exists check misses a binary built for another Node)
 
 # A global ace-cli (fallback)
 GLOBAL_CLI="$(command -v 'ace-cli')"
@@ -342,7 +341,7 @@ test -f "$PLUGIN_ROOT/scripts/ace_subagent_stop_wrapper.sh" && echo "subagent_st
 test -f "$PLUGIN_ROOT/hooks/hooks.json" && echo "hooks.json: EXISTS"
 ```
 
-**Expected Hooks** (v8 round 2: PostToolBatch + PreToolUse(Agent) included incl. the async row: orphan sweep + one-time sqlite rebuild):
+**Expected Hooks** (v8 round 2: PostToolBatch + PreToolUse(Agent) included incl. the async row: orphan sweep + the installer's sqlite repair, `npm rebuild better-sqlite3` only when the binding does not load, at most one failed attempt per hour):
 1. `SessionStart` → `ace_install_cli.sh` (startup|clear|resume; plus the async row, flag `--update-check`)
 2. `SessionStart` (compact) → `ace_sessionstart_compact.sh`
 3. `UserPromptSubmit` (sync) → `ace_before_task_wrapper.sh`

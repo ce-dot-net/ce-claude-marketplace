@@ -82,30 +82,48 @@ _SQLITE_PROBE = "console.log(process.versions.modules);new (require('better-sqli
 SQLITE_PROBE_S = 10
 
 
-def _probe_key(r):
-    """None when there is no .node file (nothing to cache), else mtime+size of it and which node runs it."""
+SYNC_PROBE_S = 0.8       # SessionStart's sync row: node slower than this = "unknown", never a wait
+_UNKNOWN = "unknown"
+_NODE_ID = "process.versions.modules+':'+process.version"
+
+
+def _node_id(timeout):
+    """ABI + version of the node that runs RIGHT NOW ('' if it cannot say). A Volta/asdf/mise/nodenv shim or an
+    in-place node upgrade keeps the path, so the path alone cannot key the cache. Raises TimeoutExpired."""
+    p = subprocess.run(["node", "-p", _NODE_ID], capture_output=True, text=True, timeout=timeout)
+    return p.stdout.strip() if p.returncode == 0 else ""
+
+
+def _probe_key(r, node_id):
+    """None when there is no .node file or no node id (nothing to cache), else mtime+size of the file + node id."""
     try:
         st = (r / "node_modules" / "better-sqlite3" / "build" / "Release" / "better_sqlite3.node").stat()
-        return "%d:%d:%s" % (st.st_mtime_ns, st.st_size, os.path.realpath(shutil.which("node") or ""))
+        return "%d:%d:%s" % (st.st_mtime_ns, st.st_size, node_id) if node_id else None
     except OSError:
         return None
 
 
-def sqlite_state(r=None):
-    """None = better-sqlite3 not installed (nothing to repair); True = binding loads; False = missing/broken.
-    A passing probe is cached by the .node file's mtime/size + node path, so a healthy start spawns node once."""
+def sqlite_state(r=None, quick=False):
+    """None = better-sqlite3 not installed (nothing to repair); True = binding loads; False = missing/broken;
+    "unknown" = quick mode only: node did not answer within SYNC_PROBE_S (the caller schedules the real check).
+    A passing probe is cached by the .node file's mtime/size + the running node's ABI/version: a healthy start
+    costs one `node -p` (~40 ms), the constructor probe runs only after a change."""
     r = r or root()
     if not (r / "node_modules" / "better-sqlite3").is_dir():
         return None
-    k = _probe_key(r)
-    f = _pdd().sqlite_probe_file()
-    if k and _read(f).get("key") == k:
-        return True
+    lim, t0 = (SYNC_PROBE_S if quick else SQLITE_PROBE_S), time.time()
+    left = lambda: max(0.05, lim - (time.time() - t0))
     try:
+        k = _probe_key(r, _node_id(left()))
+        f = _pdd().sqlite_probe_file()
+        if k and _read(f).get("key") == k:
+            return True
         ok = subprocess.run(["node", "-e", _SQLITE_PROBE], cwd=str(r), capture_output=True,
-                            timeout=SQLITE_PROBE_S).returncode == 0
+                            timeout=left()).returncode == 0
+    except subprocess.TimeoutExpired:
+        return _UNKNOWN if quick else False
     except Exception:
-        ok = False
+        ok, k = False, None
     if ok and k:
         try:
             _pdd().private_write(f, json.dumps({"key": k}))
@@ -188,8 +206,10 @@ def _bad_lock(r):
     return any(isinstance(v, dict) and v.get("resolved") and not str(v["resolved"]).startswith("https://") for v in pk.values())
 
 
-def decide(auto=True, now=None, env=None):
-    """(state, detail). `auto` = the SessionStart rules (opt-out, managed, throttle); manual skips those three."""
+def decide(auto=True, now=None, env=None, quick=False):
+    """(state, detail). `auto` = the SessionStart rules (opt-out, managed, throttle); manual skips those three.
+    `quick` = the sync SessionStart row: the sqlite probe is bounded (SYNC_PROBE_S); node not answering = "start"
+    (a background check), never a wait."""
     env = os.environ if env is None else env
     now = time.time() if now is None else now
     r = root()
@@ -198,7 +218,7 @@ def decide(auto=True, now=None, env=None):
         return "unavailable", "no exact pin in package.json"
     sq = False  # repair mode: the CLI is the pinned one, only the sqlite binding is broken
     if installed_version(r) == p:
-        if sqlite_state(r) is not False:
+        if sqlite_state(r, quick) in (None, True):
             return "ok", p
         sq = True
     if auto and env.get("ACE_AUTO_INSTALL") == "0":
@@ -229,7 +249,7 @@ def _spawn():
 def ensure(now=None):
     """SessionStart / the mod: start the background install when due. Never blocks, never raises."""
     try:
-        s, d = decide(True, now)
+        s, d = decide(True, now, quick=True)
         if s == "start":
             try:
                 _spawn()

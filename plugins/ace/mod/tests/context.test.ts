@@ -173,6 +173,17 @@ test('cli fine: SessionStart still runs the installer once (quiet) so a missing 
   expect(h.band()?.state ?? null).toBe(null)
 })
 
+test('cli fine: the status publishes BEFORE the installer ensure runs (the repair never delays the status/band)', async ($, on) => {
+  let published = -1
+  const h: any = host(on, { installer: () => { published = h.statuses.length; return { state: 'started' } } })
+  await start($)
+  await tick()
+  expect(instCalls(h)).toEqual(['--ensure'])
+  expect(published).toBeGreaterThan(0)  // the status was already out when the installer ran
+  expect(h.band()?.state ?? null).toBe(null)
+  expect(ctxRows(h).length).toBe(1)
+})
+
 for (const state of ['off', 'unavailable']) {
   test(`cli missing + auto-install ${state}: the old behaviour (band offers the confirm install)`, async ($, on) => {
     const h = host(on, { cli: missing(() => false), installer: () => ({ state, detail: 'x' }) })

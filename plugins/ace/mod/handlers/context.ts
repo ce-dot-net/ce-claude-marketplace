@@ -84,9 +84,9 @@ export async function startContext($: any, L: Load, cwd: string) {
           else retry = w.detail || w.state
         } else if (e.state === 'failed') retry = e.detail || 'failed'
       }
-      if (st === 'ok' && !installed) await installer($, ['--ensure'], 30_000)  // 8.1.2: quiet background `npm rebuild better-sqlite3` when only the binding is missing; never a band
       await publish($, L, c, st === 'ok' ? null : st, st === 'cli_missing' ? retry : undefined)
       await logOnce($, L, c, st)
+      if (st === 'ok' && !installed) await installer($, ['--ensure'], 30_000)  // 8.1.2: AFTER the status/band: quiet background `npm rebuild better-sqlite3` when only the binding is missing; never a band
     })().catch(() => undefined)
   } catch { /* the hooks keep the binding they resolved */ }
 }

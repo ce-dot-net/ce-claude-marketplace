@@ -35,8 +35,16 @@ exit 0
 """
 
 
-# the sqlite probe: loads iff the .node file exists in the plugin dir (cwd)
-_FAKE_NODE = '#!/bin/sh\n[ -f node_modules/better-sqlite3/build/Release/better_sqlite3.node ]\n'
+# fake node: `-p` prints "<abi>:v<abi>.0.0"; the sqlite probe (-e) loads iff the .node file exists and holds a
+# marker that is "elf" or the CURRENT abi (a binary built for another Node does not load). FAKE_NODE_ABI = a file
+# naming the abi (a Volta/asdf shim switch rewrites it); FAKE_NODE_HANG hangs every call.
+_FAKE_NODE = r"""#!/bin/sh
+[ -n "$FAKE_NODE_HANG" ] && exec sleep 30
+ABI=$(cat "$FAKE_NODE_ABI" 2>/dev/null || echo 127)
+[ "$1" = -p ] && { echo "$ABI:v$ABI.0.0"; exit 0; }
+F=node_modules/better-sqlite3/build/Release/better_sqlite3.node
+[ -f "$F" ] && { [ "$(cat $F)" = elf ] || [ "$(cat $F)" = "$ABI" ]; }
+"""
 
 
 @pytest.fixture
@@ -328,7 +336,7 @@ def _pinned_no_binding(box, binding=False):
 def _fake_rebuild_builds(box):
     """The fake npm `rebuild` creates the .node file (as the real prebuilt download does)."""
     (box.bin / "npm").write_text(_FAKE_NPM.replace(
-        'exit 0\n', 'if [ "$1" = rebuild ] && [ -z "$FAKE_NPM_NOBUILD" ]; then mkdir -p node_modules/better-sqlite3/build/Release; echo elf > node_modules/better-sqlite3/build/Release/better_sqlite3.node; fi\nexit 0\n'))
+        'exit 0\n', 'if [ "$1" = rebuild ] && [ -z "$FAKE_NPM_NOBUILD" ]; then mkdir -p node_modules/better-sqlite3/build/Release; (cat \"$FAKE_NODE_ABI\" 2>/dev/null || echo elf) > node_modules/better-sqlite3/build/Release/better_sqlite3.node; fi\nexit 0\n'))
 
 
 def test_missing_binding_runs_only_rebuild(box):
@@ -360,7 +368,7 @@ def test_binding_probe_is_cached_by_mtime(box):
     _pinned_no_binding(box, binding=True)
     nlog = box.bin.parent / "node.log"
     nlog.touch()
-    (box.bin / "node").write_text('#!/bin/sh\necho x >> "%s"\nexit 0\n' % nlog)
+    (box.bin / "node").write_text('#!/bin/sh\n[ "$1" = -p ] && { echo 127:v22; exit 0; }\necho x >> "%s"\nexit 0\n' % nlog)
     for _ in range(3):
         assert box.inst.decide()[0] == "ok"
     assert len(nlog.read_text().splitlines()) == 1
@@ -427,3 +435,65 @@ def test_status_reports_sqlite_without_side_effects(box, capsys):
     out = json.loads(capsys.readouterr().out.strip().splitlines()[-1])
     assert out["state"] == "ok" and out["sqlite"].startswith("off (") and "RAM-only" in out["sqlite"]
     assert box.calls() == []
+
+
+# ---- 8.1.2 review: the probe cache must notice a Node switch; the sync row must not wait on node ----
+
+def _abi(box, n):
+    f = box.bin.parent / "abi"
+    f.write_text(str(n))
+    return f
+
+
+def test_node_switch_through_a_shim_invalidates_the_cache(box, monkeypatch):
+    """Volta/asdf/mise keep the same node path: built under ABI 127, cached ok, shim now runs ABI 115."""
+    _pinned_no_binding(box)
+    _fake_rebuild_builds(box)
+    monkeypatch.setenv("FAKE_NODE_ABI", str(_abi(box, 127)))
+    assert box.inst.run(auto=True)["state"] == "ok"            # built under 127, probe cached
+    assert box.inst.decide()[0] == "ok" and box.inst.status()["sqlite"] == "active"
+    _abi(box, 115)                                              # the shim now reports another Node
+    assert box.inst.decide()[0] == "start", "stale 'binding ok' served after a Node switch"
+    assert box.inst.status()["sqlite"].startswith("off (")
+    n = len(box.calls())
+    assert box.inst.run(auto=True)["state"] == "ok"
+    assert [l.split("|")[1] for l in box.calls()[n:]] == ["rebuild better-sqlite3"]  # the rebuild ran
+    assert box.inst.decide()[0] == "ok"
+
+
+def test_healthy_binding_costs_one_cheap_node_p_per_start(box, monkeypatch):
+    _pinned_no_binding(box, binding=True)
+    nlog = box.bin.parent / "node.log"
+    nlog.touch()
+    monkeypatch.setenv("FAKE_NODE_ABI", str(_abi(box, 127)))
+    (box.bin / "node").write_text('#!/bin/sh\necho "$1" >> "%s"\n' % nlog + _FAKE_NODE.split("\n", 1)[1])
+    for _ in range(3):
+        assert box.inst.decide()[0] == "ok"
+    calls = nlog.read_text().split()
+    assert calls == ["-p", "-e", "-p", "-p"], calls  # one real probe, then only the cheap -p
+
+
+def test_hanging_node_does_not_block_the_sync_row(box, monkeypatch):
+    """SessionStart sync row: a hanging node means 'unknown': no wait, a background check is scheduled."""
+    _pinned_no_binding(box, binding=True)
+    monkeypatch.setenv("FAKE_NODE_HANG", "1")
+    spawned = []
+    monkeypatch.setattr(box.inst, "_spawn", lambda: spawned.append(1))
+    t0 = time.time()
+    assert box.inst.ensure()["state"] == "started"
+    assert time.time() - t0 < 2 and spawned == [1]
+
+
+def test_hanging_node_off_when_opted_out_and_no_spawn(box, monkeypatch):
+    _pinned_no_binding(box, binding=True)
+    monkeypatch.setenv("FAKE_NODE_HANG", "1")
+    monkeypatch.setenv("ACE_AUTO_INSTALL", "0")
+    assert box.inst.ensure()["state"] == "off"
+
+
+def test_e2e_sessionstart_sync_row_with_hanging_node_is_fast(e2e):
+    env, box = e2e
+    _pinned_no_binding(box, binding=True)
+    r, dt = _start(env, box, FAKE_NODE_HANG="1")
+    assert dt < 2, "SessionStart waited %.1fs on a hanging node" % dt
+    assert parse_stdout(r.stdout) is None

@@ -61,9 +61,19 @@ argv = sys.argv[1:]
 if argv[:1] in (["-e"], ["-p"], ["--eval"], ["--print"]):
     with open(os.environ["FAKE_NODE_LOG"], "a") as f:
         f.write(json.dumps({"argv": argv, "cwd": os.getcwd()}) + "\n")
-    # the load probe: FAKE_NODE_REQUIRE_RC forces a result; else it passes once a (fake) `npm rebuild` has run
+    if os.environ.get("FAKE_NODE_HANG"):
+        import time
+        time.sleep(30)
+    abi = os.environ.get("FAKE_NODE_ABI", "127")
+    if argv[:1] in (["-p"], ["--print"]):  # the probe cache key: ABI:version of the node that runs now
+        print(abi + ":v" + abi + ".0.0")
+        sys.exit(0)
+    # the load probe: FAKE_NODE_REQUIRE_RC forces a result; else it passes once a (fake) `npm rebuild` has built
+    # a .node file for THIS abi (a binary built under another Node does not load)
     rc = os.environ.get("FAKE_NODE_REQUIRE_RC")
-    sys.exit(int(rc) if rc is not None else (0 if os.path.exists(os.environ["FAKE_BUILT"]) else 1))
+    node = os.path.join(os.getcwd(), "node_modules", "better-sqlite3", "build", "Release", "better_sqlite3.node")
+    built = os.path.exists(os.environ["FAKE_BUILT"]) and os.path.isfile(node) and open(node).read() == abi
+    sys.exit(int(rc) if rc is not None else (0 if built else 1))
 script = argv[0] if argv else ""
 pkg = os.path.join(os.path.dirname(os.path.dirname(script)), "package.json")
 respond(argv[1:], "plugin-local", json.load(open(pkg)).get("version", "0.0.0"))
@@ -77,6 +87,9 @@ with open(os.environ["FAKE_NPM_LOG"], "a") as f:
 rc = int(os.environ.get("FAKE_NPM_RC", "0"))
 if rc == 0 and sys.argv[1:2] == ["rebuild"]:
     open(os.environ["FAKE_BUILT"], "w").close()
+    node = os.path.join(os.getcwd(), "node_modules", "better-sqlite3", "build", "Release", "better_sqlite3.node")
+    os.makedirs(os.path.dirname(node), exist_ok=True)
+    open(node, "w").write(os.environ.get("FAKE_NODE_ABI", "127"))
 sys.exit(rc)
 '''
 
@@ -176,7 +189,11 @@ class Box3d:
         return self._jsonl(self.npm_log)
 
     def node_evals(self):
-        return self._jsonl(self.node_log)
+        """the constructor probes (-e); the cheap ABI query (-p) is node_abi_calls"""
+        return [c for c in self._jsonl(self.node_log) if c["argv"][:1] == ["-e"]]
+
+    def node_abi_calls(self):
+        return [c for c in self._jsonl(self.node_log) if c["argv"][:1] == ["-p"]]
 
     def relevance(self):
         return self._jsonl(self.proj / ".claude" / "data" / "logs" / "ace-relevance.jsonl")

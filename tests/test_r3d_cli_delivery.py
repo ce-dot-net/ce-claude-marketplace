@@ -308,16 +308,21 @@ def test_binary_that_loads_is_not_rebuilt_again(tmp_path):
     b.session_start_async(sid="a")
     b.session_start_async(sid="b")
     assert len(_rebuilds(b)) == 1
-    assert len(b.node_evals()) == 3, "probe, verify after the rebuild, probe again: one cheap node spawn per startup"
+    assert len(b.node_evals()) == 2, "probe, verify after the rebuild; the 2nd start is a cache hit (no constructor probe)"
+    assert len(b.node_abi_calls()) == 3, "...but the cheap ABI query keys every check: first probe, verify, 2nd start"
 
 
 def test_binary_is_probed_on_every_startup_not_trusted_from_a_marker(tmp_path):
-    """A reinstall at the same plugin version wiped the build dir: the old marker said 'done', the probe does not."""
+    """A reinstall wiped the build dir, or Node switched (nvm/volta/asdf shims keep the path): the cached 'ok' must
+    not be served. The cache key = the .node file + the running node's ABI/version."""
     b = Box3d(tmp_path, local=True)
     b.session_start_async(sid="a")
-    (b.tmp / "sqlite-built").unlink()  # reinstall wiped the build dir
+    node = b.root / "node_modules" / "better-sqlite3" / "build" / "Release" / "better_sqlite3.node"
+    node.unlink()  # reinstall wiped the build dir
     b.session_start_async(sid="b")
     assert len(_rebuilds(b)) == 2
+    b.session_start_async(sid="c", FAKE_NODE_ABI=115)  # same node path, another ABI: built binary no longer loads
+    assert len(_rebuilds(b)) == 3, "stale 'binding ok' served after a Node switch"
     assert not list(b.data.glob("sqlite-rebuilt*")), "no version marker any more"
 
 
