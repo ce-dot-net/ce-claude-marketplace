@@ -270,7 +270,7 @@ function analyze(cmd: string): [string, boolean, string] {
 
 // [family, decisive, key] of a Bash command (ace_after_task.bash_step); never throws.
 export function bashStep(cmd: unknown): [string, boolean, string] {
-  const c = typeof cmd === 'string' ? cmd : cmd === null || cmd === undefined ? '' : String(cmd)
+  const c = redact(typeof cmd === 'string' ? cmd : cmd === null || cmd === undefined ? '' : String(cmd))  // a family never holds a secret
   try { return analyze(c) } catch {  // ponytail: unparsable input falls back to the first word
     const w = c.split(/[ \t\n\r\x0b\x0c]+/).filter(Boolean)
     let fam = w.length ? w[0].split('/').pop()! : ''
@@ -292,13 +292,14 @@ export function mcpWrites(tool: string): boolean {
 // Secrets in sent text (8.1.3): Claude Code does not redact hook inputs. Applied before any cut. Parity: ace_after_task.redact.
 const SECRET_RES: [RegExp, string][] = [
   [/(--[A-Za-z0-9-]*(?:token|password|secret|api[-_]?key)(?:=|[ \t]+))("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)/gi, '$1[redacted]'],
-  [/(\b[A-Za-z][A-Za-z0-9+.-]*:\/\/)(?!\[redacted\]@)[^/ \t\n\r\x0b\x0c"'@]+@/g, '$1[redacted]@'],
+  [/(\b[A-Za-z][A-Za-z0-9+.-]*:\/\/)[^ \t\n\r\x0b\x0c"']*@/g, '$1[redacted]@'],
   [/(Authorization["']?[ \t]*[:=][ \t]*["']?(?:(?:Bearer|Basic|Token)[ \t]+)?)(?!\[redacted\])[^ \t\n\r\x0b\x0c"',;}]+/gi, '$1[redacted]'],
   [/(\bBearer[ \t]+)(?!\[redacted\])[^ \t\n\r\x0b\x0c"']+/gi, '$1[redacted]'],
-  [/(\b[A-Za-z0-9_]*(?:token|secret|key|password|pass|credential)[A-Za-z0-9_]*=)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c;&|"']+)/gi, '$1[redacted]'],
-  [/(["']?\b[A-Za-z0-9_-]*(?:password|passwd|pwd|secret|token|api[-_]?key|credentials?)[A-Za-z0-9_-]*["']?[ \t]*[:=][ \t]*)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c,;}&|"']+)/gi, '$1[redacted]'],
-  [/(\bmysql(?:dump|admin|sh)?\b[^|;&\n]*?[ \t]-p[ \t]*)(?!\[redacted\])(?!-)("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)/g, '$1[redacted]'],
-  [/((?:^|[ \t])(?:-u|--user)(?:=|[ \t]+))(?!\[redacted\])("[^"]*:[^"]*"|'[^']*:[^']*'|[^ \t\n\r\x0b\x0c"':]*:[^ \t\n\r\x0b\x0c"']+)/g, '$1[redacted]'],
+  [/(\b(?:[A-Za-z0-9_]*(?:token|secret|password|pass|credential)[A-Za-z0-9_]*|[A-Za-z0-9_]*(?:_key|apikey))=)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c;&|"']+)/gi, '$1[redacted]'],
+  [/(["']?\b[A-Za-z0-9_-]*(?:password|passwd|pwd|secret|token|api[-_]?key|credentials?)[A-Za-z0-9_-]*["']?[ \t]*[:=][ \t]*)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)/gi, '$1[redacted]'],
+  [/(\bmysql(?:dump|admin|sh)?\b[^|;&\n]*?[ \t]-p)(?:(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)|([ \t]+)(?!-)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+))/g, '$1$3[redacted]'],
+  [/(\bsshpass\b[^|;&\n]*?[ \t]-p[ \t]*)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)/g, '$1[redacted]'],
+  [/((?:^|[ \t])(?:-u|--user)(?:=|[ \t]+)?)(?!\[redacted\])("[^"]*:[^"]*"|'[^']*:[^']*'|[^ \t\n\r\x0b\x0c"':]*:[^ \t\n\r\x0b\x0c"']+)/g, '$1[redacted]'],
   [/\b(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abprs]-|ace_user_|sk-)[A-Za-z0-9_-]{8,}|\bnpm_[A-Za-z0-9]{20,}|\bAKIA[0-9A-Z]{12,}|\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+)?/g, '[redacted]'],
 ]
 export function redact<T>(text: T): T {

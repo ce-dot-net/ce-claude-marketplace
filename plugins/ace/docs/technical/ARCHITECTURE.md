@@ -115,11 +115,12 @@ the whole action cut to 200 characters; `unknown` when there is no command, neve
 ` :: `. The command is built from `tool_input.command` (complete in every hook input; the old empty or cut actions came
 from our own 60-char cut and from the accumulator's size caps). Secrets are replaced by `[redacted]` before any cut,
 in the action, every step `result`, the task and the summary (`redact`, both chains): values after
-`--token`/`--password`/`--secret`/`--api-key`, URL userinfo (`scheme://user:pass@host` and `scheme://token@host` ->
-`scheme://[redacted]@host`, psql URLs included), `Authorization:`/`Bearer` (also as a JSON key), `NAME=` assignments
-whose name holds TOKEN/SECRET/KEY/PASSWORD/PASS/CREDENTIAL, YAML/JSON/INI keys holding
+`--token`/`--password`/`--secret`/`--api-key`, URL userinfo (everything from `scheme://` to the LAST `@` of the URL token ->
+`scheme://[redacted]@host`, so `@`, `/`, `:` in a password are covered; psql URLs included), `Authorization:`/`Bearer` (also as a JSON key), `NAME=` assignments
+whose name holds TOKEN/SECRET/PASSWORD/PASS/CREDENTIAL or ends in `_KEY`/`apikey` (not a bare `key=`), YAML/JSON/INI keys holding
 password/passwd/pwd/secret/token/apikey/api_key/credential (value after `:` or `=`, quoted or bare), `mysql -p<v>` /
-`-p <v>`, `-u user:pass` / `--user`, and ghp_/gho_/github_pat_/sk-/xoxb-/AKIA/ace_user_/npm_ tokens and JWTs.
+`-p <v>`, `sshpass -p <v>`, `-u user:pass` / `-uuser:pass` / `--user`, and ghp_/gho_/github_pat_/sk-/xoxb-/AKIA/ace_user_/npm_ tokens and JWTs.
+The family is computed from the redacted command. A fuzz test (300 random passwords x 6 forms) runs in both chains.
 Claude Code does not redact hook inputs.
 
 The execution row in `ace-relevance.jsonl` carries `failed_steps` and `outcome_rule: "8.1.3"`; `/ace:ace-doctor` shows
