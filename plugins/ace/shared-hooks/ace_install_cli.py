@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """ACE SessionStart (v8, DESIGN §3/§23): slim presence check. Sync row (startup|clear|resume): no whoami, no
-network, no npm. The CLI is the one pinned in package.json and installed by Claude Code itself
+network, never waits on npm (when an install or sqlite repair is due it only starts the detached background installer;
+its node probe is bounded to 0.8 s, a slower node = "unknown" = schedule the background check). The CLI is the one pinned in package.json and installed by Claude Code itself
 (plugin-local); a global ace-cli >= the pin is the fallback; neither = one message naming
 /ace:ace-install-cli (never disabled.flag). 8.1.1: a missing/wrong plugin-local CLI is first installed in the
 background (utils/ace_cli_installer.py; ACE_AUTO_INSTALL=0 opts out); the message is for failure/opt-out only. The async row (flag kept: `--update-check`) runs the
