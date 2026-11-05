@@ -48,6 +48,19 @@ test('8.1.3: Bash action = "<family> :: <redacted command <= 200>", unknown when
   for (const c of ['"', "'", '$(', '`', '((', '))', '<<', '<<EOF', '| |', '&& ;', '\\', 'a |& b', '\x00', 123]) { commandFamily(c); expect(!!summarizeAction('Bash', { command: c })).toBe(true) }
 })
 
+test('8.1.3 fuzz: 300 random passwords x 6 forms reach no sent trace field', () => {
+  const strings = (x: any): string[] => typeof x === 'string' ? [x] : x && typeof x === 'object' ? Object.values(x).flatMap(strings) : []
+  const leaks: string[] = []
+  for (const pw of TABLES.fuzz_passwords) for (const tpl of TABLES.fuzz_templates) {
+    const cmd = tpl.split('{pw}').join(pw)
+    const tools = [toolRec('Bash', { command: cmd }, { stdout: '', stderr: cmd, interrupted: false }, true, undefined, 0, 1, `Exit code 1\n${cmd}`),
+      toolRec('Bash', { command: cmd }, { stdout: cmd, stderr: '', interrupted: false }, false, undefined, 1, 2)]
+    const t = buildTrace({ userPrompt: `run ${cmd}`, answer: `ran ${cmd}`, playbookUsed: [], agentType: 'main', appliedLogIds: [], nowIso: 'x', effort: 'normal', tools })
+    if (strings(t.trace).some(v => v.includes(pw))) leaks.push(tpl)
+  }
+  expect(leaks).toEqual([])
+})
+
 test('8.1.3: canary secrets reach no sent trace field (action, result, summary, task)', () => {
   const C = 'ghp_CANARYcanary0123456789', U = 'CANARYurl', Y = 'CANARYyaml', M = 'CANARYmysql'
   const tools = [toolRec('Bash', { command: `git clone https://user:${U}@github.com/o/r` }, { stdout: '', stderr: `fatal: https://user:${U}@github.com`, interrupted: false }, true, undefined, 0, 1, `Exit code 128\nfatal: https://user:${U}@github.com/o/r`),
