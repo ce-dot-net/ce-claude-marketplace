@@ -49,6 +49,54 @@ All plugin state lives under `$CLAUDE_PLUGIN_DATA` (default `~/.claude/plugins/d
   `ACE_LEARN_INLINE=1` runs it inline for tests. All async hooks print nothing.
 - **pin-backoff**: a failed session pin is dropped and not retried for `ACE_PIN_BACKOFF_MIN` minutes.
 
+### Task outcome (8.1.3)
+
+Contract (agreed with the server team): every automatic trace, both chains (Python Stop/SubagentStop, mod
+turn.complete), carries `result.success` (bool) = the END outcome of the task and `result.failed_steps` (int >= 0) =
+the number of failed steps, informational only, never deciding success, plus `result.aborted: true` only when the run
+was aborted (the key is absent otherwise; an aborted run is always `success: false`). PermissionDenied traces (`agent_type`
+`permission_gate`) stay `success: false` with `failed_steps: 1`. The server stores `result` unchanged, and the trace
+reaches it unchanged via `ace-cli learn --transcript` / the engine, so the new key needs no SDK change.
+v8.0.0 to 8.1.2 sent `success = no step failed`: one grep without a match, one red test run in a TDD loop or one
+retried call failed the whole task (main-task success fell from about 90 % to about 60 %).
+
+The rule (one implementation per chain, identical semantics: `ace_after_task.task_outcome`,
+`mod/lib/trace.ts taskOutcome`; shared fixture `tests-fixtures/task-outcome/`, run by both suites):
+
+1. Steps in order. Bash steps carry a command family: the first word of the last top-level segment (`&&`, `||`, `;`,
+   newline), its first pipe stage, `VAR=value` and wrappers (`sudo`, `time`, `env`, `nice`, `nohup`, `exec`, `npx`,
+   `bunx`, `timeout N`, `uv run`, `poetry run`) skipped, `python -m X` = `X`, plus the subcommand for git, npm, pnpm,
+   yarn, bun, cargo, go, gh, docker, uv, pip (two levels for `claude`, e.g. `claude plugin test`). A heredoc body is
+   ignored.
+2. A step fails on: a denial, an interrupt, a known non-zero Bash exit code (structured, or the `Exit code N` text),
+   or, without a known exit code, `error` / `is_error`. stderr alone never fails a step: a Bash step with exit 0 is a
+   success whatever stderr or stdout say. A code the tool interpreted itself (`returnCodeInterpretation`) is 0.
+3. Benign: exit 1 (only 1) of grep, egrep, fgrep, rg, diff, cmp, test, `[`, `[[`, git diff, git grep, `command -v`,
+   which, type, pgrep, pidof, jq is no failed step at all.
+4. Every other failed step counts in `failed_steps`, test runners included.
+5. A failed step is recovered by a LATER successful step with the same key: Bash = the same family; Edit, Write,
+   MultiEdit, NotebookEdit = the same path (across those tools, so a Write recovers a failed Edit of the file); any
+   other tool = the same tool name.
+6. `success` is false only when an unrecovered failed step is decisive (Bash outside the read-only family list, Edit,
+   Write, MultiEdit, NotebookEdit, Agent, Task, Workflow), or the run's last step was interrupted. Read, Glob, Grep,
+   WebFetch, WebSearch, MCP tools and read-only Bash (ls, cat, git status ...) never fail the task. A test run left red
+   (no later green run of the same family) is unrecovered. No failures or no tool data: `success: true`.
+7. `aborted` = the run's LAST recorded step was interrupted (Python: a PostToolUseFailure row with `is_interrupt`;
+   mod: a tool result with `interrupted: true`). A mid-run interrupt the task went on from is no abort; a user
+   rejection (denial) is a failed step, never an abort.
+
+Abort detection, what each chain can see (code.claude.com/docs/en/hooks): `Stop` does not fire on a user interrupt and
+API errors fire `StopFailure` (not registered), and the Stop/SubagentStop inputs carry no abort field, so the Python
+chain sees an abort only as an `is_interrupt` tool row (a user cancelling a running tool fires no PostToolUseFailure;
+the transcript's `[Request interrupted by user]` marker is undocumented and not used). The mod sees
+`turn.complete` `isAborted` / `reason` reliably, but an aborted turn abstains (no trace, F-080 credit withheld) in
+both chains, as before. So `aborted: true` reaches the server only for a turn that still completed after its last
+step was interrupted; a turn the user cut off sends nothing.
+
+The execution row in `ace-relevance.jsonl` carries `failed_steps` and `outcome_rule: "8.1.3"`; `/ace:ace-doctor` shows
+the rule of the newest row (`pre-8.1.3` for older rows). The user-rejection downvote and `applied_log_ids` are
+unchanged. Heuristics carry `ponytail:` comments (read-only list, MCP never decisive, the tokenizer).
+
 ### Hook topology
 
 | Event | Mode | Script |

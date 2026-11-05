@@ -2,6 +2,12 @@
 
 **Agentic Context Engineering** - Self-improving Claude Code plugin using automatic pattern learning.
 
+## 8.1.3 (unreleased): task outcome
+
+`result.success` in a learned trace is the task's END outcome: a grep without a match, a red test that later went
+green or a retried call no longer fail the task, and stderr alone is no failure. `result.failed_steps` counts the
+failed steps (informational); `result.aborted: true` marks a run whose last step was interrupted. The rule: docs/technical/ARCHITECTURE.md "Task outcome (8.1.3)".
+
 ## What's new in 8.1.0
 
 - **One binding core.** Every hook (both chains), every command and the statusline take org/project from one resolver

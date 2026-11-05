@@ -5,7 +5,7 @@ ACE Tool Accumulator - SQLite storage for PostToolUse / PostToolUseFailure data.
 v8 (DESIGN §4, §5 C4):
   PostToolBatch      -> `ace_tool_accumulator.py --batch`    (tool_calls[] on stdin) -> record_tool(success=True)
   PostToolUseFailure -> `ace_tool_accumulator.py --failure`  (event on stdin) -> record_tool(success=False,
-                        or success=None = interrupted/aborted, never counted as a failure)
+                        or success=None = interrupted/aborted; 8.1.3: a failed step, and the run is aborted when it is the last one)
   (no PostToolUse row any more, DESIGN §9 G4; accepted loss P-10: PostToolBatch has no
    duration_ms, so only failure rows carry timing.)
   Stop               -> get_session_tools()  (ace_after_task builds the trajectory)

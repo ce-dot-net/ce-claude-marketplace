@@ -294,6 +294,8 @@ class ACERelevanceLogger:
         agent_id: Optional[str] = None,
         task_session_id: Optional[str] = None,
         render_cohort: Optional[str] = None,
+        failed_steps: Optional[int] = None,
+        outcome_rule: Optional[str] = None,
     ) -> None:
         """
         Log task execution metrics for correlation with pattern usage.
@@ -316,6 +318,9 @@ class ACERelevanceLogger:
             'learning_sent': learning_sent,
             'source': 'python', 'agent_id': agent_id, 'task_session_id': task_session_id, 'render_cohort': render_cohort,
         }
+        if outcome_rule:  # 8.1.3: success = end outcome; the rule version shows in /ace:ace-doctor
+            entry['failed_steps'] = failed_steps or 0
+            entry['outcome_rule'] = outcome_rule
         if used_ids_count is not None:  # item H: how many injected ids the task evidenced, and by what
             entry['used_ids_count'] = used_ids_count
             entry['used_source'] = used_source or 'none'

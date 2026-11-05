@@ -54,24 +54,132 @@ export function summarizeResult(tool: string, res: any, isError = false, denied?
   if (res.stderr) return `Stderr: ${String(res.stderr).slice(0, 100)}`
   if (tool === 'Edit' || tool === 'Write') return 'Success'
   if (tool === 'Read') { const c = res.file?.content ?? res.content ?? ''; return `Read ${c ? c.split('\n').length : 0} lines` }
-  if (tool === 'Bash' && exitCodeOf(res)) return `Exit code ${exitCodeOf(res)}`
+  if (tool === 'Bash' && exitCode(res)) return `Exit code ${exitCode(res)}`
   if (tool === 'Bash') { const first = String(res.stdout || '').split('\n')[0]; return res.stdout ? (cut(first, 60) || 'Success') : 'Success' }
   if (tool === 'Grep' || tool === 'Glob') { const f = res.filenames ?? res.files; return Array.isArray(f) ? `Found ${f.length} files` : cut(JSON.stringify(res), 100) }
   if (tool === 'Task' || tool === 'Agent') return 'Task completed'
   return cut(JSON.stringify(res), 100)
 }
 
-// fix 5a: a non-zero exit code (structured, or the "Exit code N" text) unless the tool interpreted it (grep 1 = no matches)
-function exitCodeOf(res: any): number {
-  if (typeof res === 'string') { const m = /^Exit code (\d+)/.exec(res); return m ? Number(m[1]) : 0 }
-  if (!res || typeof res !== 'object' || Array.isArray(res) || res.returnCodeInterpretation) return 0
-  const c = Number(res.exitCode ?? res.exit_code ?? 0)
-  return Number.isFinite(c) ? c : 0
+// ---------- 8.1.3 task outcome (docs/technical/ARCHITECTURE.md "Task outcome"; parity: ace_after_task.py, fixture tests-fixtures/task-outcome) ----------
+// result.success = the END outcome of the task; result.failed_steps = how many steps failed (informational).
+// Exit 1 of these families means "no match / differs / false", never a failure (not even a failed step); exit >= 2 is.
+export const OUTCOME_RULE = '8.1.3'  // the execution row names the rule that set success; /ace:ace-doctor shows the last one
+export const BENIGN_EXIT1 = ['grep', 'egrep', 'fgrep', 'rg', 'diff', 'cmp', 'test', '[', '[[', 'git diff', 'git grep', 'command -v', 'which', 'type', 'pgrep', 'pidof', 'jq']
+// ponytail: a fixed read-only family list (a failed read-only step never fails the task); grow it from probe data.
+export const READ_ONLY_BASH = ['ls', 'cat', 'head', 'tail', 'wc', 'find', 'grep', 'egrep', 'fgrep', 'rg', 'pwd', 'echo', 'printf', 'which', 'type', 'command -v', 'file', 'stat', 'du', 'df', 'tree', 'jq', 'sort', 'uniq', 'cut', 'tr', 'diff', 'cmp', 'test', '[', '[[', 'date', 'printenv', 'ps', 'pgrep', 'pidof', 'git status', 'git log', 'git show', 'git diff', 'git grep', 'git rev-parse', 'git ls-files', 'git blame']
+// State-changing or verifying tools besides non-read-only Bash. ponytail: MCP tools are never decisive (read vs write
+// is unknown per server); a per-server table is the upgrade path.
+export const DECISIVE_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Agent', 'Task', 'Workflow']
+const FILE_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']
+const WRAPPERS = ['sudo', 'time', 'env', 'nice', 'nohup', 'exec', 'npx', 'bunx']
+const SUBCMD = ['git', 'npm', 'pnpm', 'yarn', 'bun', 'cargo', 'go', 'gh', 'docker', 'uv', 'pip', 'pip3', 'claude']
+const ASSIGN = /^[A-Za-z_][A-Za-z0-9_]*=/
+
+// Split s at any of seps outside quotes (backslash escapes outside single quotes). Same scan as ace_after_task._split_top.
+function splitTop(s: string, seps: string[]): string[] {
+  const out: string[] = []
+  let cur = '', q = '', i = 0
+  while (i < s.length) {
+    const ch = s[i]
+    if (q) {
+      if (ch === '\\' && q === '"' && i + 1 < s.length) { cur += s.slice(i, i + 2); i += 2; continue }
+      if (ch === q) q = ''
+      cur += ch; i++; continue
+    }
+    if (ch === '\\' && i + 1 < s.length) { cur += s.slice(i, i + 2); i += 2; continue }
+    if (ch === '"' || ch === "'") { q = ch; cur += ch; i++; continue }
+    const sep = seps.find(x => s.startsWith(x, i))
+    if (sep) { out.push(cur); cur = ''; i += sep.length; continue }
+    cur += ch; i++
+  }
+  out.push(cur)
+  return out
+}
+const words = (s: string) => splitTop(s.trim(), [' ', '\t']).filter(Boolean).map(w => w.replace(/["']/g, ''))
+const isBlank = (x: string) => !x.trim()
+const stripParens = (x: string) => x.replace(/^[(){}]+|[(){}]+$/g, '')
+
+// Bash command -> its family (ace_after_task.command_family). ponytail: a heuristic tokenizer, not a shell parser;
+// a heredoc body is ignored (first line only).
+export function commandFamily(cmd: unknown): string {
+  let c = String(cmd ?? '')
+  if (c.includes('<<')) c = c.split('\n')[0]
+  const segs = splitTop(c, ['&&', '||', ';', '\n']).filter(x => !isBlank(x))
+  if (!segs.length) return ''
+  let w = words(splitTop(segs[segs.length - 1], ['|'])[0]).map(stripParens).filter(x => x && x !== '!')
+  while (w.length && (WRAPPERS.includes(w[0]) || ASSIGN.test(w[0]) || w[0] === 'timeout' || ((w[0] === 'uv' || w[0] === 'poetry') && w[1] === 'run'))) {
+    if (w[0] === 'timeout') {
+      w = w.slice(1)
+      while (w.length && w[0].startsWith('-')) w = w.slice(1)
+      w = w.slice(1)
+    } else if ((w[0] === 'uv' || w[0] === 'poetry') && w[1] === 'run') w = w.slice(2)
+    else w = w.slice(1)
+  }
+  if (!w.length) return ''
+  const first = w[0].split('/').pop()!
+  if ((first === 'python' || first === 'python3') && w.length > 2 && w[1] === '-m') return w[2]
+  if (first === 'command' && (w[1] === '-v' || w[1] === '-V')) return 'command -v'
+  if (!SUBCMD.includes(first)) return first
+  const fam = [first], rest = w.slice(1)
+  while (rest.length && fam.length < (first === 'claude' ? 3 : 2)) {
+    const x = rest.shift()!
+    if (x.startsWith('-')) { if (first === 'git' && (x === '-C' || x === '-c') && rest.length) rest.shift(); continue }
+    fam.push(x)
+  }
+  return fam.join(' ')
+}
+
+const EXIT_TEXT = /^Exit code (\d+)/
+// The known exit code (structured, or the "Exit code N" text), else null. A code the tool interpreted itself
+// (returnCodeInterpretation, e.g. grep's no-matches) counts as 0.
+function exitCode(res: any): number | null {
+  if (typeof res === 'string') { const m = EXIT_TEXT.exec(res); return m ? Number(m[1]) : null }
+  if (!res || typeof res !== 'object' || Array.isArray(res)) return null
+  if (res.returnCodeInterpretation) return 0
+  for (const k of ['exit_code', 'exitCode']) if (res[k] !== undefined && res[k] !== null) { const c = Number(res[k]); if (Number.isFinite(c)) return Math.trunc(c) }
+  for (const k of ['error', 'content']) if (typeof res[k] === 'string') { const m = EXIT_TEXT.exec(res[k]); if (m) return Number(m[1]) }
+  return null
+}
+
+// 'ok' | 'failed' | 'interrupted'. stderr alone never fails a step; a known Bash exit code decides (benign exit-1
+// families are ok); otherwise isError / error / a denial does.
+function stepStatus(tool: string, input: any, res: any, isError: boolean, denied: string | undefined): 'ok' | 'failed' | 'interrupted' {
+  if (res && typeof res === 'object' && res.interrupted === true) return 'interrupted'
+  if (denied) return 'failed'
+  if (tool === 'Bash') {
+    const c = exitCode(res)
+    if (c !== null) return c === 0 || (c === 1 && BENIGN_EXIT1.includes(commandFamily(input?.command))) ? 'ok' : 'failed'
+  }
+  return isError || (res && typeof res === 'object' && !Array.isArray(res) && res.error) ? 'failed' : 'ok'
+}
+
+// The step's recovery key and whether an unrecovered failure of it fails the task.
+function stepKey(tool: string, input: any): { key: string; dec: boolean } {
+  if (tool === 'Bash') { const f = commandFamily(input?.command); return { key: `Bash:${f}`, dec: !READ_ONLY_BASH.includes(f) } }
+  const path = input?.file_path || input?.notebook_path
+  return { key: FILE_TOOLS.includes(tool) && path ? `file:${path}` : tool, dec: DECISIVE_TOOLS.includes(tool) }
+}
+
+// success is False only for an unrecovered failed decisive step (a LATER ok step with the same key recovers it) or a
+// run whose last step was interrupted. No tool data -> success, 0. Records from before 8.1.3 (no key) count by tool name.
+// aborted: the run's LAST step was interrupted (a mid-run interrupt the task went on from is no abort). A turn that
+// ends aborted (turn.complete isAborted / reason != 'answer') abstains and sends no trace at all.
+export function taskOutcome(tools: ToolRec[]): { success: boolean; failed_steps: number; aborted: boolean } {
+  const st = tools.map(t => ({ s: t.intr ? 'interrupted' : t.failed ? 'failed' : 'ok', key: t.key ?? t.tool, dec: t.dec ?? DECISIVE_TOOLS.includes(t.tool) }))
+  const aborted = st.length > 0 && st[st.length - 1].s === 'interrupted'
+  let success = !aborted
+  st.forEach((x, i) => {
+    if (x.s === 'failed' && x.dec && !st.slice(i + 1).some(y => y.s === 'ok' && y.key === x.key)) success = false
+  })
+  return { success, failed_steps: st.filter(x => x.s !== 'ok').length, aborted }
 }
 
 export function toolRec(tool: string, input: any, res: any, isError: boolean, denied: string | undefined, t0: number, t1: number): ToolRec {
-  const failed = isError || !!denied || !!(res && typeof res === 'object' && !Array.isArray(res) && (res.error || res.stderr)) || (tool === 'Bash' && exitCodeOf(res) !== 0)
-  const rec: ToolRec = { tool, action: summarizeAction(tool, input), result: summarizeResult(tool, res, isError, denied), failed, start_ms: t0, end_ms: t1 }
+  const status = stepStatus(tool, input, res, isError, denied)
+  const rec: ToolRec = { tool, action: summarizeAction(tool, input), result: summarizeResult(tool, res, isError, denied), failed: status !== 'ok',
+    start_ms: t0, end_ms: t1, ...stepKey(tool, input) }
+  if (status === 'interrupted') rec.intr = true
   const hay = cpSlice(toolHaystack([input]), 2000)
   if (hay) rec.hay = hay
   if (tool === 'Bash' && String(input?.command ?? '').includes('git commit')) { // git_utils.detect_commits_in_session
@@ -115,12 +223,12 @@ export function buildTrace(a: {
   downvote?: number[]  // the previous main task's evidenced ids after a user rejection
   summaryCap?: number  // 2000 for the closing answer, 4000 for a SubagentHandback report (ace_after_task.handback_summary)
 }) {
-  const success = !a.tools.some(t => t.failed)
+  const { success, failed_steps, aborted } = taskOutcome(a.tools)  // 8.1.3: end outcome + informational count
   const trace: any = {
     task: `User request: ${cpSlice(a.userPrompt, 2000)}`,
     trajectory: a.tools.map((t, k) => ({ step: k + 1, tool: t.tool, action: t.action,
       result: t.result, start_ms: t.start_ms, end_ms: t.end_ms, duration_ms: t.end_ms - t.start_ms })),
-    result: { success, output: `Executed ${a.tools.length} tool calls`, summary: a.answer ? cpSlice(a.answer, a.summaryCap ?? 2000) : null },
+    result: { success, failed_steps, ...(aborted ? { aborted: true } : {}), output: `Executed ${a.tools.length} tool calls`, summary: a.answer ? cpSlice(a.answer, a.summaryCap ?? 2000) : null },
     playbook_used: a.playbookUsed,
     timestamp: a.nowIso,
     agent_type: a.agentType,
@@ -138,7 +246,7 @@ export function buildTrace(a: {
   trace.effort_level = a.effort
   trace.effort_weight = effortWeight(a.effort)
   if (a.git) trace.git = a.git
-  return { trace: truncateTrace(trace), success }
+  return { trace: truncateTrace(trace), success, failed_steps }
 }
 
 // git_utils.parse_diff_stat

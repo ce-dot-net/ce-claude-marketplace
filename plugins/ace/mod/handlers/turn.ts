@@ -7,7 +7,7 @@ import { traceVariant } from '../lib/cohort.ts'
 import { type ToolRec, appliedLogIds, parseAceReview, parseUsedIds, selfEvalPrompt, usedPatternIds } from '../lib/evidence.ts'
 import { pyDumps, pyLoads } from '../lib/pyjson.ts'
 import { safeComponent as safe } from '../lib/state.ts'
-import { FALLBACK_ON_3, buildTrace, detachedLearnArgv, hasSubstantialWork, isTrivialTask, learnArgv } from '../lib/trace.ts'
+import { FALLBACK_ON_3, OUTCOME_RULE, buildTrace, detachedLearnArgv, hasSubstantialWork, isTrivialTask, learnArgv } from '../lib/trace.ts'
 import { learnLine } from '../ui/status.ts'
 import { anchorRun, checkPlaceholder } from './agent.ts'
 
@@ -70,7 +70,7 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
       const commits = recs.filter(r => r.commit).map(r => r.commit)
       if (git && commits.length) git.session_commits = commits
     } catch { /* git context is optional */ }
-    const { trace, success } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
+    const { trace, success, failed_steps } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
       tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied, usedIds: bySource, downvote,
       nowIso: await nowIso($), renderVariant: variant, conversationId: s.sessionId, effort, git, summaryCap })
     const traceFile = `${s.root}/tmp/ace-trace-${uuid()}.json`
@@ -78,7 +78,7 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
     const row = async (sent: boolean) => ({ timestamp: await nowIso($), event: 'execution', hook, session_id: s.sessionId,
       project_id: s.project, agent_type: agentType, patterns_used_count: playbook.length, pattern_ids: playbook.slice(0, 20),
       tools_executed: recs.length, state_changing_tools: recs.filter(r => ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit'].some(x => r.tool.includes(x))).length,
-      success, execution_time_seconds: Math.round((await $.clock.now() - t0) / 10) / 100, learning_sent: sent,
+      success, failed_steps, outcome_rule: OUTCOME_RULE, execution_time_seconds: Math.round((await $.clock.now() - t0) / 10) / 100, learning_sent: sent,
       used_ids_count: used.length, used_source: source, ...bySource, ...(capped ? { used_ids_capped: true } : {}),
       source: 'mod', agent_id: agentId ?? null, task_session_id: tsid ?? null, render_cohort: variant ?? null })  // 8.1.0 audit
     const log = `${s.logs}/ace-relevance.jsonl`
