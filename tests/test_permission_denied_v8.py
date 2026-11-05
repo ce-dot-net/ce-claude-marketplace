@@ -185,3 +185,10 @@ def test_render_variant_full_arm_is_budget_in_the_python_chain(tmp_path, monkeyp
 def test_conversation_id_omitted_when_session_id_empty():
     t = _mod()._build_trace({"tool_name": "Bash", "tool_input": {}})
     assert "conversation_id" not in t
+
+
+def test_trace_never_carries_session_id_only_conversation_id():
+    """ace_after_task forbids the CC conversation id as session_id (false cross-task correlation)."""
+    t = _mod()._build_trace({"session_id": "cc-conv-1", "tool_name": "Bash", "tool_input": {}})
+    assert "session_id" not in t
+    assert t["conversation_id"] == "cc-conv-1"

@@ -324,7 +324,7 @@ def _build_trace(event: dict) -> dict:
         "playbook_used": [],
         "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
         "agent_type": "permission_gate",
-        "session_id": session_id,
+        # no session_id: the CC conversation id must never be sent as one (see ace_after_task); conversation_id below
         # Domain tag — client-side classification; server respects this for searchPatterns
         "domains": ["permission-boundary"],
     }

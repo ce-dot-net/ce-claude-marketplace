@@ -937,7 +937,9 @@ def session_notice(sid, cwd=None, env=None, spawn_verify=True, bound=None):
             except OSError:
                 pass
     line = None
-    if st.get('state') in PROBLEM_STATES and not st.get('shown'):
+    if st.get('state') == 'cli_missing' and not st.get('shown') and _cli_install_quiet(st, p, sid, cwd, spawn_verify):
+        pass  # 8.1.1: the pinned CLI is being installed in the background: no ▼ claim, no message on success
+    elif st.get('state') in PROBLEM_STATES and not st.get('shown'):
         line, st['shown'] = LINES[st['state']], True
     elif st.get('note') and not st.get('note_shown'):
         line, st['note_shown'] = st['note'], True
@@ -946,6 +948,28 @@ def session_notice(sid, cwd=None, env=None, spawn_verify=True, bound=None):
     if line:
         _save(p, st)
     return line
+
+
+def _cli_install_quiet(st, p, sid, cwd, spawn_verify):
+    """True while the background install of the pinned CLI runs (stay quiet). Once the CLI is there the stale
+    cli_missing is dropped and verified again, detached; the hooks resolve the CLI per call (no restart)."""
+    try:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import ace_cli
+        import ace_cli_installer
+        if ace_cli_installer.lock_held():
+            return True
+        if ace_cli.cli_source():
+            st['state'] = None
+            _save(p, st)
+            if spawn_verify:
+                subprocess.Popen([sys.executable, os.path.abspath(__file__), '--verify-session', sid, '--cwd', cwd],
+                                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                 start_new_session=True)
+            return True
+    except Exception:
+        pass
+    return False
 
 
 def verify_session(sid, cwd):

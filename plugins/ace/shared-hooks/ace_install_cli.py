@@ -2,7 +2,8 @@
 """ACE SessionStart (v8, DESIGN §3/§23): slim presence check. Sync row (startup|clear|resume): no whoami, no
 network, no npm. The CLI is the one pinned in package.json and installed by Claude Code itself
 (plugin-local); a global ace-cli >= the pin is the fallback; neither = one message naming
-/ace:ace-install-cli (never disabled.flag). The async row (flag kept: `--update-check`) runs the
+/ace:ace-install-cli (never disabled.flag). 8.1.1: a missing/wrong plugin-local CLI is first installed in the
+background (utils/ace_cli_installer.py; ACE_AUTO_INSTALL=0 opts out); the message is for failure/opt-out only. The async row (flag kept: `--update-check`) runs the
 orphan sweep and the `npm rebuild better-sqlite3` when the binary does not load.
 
 Caches under CLAUDE_PLUGIN_DATA: python_path (read by every shim) and cli_version.json
@@ -118,6 +119,9 @@ def rebuild_sqlite():
     if os.environ.get("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC") or not root or not (Path(root) / "node_modules" / "better-sqlite3").is_dir():
         return
     try:
+        import ace_cli_installer
+        if ace_cli_installer.lock_held():  # the installer runs its own rebuild; node_modules is mid-install
+            return
         if _sqlite_loads(root):
             return
         env = dict(os.environ, npm_config_ignore_scripts="false")
@@ -190,10 +194,22 @@ def startup(ev, sid, pid, cli=None):
     except Exception:
         pass
     notice = []
+    inst = {"state": "unavailable"}
+    try:  # 8.1.1: a missing/wrong plugin-local pinned CLI is installed in the background (ace_cli_installer)
+        import ace_cli_installer
+        inst = ace_cli_installer.ensure()
+    except Exception:
+        pass
     if not source:  # §23: never disable for this - ACE activates by itself once a CLI appears
         pin = ace_cli._pin()
         why = ("ace-cli v%s is older than the v%s this plugin was tested with" % (cur, pin)) if (g and cur) else "ace-cli not found"
-        notice = ["⚠️ [ACE] %s. Run /ace:ace-install-cli. ACE learns once it is installed." % why]
+        if inst["state"] in ("started", "running"):
+            pass  # quiet: no message while the install runs, none on success (the CLI is picked up per call)
+        elif inst["state"] == "failed":
+            notice = ["⚠️ [ACE] %s; the automatic install failed (%s). Run /ace:ace-install-cli to retry. ACE learns once it is installed."
+                      % (why, (inst.get("detail") or "see ace-hook-errors.log")[:160])]
+        else:
+            notice = ["⚠️ [ACE] %s. Run /ace:ace-install-cli. ACE learns once it is installed." % why]
 
     msgs = list(notice)
     old, new = Path.home() / ".ace" / "config.json", Path.home() / ".config" / "ace" / "config.json"

@@ -112,6 +112,7 @@ def pytest_configure(config):
             del os.environ[key]
 
     os.environ.update({
+        "ACE_AUTO_INSTALL": "0",  # 8.1.1: SessionStart would start a background npm; the tests that cover it opt in
         "ACE_LEARN_INLINE": "1",  # Stop/SubagentStop learn detaches by default; tests need it synchronous
         "HOME": str(home),
         "CLAUDE_PLUGIN_DATA": str(root / "ace-plugin-data"),

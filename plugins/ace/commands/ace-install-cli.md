@@ -3,7 +3,7 @@ disable-model-invocation: true
 model: claude-haiku-4-5
 description: Report which ace-cli ACE uses and repair a missing or broken install
 argument-hint:
-allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(node:*), Bash(claude:*), Bash(test:*), Bash(ls:*), Read
+allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(node:*), Bash(python3:*), Bash(claude:*), Bash(test:*), Bash(ls:*), Read
 ---
 
 # ACE CLI Repair
@@ -43,11 +43,13 @@ no network, or `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` set (Claude Code skips
 ## Step 3: Install the packages by hand
 
 ```bash
-npm ci --ignore-scripts --prefix "${CLAUDE_PLUGIN_ROOT}" && npm rebuild better-sqlite3 --prefix "${CLAUDE_PLUGIN_ROOT}"
+python3 "${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils/ace_cli_installer.py" --run
 ```
 
-`npm ci` installs exactly the locked pin; the rebuild gives the CLI its local cache (otherwise SessionStart does it once).
-Show npm's error if it fails.
+This is the same installer SessionStart starts in the background (8.1.1; `ACE_AUTO_INSTALL=0` turns that off): in the plugin
+dir only, `npm ci --ignore-scripts` from the lockfile (exactly the locked pin), then `npm rebuild better-sqlite3` (the CLI's
+local cache). It prints one JSON line `{"state": "ok"|"failed"|"running"|"unavailable", "detail": ...}`; show `detail` if it
+is not `ok`. Hooks and commands pick the new CLI up on the next call, no restart.
 
 ## Last resort: global install
 
