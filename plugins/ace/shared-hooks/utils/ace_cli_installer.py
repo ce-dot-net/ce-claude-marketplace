@@ -13,6 +13,11 @@ CLI (always exit 0, one JSON line on stdout {"state": ...}):
   --run      install now in the foreground; add --auto for the throttled/opt-out rules (the detached child)
   --status   what --ensure would see, no side effects                            (doctor)
 states: ok | started | running | failed | off | unavailable
+
+8.1.2: pinned CLI present but better-sqlite3's native binding missing/unloadable (`npm ci --ignore-scripts` without the
+rebuild, a killed install, a Node switch): the SAME flow runs ONLY `npm rebuild better-sqlite3` (never `ci` again), same
+lock, opt-out and hourly throttle (own state key). That failure is never a band: ACE runs RAM-only, and `--status`
+carries `"sqlite": "active" | "off (reason)"` for the doctor.
 """
 import json
 import os
@@ -66,8 +71,47 @@ def installed_version(r=None):
         return None
 
 
-def _key(r):
-    return "%s:%s" % (r.name, pin(r))  # <cache dir = plugin version>:<pin>
+def _key(r, sqlite=False):
+    return "%s:%s%s" % (r.name, pin(r), ":sqlite" if sqlite else "")  # <cache dir = plugin version>:<pin>
+
+
+# better-sqlite3 loads its native addon lazily (in the constructor): `require` alone proves nothing, and a bare
+# "does the .node file exist" misses a binary built for another Node (nvm/volta switch). So: really construct a
+# Database. The first line out is the Node ABI (names a mismatch in the log).
+_SQLITE_PROBE = "console.log(process.versions.modules);new (require('better-sqlite3'))(':memory:').close()"
+SQLITE_PROBE_S = 10
+
+
+def _probe_key(r):
+    """None when there is no .node file (nothing to cache), else mtime+size of it and which node runs it."""
+    try:
+        st = (r / "node_modules" / "better-sqlite3" / "build" / "Release" / "better_sqlite3.node").stat()
+        return "%d:%d:%s" % (st.st_mtime_ns, st.st_size, os.path.realpath(shutil.which("node") or ""))
+    except OSError:
+        return None
+
+
+def sqlite_state(r=None):
+    """None = better-sqlite3 not installed (nothing to repair); True = binding loads; False = missing/broken.
+    A passing probe is cached by the .node file's mtime/size + node path, so a healthy start spawns node once."""
+    r = r or root()
+    if not (r / "node_modules" / "better-sqlite3").is_dir():
+        return None
+    k = _probe_key(r)
+    f = _pdd().sqlite_probe_file()
+    if k and _read(f).get("key") == k:
+        return True
+    try:
+        ok = subprocess.run(["node", "-e", _SQLITE_PROBE], cwd=str(r), capture_output=True,
+                            timeout=SQLITE_PROBE_S).returncode == 0
+    except Exception:
+        ok = False
+    if ok and k:
+        try:
+            _pdd().private_write(f, json.dumps({"key": k}))
+        except Exception:
+            pass
+    return ok
 
 
 def _read(path):
@@ -152,8 +196,11 @@ def decide(auto=True, now=None, env=None):
     p = pin(r)
     if not p:
         return "unavailable", "no exact pin in package.json"
+    sq = False  # repair mode: the CLI is the pinned one, only the sqlite binding is broken
     if installed_version(r) == p:
-        return "ok", p
+        if sqlite_state(r) is not False:
+            return "ok", p
+        sq = True
     if auto and env.get("ACE_AUTO_INSTALL") == "0":
         return "off", "ACE_AUTO_INSTALL=0"
     if auto and env.get("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"):
@@ -169,9 +216,9 @@ def decide(auto=True, now=None, env=None):
     if lock_held(now):
         return "running", ""
     st = _read(_pdd().cli_install_state())
-    if auto and st.get("key") == _key(r) and not st.get("ok") and now - float(st.get("at", 0)) < RETRY_S:
+    if auto and st.get("key") == _key(r, sq) and not st.get("ok") and now - float(st.get("at", 0)) < RETRY_S:
         return "failed", str(st.get("error", ""))
-    return "start", ""
+    return "start", "sqlite" if sq else ""
 
 
 def _spawn():
@@ -209,19 +256,27 @@ def run(auto=False):
         return {"state": s, "detail": d}
     if s == "ok":
         return {"state": "ok", "detail": d}
+    sq = d == "sqlite"
     if not _acquire():
         return {"state": "running", "detail": ""}
     r, t0, err, rebuild = root(), time.time(), "", ""
     try:
         if _unsafe_node_modules(r):  # re-check under the lock
             raise RuntimeError("node_modules is a symlink leaving the plugin dir")
-        rc, out = _npm(["ci", "--ignore-scripts", "--no-audit", "--no-fund"], r, True)
-        if rc:
-            raise RuntimeError("npm ci exit %s: %s" % (rc, out[-300:]))
-        rc, out = _npm(["rebuild", "better-sqlite3"], r, False)
-        rebuild = "" if not rc else " (npm rebuild exit %s: ACE runs RAM-only until SessionStart's rebuild works)" % rc
-        if installed_version(r) != pin(r):
-            raise RuntimeError("installed %s, expected %s" % (installed_version(r), pin(r)))
+        if sq:  # the CLI is fine: rebuild only, never `ci` again
+            rc, out = _npm(["rebuild", "better-sqlite3"], r, False)
+            if rc:
+                raise RuntimeError("npm rebuild better-sqlite3 exit %s: %s" % (rc, out[-300:]))
+            if sqlite_state(r) is not True:
+                raise RuntimeError("npm rebuild better-sqlite3 exit 0 but the binding still does not load")
+        else:
+            rc, out = _npm(["ci", "--ignore-scripts", "--no-audit", "--no-fund"], r, True)
+            if rc:
+                raise RuntimeError("npm ci exit %s: %s" % (rc, out[-300:]))
+            rc, out = _npm(["rebuild", "better-sqlite3"], r, False)
+            rebuild = "" if not rc else " (npm rebuild exit %s: ACE runs RAM-only until the next start's rebuild works)" % rc
+            if installed_version(r) != pin(r):
+                raise RuntimeError("installed %s, expected %s" % (installed_version(r), pin(r)))
     except subprocess.TimeoutExpired:
         err = "timeout after %ss" % STEP_TIMEOUT_S
     except Exception as e:
@@ -230,11 +285,12 @@ def run(auto=False):
         _release()
     ok = not err
     try:
-        _pdd().private_write(_pdd().cli_install_state(), json.dumps({"key": _key(r), "ok": ok, "at": time.time(), "error": err}))
+        _pdd().private_write(_pdd().cli_install_state(), json.dumps({"key": _key(r, sq), "ok": ok, "at": time.time(), "error": err}))
     except Exception:
         pass
-    _log("%s plugin=%s pin=%s secs=%d%s" % ("ok" if ok else "FAILED", r.name, pin(r), time.time() - t0,
-                                                 (rebuild if ok else " " + err.replace("\n", " "))))
+    _log("%s plugin=%s pin=%s secs=%d%s%s" % ("ok" if ok else "FAILED", r.name, pin(r), time.time() - t0,
+                                                   " sqlite-rebuild" if sq else "",
+                                                   (rebuild if ok else " " + err.replace("\n", " "))))
     if ok:  # the early pin failure's backoff (first prompt raced this install) is stale now
         try:
             _pdd().pin_backoff_file().unlink()
@@ -244,8 +300,19 @@ def run(auto=False):
 
 
 def status(now=None):
+    """`state` is the CLI's (a missing sqlite binding never turns it into a failure); `sqlite` is the cache's."""
     s, d = decide(True, now)
-    return {"state": "started" if s == "start" else s, "detail": d}
+    r = root()
+    if installed_version(r) != pin(r):
+        return {"state": "started" if s == "start" else s, "detail": d, "sqlite": "off (ace-cli not installed)"}
+    q = sqlite_state(r)
+    if q:
+        return {"state": "ok", "detail": pin(r), "sqlite": "active"}
+    if q is None:
+        return {"state": "ok", "detail": pin(r), "sqlite": "off (better-sqlite3 not installed)"}
+    why = {"failed": "last npm rebuild failed: %s" % d, "off": d, "unavailable": d,
+           "running": "npm rebuild running"}.get(s, "npm rebuild better-sqlite3 pending, starts at the next session")
+    return {"state": "ok", "detail": pin(r), "sqlite": "off (binding missing or does not load; %s; ACE runs RAM-only)" % why}
 
 
 def wait():
@@ -258,6 +325,8 @@ def wait():
             if not lock_held():
                 break
     s, d = decide(True)
+    if installed_version(root()) == pin():  # the CLI itself is installed: a sqlite repair is not this call's business
+        s, d = "ok", pin()
     return {"state": "ok" if s == "ok" else s if s in ("failed", "off", "unavailable") else "failed", "detail": d}
 
 

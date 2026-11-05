@@ -4,7 +4,7 @@ import { expect, test } from 'claude-code/testing'
 import { COMMANDS, findCommand } from '../commands/index.ts'
 import { OUT_CAP } from '../io/cli.ts'
 import { LINES } from '../context/index.ts'
-import { CWD, PRJ, cliOf, host } from './helpers.ts'
+import { CWD, PRJ, PROOT, cliOf, host } from './helpers.ts'
 
 const start = ($: any) => $.session.start({ cwd: CWD, surface: null, isInteractive: false } as any)
 const run = async ($: any, name: string, args = '') => (await $.command.run({ command: `ace:ace-${name}`, args })).text as string
@@ -226,4 +226,28 @@ test('doctor counts retries, failed learns and the binding source/state from the
     [`${L}/ace-relevance.1.jsonl`]: '{"event":"learn_retry"}\n' } })
   await start($)
   expect(await run($, 'doctor')).toContain('learn retries 2 · failed learns 1 · binding repo_file/ok 1')
+})
+
+// ---- 8.1.2: the sqlite binding (the CLI's local cache) ----
+test('doctor: "SQLite cache: active | off (reason)" from the installer status', async ($, on) => {
+  host(on, { installer: () => ({ state: 'ok', detail: '4.4.2', sqlite: 'off (binding missing or does not load; npm rebuild better-sqlite3 pending; ACE runs RAM-only)' }) })
+  await start($)
+  expect(await run($, 'doctor')).toContain('SQLite cache: off (binding missing or does not load; npm rebuild better-sqlite3 pending; ACE runs RAM-only)')
+})
+
+test('doctor: SQLite cache active', async ($, on) => {
+  host(on, { installer: () => ({ state: 'ok', detail: '4.4.2', sqlite: 'active' }) })
+  await start($)
+  expect(await run($, 'doctor')).toContain('SQLite cache: active')
+})
+
+test('install-cli: the CLI is the pin but the sqlite binding is gone: the confirm says it runs only npm rebuild better-sqlite3', async ($, on) => {
+  const h = host(on, { files: { [`${PROOT}/package.json`]: JSON.stringify({ dependencies: { '@ace-sdk/cli': '4.4.2' } }) },
+    cli: a => a[0] === '--version' ? { exitCode: 0, stdout: '4.4.2\n' } : undefined,
+    installer: () => ({ state: 'ok', detail: '4.4.2', sqlite: 'off (binding missing)' }) })
+  await start($)
+  const t = await run($, 'install-cli')
+  expect(t).toContain('npm rebuild better-sqlite3')
+  expect(t).not.toContain('npm ci')
+  expect(h.pending()).toMatchObject({ kind: 'install' })
 })

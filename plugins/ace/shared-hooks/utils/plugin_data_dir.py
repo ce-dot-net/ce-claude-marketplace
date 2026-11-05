@@ -235,6 +235,10 @@ def cli_install_state() -> Path:
     return _file(data_root() / "cli-install.json")
 
 
+def sqlite_probe_file() -> Path:
+    return _file(data_root() / "sqlite-probe.json")
+
+
 def pin_backoff_file() -> Path:
     return _file(data_root() / "pin-backoff")
 

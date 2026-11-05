@@ -165,6 +165,14 @@ test('cli missing + a recent failure (throttled): the band shows at once, no sec
   expect(h.band()).toMatchObject({ state: 'cli_missing', retry: 'timeout' })
 })
 
+test('cli fine: SessionStart still runs the installer once (quiet) so a missing sqlite binding is repaired; never a band', async ($, on) => {
+  const h = host(on, { installer: () => ({ state: 'started' }) })
+  await start($)
+  await tick()
+  expect(instCalls(h)).toEqual(['--ensure'])
+  expect(h.band()?.state ?? null).toBe(null)
+})
+
 for (const state of ['off', 'unavailable']) {
   test(`cli missing + auto-install ${state}: the old behaviour (band offers the confirm install)`, async ($, on) => {
     const h = host(on, { cli: missing(() => false), installer: () => ({ state, detail: 'x' }) })
