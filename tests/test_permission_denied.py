@@ -407,6 +407,7 @@ class TestMainInfraAbortSkip:
         assert trace["agent_type"] == "permission_gate"
         assert trace["domains"] == ["permission-boundary"]
         assert trace["result"]["success"] is False
+        assert trace["result"]["failed_steps"] >= 1  # 8.1.3 contract
 
     def test_genuine_deny_no_transcript_path_still_learns(self, monkeypatch):
         """No transcript_path → _is_classifier_infra_denial returns False → learns."""

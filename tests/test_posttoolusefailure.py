@@ -92,3 +92,21 @@ def test_failed_bash_reaches_learn_trajectory(box):
     bash_steps = [s for s in trace["trajectory"] if s["tool"] == "Bash"]
     assert bash_steps and "Exit code 1" in bash_steps[0]["result"]
     assert trace["result"]["success"] is False
+    assert trace["result"]["failed_steps"] == 1
+    assert "aborted" not in trace["result"]
+
+
+def test_interrupt_as_last_step_sends_aborted(box):
+    """8.1.3: a run whose last recorded step was an abort (PostToolUseFailure is_interrupt) is success=false,
+    aborted=true; a run without one carries no `aborted` key (contract: only when true)."""
+    sid = "sess-abort"
+    ev = _failure_event(box, sid)
+    ev.update(is_interrupt=True, error="Interrupted")
+    assert box.run_shim("ace_posttoolusefailure_wrapper.sh", ev).returncode == 0
+    box.write_state(sid, user_prompt="make the test suite pass again")
+    stop = {"session_id": sid, "transcript_path": str(box.root / "none.jsonl"), "cwd": str(box.project),
+            "permission_mode": "default", "hook_event_name": "Stop", "stop_hook_active": False,
+            "last_assistant_message": "stopped", "background_tasks": []}
+    assert box.run_after_task(stop, ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID).returncode == 0
+    result = box.cli_calls("learn")[0]["trace"]["result"]
+    assert (result["success"], result["failed_steps"], result.get("aborted")) == (False, 1, True)

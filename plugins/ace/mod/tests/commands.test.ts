@@ -228,6 +228,20 @@ test('doctor counts retries, failed learns and the binding source/state from the
   expect(await run($, 'doctor')).toContain('learn retries 2 · failed learns 1 · binding repo_file/ok 1')
 })
 
+test('8.1.3 doctor: the outcome rule of the newest execution row (pre-8.1.3 without one, none without executions)', async ($, on) => {
+  const L = `${CWD}/.claude/data/logs`
+  host(on, { files: { [`${L}/ace-relevance.jsonl`]: '{"event":"execution","success":true}\n{"event":"execution","success":true,"failed_steps":2,"outcome_rule":"8.1.3"}\n',
+    [`${L}/ace-relevance.1.jsonl`]: '{"event":"execution","success":false}\n' } })
+  await start($)
+  expect(await run($, 'doctor')).toContain('· outcome rule 8.1.3')
+})
+
+test('8.1.3 doctor: an old execution row shows the outcome rule as pre-8.1.3', async ($, on) => {
+  host(on, { files: { [`${CWD}/.claude/data/logs/ace-relevance.jsonl`]: '{"event":"execution","success":false}\n' } })
+  await start($)
+  expect(await run($, 'doctor')).toContain('· outcome rule pre-8.1.3')
+})
+
 // ---- 8.1.2: the sqlite binding (the CLI's local cache) ----
 test('doctor: "SQLite cache: active | off (reason)" from the installer status', async ($, on) => {
   host(on, { installer: () => ({ state: 'ok', detail: '4.4.2', sqlite: 'off (binding missing or does not load; npm rebuild better-sqlite3 pending; ACE runs RAM-only)' }) })

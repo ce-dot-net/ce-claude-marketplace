@@ -172,7 +172,28 @@ def test_batch_rows_reach_learn_trajectory(box):
     assert [s["tool"] for s in traj] == ["Read", "mcp__linear__get_issue", "Bash", "Edit"]
     assert "issue body" in traj[1]["result"], traj[1]
     assert "Exit code 1" in traj[2]["result"], traj[2]
-    assert learns[0]["trace"]["result"]["success"] is False
+    assert learns[0]["trace"]["result"]["success"] is False  # 8.1.3: npm test left red (never rerun green)
+    assert learns[0]["trace"]["result"]["failed_steps"] == 1
+
+
+def test_recovered_failure_keeps_success_true(box):
+    """8.1.3 end outcome: a red `npm test` rerun green and a grep without matches do not fail the task;
+    failed_steps counts the red run only (grep exit 1 is benign, not a failed step)."""
+    sid = "s-recovered"
+    box.run_shim(FAIL_SHIM, _failure(box, sid, "toolu_r1"))
+    grep = _failure(box, sid, "toolu_r2", error="Exit code 1")
+    grep["tool_input"] = {"command": "grep -rn needle src"}
+    box.run_shim(FAIL_SHIM, grep)
+    box.run_shim(SHIM, _batch(box, sid, [
+        {"tool_name": "Edit", "tool_input": {"file_path": "/p/app.py"}, "tool_use_id": "toolu_r3",
+         "tool_response": "The file /p/app.py has been updated."},
+        {"tool_name": "Bash", "tool_input": {"command": "npm test"}, "tool_use_id": "toolu_r4",
+         "tool_response": "12 passing"}]), args=["--batch"])
+    box.write_state(sid, user_prompt="fix the ledger rounding bug and run tests")
+    p = box.run_after_task(box.stop_event(sid), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
+    assert p.returncode == 0, p.stderr
+    result = box.cli_calls("learn")[0]["trace"]["result"]
+    assert (result["success"], result["failed_steps"]) == (True, 1)
 
 
 def test_failure_row_keeps_duration_ms(box):
