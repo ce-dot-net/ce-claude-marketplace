@@ -20,6 +20,8 @@ def test_success_and_interpreted_exits_are_not():
     assert tool_failed({}) is False
 
 
-def test_error_and_stderr_still_fail():
+def test_error_fails_stderr_alone_does_not():
+    """8.1.3: stderr alone is not a failure (git progress, npm/pip notices, node warnings write there on success)."""
     assert tool_failed({"error": "boom"}) is True
-    assert tool_failed({"stderr": "warn"}) is True
+    assert tool_failed({"stderr": "warn"}) is False
+    assert tool_failed({"stderr": "warn", "exit_code": 0}) is False

@@ -1,0 +1,27 @@
+{
+ "_doc": "Command-family tables of the 8.1.3 end-outcome rule. Each chain keeps ONE copy (Python: ace_after_task.BENIGN_EXIT1 / READ_ONLY_BASH / DECISIVE_TOOLS, mod: lib/trace.ts same names); tests/test_task_outcome.py asserts both equal this file.",
+ "benign_exit1": ["grep", "egrep", "fgrep", "rg", "diff", "cmp", "test", "[", "[[", "git diff", "git grep", "command -v", "which", "type", "pgrep", "pidof", "jq"],
+ "read_only_bash": ["ls", "cat", "head", "tail", "wc", "find", "grep", "egrep", "fgrep", "rg", "pwd", "echo", "printf", "which", "type", "command -v", "file", "stat", "du", "df", "tree", "jq", "sort", "uniq", "cut", "tr", "diff", "cmp", "test", "[", "[[", "date", "printenv", "ps", "pgrep", "pidof", "git status", "git log", "git show", "git diff", "git grep", "git rev-parse", "git ls-files", "git blame"],
+ "decisive_tools": ["Edit", "Write", "MultiEdit", "NotebookEdit", "Agent", "Task", "Workflow"],
+ "families": [
+  ["grep -rn needle src", "grep"],
+  ["cd /p && rstest tests -x", "rstest"],
+  ["ACE_E2E=1 rstest tests/e2e", "rstest"],
+  ["cd /p && npm test 2>&1 | tail -5", "npm test"],
+  ["python3 -m pytest tests", "pytest"],
+  ["claude plugin test plugins/ace", "claude plugin test"],
+  ["git -C /p diff --exit-code", "git diff"],
+  ["git -c core.pager=cat log -1", "git log"],
+  ["command -v foo", "command -v"],
+  ["timeout 60 rstest tests", "rstest"],
+  ["sudo rstest tests", "rstest"],
+  ["env FOO=1 npm run build", "npm run"],
+  ["uv run pytest -q", "pytest"],
+  ["/usr/bin/grep -q x f", "grep"],
+  ["python3 - <<'EOF'\nimport sys\nrm -rf x\nEOF", "python3"],
+  ["git commit -m \"a && b; c | d\"", "git commit"],
+  ["(cd sub && make)", "make"],
+  ["echo hi; false || true", "true"],
+  ["", ""]
+ ]
+}
