@@ -18,17 +18,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Key = the Bash command family, the file path for Edit/Write/MultiEdit/NotebookEdit, else the tool name. A Bash family
   is taken from the LAST pipe stage and the LAST NON-READ-ONLY `&&`/`||`/`;` item (a trailing `&& echo done` never
   decides), with the subcommand or script for interpreters and multi-tool CLIs (`gh pr merge`, `python3 deploy.py`,
-  `python3 -c`); quotes, heredocs, `$(...)`, backticks and subshells do not split. Exit 1 of grep/rg/diff/cmp/test/`[`/
+  `python3 -c`); quotes, heredocs, `$(...)`, backticks and subshells do not split. An output redirection to a file
+  (`awk ... > out`, `echo x >> log`) and in-place editors (`sed -i`/`-Ei`/`-i.bak`, `awk -i inplace`, `perl -pi`) make a
+  step decisive. The recovery key adds a script hash for `python`/`bash`/`node`/... `-c`/`-e`/heredoc scripts and
+  method+host for curl/wget, so a different script or host never recovers a failure. Exit 1 of grep/rg/diff/cmp/test/`[`/
   git diff/git grep/`command -v`/which/type/pgrep/pidof/jq (as the deciding family) is no failed step. Failed
   read-only steps (Read, Glob, Grep, WebFetch, WebSearch, read-only Bash, read MCP tools) never fail the task.
 - stderr alone is no failure: a Bash step with exit code 0 succeeds whatever it wrote to stderr (git progress, npm/pip
   notices, node warnings). Before, the mod counted any stderr as a failed step. The mod reads a failed call's exit code
   from the `tool.call` text (`Exit code N`), as the Python chain does from PostToolUseFailure.
 - Bash `trajectory[].action` is never empty, `...` or cut to 60 characters any more: it is `<family> :: <command>`,
-  the family first and never cut (the server can filter by it), the command after it with whitespace collapsed, cut to
-  200 characters; `unknown` when there is no command. Still a string, nothing the server reads changes shape.
-- Secrets never leave in a trace: token flags, `Authorization`/`Bearer` values, `*TOKEN*=`/`*KEY*=`/`*SECRET*=`/
-  `*PASS*=`/`*CREDENTIAL*=` assignments, GitHub/OpenAI/Slack/AWS/npm/ace tokens and JWTs are replaced by `[redacted]`
+  the family first (cut to 60 characters; the server can filter by it), the command after it with whitespace
+  collapsed, the whole action cut to 200 characters; a family never holds a URL, userinfo or token; `unknown` when there is no command. Still a string, nothing the server reads changes shape.
+- Secrets never leave in a trace: token flags, URL userinfo (`https://user:pass@host`, `https://token@host`, psql
+  URLs), `Authorization`/`Bearer` values, `*TOKEN*=`/`*KEY*=`/`*SECRET*=`/`*PASS*=`/`*CREDENTIAL*=` assignments,
+  YAML/JSON/INI password/secret/token/api_key/credential keys, `mysql -p`, `-u user:pass`, GitHub/OpenAI/Slack/AWS/npm/ace
+  tokens and JWTs are replaced by `[redacted]`
   in the action, step results, the task and the summary, before any cut (both chains).
 
 ### Added
@@ -38,7 +43,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   sends no trace for them, and the classic chain sees no abort (Claude Code fires no Stop on a user interrupt).
 - The execution row carries `failed_steps` and `outcome_rule`; `/ace:ace-doctor` (mod and markdown) shows the outcome
   rule of the newest execution row.
-- Shared fixture `tests-fixtures/task-outcome/` (98 step sequences, 400 seeded random sequences, the family, action and
+- Shared fixture `tests-fixtures/task-outcome/` (116 step sequences, 400 seeded random sequences, the family, key, action and
   redaction tables), run by the Python and the mod suite; a parity test keeps the two chains' tables equal.
 - `tests/probe_success_rule.py --days N`: the old vs new rule over local transcripts, counts only.
 

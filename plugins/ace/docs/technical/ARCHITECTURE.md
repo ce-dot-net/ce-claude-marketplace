@@ -72,14 +72,24 @@ sequences, run by both suites; tables in ONE place per chain, a test keeps them 
    Unparsable input never raises: the first word is the family (`ponytail:`).
 2. A stage's family is its first word (basename), `python -m X` = `X`. For the tools in `SUBCOMMAND_TOOLS` the family
    adds the first non-flag token (the subcommand or the script basename; `-c`/`-e` count as that token): python,
-   python3, bash, sh, node, bun, deno, ruby, perl, curl, wget, npm, npx, pnpm, yarn, cargo, go, make, terraform, uv, pip,
-   pip3 (`python3 deploy.py`, `python3 -c`, `npm publish`, `make test`). gh, git, docker, kubectl, aws, gcloud and
-   claude add up to TWO tokens, the second only when it directly follows the first (`gh pr merge`, `docker compose up`,
-   `claude plugin test`; `git commit -m x` = `git commit`).
+   python3, bash, sh, node, bun, deno, ruby, perl, npm, npx, pnpm, yarn, cargo, go, make, terraform, uv, pip, pip3
+   (`python3 deploy.py`, `python3 -c`, `npm publish`, `make test`). gh, git, docker, kubectl, aws, gcloud and claude add
+   up to TWO tokens, the second only when it directly follows the first (`gh pr merge`, `docker compose up`, `claude
+   plugin test`; `git commit -m x` = `git commit`). A token that looks like a URL, holds `@`, is a long hex/base64 run or
+   a secret is never part of a family: the family is then the first word only. In-place editors are their own
+   non-read-only families: `sed-i` (`-i`, `-Ei`, `-i.bak`, `--in-place[=..]`), `awk-i` (`-i inplace`), `perl-pi`
+   (`-i`, `-pi`). curl and wget: the family is the first word.
+2b. The recovery KEY is the family, except: an interpreter (python, python3, bash, sh, node, ruby, perl) running a
+   `-c`/`-e` argument or a heredoc script adds `#` + 8 hex chars of sha256 over the whitespace-collapsed script, and
+   curl/wget add `#METHOD host` (method from `-X`/`--request`/`--method`, POST with `-d`/`--data*`/`-F`/`--json`, else
+   GET; host without userinfo, path or query). So two different `python3 - <<EOF` scripts never recover each other.
 3. A pipeline's family is its LAST stage's (the stage whose exit code the shell reports; no pipefail). A chain's family
    is its LAST NON-READ-ONLY item's (a trailing read-only item such as `&& echo done` usually never ran and never
    decides), else its last item's. The step is non-read-only when any item is. Read-only = the family is in
-   `READ_ONLY_BASH` by prefix (`git diff HEAD~1` is in `git diff`); `cd`, `true`, `export`, `set`, `sleep` are in it.
+   `READ_ONLY_BASH` by prefix (`git diff HEAD~1` is in `git diff`); `cd`, `true`, `export`, `set`, `sleep`, `read`,
+   `sed`, `awk` are in it. A stage with an output redirection to a file (`>`, `>>`, `>|` with no fd, fd 1 or `&`; not
+   `2>&1`, not `> /dev/null`, not `2> file`) is never read-only (`awk ... > out`, `echo x >> log`); `tee` is not in the
+   list.
 4. A step fails on: a denial, an interrupt, a known non-zero Bash exit code (structured, or the first line `Exit code
    N` of the error text: PostToolUseFailure `error`, the mod's `tool.call` `text`), or, without a known exit code,
    `error` / `is_error`. stderr alone never fails a step and no exit code is guessed from stderr. A code the tool
@@ -88,7 +98,7 @@ sequences, run by both suites; tables in ONE place per chain, a test keeps them 
    grep, `command -v`, which, type, pgrep, pidof or jq is no failed step at all (so `rstest tests | grep FAIL` with
    exit 1 is none).
 6. Every other failed step counts in `failed_steps`, test runners included.
-7. A failed step is recovered by a LATER successful step with the same key: Bash = the same family; Edit, Write,
+7. A failed step is recovered by a LATER successful step with the same key: Bash = the same key (2b); Edit, Write,
    MultiEdit, NotebookEdit = the same path (across those tools); any other tool, MCP tools included = the same tool name.
 8. `success` is false only when an unrecovered failed step is decisive, or the run's last step was interrupted.
    Decisive: non-read-only Bash, Edit, Write, MultiEdit, NotebookEdit, Agent, Task, Workflow, and a state-changing MCP
@@ -100,13 +110,16 @@ sequences, run by both suites; tables in ONE place per chain, a test keeps them 
 Kept on purpose: a red `rstest` followed by a green `pytest` stays false (different families).
 
 Bash `trajectory[].action` (8.1.3, both chains): `<family> :: <command>`. The family (the one the rule uses, the
-deciding one for pipes and chains) comes first and is never cut; the command follows with whitespace collapsed, cut to
-200 characters; `unknown` when there is no command, never an empty string. The server can filter by the text before
+deciding one for pipes and chains) comes first, cut to 60 characters; the command follows with whitespace collapsed,
+the whole action cut to 200 characters; `unknown` when there is no command, never an empty string. The server can filter by the text before
 ` :: `. The command is built from `tool_input.command` (complete in every hook input; the old empty or cut actions came
 from our own 60-char cut and from the accumulator's size caps). Secrets are replaced by `[redacted]` before any cut,
 in the action, every step `result`, the task and the summary (`redact`, both chains): values after
-`--token`/`--password`/`--secret`/`--api-key`, `Authorization:`/`Bearer`, `NAME=` assignments whose name holds
-TOKEN/SECRET/KEY/PASSWORD/PASS/CREDENTIAL, and ghp_/gho_/github_pat_/sk-/xoxb-/AKIA/ace_user_/npm_ tokens and JWTs.
+`--token`/`--password`/`--secret`/`--api-key`, URL userinfo (`scheme://user:pass@host` and `scheme://token@host` ->
+`scheme://[redacted]@host`, psql URLs included), `Authorization:`/`Bearer` (also as a JSON key), `NAME=` assignments
+whose name holds TOKEN/SECRET/KEY/PASSWORD/PASS/CREDENTIAL, YAML/JSON/INI keys holding
+password/passwd/pwd/secret/token/apikey/api_key/credential (value after `:` or `=`, quoted or bare), `mysql -p<v>` /
+`-p <v>`, `-u user:pass` / `--user`, and ghp_/gho_/github_pat_/sk-/xoxb-/AKIA/ace_user_/npm_ tokens and JWTs.
 Claude Code does not redact hook inputs.
 
 The execution row in `ace-relevance.jsonl` carries `failed_steps` and `outcome_rule: "8.1.3"`; `/ace:ace-doctor` shows
