@@ -32,21 +32,25 @@ export async function doctorCmd($: any, { c, cli }: Kit): Promise<string> {
     return out.join('\n')
 }
 
-// learn retries, failed learns, the context state/source mix, from the repo root's log and its rotation (.1)
+// learn retries, failed learns, the context state/source mix, from the repo root's log and its rotation (.1);
+// 8.1.3: the outcome rule of the newest execution row (pre-8.1.3 rows carry none)
 export async function logCounts($: any, dir: string): Promise<string> {
-  let retry = 0, failed = 0
+  let retry = 0, failed = 0, rule: string | undefined
   const ctx: Record<string, number> = {}
   for (const f of ['ace-relevance.jsonl', 'ace-relevance.1.jsonl']) {
-    let text = ''
+    let text = '', fileRule: string | undefined
     try { text = await $.fs.read(`${dir}/${f}`) as string } catch { continue }
     for (const line of text.split('\n')) {
       if (!line.includes('"event"')) continue
       let r: any
       try { r = JSON.parse(line) } catch { continue }
       if (r.event === 'learn_retry') retry++
-      else if (r.event === 'execution' && r.learning_sent === false) failed++
+      if (r.event === 'execution') fileRule = r.outcome_rule ?? 'pre-8.1.3'
+      if (r.event === 'execution' && r.learning_sent === false) failed++
       else if (r.event === 'context') { const k = `${r.source}/${r.state}`; ctx[k] = (ctx[k] ?? 0) + 1 }
     }
+    rule ??= fileRule
   }
-  return `logs     learn retries ${retry} · failed learns ${failed} · binding ${Object.entries(ctx).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}`
+  return `logs     learn retries ${retry} · failed learns ${failed} · binding ${Object.entries(ctx).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}` +
+    (rule ? ` · outcome rule ${rule}` : '')
 }

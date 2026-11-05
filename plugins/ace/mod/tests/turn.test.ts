@@ -29,7 +29,7 @@ test('item D/H1: Haiku self-eval (not blocking the turn) writes the review and i
   const req = h.modelCalls[0]
   expect([req.model, req.effort, req.timeoutMs]).toEqual(['haiku', 'low', 15000])
   expect(req.prompt.includes(`${b}: `)).toBe(true)          // injected patterns as id: content lines
-  expect(req.prompt.includes('Ran: pytest -q')).toBe(true)  // the task's tool calls
+  expect(req.prompt.includes('pytest :: pytest -q')).toBe(true)  // the task's tool calls
   expect(req.prompt.includes('finished the change')).toBe(true)
   expect(req.prompt.length <= 2000 + 4000 + 6000 + 4000 + 1500).toBe(true)
   expect(JSON.parse(h.files.get(`${CWD}/.claude/data/logs/ace-review-result.json`)!)).toEqual({ quality_pct: 70, time_saved: '4m' })

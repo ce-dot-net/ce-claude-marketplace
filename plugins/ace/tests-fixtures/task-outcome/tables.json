@@ -1,0 +1,3376 @@
+{
+ "_doc": "Tables of the 8.1.3 end-outcome rule. Each chain keeps ONE copy (Python: ace_after_task.BENIGN_EXIT1 / READ_ONLY_BASH / DECISIVE_TOOLS / SUBCOMMAND_TOOLS / MCP_WRITE_VERBS, mod: lib/trace.ts same names); tests/test_task_outcome.py asserts both equal this file. families: [command, family]; actions: [command, trajectory action]; redact: [text, redacted text].",
+ "benign_exit1": [
+  "grep",
+  "egrep",
+  "fgrep",
+  "rg",
+  "diff",
+  "cmp",
+  "test",
+  "[",
+  "[[",
+  "git diff",
+  "git grep",
+  "command -v",
+  "which",
+  "type",
+  "pgrep",
+  "pidof",
+  "jq"
+ ],
+ "read_only_bash": [
+  "ls",
+  "cat",
+  "head",
+  "tail",
+  "wc",
+  "find",
+  "grep",
+  "egrep",
+  "fgrep",
+  "rg",
+  "pwd",
+  "echo",
+  "printf",
+  "which",
+  "type",
+  "command -v",
+  "file",
+  "stat",
+  "du",
+  "df",
+  "tree",
+  "jq",
+  "sort",
+  "uniq",
+  "cut",
+  "tr",
+  "diff",
+  "cmp",
+  "test",
+  "[",
+  "[[",
+  "date",
+  "printenv",
+  "ps",
+  "pgrep",
+  "pidof",
+  "git status",
+  "git log",
+  "git show",
+  "git diff",
+  "git grep",
+  "git rev-parse",
+  "git ls-files",
+  "git blame",
+  "cd",
+  "pushd",
+  "popd",
+  "true",
+  "sleep",
+  "export",
+  "set",
+  "sed",
+  "awk",
+  "read"
+ ],
+ "decisive_tools": [
+  "Edit",
+  "Write",
+  "MultiEdit",
+  "NotebookEdit",
+  "Agent",
+  "Task",
+  "Workflow"
+ ],
+ "families": [
+  [
+   "grep -rn needle src",
+   "grep"
+  ],
+  [
+   "cd /p && rstest tests -x",
+   "rstest"
+  ],
+  [
+   "ACE_E2E=1 rstest tests/e2e",
+   "rstest"
+  ],
+  [
+   "cd /p && npm test 2>&1 | tail -5",
+   "tail"
+  ],
+  [
+   "python3 -m pytest tests",
+   "pytest"
+  ],
+  [
+   "claude plugin test plugins/ace",
+   "claude plugin test"
+  ],
+  [
+   "git -C /p diff --exit-code",
+   "git diff"
+  ],
+  [
+   "git -c core.pager=cat log -1",
+   "git log"
+  ],
+  [
+   "command -v foo",
+   "command -v"
+  ],
+  [
+   "timeout 60 rstest tests",
+   "rstest"
+  ],
+  [
+   "sudo rstest tests",
+   "rstest"
+  ],
+  [
+   "env FOO=1 npm run build",
+   "npm run"
+  ],
+  [
+   "uv run pytest -q",
+   "pytest"
+  ],
+  [
+   "/usr/bin/grep -q x f",
+   "grep"
+  ],
+  [
+   "python3 - <<'EOF'\nimport sys\nrm -rf x\nEOF",
+   "python3"
+  ],
+  [
+   "git commit -m \"a && b; c | d\"",
+   "git commit"
+  ],
+  [
+   "(cd sub && make)",
+   "make"
+  ],
+  [
+   "echo hi; false || true",
+   "false"
+  ],
+  [
+   "",
+   ""
+  ],
+  [
+   "make && echo done",
+   "make"
+  ],
+  [
+   "git merge feat && echo merged",
+   "git merge feat"
+  ],
+  [
+   "cat cfg | kubectl apply -f -",
+   "kubectl apply"
+  ],
+  [
+   "echo y | npm publish",
+   "npm publish"
+  ],
+  [
+   "rstest tests | grep FAIL",
+   "grep"
+  ],
+  [
+   "gh pr merge 41 --squash",
+   "gh pr merge"
+  ],
+  [
+   "gh pr view 41",
+   "gh pr view"
+  ],
+  [
+   "python3 /p/deploy.py --env prod",
+   "python3 deploy.py"
+  ],
+  [
+   "python3 -c \"print(1)\"",
+   "python3 -c"
+  ],
+  [
+   "node -e \"x\"",
+   "node -e"
+  ],
+  [
+   "docker compose up -d",
+   "docker compose up"
+  ],
+  [
+   "aws s3 cp a s3://b/c",
+   "aws s3 cp"
+  ],
+  [
+   "git push origin main",
+   "git push origin"
+  ],
+  [
+   "make test",
+   "make test"
+  ],
+  [
+   "make > build.log 2>&1",
+   "make"
+  ],
+  [
+   "(cd sub && make test)",
+   "make test"
+  ],
+  [
+   "echo $(make build && echo ok)",
+   "echo"
+  ],
+  [
+   "cd /p && grep -rn x src",
+   "grep"
+  ],
+  [
+   "make || true",
+   "make"
+  ],
+  [
+   "curl -sS -H \"Authorization: Bearer x\" https://api.example.com/v1/items",
+   "curl"
+  ],
+  [
+   "{ make; echo ok; }",
+   "make"
+  ],
+  [
+   "timeout 30 npx vitest run",
+   "npx vitest"
+  ],
+  [
+   "git diff HEAD~1",
+   "git diff HEAD~1"
+  ],
+  [
+   "echo \"unterminated && make",
+   "echo"
+  ],
+  [
+   "for f in a b; do make $f; done",
+   "make $f"
+  ],
+  [
+   "if [ -f x ]; then npm publish; fi",
+   "npm publish"
+  ],
+  [
+   "while read l; do echo $l; done < f",
+   "echo"
+  ],
+  [
+   "sed -n 1,20p f",
+   "sed"
+  ],
+  [
+   "sed -i '' s/a/b/ f",
+   "sed-i"
+  ],
+  [
+   "rstest tests | sed -n 1,5p",
+   "sed"
+  ],
+  [
+   "git clone https://user:pw@github.com/o/r",
+   "git"
+  ],
+  [
+   "git push https://tok@github.com/o/r main",
+   "git"
+  ],
+  [
+   "gh auth login 0123456789abcdef0123456789abcdef",
+   "gh auth login"
+  ],
+  [
+   "curl -X POST https://u:p@api.x.com/v1?a=1",
+   "curl"
+  ],
+  [
+   "sed -Ei 's/a/b/' f",
+   "sed-i"
+  ],
+  [
+   "sed -i.bak s/a/b/ f",
+   "sed-i"
+  ],
+  [
+   "sed --in-place=.bak s/a/b/ f",
+   "sed-i"
+  ],
+  [
+   "awk -i inplace '{print}' f",
+   "awk-i"
+  ],
+  [
+   "perl -pi -e 's/a/b/' f",
+   "perl-pi"
+  ],
+  [
+   "perl -e 'print 1'",
+   "perl -e"
+  ],
+  [
+   "awk '{print}' f > out",
+   "awk"
+  ],
+  [
+   "bash -c \"make a\"",
+   "bash -c"
+  ],
+  [
+   "python3 - <<'EOF'\nprint(1)\nEOF",
+   "python3"
+  ]
+ ],
+ "subcommand_tools": {
+  "python": 1,
+  "python3": 1,
+  "bash": 1,
+  "sh": 1,
+  "node": 1,
+  "bun": 1,
+  "deno": 1,
+  "ruby": 1,
+  "perl": 1,
+  "npm": 1,
+  "npx": 1,
+  "pnpm": 1,
+  "yarn": 1,
+  "cargo": 1,
+  "go": 1,
+  "make": 1,
+  "terraform": 1,
+  "uv": 1,
+  "pip": 1,
+  "pip3": 1,
+  "gh": 2,
+  "git": 2,
+  "docker": 2,
+  "kubectl": 2,
+  "aws": 2,
+  "gcloud": 2,
+  "claude": 2
+ },
+ "mcp_write_verbs": [
+  "save",
+  "create",
+  "update",
+  "delete",
+  "remove",
+  "send",
+  "post",
+  "publish",
+  "merge",
+  "push",
+  "comment",
+  "reply",
+  "upload",
+  "write",
+  "set",
+  "add",
+  "assign",
+  "close",
+  "transfer"
+ ],
+ "actions": [
+  [
+   null,
+   "unknown"
+  ],
+  [
+   "",
+   "unknown"
+  ],
+  [
+   "   \n\t",
+   "unknown"
+  ],
+  [
+   "grep -rn \"a b\" src",
+   "grep :: grep -rn \"a b\" src"
+  ],
+  [
+   "python3 - <<'EOF'\nprint(\"x\")\nEOF",
+   "python3 :: python3 - <<'EOF' print(\"x\") EOF"
+  ],
+  [
+   "echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "echo :: echo aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa..."
+  ],
+  [
+   "git commit -m \"line one\n\nline two\"",
+   "git commit :: git commit -m \"line one line two\""
+  ],
+  [
+   "make && echo done",
+   "make :: make && echo done"
+  ],
+  [
+   "cat cfg | kubectl apply -f -",
+   "kubectl apply :: cat cfg | kubectl apply -f -"
+  ],
+  [
+   "FOO=1",
+   "unknown :: FOO=1"
+  ],
+  [
+   "GITHUB_TOKEN=ghp_abcdefghijklmnop1234 gh release create v1",
+   "unknown :: GITHUB_TOKEN=[redacted]"
+  ],
+  [
+   "ace-cli --token sekret123 status",
+   "ace-cli :: ace-cli --token [redacted]"
+  ],
+  [
+   "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz",
+   "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz... :: zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz..."
+  ],
+  [
+   "git clone https://user:pw@github.com/o/r",
+   "git :: git clone https://[redacted]@github.com/o/r"
+  ],
+  [
+   "mysql -uroot -pS3cret db",
+   "mysql :: mysql -uroot -p[redacted]"
+  ],
+  [
+   "export TOKEN=abc; make deploy",
+   "unknown :: export TOKEN=[redacted]"
+  ],
+  [
+   "password=$(echo CANARY)",
+   "unknown :: password=[redacted]"
+  ],
+  [
+   "FOO=1 npx playwright test | grep -c passed",
+   "grep :: FOO=1 npx playwright test | grep -c passed"
+  ]
+ ],
+ "redact": [
+  [
+   "gh auth login --with-token ghp_ABCDEFGHIJ1234567890",
+   "gh auth login --with-token [redacted]"
+  ],
+  [
+   "ace-cli --token abc123 status",
+   "ace-cli --token [redacted]"
+  ],
+  [
+   "x --password=\"hunter 2\" y",
+   "x --password=[redacted]"
+  ],
+  [
+   "x --secret=s3cr3t",
+   "x --secret=[redacted]"
+  ],
+  [
+   "x --api-key k-123 y",
+   "x --api-key [redacted]"
+  ],
+  [
+   "GITHUB_TOKEN=xyz npm publish",
+   "GITHUB_TOKEN=[redacted]"
+  ],
+  [
+   "export AWS_SECRET_ACCESS_KEY='abc def'",
+   "export AWS_SECRET_ACCESS_KEY=[redacted]"
+  ],
+  [
+   "MY_PASS=x DB_CREDENTIALS=y ./run",
+   "MY_PASS=[redacted]"
+  ],
+  [
+   "curl -H \"Authorization: Bearer abc.def\" https://x",
+   "curl -H \"Authorization: [redacted]"
+  ],
+  [
+   "curl -H \"Authorization: token123\" https://x",
+   "curl -H \"Authorization: [redacted]"
+  ],
+  [
+   "echo Bearer qwerty",
+   "echo Bearer [redacted]"
+  ],
+  [
+   "echo sk-proj-abcdefgh12345678",
+   "echo [redacted]"
+  ],
+  [
+   "aws AKIAIOSFODNN7EXAMPLE",
+   "aws [redacted]"
+  ],
+  [
+   "slack xoxb-123456-789012-abcdef",
+   "slack [redacted]"
+  ],
+  [
+   "ace ace_user_0123456789abcdef",
+   "ace [redacted]"
+  ],
+  [
+   "npm npm_abcdefghijklmnopqrstuvw",
+   "npm [redacted]"
+  ],
+  [
+   "gh github_pat_11ABCDEFG0123456789_abcdef",
+   "gh [redacted]"
+  ],
+  [
+   "gh gho_abcdefghij1234",
+   "gh [redacted]"
+  ],
+  [
+   "jwt eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.c2lnbmF0dXJl",
+   "jwt [redacted]"
+  ],
+  [
+   "https://x/api?api_key=abc123&q=1",
+   "https://x/api?api_key=[redacted]&q=1"
+  ],
+  [
+   "npm run build && pip install sk-learn",
+   "npm run build && pip install sk-learn"
+  ],
+  [
+   "echo monkey business",
+   "echo monkey business"
+  ],
+  [
+   "git clone https://user:CANARY1@github.com/o/r",
+   "git clone https://[redacted]@github.com/o/r"
+  ],
+  [
+   "git clone https://x-token-abc@host/r",
+   "git clone https://[redacted]@host/r"
+  ],
+  [
+   "psql postgres://app:pw@db:5432/x",
+   "psql postgres://[redacted]@db:5432/x"
+  ],
+  [
+   "password: hunter2",
+   "password: [redacted]"
+  ],
+  [
+   "db_password = \"x y\"",
+   "db_password = [redacted]"
+  ],
+  [
+   "{\"password\":\"X1\"}",
+   "{\"password\":[redacted]"
+  ],
+  [
+   "{\"api_key\": \"abc\", \"n\": 1}",
+   "{\"api_key\": [redacted]"
+  ],
+  [
+   "secret: managed-by-vault",
+   "secret: [redacted]"
+  ],
+  [
+   "authorization: Basic abc",
+   "authorization: [redacted]"
+  ],
+  [
+   "{\"authorization\": \"Bearer xyz\"}",
+   "{\"authorization\": [redacted]"
+  ],
+  [
+   "mysql -uroot -pS3cret db",
+   "mysql -uroot -p[redacted]"
+  ],
+  [
+   "mysql -u root -p S3cret db",
+   "mysql -u root -p [redacted]"
+  ],
+  [
+   "curl -u admin:pw https://x",
+   "curl -u [redacted]"
+  ],
+  [
+   "git push -u origin main && sort -u f",
+   "git push -u origin main && sort -u f"
+  ],
+  [
+   "git clone git@github.com:o/r.git; mail me@x.com",
+   "git clone git@github.com:o/r.git; mail me@x.com"
+  ],
+  [
+   "git clone https://user:p@CANARY@host/r",
+   "git clone https://[redacted]@host/r"
+  ],
+  [
+   "git clone https://user:pa/CANARY@host/r",
+   "git clone https://[redacted]@host/r"
+  ],
+  [
+   "x https://u:a:b%40c#d?e/f@host/r y",
+   "x https://[redacted]@host/r y"
+  ],
+  [
+   "curl -uuser:CANARY https://h",
+   "curl -u[redacted]"
+  ],
+  [
+   "curl --user=user:CANARY https://h && curl -uuser:x2 h",
+   "curl --user=[redacted]"
+  ],
+  [
+   "sshpass -p CANARY ssh h",
+   "sshpass -p [redacted]"
+  ],
+  [
+   "sshpass -p'CANARY' ssh h",
+   "sshpass -p[redacted]"
+  ],
+  [
+   "sshpass -pCANARY ssh h",
+   "sshpass -p[redacted]"
+  ],
+  [
+   "sshpass -f pwfile ssh h; sshpass -e ssh h",
+   "sshpass -f pwfile ssh h; sshpass -e ssh h"
+  ],
+  [
+   "mkdir -p a; cp -p a b; ssh -p 22 h; git push -p; docker run -p 80:80 i",
+   "mkdir -p a; cp -p a b; ssh -p 22 h; git push -p; docker run -p 80:80 i"
+  ],
+  [
+   "echo key=value keyword=x monkey=1",
+   "echo key=value keyword=x monkey=1"
+  ],
+  [
+   "API_KEY=a SECRET_KEY=b ACCESS_KEY=c PRIVATE_KEY=d apikey=e AWS_SECRET_ACCESS_KEY=f SSH_KEY=g",
+   "API_KEY=[redacted]"
+  ],
+  [
+   "password: ab;cd&ef",
+   "password: [redacted]"
+  ],
+  [
+   "password=ab;cd&ef|gh x",
+   "password=[redacted]"
+  ],
+  [
+   "DB_TOKEN=a&b;c y",
+   "DB_TOKEN=[redacted]"
+  ],
+  [
+   "https://x/api?api_key=abc123&q=1",
+   "https://x/api?api_key=[redacted]&q=1"
+  ],
+  [
+   "password=$(echo CANARY)",
+   "password=[redacted]"
+  ],
+  [
+   "password=`echo CANARY` y",
+   "password=[redacted]"
+  ],
+  [
+   "{\"password\":\"pre\\\"CANARY\"}",
+   "{\"password\":[redacted]"
+  ],
+  [
+   "{\"password\":\"a\\\"b CANARY c\"}",
+   "{\"password\":[redacted]"
+  ],
+  [
+   "password=\"pre\\\" CANARY\" x",
+   "password=[redacted]"
+  ],
+  [
+   "password: |\n  CANARY\n  more\n\nnext: ok",
+   "password: [redacted]\n\nnext: ok"
+  ],
+  [
+   "https://x/api?token=abc&q=1 tail",
+   "https://x/api?token=[redacted]&q=1 tail"
+  ],
+  [
+   "mkdir -p a && cp -p a b && ssh -p 22 h && git push -u origin main",
+   "mkdir -p a && cp -p a b && ssh -p 22 h && git push -u origin main"
+  ],
+  [
+   "date -u +%Y-%m-%dT%H:%M:%SZ && git push -u origin a:b",
+   "date -u +%Y-%m-%dT%H:%M:%SZ && git push -u origin a:b"
+  ],
+  [
+   "docker run -u 1000:1000 img",
+   "docker run -u 1000:1000 img"
+  ],
+  [
+   "curl -H \"Cookie: sid=CANARY; x=1\" h",
+   "curl -H \"Cookie: [redacted]"
+  ],
+  [
+   "Set-Cookie: sid=CANARY; Path=/",
+   "Set-Cookie: [redacted]"
+  ],
+  [
+   "curl -H \"X-Auth-Token: CANARY\" h",
+   "curl -H \"X-Auth-Token: [redacted]"
+  ],
+  [
+   "curl -H \"X-API-Key: CANARY\" h",
+   "curl -H \"X-API-Key: [redacted]"
+  ],
+  [
+   "ssh-keygen -t ed25519 -N CANARY -f k",
+   "ssh-keygen -t ed25519 -N [redacted]"
+  ],
+  [
+   "openssl enc -aes256 -k CANARY -in a",
+   "openssl enc -aes256 -k [redacted]"
+  ],
+  [
+   "openssl rsa -passin pass:CANARY -in k",
+   "openssl rsa -passin [redacted]"
+  ],
+  [
+   "openssl pkcs12 -passout pass:CANARY -out p",
+   "openssl pkcs12 -passout [redacted]"
+  ],
+  [
+   "openssl enc -pass pass:CANARY",
+   "openssl enc -pass [redacted]"
+  ],
+  [
+   "7z a -pCANARY out.7z dir",
+   "7z a -p[redacted]"
+  ],
+  [
+   "unzip -P CANARY a.zip",
+   "unzip -P [redacted]"
+  ],
+  [
+   "htpasswd -b .htpasswd admin CANARY",
+   "htpasswd [redacted]"
+  ],
+  [
+   "echo CANARY | docker login -u me --password-stdin ghcr.io",
+   "echo [redacted] | docker login -u me --password-stdin [redacted]"
+  ],
+  [
+   "printf '%s' CANARY | gh auth login --with-token",
+   "printf [redacted] | gh auth login --with-token"
+  ],
+  [
+   "openssl genrsa -out key.pem 2048 && ssh-keygen -l -f k",
+   "openssl genrsa -out key.pem 2048 && ssh-keygen -l -f k"
+  ]
+ ],
+ "keys": [
+  [
+   "make test",
+   "make test"
+  ],
+  [
+   "bash -c \"make a\"",
+   "bash -c#4cfc5752"
+  ],
+  [
+   "bash -c \"make   a\"",
+   "bash -c#4cfc5752"
+  ],
+  [
+   "python3 - <<'EOF'\nprint(1)\nEOF",
+   "python3#cf9426b6"
+  ],
+  [
+   "node -e 'x()'",
+   "node -e#0fa2064b"
+  ],
+  [
+   "curl -X POST https://u:p@API.example.com:8443/v1?a=1",
+   "curl#POST api.example.com:8443"
+  ],
+  [
+   "curl https://x.com/a",
+   "curl#GET x.com"
+  ],
+  [
+   "curl -d a=1 https://x.com/a",
+   "curl#POST x.com"
+  ],
+  [
+   "curl --request=PUT https://x.com",
+   "curl#PUT x.com"
+  ],
+  [
+   "wget -q https://dl.x.com/f.tgz",
+   "wget#GET dl.x.com"
+  ],
+  [
+   "curl -s localhost:8080",
+   "curl#GET"
+  ],
+  [
+   "python3 deploy.py",
+   "python3 deploy.py"
+  ],
+  [
+   "perl -pi -e 's/a/b/' f",
+   "perl-pi"
+  ],
+  [
+   "export TOKEN=abc; make deploy",
+   "make deploy"
+  ],
+  [
+   "export FOO=abc; make deploy",
+   "make deploy"
+  ],
+  [
+   "TOKEN=1 npx playwright test | grep -c passed",
+   "grep"
+  ]
+ ],
+ "fuzz_passwords": [
+  [
+   "2b0$Rk+^SdN5xvrr漢wUX",
+   "2b0$Rk+^SdN5xvrr漢wUX",
+   "2b0$Rk+^SdN5xvrr漢wUX"
+  ],
+  [
+   "jR€@NqR68+$W",
+   "jR€@NqR68+$W",
+   "jR€@NqR68+$W"
+  ],
+  [
+   "Tho€3''tmtD",
+   "Tho€3tmtD",
+   "Tho€3tmtD"
+  ],
+  [
+   "^?(PwB_f[жpP#n",
+   "^?(PwB_f[жpP#n",
+   "^?(PwB_f[жpPn"
+  ],
+  [
+   "~p<Rz€Z,üP]mZ02?6 I",
+   "~p<Rz€Z,üP]mZ02?6I",
+   "~p<Rz€Z,üP]mZ02?6I"
+  ],
+  [
+   "w8zTBmX}tciO)é",
+   "w8zTBmX}tciO)é",
+   "w8zTBmX}tciO)é"
+  ],
+  [
+   "ßcuP}LRé^V[3E",
+   "ßcuP}LRé^V[3E",
+   "ßcuP}LRé^V[3E"
+  ],
+  [
+   "6tp}<}ow5",
+   "6tp}<}ow5",
+   "6tp}<}ow5"
+  ],
+  [
+   "EY3:!j'^kWMmp",
+   "EY3:!j^kWMmp",
+   "EY3:!j^kWMmp"
+  ],
+  [
+   "1vv$;~.b3Z3Ω%s",
+   "1vv$;~.b3Z3Ω%s",
+   "1vv$;~.b3Z3Ω%s"
+  ],
+  [
+   "Ω >{M5Z\\^?b<'2",
+   "Ω>{M5Z\\^?b<2",
+   "Ω>{M5Z\\^?b<2"
+  ],
+  [
+   "'r&#J[#?EYΩWtD|Lo1&*6Em66",
+   "r&#J[#?EYΩWtD|Lo1&*6Em66",
+   "rJ[?EYΩWtD|Lo1*6Em66"
+  ],
+  [
+   "Yp#kжwx}\\q\\yR",
+   "Yp#kжwx}\\q\\yR",
+   "Ypkжwx}\\q\\yR"
+  ],
+  [
+   "NO94G1+-2{k3",
+   "NO94G1+-2{k3",
+   "NO94G1+-2{k3"
+  ],
+  [
+   "XmlN(KR?i^漢KnFa@Km(NQ87r7",
+   "XmlN(KR?i^漢KnFa@Km(NQ87r7",
+   "XmlN(KR?i^漢KnFa@Km(NQ87r7"
+  ],
+  [
+   "z€5>ß<IC[![8g$i^g*Mgf4!bv}",
+   "z€5>ß<IC[![8g$i^g*Mgf4!bv}",
+   "z€5>ß<IC[![8g$i^g*Mgf4!bv}"
+  ],
+  [
+   "/Kf`YK\"n3[A|_bP$)tdpжak$q",
+   "/Kf`YKn3[A|_bP$)tdpжak$q",
+   "/Kf`YKn3[A|_bP$)tdpжak$q"
+  ],
+  [
+   ";€uxidY{daiiF5/mVT#/$",
+   ";€uxidY{daiiF5/mVT#/$",
+   ";€uxidY{daiiF5/mVT/$"
+  ],
+  [
+   "DL=>1!KUL*/",
+   "DL=>1!KUL*/",
+   "DL=>1!KUL*/"
+  ],
+  [
+   "+VF;ZHo_T(E/h/|Ωlr64#[/|/Do漢&",
+   "+VF;ZHo_T(E/h/|Ωlr64#[/|/Do漢&",
+   "+VF;ZHo_T(E/h/|Ωlr64[/|/Do漢"
+  ],
+  [
+   "psreΩzkj!p}_cpD1w+W+]C",
+   "psreΩzkj!p}_cpD1w+W+]C",
+   "psreΩzkj!p}_cpD1w+W+]C"
+  ],
+  [
+   "жyX6aj.6ж{Ules)=Ω2~~€>,",
+   "жyX6aj.6ж{Ules)=Ω2~~€>,",
+   "жyX6aj.6ж{Ules)=Ω2~~€>,"
+  ],
+  [
+   "ßCqa.zL\"CKW~E",
+   "ßCqa.zLCKW~E",
+   "ßCqa.zLCKW~E"
+  ],
+  [
+   "I%GvC5D=€'漢1z$F9&VhQ",
+   "I%GvC5D=€漢1z$F9&VhQ",
+   "I%GvC5D=€漢1z$F9VhQ"
+  ],
+  [
+   "zqDüelVeEü&VéZAKIZ",
+   "zqDüelVeEü&VéZAKIZ",
+   "zqDüelVeEüVéZAKIZ"
+  ],
+  [
+   ";u*^.T]Wß,ж!éBhCc~\"",
+   ";u*^.T]Wß,ж!éBhCc~",
+   ";u*^.T]Wß,ж!éBhCc~"
+  ],
+  [
+   "G>s  6hkNß_Y*RWßebZ{)}ujk\\tQuC",
+   "G>s6hkNß_Y*RWßebZ{)}ujk\\tQuC",
+   "G>s6hkNß_Y*RWßebZ{)}ujk\\tQuC"
+  ],
+  [
+   "p-gTm c]4uc5{ppßn",
+   "p-gTmc]4uc5{ppßn",
+   "p-gTmc]4uc5{ppßn"
+  ],
+  [
+   ".#`#n 6Z\\&=\"XID3@JOΩ/j]^gR",
+   ".#`#n6Z\\&=XID3@JOΩ/j]^gR",
+   ".`n6Z\\=XID3@JOΩ/j]^gR"
+  ],
+  [
+   "G/7x@LuüéRß,bwD*VR",
+   "G/7x@LuüéRß,bwD*VR",
+   "G/7x@LuüéRß,bwD*VR"
+  ],
+  [
+   "N'xü>\\}AyG6)T\\:EébF)WFeQ`Ev2",
+   "Nxü>\\}AyG6)T\\:EébF)WFeQ`Ev2",
+   "Nxü>\\}AyG6)T\\:EébF)WFeQ`Ev2"
+  ],
+  [
+   "D€v/é9>/",
+   "D€v/é9>/",
+   "D€v/é9>/"
+  ],
+  [
+   "€IM+~i;\"",
+   "€IM+~i;",
+   "€IM+~i;"
+  ],
+  [
+   "`y;) *HD",
+   "`y;)*HD",
+   "`y;)*HD"
+  ],
+  [
+   "V{yiEOoX üzZfHd0}e*ßΩXGJ\\-\"E",
+   "V{yiEOoXüzZfHd0}e*ßΩXGJ\\-E",
+   "V{yiEOoXüzZfHd0}e*ßΩXGJ\\-E"
+  ],
+  [
+   "JS/]9D18",
+   "JS/]9D18",
+   "JS/]9D18"
+  ],
+  [
+   "M^W-PKifiZS/`fVB",
+   "M^W-PKifiZS/`fVB",
+   "M^W-PKifiZS/`fVB"
+  ],
+  [
+   "v漢€oΩpDF}T",
+   "v漢€oΩpDF}T",
+   "v漢€oΩpDF}T"
+  ],
+  [
+   "nQV9Tr1mR",
+   "nQV9Tr1mR",
+   "nQV9Tr1mR"
+  ],
+  [
+   "üNOMfC/4~C,)j=m.PfJ|w€üyeo@\\",
+   "üNOMfC/4~C,)j=m.PfJ|w€üyeo@\\",
+   "üNOMfC/4~C,)j=m.PfJ|w€üyeo@\\"
+  ],
+  [
+   "FXM}[lU]#q4*R3Ω7+^GCmRPdNY iO[",
+   "FXM}[lU]#q4*R3Ω7+^GCmRPdNYiO[",
+   "FXM}[lU]q4*R3Ω7+^GCmRPdNYiO["
+  ],
+  [
+   "V7e&B+@K;0ep=W&J'!qMu<$üIEg",
+   "V7e&B+@K;0ep=W&J!qMu<$üIEg",
+   "V7eB+@K;0ep=WJ!qMu<$üIEg"
+  ],
+  [
+   "iZ@|f]fN<YR",
+   "iZ@|f]fN<YR",
+   "iZ@|f]fN<YR"
+  ],
+  [
+   "Mc<V%*^yveß:P1€<f%\\3xu^",
+   "Mc<V%*^yveß:P1€<f%\\3xu^",
+   "Mc<V%*^yveß:P1€<f%\\3xu^"
+  ],
+  [
+   "hU&amzUEΩF(UT/k!Z-",
+   "hU&amzUEΩF(UT/k!Z-",
+   "hUamzUEΩF(UT/k!Z-"
+  ],
+  [
+   "UrHu.~`Hm{rt<\"rJj*t RA",
+   "UrHu.~`Hm{rt<rJj*tRA",
+   "UrHu.~`Hm{rt<rJj*tRA"
+  ],
+  [
+   "s_trXlz%:K?ok~",
+   "s_trXlz%:K?ok~",
+   "s_trXlz%:K?ok~"
+  ],
+  [
+   ")ksf€#JU5BVb2J[C,=G]mü$cfY",
+   ")ksf€#JU5BVb2J[C,=G]mü$cfY",
+   ")ksf€JU5BVb2J[C,=G]mü$cfY"
+  ],
+  [
+   "]:L_vf]|\"v(UhiH?nж^]#>0r3_}7",
+   "]:L_vf]|v(UhiH?nж^]#>0r3_}7",
+   "]:L_vf]|v(UhiH?nж^]>0r3_}7"
+  ],
+  [
+   "P~[*; \"qW$|!1!X*ai/nv!Hk",
+   "P~[*;qW$|!1!X*ai/nv!Hk",
+   "P~[*;qW$|!1!X*ai/nv!Hk"
+  ],
+  [
+   "eDD9pyuBdé8R!slq&2漢v%\")",
+   "eDD9pyuBdé8R!slq&2漢v%)",
+   "eDD9pyuBdé8R!slq2漢v%)"
+  ],
+  [
+   "{bI|?-Uw~IPU;.ß/?Nn;yTXxAN",
+   "{bI|?-Uw~IPU;.ß/?Nn;yTXxAN",
+   "{bI|?-Uw~IPU;.ß/?Nn;yTXxAN"
+  ],
+  [
+   "$~9P.U1]2(vfB!#[%uü'zsO",
+   "$~9P.U1]2(vfB!#[%uüzsO",
+   "$~9P.U1]2(vfB![%uüzsO"
+  ],
+  [
+   "{8ei/:漢漢E漢V;~f8~W]@Aü!5",
+   "{8ei/:漢漢E漢V;~f8~W]@Aü!5",
+   "{8ei/:漢漢E漢V;~f8~W]@Aü!5"
+  ],
+  [
+   ",jFv::vMi\\VpE_}^&,f",
+   ",jFv::vMi\\VpE_}^&,f",
+   ",jFv::vMi\\VpE_}^,f"
+  ],
+  [
+   "#]\"5%N+6uCa'*7v,@lü9aBmüc$*",
+   "#]5%N+6uCa*7v,@lü9aBmüc$*",
+   "]5%N+6uCa*7v,@lü9aBmüc$*"
+  ],
+  [
+   "_A%üC-c@%B>#9>EhSx",
+   "_A%üC-c@%B>#9>EhSx",
+   "_A%üC-c@%B>9>EhSx"
+  ],
+  [
+   "X\\BVnß<W*cR$A=y8C7H#2",
+   "X\\BVnß<W*cR$A=y8C7H#2",
+   "X\\BVnß<W*cR$A=y8C7H2"
+  ],
+  [
+   "g,Keoßv={C,^/c漢(*?Q%j",
+   "g,Keoßv={C,^/c漢(*?Q%j",
+   "g,Keoßv={C,^/c漢(*?Q%j"
+  ],
+  [
+   "/]bze7SL漢G^",
+   "/]bze7SL漢G^",
+   "/]bze7SL漢G^"
+  ],
+  [
+   "KΩж>g1xdsn€",
+   "KΩж>g1xdsn€",
+   "KΩж>g1xdsn€"
+  ],
+  [
+   "Fded)ws\\}TE2X8'Lmob'",
+   "Fded)ws\\}TE2X8Lmob",
+   "Fded)ws\\}TE2X8Lmob"
+  ],
+  [
+   "d>~(KP^!@{xl>]漢Ee(,é",
+   "d>~(KP^!@{xl>]漢Ee(,é",
+   "d>~(KP^!@{xl>]漢Ee(,é"
+  ],
+  [
+   "L0Mp8:*sKf]C QsA}$Ω'D,",
+   "L0Mp8:*sKf]CQsA}$ΩD,",
+   "L0Mp8:*sKf]CQsA}$ΩD,"
+  ],
+  [
+   "p4ha4M^wQ##G=n漢KwpoX",
+   "p4ha4M^wQ##G=n漢KwpoX",
+   "p4ha4M^wQG=n漢KwpoX"
+  ],
+  [
+   "\\sW[u-5@obΩWn0D",
+   "\\sW[u-5@obΩWn0D",
+   "\\sW[u-5@obΩWn0D"
+  ],
+  [
+   "~P xnuß,5J~R[",
+   "~Pxnuß,5J~R[",
+   "~Pxnuß,5J~R["
+  ],
+  [
+   "\\&x2xßNé4#=tsQ",
+   "\\&x2xßNé4#=tsQ",
+   "\\x2xßNé4=tsQ"
+  ],
+  [
+   "ж%|/2zBw e_8KD:j5'üW+[#p",
+   "ж%|/2zBwe_8KD:j5üW+[#p",
+   "ж%|/2zBwe_8KD:j5üW+[p"
+  ],
+  [
+   "sw@Q4f!\"Mz#o8\"4~X$:58D3ßOüD",
+   "sw@Q4f!Mz#o84~X$:58D3ßOüD",
+   "sw@Q4f!Mzo84~X$:58D3ßOüD"
+  ],
+  [
+   "0Ω%g/zyh:d IVY|\"iΩo9|J-gLJ|",
+   "0Ω%g/zyh:dIVY|iΩo9|J-gLJ|",
+   "0Ω%g/zyh:dIVY|iΩo9|J-gLJ|"
+  ],
+  [
+   "ht,A=%Ω$ii+pVZUc~nC,Oy",
+   "ht,A=%Ω$ii+pVZUc~nC,Oy",
+   "ht,A=%Ω$ii+pVZUc~nC,Oy"
+  ],
+  [
+   "uL9漢YZ]漢Y:],!74p#TßQж)lm",
+   "uL9漢YZ]漢Y:],!74p#TßQж)lm",
+   "uL9漢YZ]漢Y:],!74pTßQж)lm"
+  ],
+  [
+   "6Hf;LG`z1P;`taß\\f*|D$Xr>2D4 mé",
+   "6Hf;LG`z1P;`taß\\f*|D$Xr>2D4mé",
+   "6Hf;LG`z1P;`taß\\f*|D$Xr>2D4mé"
+  ],
+  [
+   "+%]ж r],ko7.NNEO x6NmTyv n|s",
+   "+%]жr],ko7.NNEOx6NmTyvn|s",
+   "+%]жr],ko7.NNEOx6NmTyvn|s"
+  ],
+  [
+   "K,OAj/XnYl{",
+   "K,OAj/XnYl{",
+   "K,OAj/XnYl{"
+  ],
+  [
+   "2y(:$X&4",
+   "2y(:$X&4",
+   "2y(:$X4"
+  ],
+  [
+   "zQ@K$}S!xD:Yn&c]zж8xqnRZ",
+   "zQ@K$}S!xD:Yn&c]zж8xqnRZ",
+   "zQ@K$}S!xD:Ync]zж8xqnRZ"
+  ],
+  [
+   "Z)漢s\"^Oq€qZ\"S:r%f1{TbüQ>",
+   "Z)漢s^Oq€qZS:r%f1{TbüQ>",
+   "Z)漢s^Oq€qZS:r%f1{TbüQ>"
+  ],
+  [
+   "漢UP)T;%&g9t)6ML",
+   "漢UP)T;%&g9t)6ML",
+   "漢UP)T;%g9t)6ML"
+  ],
+  [
+   "z8`%2BN{*!B_rHvn@86<z -h)s",
+   "z8`%2BN{*!B_rHvn@86<z-h)s",
+   "z8`%2BN{*!B_rHvn@86<z-h)s"
+  ],
+  [
+   "Fy`+\"JO'a3ag4#€tjON",
+   "Fy`+JOa3ag4#€tjON",
+   "Fy`+JOa3ag4€tjON"
+  ],
+  [
+   "CjIv8*y6жe'EH2aUz?€m5SL2V-N",
+   "CjIv8*y6жeEH2aUz?€m5SL2V-N",
+   "CjIv8*y6жeEH2aUz?€m5SL2V-N"
+  ],
+  [
+   "7J~Xc5N9XS!hAM.'ж'",
+   "7J~Xc5N9XS!hAM.ж",
+   "7J~Xc5N9XS!hAM.ж"
+  ],
+  [
+   "ZV |`@}vZR?)j\\$8='[H",
+   "ZV|`@}vZR?)j\\$8=[H",
+   "ZV|`@}vZR?)j\\$8=[H"
+  ],
+  [
+   "JOB+$|WY CkU}oEé<nP<GYL",
+   "JOB+$|WYCkU}oEé<nP<GYL",
+   "JOB+$|WYCkU}oEé<nP<GYL"
+  ],
+  [
+   "Pi*xh~Pkm{2;iKa\"f)9=>iMQ",
+   "Pi*xh~Pkm{2;iKaf)9=>iMQ",
+   "Pi*xh~Pkm{2;iKaf)9=>iMQ"
+  ],
+  [
+   "Ω+~ж8p'N(\"4",
+   "Ω+~ж8pN(4",
+   "Ω+~ж8pN(4"
+  ],
+  [
+   "U7RW8+oCtcfh",
+   "U7RW8+oCtcfh",
+   "U7RW8+oCtcfh"
+  ],
+  [
+   "u78füm9-",
+   "u78füm9-",
+   "u78füm9-"
+  ],
+  [
+   "Rxcj[DSk%<UqAn%bR2-dOeejG/",
+   "Rxcj[DSk%<UqAn%bR2-dOeejG/",
+   "Rxcj[DSk%<UqAn%bR2-dOeejG/"
+  ],
+  [
+   ")eΩßoAr,`(&`9-AhY[\\xrG€sj3",
+   ")eΩßoAr,`(&`9-AhY[\\xrG€sj3",
+   ")eΩßoAr,`(`9-AhY[\\xrG€sj3"
+  ],
+  [
+   "@{}[xY/1J.漢?inp/",
+   "@{}[xY/1J.漢?inp/",
+   "@{}[xY/1J.漢?inp/"
+  ],
+  [
+   "'}/Xjc[izIVu4*\\bB),AMF",
+   "}/Xjc[izIVu4*\\bB),AMF",
+   "}/Xjc[izIVu4*\\bB),AMF"
+  ],
+  [
+   "X=\\1t~YIDlxYT)rzN=yE)>~|é8Qu",
+   "X=\\1t~YIDlxYT)rzN=yE)>~|é8Qu",
+   "X=\\1t~YIDlxYT)rzN=yE)>~|é8Qu"
+  ],
+  [
+   "a{FRO60Ωv!lh*N45漢üAqrY(ksv8_mm",
+   "a{FRO60Ωv!lh*N45漢üAqrY(ksv8_mm",
+   "a{FRO60Ωv!lh*N45漢üAqrY(ksv8_mm"
+  ],
+  [
+   "n%ibEc'&6U}éAb=z漢;VKMk(~ZB",
+   "n%ibEc&6U}éAb=z漢;VKMk(~ZB",
+   "n%ibEc6U}éAb=z漢;VKMk(~ZB"
+  ],
+  [
+   ".ΩSΩYhfERq!k ",
+   ".ΩSΩYhfERq!k",
+   ".ΩSΩYhfERq!k"
+  ],
+  [
+   "[|QsZa%I€'tFjzSPéYé.|)k%",
+   "[|QsZa%I€tFjzSPéYé.|)k%",
+   "[|QsZa%I€tFjzSPéYé.|)k%"
+  ],
+  [
+   "O\"$3=k;6e[ 4+l+_>;:3zh[J",
+   "O$3=k;6e[4+l+_>;:3zh[J",
+   "O$3=k;6e[4+l+_>;:3zh[J"
+  ],
+  [
+   "U&漢;Y€U$;vH7Y|(éV($zwLk>x-ß",
+   "U&漢;Y€U$;vH7Y|(éV($zwLk>x-ß",
+   "U漢;Y€U$;vH7Y|(éV($zwLk>x-ß"
+  ],
+  [
+   ")oüSé+\\KI'ΩΩR{hieHmzJ `",
+   ")oüSé+\\KIΩΩR{hieHmzJ`",
+   ")oüSé+\\KIΩΩR{hieHmzJ`"
+  ],
+  [
+   "ж$nizqFTX_fv€7FCyA~p?MtyWK|p<",
+   "ж$nizqFTX_fv€7FCyA~p?MtyWK|p<",
+   "ж$nizqFTX_fv€7FCyA~p?MtyWK|p<"
+  ],
+  [
+   "Xé@{ΩRDXb%h;#EklL|So5B?0t",
+   "Xé@{ΩRDXb%h;#EklL|So5B?0t",
+   "Xé@{ΩRDXb%h;EklL|So5B?0t"
+  ],
+  [
+   "2`J(}z GM/m?~C6&FVk\"k3K<rJ€4",
+   "2`J(}zGM/m?~C6&FVkk3K<rJ€4",
+   "2`J(}zGM/m?~C6FVkk3K<rJ€4"
+  ],
+  [
+   "l^[.iHu2c_T.;üN7-mUKI5CJ]7F",
+   "l^[.iHu2c_T.;üN7-mUKI5CJ]7F",
+   "l^[.iHu2c_T.;üN7-mUKI5CJ]7F"
+  ],
+  [
+   "[N4|[%@0BKz_Xx|9|$€ kKüJRLdH9P",
+   "[N4|[%@0BKz_Xx|9|$€kKüJRLdH9P",
+   "[N4|[%@0BKz_Xx|9|$€kKüJRLdH9P"
+  ],
+  [
+   "ve]eжSE|)8EAΩ73A?",
+   "ve]eжSE|)8EAΩ73A?",
+   "ve]eжSE|)8EAΩ73A?"
+  ],
+  [
+   "TSéADN@7znc!X",
+   "TSéADN@7znc!X",
+   "TSéADN@7znc!X"
+  ],
+  [
+   "_éDXO2n3",
+   "_éDXO2n3",
+   "_éDXO2n3"
+  ],
+  [
+   "78h6LgwE>ol1==1]t*K?%ü`M|bt#Gm",
+   "78h6LgwE>ol1==1]t*K?%ü`M|bt#Gm",
+   "78h6LgwE>ol1==1]t*K?%ü`M|btGm"
+  ],
+  [
+   "c5+LL-bg+tLFmdu&d A<",
+   "c5+LL-bg+tLFmdu&dA<",
+   "c5+LL-bg+tLFmdudA<"
+  ],
+  [
+   "#g7yXD^vuU",
+   "#g7yXD^vuU",
+   "g7yXD^vuU"
+  ],
+  [
+   "~[ ]M_\\n!L xNCp3k$",
+   "~[]M_\\n!LxNCp3k$",
+   "~[]M_\\n!LxNCp3k$"
+  ],
+  [
+   "?G/^.iq$>€\"UF6ETBv<MPab<4Ω@",
+   "?G/^.iq$>€UF6ETBv<MPab<4Ω@",
+   "?G/^.iq$>€UF6ETBv<MPab<4Ω@"
+  ],
+  [
+   "SKéw~H6+G7F+Nn_CGcMj",
+   "SKéw~H6+G7F+Nn_CGcMj",
+   "SKéw~H6+G7F+Nn_CGcMj"
+  ],
+  [
+   "1ΩQSXf*}1GU&s)y[h,€Q]HodN",
+   "1ΩQSXf*}1GU&s)y[h,€Q]HodN",
+   "1ΩQSXf*}1GUs)y[h,€Q]HodN"
+  ],
+  [
+   "gJ!r0jTiP3be",
+   "gJ!r0jTiP3be",
+   "gJ!r0jTiP3be"
+  ],
+  [
+   "(%lD1RLAV",
+   "(%lD1RLAV",
+   "(%lD1RLAV"
+  ],
+  [
+   "6c+u(]漢Ee2reE,| 1}4+V6`(Id$I{",
+   "6c+u(]漢Ee2reE,|1}4+V6`(Id$I{",
+   "6c+u(]漢Ee2reE,|1}4+V6`(Id$I{"
+  ],
+  [
+   "LuW}/w3o9Vo漢8pv_gΩrLk",
+   "LuW}/w3o9Vo漢8pv_gΩrLk",
+   "LuW}/w3o9Vo漢8pv_gΩrLk"
+  ],
+  [
+   "üG)OtUn~-dbzsO{~S$MUΩTp",
+   "üG)OtUn~-dbzsO{~S$MUΩTp",
+   "üG)OtUn~-dbzsO{~S$MUΩTp"
+  ],
+  [
+   "~3!;E:Rq)NJN+:^",
+   "~3!;E:Rq)NJN+:^",
+   "~3!;E:Rq)NJN+:^"
+  ],
+  [
+   "a€hhMLTo1JOß0^üq)8w(v]",
+   "a€hhMLTo1JOß0^üq)8w(v]",
+   "a€hhMLTo1JOß0^üq)8w(v]"
+  ],
+  [
+   "ü:A(pw|D_<_s{ams,s9kL?Y",
+   "ü:A(pw|D_<_s{ams,s9kL?Y",
+   "ü:A(pw|D_<_s{ams,s9kL?Y"
+  ],
+  [
+   "3daza1=ulhgdLHZ>EeKD~DmSqU",
+   "3daza1=ulhgdLHZ>EeKD~DmSqU",
+   "3daza1=ulhgdLHZ>EeKD~DmSqU"
+  ],
+  [
+   "aEpG#~M7(VU",
+   "aEpG#~M7(VU",
+   "aEpG~M7(VU"
+  ],
+  [
+   "pKfü[IJNo>vM^F!~6}2%ZQe\\Pf",
+   "pKfü[IJNo>vM^F!~6}2%ZQe\\Pf",
+   "pKfü[IJNo>vM^F!~6}2%ZQe\\Pf"
+  ],
+  [
+   "UkwüqWapC!漢(üDS_漢$:s|&Bash",
+   "UkwüqWapC!漢(üDS_漢$:s|&Bash",
+   "UkwüqWapC!漢(üDS_漢$:s|Bash"
+  ],
+  [
+   "qs|yf|-D@XzqY\"Q<',#A",
+   "qs|yf|-D@XzqYQ<,#A",
+   "qs|yf|-D@XzqYQ<,A"
+  ],
+  [
+   "\"Ppm_ж=G^a",
+   "Ppm_ж=G^a",
+   "Ppm_ж=G^a"
+  ],
+  [
+   "Ωi+CW!@>Ld/Ybg}P!C4VN$y[Zsh=jR",
+   "Ωi+CW!@>Ld/Ybg}P!C4VN$y[Zsh=jR",
+   "Ωi+CW!@>Ld/Ybg}P!C4VN$y[Zsh=jR"
+  ],
+  [
+   "KpyFIvyR<(-U0",
+   "KpyFIvyR<(-U0",
+   "KpyFIvyR<(-U0"
+  ],
+  [
+   "{QhmYRPN_A{=F\"#SRN%nsXyRvH6mΩ ",
+   "{QhmYRPN_A{=F#SRN%nsXyRvH6mΩ",
+   "{QhmYRPN_A{=FSRN%nsXyRvH6mΩ"
+  ],
+  [
+   "漢NjS%(€md)n6!dpSJT",
+   "漢NjS%(€md)n6!dpSJT",
+   "漢NjS%(€md)n6!dpSJT"
+  ],
+  [
+   ".ZNJM*ci!R",
+   ".ZNJM*ci!R",
+   ".ZNJM*ci!R"
+  ],
+  [
+   "Ω4nNv@MZ'KOΩX.CNEOHx&PRpXHPB",
+   "Ω4nNv@MZKOΩX.CNEOHx&PRpXHPB",
+   "Ω4nNv@MZKOΩX.CNEOHxPRpXHPB"
+  ],
+  [
+   "`üv#p,eRkis@p",
+   "`üv#p,eRkis@p",
+   "`üvp,eRkis@p"
+  ],
+  [
+   "ж4üi14Zex/g}U8n4p6cjxY",
+   "ж4üi14Zex/g}U8n4p6cjxY",
+   "ж4üi14Zex/g}U8n4p6cjxY"
+  ],
+  [
+   "-BsG=d@?XrW漢|FL))|K?`[V",
+   "-BsG=d@?XrW漢|FL))|K?`[V",
+   "-BsG=d@?XrW漢|FL))|K?`[V"
+  ],
+  [
+   "3t*QMvDl8/Z",
+   "3t*QMvDl8/Z",
+   "3t*QMvDl8/Z"
+  ],
+  [
+   "M.-漢@`'QQIV]",
+   "M.-漢@`QQIV]",
+   "M.-漢@`QQIV]"
+  ],
+  [
+   "w}UgUü]v;s?zx^7[yR@e9évh",
+   "w}UgUü]v;s?zx^7[yR@e9évh",
+   "w}UgUü]v;s?zx^7[yR@e9évh"
+  ],
+  [
+   "q`{L-YcF/6%2{6s?yjkR;*7l^fy",
+   "q`{L-YcF/6%2{6s?yjkR;*7l^fy",
+   "q`{L-YcF/6%2{6s?yjkR;*7l^fy"
+  ],
+  [
+   "2'\"x)hZVZ'ihT>f5ß%a!V'Z0H_,p",
+   "2x)hZVZihT>f5ß%a!VZ0H_,p",
+   "2x)hZVZihT>f5ß%a!VZ0H_,p"
+  ],
+  [
+   "Aж}{6Ig0RD0{XR{2Y+_",
+   "Aж}{6Ig0RD0{XR{2Y+_",
+   "Aж}{6Ig0RD0{XR{2Y+_"
+  ],
+  [
+   "@VDüUGN!vt3",
+   "@VDüUGN!vt3",
+   "@VDüUGN!vt3"
+  ],
+  [
+   "}oGH9üHßWsfJWv55|s%(&^ sB",
+   "}oGH9üHßWsfJWv55|s%(&^sB",
+   "}oGH9üHßWsfJWv55|s%(^sB"
+  ],
+  [
+   "M`yTH]#]'KR%3TwmH€",
+   "M`yTH]#]KR%3TwmH€",
+   "M`yTH]]KR%3TwmH€"
+  ],
+  [
+   "}*bΩ<v a=xyjO€€gJY>m5f:@é.jkj",
+   "}*bΩ<va=xyjO€€gJY>m5f:@é.jkj",
+   "}*bΩ<va=xyjO€€gJY>m5f:@é.jkj"
+  ],
+  [
+   "(bz@3UßcCKrQ",
+   "(bz@3UßcCKrQ",
+   "(bz@3UßcCKrQ"
+  ],
+  [
+   "9~y€/Po,4?<?> 0X[7Wc<Wж漢",
+   "9~y€/Po,4?<?>0X[7Wc<Wж漢",
+   "9~y€/Po,4?<?>0X[7Wc<Wж漢"
+  ],
+  [
+   "a9b8sCaa",
+   "a9b8sCaa",
+   "a9b8sCaa"
+  ],
+  [
+   "z*LFpIgoI",
+   "z*LFpIgoI",
+   "z*LFpIgoI"
+  ],
+  [
+   "`ft@Iizx</mqqvQE?L<=",
+   "`ft@Iizx</mqqvQE?L<=",
+   "`ft@Iizx</mqqvQE?L<="
+  ],
+  [
+   ".WFOéPbLüéGß6QXQ7+Z_`qH/a)Cc4",
+   ".WFOéPbLüéGß6QXQ7+Z_`qH/a)Cc4",
+   ".WFOéPbLüéGß6QXQ7+Z_`qH/a)Cc4"
+  ],
+  [
+   "07漢&Y)漢eu漢Kgj$#iNl/zk",
+   "07漢&Y)漢eu漢Kgj$#iNl/zk",
+   "07漢Y)漢eu漢Kgj$iNl/zk"
+  ],
+  [
+   "\\MJGqQn|XCQao=|/],xiж",
+   "\\MJGqQn|XCQao=|/],xiж",
+   "\\MJGqQn|XCQao=|/],xiж"
+  ],
+  [
+   "{vü[ME16",
+   "{vü[ME16",
+   "{vü[ME16"
+  ],
+  [
+   "o7;D$lq7,!üd{7SiQQé",
+   "o7;D$lq7,!üd{7SiQQé",
+   "o7;D$lq7,!üd{7SiQQé"
+  ],
+  [
+   ":AEtjr[v|g&$gZ0K漢ΩéLu(",
+   ":AEtjr[v|g&$gZ0K漢ΩéLu(",
+   ":AEtjr[v|g$gZ0K漢ΩéLu("
+  ],
+  [
+   "OFyh<ymbH~=7é3>m",
+   "OFyh<ymbH~=7é3>m",
+   "OFyh<ymbH~=7é3>m"
+  ],
+  [
+   "NcFEwcVt8oe",
+   "NcFEwcVt8oe",
+   "NcFEwcVt8oe"
+  ],
+  [
+   "`!fé;!tRßß8=3sGDJ",
+   "`!fé;!tRßß8=3sGDJ",
+   "`!fé;!tRßß8=3sGDJ"
+  ],
+  [
+   "{[1=$/!Cd2>\\G_\"sLw\"€éAdp",
+   "{[1=$/!Cd2>\\G_sLw€éAdp",
+   "{[1=$/!Cd2>\\G_sLw€éAdp"
+  ],
+  [
+   "Nm9Y:漢3C}o9",
+   "Nm9Y:漢3C}o9",
+   "Nm9Y:漢3C}o9"
+  ],
+  [
+   "=dI<vm!p\"6pbed",
+   "=dI<vm!p6pbed",
+   "=dI<vm!p6pbed"
+  ],
+  [
+   "YNPR_n7HL:bwz\\As",
+   "YNPR_n7HL:bwz\\As",
+   "YNPR_n7HL:bwz\\As"
+  ],
+  [
+   "A}_3*i_]",
+   "A}_3*i_]",
+   "A}_3*i_]"
+  ],
+  [
+   "méf-~YNEGkNb",
+   "méf-~YNEGkNb",
+   "méf-~YNEGkNb"
+  ],
+  [
+   "pMb{||4B@NUT*,é'aжv#3x]漢",
+   "pMb{||4B@NUT*,éaжv#3x]漢",
+   "pMb{||4B@NUT*,éaжv3x]漢"
+  ],
+  [
+   "J*`$Iq4fi-oV6o4m8*EX",
+   "J*`$Iq4fi-oV6o4m8*EX",
+   "J*`$Iq4fi-oV6o4m8*EX"
+  ],
+  [
+   "UqAwT9j^O/*Z",
+   "UqAwT9j^O/*Z",
+   "UqAwT9j^O/*Z"
+  ],
+  [
+   "%-sk9漢L  QdC!mL}iSo9`.X5Gi&M#E",
+   "%-sk9漢LQdC!mL}iSo9`.X5Gi&M#E",
+   "%-sk9漢LQdC!mL}iSo9`.X5GiME"
+  ],
+  [
+   "O.s.tkΩ1nPk€s]1ji<.K\":\\(Nж+)E",
+   "O.s.tkΩ1nPk€s]1ji<.K:\\(Nж+)E",
+   "O.s.tkΩ1nPk€s]1ji<.K:\\(Nж+)E"
+  ],
+  [
+   "8wqGUß|) Vt5S^6EGж+",
+   "8wqGUß|)Vt5S^6EGж+",
+   "8wqGUß|)Vt5S^6EGж+"
+  ],
+  [
+   ":[ci.Ca,x2O`",
+   ":[ci.Ca,x2O`",
+   ":[ci.Ca,x2O`"
+  ],
+  [
+   ";)[T>I1`ü4UE'j ] ~dжS",
+   ";)[T>I1`ü4UEj]~dжS",
+   ";)[T>I1`ü4UEj]~dжS"
+  ],
+  [
+   "ZΩ9$x}PI(u|Wm EK~nLUa=oI[",
+   "ZΩ9$x}PI(u|WmEK~nLUa=oI[",
+   "ZΩ9$x}PI(u|WmEK~nLUa=oI["
+  ],
+  [
+   "elk \"PCJE4\\Urxn3D8GqAa^",
+   "elkPCJE4\\Urxn3D8GqAa^",
+   "elkPCJE4\\Urxn3D8GqAa^"
+  ],
+  [
+   "ßi  &IWAqΩa+6WSf3WC^Ilo*g€)",
+   "ßi&IWAqΩa+6WSf3WC^Ilo*g€)",
+   "ßiIWAqΩa+6WSf3WC^Ilo*g€)"
+  ],
+  [
+   "tg8dw,0hé:8,nw&R:?J]RNWCk",
+   "tg8dw,0hé:8,nw&R:?J]RNWCk",
+   "tg8dw,0hé:8,nwR:?J]RNWCk"
+  ],
+  [
+   "XsF >'wJ&/",
+   "XsF>wJ&/",
+   "XsF>wJ/"
+  ],
+  [
+   ".YB)fßwl\\",
+   ".YB)fßwl\\",
+   ".YB)fßwl\\"
+  ],
+  [
+   "\\tY{Mv\\F=p~X_htqwo]&&z.N'[nn%B",
+   "\\tY{Mv\\F=p~X_htqwo]&&z.N[nn%B",
+   "\\tY{Mv\\F=p~X_htqwo]z.N[nn%B"
+  ],
+  [
+   "|lc6Mt69<lbq^2)ßT,9X=<uD€ ]i.V",
+   "|lc6Mt69<lbq^2)ßT,9X=<uD€]i.V",
+   "|lc6Mt69<lbq^2)ßT,9X=<uD€]i.V"
+  ],
+  [
+   "ZW<€MZb/gQ{c\";nK0H'Vw=aE",
+   "ZW<€MZb/gQ{c;nK0HVw=aE",
+   "ZW<€MZb/gQ{c;nK0HVw=aE"
+  ],
+  [
+   "<3:-n<U]:.rT(C_-=%[",
+   "<3:-n<U]:.rT(C_-=%[",
+   "<3:-n<U]:.rT(C_-=%["
+  ],
+  [
+   "|/yzg+Mgpy+-ж+&",
+   "|/yzg+Mgpy+-ж+&",
+   "|/yzg+Mgpy+-ж+"
+  ],
+  [
+   "gxNMN6V4$S&}-J<hJ{;/`€?`3ygv",
+   "gxNMN6V4$S&}-J<hJ{;/`€?`3ygv",
+   "gxNMN6V4$S}-J<hJ{;/`€?`3ygv"
+  ],
+  [
+   "[#wf&%*Y{1f#9V",
+   "[#wf&%*Y{1f#9V",
+   "[wf%*Y{1f9V"
+  ],
+  [
+   "8@aA@Rk5S9jj,",
+   "8@aA@Rk5S9jj,",
+   "8@aA@Rk5S9jj,"
+  ],
+  [
+   "Ωd4IPu}Xv",
+   "Ωd4IPu}Xv",
+   "Ωd4IPu}Xv"
+  ],
+  [
+   "I*OJжoPA%BB}K#[g漢",
+   "I*OJжoPA%BB}K#[g漢",
+   "I*OJжoPA%BB}K[g漢"
+  ],
+  [
+   "Za[Fж漢J|os`жMx{drb5,i0g+P",
+   "Za[Fж漢J|os`жMx{drb5,i0g+P",
+   "Za[Fж漢J|os`жMx{drb5,i0g+P"
+  ],
+  [
+   "%6C_^[2)h5漢M3$ZVΩBD&qrxhnrlB",
+   "%6C_^[2)h5漢M3$ZVΩBD&qrxhnrlB",
+   "%6C_^[2)h5漢M3$ZVΩBDqrxhnrlB"
+  ],
+  [
+   "}sJMv9H^Y+8CJ#W%]Mf/*>##}",
+   "}sJMv9H^Y+8CJ#W%]Mf/*>##}",
+   "}sJMv9H^Y+8CJW%]Mf/*>}"
+  ],
+  [
+   ".=#YX@2Erf-o€q&\\<$f4%Q@4~4)漢S[",
+   ".=#YX@2Erf-o€q&\\<$f4%Q@4~4)漢S[",
+   ".=YX@2Erf-o€q\\<$f4%Q@4~4)漢S["
+  ],
+  [
+   "pnp$cjB7ViefZ",
+   "pnp$cjB7ViefZ",
+   "pnp$cjB7ViefZ"
+  ],
+  [
+   "B0t#.G%s€méd{`^H€\\E3>dXlF H!",
+   "B0t#.G%s€méd{`^H€\\E3>dXlFH!",
+   "B0t.G%s€méd{`^H€\\E3>dXlFH!"
+  ],
+  [
+   "_\\,WSoüY;",
+   "_\\,WSoüY;",
+   "_\\,WSoüY;"
+  ],
+  [
+   "FpY8MF/$[RbLnui]\"J2y<31jfyVyM",
+   "FpY8MF/$[RbLnui]J2y<31jfyVyM",
+   "FpY8MF/$[RbLnui]J2y<31jfyVyM"
+  ],
+  [
+   "?nWeqAZbWжM24{Gi",
+   "?nWeqAZbWжM24{Gi",
+   "?nWeqAZbWжM24{Gi"
+  ],
+  [
+   ":9Zw34CFyWq9U47",
+   ":9Zw34CFyWq9U47",
+   ":9Zw34CFyWq9U47"
+  ],
+  [
+   "жжA,LOyBgnU)_!",
+   "жжA,LOyBgnU)_!",
+   "жжA,LOyBgnU)_!"
+  ],
+  [
+   "(!.CVuDYUU-I€M€]FC\"J\\Lc?~:J9",
+   "(!.CVuDYUU-I€M€]FCJ\\Lc?~:J9",
+   "(!.CVuDYUU-I€M€]FCJ\\Lc?~:J9"
+  ],
+  [
+   "=?€/($'3SRn{)U,tmB?h=(",
+   "=?€/($3SRn{)U,tmB?h=(",
+   "=?€/($3SRn{)U,tmB?h=("
+  ],
+  [
+   "mg)i\\f|`é#ppy",
+   "mg)i\\f|`é#ppy",
+   "mg)i\\f|`éppy"
+  ],
+  [
+   "x9o2V:NG3P)mfnSh:@CeY`7<odOUNX",
+   "x9o2V:NG3P)mfnSh:@CeY`7<odOUNX",
+   "x9o2V:NG3P)mfnSh:@CeY`7<odOUNX"
+  ],
+  [
+   "漢*NB>Vp'W",
+   "漢*NB>VpW",
+   "漢*NB>VpW"
+  ],
+  [
+   "Zd}Yv7narAu4o;HF,;`ob",
+   "Zd}Yv7narAu4o;HF,;`ob",
+   "Zd}Yv7narAu4o;HF,;`ob"
+  ],
+  [
+   "&/aq5=~Lgj!Tx~&$4",
+   "&/aq5=~Lgj!Tx~&$4",
+   "/aq5=~Lgj!Tx~$4"
+  ],
+  [
+   "n3^B3Y.NΩ&",
+   "n3^B3Y.NΩ&",
+   "n3^B3Y.NΩ"
+  ],
+  [
+   "E0V&>qeжoIv]^J:S|",
+   "E0V&>qeжoIv]^J:S|",
+   "E0V>qeжoIv]^J:S|"
+  ],
+  [
+   "漢5U,2M3=|5:5;(漢(3^ üGe;-",
+   "漢5U,2M3=|5:5;(漢(3^üGe;-",
+   "漢5U,2M3=|5:5;(漢(3^üGe;-"
+  ],
+  [
+   "ob{V1,^];yTV~Kw.\\=Dx}+",
+   "ob{V1,^];yTV~Kw.\\=Dx}+",
+   "ob{V1,^];yTV~Kw.\\=Dx}+"
+  ],
+  [
+   ">Kgc@{3f",
+   ">Kgc@{3f",
+   ">Kgc@{3f"
+  ],
+  [
+   "q$>3 I*:&>pCd*",
+   "q$>3I*:&>pCd*",
+   "q$>3I*:>pCd*"
+  ],
+  [
+   "A!0!|tE?/",
+   "A!0!|tE?/",
+   "A!0!|tE?/"
+  ],
+  [
+   "`rE#=7ßV)",
+   "`rE#=7ßV)",
+   "`rE=7ßV)"
+  ],
+  [
+   "Irg:ß(${-;&5t/^KP2|/",
+   "Irg:ß(${-;&5t/^KP2|/",
+   "Irg:ß(${-;5t/^KP2|/"
+  ],
+  [
+   "s漢&-KJK^h4tüIe#og€ж(ZK]Vt",
+   "s漢&-KJK^h4tüIe#og€ж(ZK]Vt",
+   "s漢-KJK^h4tüIeog€ж(ZK]Vt"
+  ],
+  [
+   "n~h-[I lq 'X[NKG",
+   "n~h-[IlqX[NKG",
+   "n~h-[IlqX[NKG"
+  ],
+  [
+   "$$u]ZSzD2hiN!u*lh",
+   "$$u]ZSzD2hiN!u*lh",
+   "$$u]ZSzD2hiN!u*lh"
+  ],
+  [
+   "sNz[>KA2Z4ScFe)fzJßI,Q$}E]",
+   "sNz[>KA2Z4ScFe)fzJßI,Q$}E]",
+   "sNz[>KA2Z4ScFe)fzJßI,Q$}E]"
+  ],
+  [
+   "A]>Y'7CheTzl#4Q;efE",
+   "A]>Y7CheTzl#4Q;efE",
+   "A]>Y7CheTzl4Q;efE"
+  ],
+  [
+   ";0CΩ^ZTp",
+   ";0CΩ^ZTp",
+   ";0CΩ^ZTp"
+  ],
+  [
+   "nж/l\\o\"wjed",
+   "nж/l\\owjed",
+   "nж/l\\owjed"
+  ],
+  [
+   "<t`zNUR ü}ni>hLq)ü?kc",
+   "<t`zNURü}ni>hLq)ü?kc",
+   "<t`zNURü}ni>hLq)ü?kc"
+  ],
+  [
+   "u(}M|~%mZ2/üQ;h]L^\"KC]",
+   "u(}M|~%mZ2/üQ;h]L^KC]",
+   "u(}M|~%mZ2/üQ;h]L^KC]"
+  ],
+  [
+   "'S\"`lΩ9l+XH\\}n/Rm1",
+   "S`lΩ9l+XH\\}n/Rm1",
+   "S`lΩ9l+XH\\}n/Rm1"
+  ],
+  [
+   "YüpcQ!^w>0Ωf4",
+   "YüpcQ!^w>0Ωf4",
+   "YüpcQ!^w>0Ωf4"
+  ],
+  [
+   "]Q66Ω+5lßж!.IM\\",
+   "]Q66Ω+5lßж!.IM\\",
+   "]Q66Ω+5lßж!.IM\\"
+  ],
+  [
+   "wUQ|K]#Yd_",
+   "wUQ|K]#Yd_",
+   "wUQ|K]Yd_"
+  ],
+  [
+   "9I/.\\жBgGD!YжWhBi éM)€R[жc~iü[",
+   "9I/.\\жBgGD!YжWhBiéM)€R[жc~iü[",
+   "9I/.\\жBgGD!YжWhBiéM)€R[жc~iü["
+  ],
+  [
+   "w{R2{95f8\\QzMgC%`é\\s=ßI",
+   "w{R2{95f8\\QzMgC%`é\\s=ßI",
+   "w{R2{95f8\\QzMgC%`é\\s=ßI"
+  ],
+  [
+   "Y!$|&!vK{Xod",
+   "Y!$|&!vK{Xod",
+   "Y!$|!vK{Xod"
+  ],
+  [
+   "&_Z8q:YOL?Vz:Q}",
+   "&_Z8q:YOL?Vz:Q}",
+   "_Z8q:YOL?Vz:Q}"
+  ],
+  [
+   "u`B&N;ma`0n0N",
+   "u`B&N;ma`0n0N",
+   "u`BN;ma`0n0N"
+  ],
+  [
+   "XEw1NftiFkJGFfl ]",
+   "XEw1NftiFkJGFfl]",
+   "XEw1NftiFkJGFfl]"
+  ],
+  [
+   "YA<€`[aH U",
+   "YA<€`[aHU",
+   "YA<€`[aHU"
+  ],
+  [
+   "Y€jM1v6Z@mL2üQs1vDxqY:fv&.漢U",
+   "Y€jM1v6Z@mL2üQs1vDxqY:fv&.漢U",
+   "Y€jM1v6Z@mL2üQs1vDxqY:fv.漢U"
+  ],
+  [
+   "p#G9.sж\"64N4JIe\\(c^nMr",
+   "p#G9.sж64N4JIe\\(c^nMr",
+   "pG9.sж64N4JIe\\(c^nMr"
+  ],
+  [
+   " Eßhug@4mlJuT1)O3B%)Z",
+   "Eßhug@4mlJuT1)O3B%)Z",
+   "Eßhug@4mlJuT1)O3B%)Z"
+  ],
+  [
+   "s,84\"ü+6Ll",
+   "s,84ü+6Ll",
+   "s,84ü+6Ll"
+  ],
+  [
+   "@kJTEnA`?g5w.漢|S7GVA@&",
+   "@kJTEnA`?g5w.漢|S7GVA@&",
+   "@kJTEnA`?g5w.漢|S7GVA@"
+  ],
+  [
+   "qOOqwvccbh^AKжexzv\"lmßM",
+   "qOOqwvccbh^AKжexzvlmßM",
+   "qOOqwvccbh^AKжexzvlmßM"
+  ],
+  [
+   "Qc6üj>+XgIß^]%3p-MCPt<o{CttUO",
+   "Qc6üj>+XgIß^]%3p-MCPt<o{CttUO",
+   "Qc6üj>+XgIß^]%3p-MCPt<o{CttUO"
+  ],
+  [
+   "sD?rml#;GR%R*~",
+   "sD?rml#;GR%R*~",
+   "sD?rml;GR%R*~"
+  ],
+  [
+   "wH'Q9$D/zB`F漢hbJ",
+   "wHQ9$D/zB`F漢hbJ",
+   "wHQ9$D/zB`F漢hbJ"
+  ],
+  [
+   "z0NΩl|g!_j\\Q1i`1qd*_5ar",
+   "z0NΩl|g!_j\\Q1i`1qd*_5ar",
+   "z0NΩl|g!_j\\Q1i`1qd*_5ar"
+  ],
+  [
+   "KUeΩjI(UINTyVuh:$L1q*\"mNVhжl#V",
+   "KUeΩjI(UINTyVuh:$L1q*mNVhжl#V",
+   "KUeΩjI(UINTyVuh:$L1q*mNVhжlV"
+  ],
+  [
+   "3R,ß€K]-zoLz:d[B?T=.g\"LC",
+   "3R,ß€K]-zoLz:d[B?T=.gLC",
+   "3R,ß€K]-zoLz:d[B?T=.gLC"
+  ],
+  [
+   "?-j{/\"SmQpénU/3c'üDY",
+   "?-j{/SmQpénU/3cüDY",
+   "?-j{/SmQpénU/3cüDY"
+  ],
+  [
+   "漢]v|UM_pQenq?W)oj!}=\\€f",
+   "漢]v|UM_pQenq?W)oj!}=\\€f",
+   "漢]v|UM_pQenq?W)oj!}=\\€f"
+  ],
+  [
+   " iß`?€<fC3/n2tSΩжXVV<x",
+   "iß`?€<fC3/n2tSΩжXVV<x",
+   "iß`?€<fC3/n2tSΩжXVV<x"
+  ],
+  [
+   "z.!>}漢jX[S漢3GX6RZ)S$0IJgzutN",
+   "z.!>}漢jX[S漢3GX6RZ)S$0IJgzutN",
+   "z.!>}漢jX[S漢3GX6RZ)S$0IJgzutN"
+  ],
+  [
+   "L?x0AjM&_H/",
+   "L?x0AjM&_H/",
+   "L?x0AjM_H/"
+  ],
+  [
+   ".ü-[6%d`]?-oru?éiK/zl",
+   ".ü-[6%d`]?-oru?éiK/zl",
+   ".ü-[6%d`]?-oru?éiK/zl"
+  ],
+  [
+   "QP9GA,j\"d;vXPFYrw01WA",
+   "QP9GA,jd;vXPFYrw01WA",
+   "QP9GA,jd;vXPFYrw01WA"
+  ],
+  [
+   "jfS_4g漢\\`4f%;FbbpüFnv",
+   "jfS_4g漢\\`4f%;FbbpüFnv",
+   "jfS_4g漢\\`4f%;FbbpüFnv"
+  ],
+  [
+   "1ß5nid0>漢:",
+   "1ß5nid0>漢:",
+   "1ß5nid0>漢:"
+  ],
+  [
+   "kU`apVkDn;Knlzb@",
+   "kU`apVkDn;Knlzb@",
+   "kU`apVkDn;Knlzb@"
+  ],
+  [
+   "(Eq8Y{Ms\"Wd~SN",
+   "(Eq8Y{MsWd~SN",
+   "(Eq8Y{MsWd~SN"
+  ],
+  [
+   "-zce`sq68 漢Xü\" 13üß:",
+   "-zce`sq68漢Xü13üß:",
+   "-zce`sq68漢Xü13üß:"
+  ],
+  [
+   "csT?ßm&m_X*LpR 1M#)O<.TB",
+   "csT?ßm&m_X*LpR1M#)O<.TB",
+   "csT?ßmm_X*LpR1M)O<.TB"
+  ],
+  [
+   "I&\\Uj7a`wE\"Ouo",
+   "I&\\Uj7a`wEOuo",
+   "I\\Uj7a`wEOuo"
+  ],
+  [
+   "h<&Qa5xO-~H",
+   "h<&Qa5xO-~H",
+   "h<Qa5xO-~H"
+  ],
+  [
+   "Cm3\"D?^wxTmeFD_aYb7Y\\9Pi]",
+   "Cm3D?^wxTmeFD_aYb7Y\\9Pi]",
+   "Cm3D?^wxTmeFD_aYb7Y\\9Pi]"
+  ],
+  [
+   "yUmea|UHw+eüxXßOiw4aK8{+'tO7",
+   "yUmea|UHw+eüxXßOiw4aK8{+tO7",
+   "yUmea|UHw+eüxXßOiw4aK8{+tO7"
+  ],
+  [
+   " j5éjayJw>^{_F:2>üGж^vjJ",
+   "j5éjayJw>^{_F:2>üGж^vjJ",
+   "j5éjayJw>^{_F:2>üGж^vjJ"
+  ],
+  [
+   "oBg=0ts9 -yyOCS]P7",
+   "oBg=0ts9-yyOCS]P7",
+   "oBg=0ts9-yyOCS]P7"
+  ],
+  [
+   "=cj1:/UsJ",
+   "=cj1:/UsJ",
+   "=cj1:/UsJ"
+  ],
+  [
+   "Sb#IXdWV*UP]:#",
+   "Sb#IXdWV*UP]:#",
+   "SbIXdWV*UP]:"
+  ],
+  [
+   "vF Ifv!`жüGZ9!XQCSI}5ü",
+   "vFIfv!`жüGZ9!XQCSI}5ü",
+   "vFIfv!`жüGZ9!XQCSI}5ü"
+  ],
+  [
+   "Z@%UPuVT",
+   "Z@%UPuVT",
+   "Z@%UPuVT"
+  ],
+  [
+   "VyV€@>tSe",
+   "VyV€@>tSe",
+   "VyV€@>tSe"
+  ],
+  [
+   "hP>&m-é[b}HPE7QE9Glf",
+   "hP>&m-é[b}HPE7QE9Glf",
+   "hP>m-é[b}HPE7QE9Glf"
+  ],
+  [
+   ">жw=< t](3",
+   ">жw=<t](3",
+   ">жw=<t](3"
+  ],
+  [
+   "EH^'uhcqjMOy5=h-x8W^=JVYß_k;",
+   "EH^uhcqjMOy5=h-x8W^=JVYß_k;",
+   "EH^uhcqjMOy5=h-x8W^=JVYß_k;"
+  ],
+  [
+   "VqCJCpa_`[33q:cCnWP\"9Intm# ",
+   "VqCJCpa_`[33q:cCnWP9Intm#",
+   "VqCJCpa_`[33q:cCnWP9Intm"
+  ],
+  [
+   "maXaw_ж漢,",
+   "maXaw_ж漢,",
+   "maXaw_ж漢,"
+  ],
+  [
+   "HRZ=€,/vbtI`",
+   "HRZ=€,/vbtI`",
+   "HRZ=€,/vbtI`"
+  ],
+  [
+   "Jrr5h9Ad(Zo;#eW0\\",
+   "Jrr5h9Ad(Zo;#eW0\\",
+   "Jrr5h9Ad(Zo;eW0\\"
+  ],
+  [
+   ",uyl}lXN,hvΩPjd,V&VжQ'aAh_f7ßn",
+   ",uyl}lXN,hvΩPjd,V&VжQaAh_f7ßn",
+   ",uyl}lXN,hvΩPjd,VVжQaAh_f7ßn"
+  ],
+  [
+   "64H)$;'$n;oeΩ`ßfb_E}bj?/\"0",
+   "64H)$;$n;oeΩ`ßfb_E}bj?/0",
+   "64H)$;$n;oeΩ`ßfb_E}bj?/0"
+  ],
+  [
+   "q`5AQl3Wt}!aW",
+   "q`5AQl3Wt}!aW",
+   "q`5AQl3Wt}!aW"
+  ],
+  [
+   "{?`Xs漢A%5t",
+   "{?`Xs漢A%5t",
+   "{?`Xs漢A%5t"
+  ],
+  [
+   "p9Dm@inj=ücX)6>wlDau",
+   "p9Dm@inj=ücX)6>wlDau",
+   "p9Dm@inj=ücX)6>wlDau"
+  ],
+  [
+   "msr>j/[2Z2m/s~]v>lLp/3Et&XoA漢",
+   "msr>j/[2Z2m/s~]v>lLp/3Et&XoA漢",
+   "msr>j/[2Z2m/s~]v>lLp/3EtXoA漢"
+  ],
+  [
+   "xH&~Mp]vWvGIA^2",
+   "xH&~Mp]vWvGIA^2",
+   "xH~Mp]vWvGIA^2"
+  ],
+  [
+   "M~3k:ATNE$]) P\\5#n`",
+   "M~3k:ATNE$])P\\5#n`",
+   "M~3k:ATNE$])P\\5n`"
+  ],
+  [
+   ":ukdPéLW6o\":cQl\".ef;\\y1",
+   ":ukdPéLW6o:cQl.ef;\\y1",
+   ":ukdPéLW6o:cQl.ef;\\y1"
+  ],
+  [
+   "b.NfF-TrW<J7m\"t$)Ω\\M[K;",
+   "b.NfF-TrW<J7mt$)Ω\\M[K;",
+   "b.NfF-TrW<J7mt$)Ω\\M[K;"
+  ],
+  [
+   "Tq8ß ^Vtvj7B-€RJvCv`[f漢M&kre=",
+   "Tq8ß^Vtvj7B-€RJvCv`[f漢M&kre=",
+   "Tq8ß^Vtvj7B-€RJvCv`[f漢Mkre="
+  ],
+  [
+   "T{o€b|;d\\O",
+   "T{o€b|;d\\O",
+   "T{o€b|;d\\O"
+  ],
+  [
+   "YdBYR}gCXR0yB->a",
+   "YdBYR}gCXR0yB->a",
+   "YdBYR}gCXR0yB->a"
+  ],
+  [
+   "U>;gST;/\"e€&1[mfK-5?MA",
+   "U>;gST;/e€&1[mfK-5?MA",
+   "U>;gST;/e€1[mfK-5?MA"
+  ],
+  [
+   "жpBj(F!23Tp",
+   "жpBj(F!23Tp",
+   "жpBj(F!23Tp"
+  ],
+  [
+   "q# 1n^Wb!v-;<",
+   "q#1n^Wb!v-;<",
+   "q1n^Wb!v-;<"
+  ],
+  [
+   "z9*2O~xb",
+   "z9*2O~xb",
+   "z9*2O~xb"
+  ],
+  [
+   "{FcR!ov\\Bd",
+   "{FcR!ov\\Bd",
+   "{FcR!ov\\Bd"
+  ],
+  [
+   "vжKoΩv\"r|t=,8B",
+   "vжKoΩvr|t=,8B",
+   "vжKoΩvr|t=,8B"
+  ],
+  [
+   "qL*ky+O|éZvVFXZжYZ@sVY:",
+   "qL*ky+O|éZvVFXZжYZ@sVY:",
+   "qL*ky+O|éZvVFXZжYZ@sVY:"
+  ],
+  [
+   "ΩSn7Mm\\y,/\\UaS;",
+   "ΩSn7Mm\\y,/\\UaS;",
+   "ΩSn7Mm\\y,/\\UaS;"
+  ],
+  [
+   "ß:^RQ[F|al#Co46b@ß",
+   "ß:^RQ[F|al#Co46b@ß",
+   "ß:^RQ[F|alCo46b@ß"
+  ],
+  [
+   "OOfYR=ülJF:IO_~n-漢stUe\\",
+   "OOfYR=ülJF:IO_~n-漢stUe\\",
+   "OOfYR=ülJF:IO_~n-漢stUe\\"
+  ],
+  [
+   "o.I|vNvfaYZow/ж",
+   "o.I|vNvfaYZow/ж",
+   "o.I|vNvfaYZow/ж"
+  ],
+  [
+   "I#e[EzMB}ßDßgD'[U[J\\y|C=g;]",
+   "I#e[EzMB}ßDßgD[U[J\\y|C=g;]",
+   "Ie[EzMB}ßDßgD[U[J\\y|C=g;]"
+  ],
+  [
+   "3AéA0l;ß",
+   "3AéA0l;ß",
+   "3AéA0l;ß"
+  ],
+  [
+   "~WLéH.&Bb~.Hqt",
+   "~WLéH.&Bb~.Hqt",
+   "~WLéH.Bb~.Hqt"
+  ],
+  [
+   "*W@=bjR[{:\"[s4d~\\/gaoé9xd",
+   "*W@=bjR[{:[s4d~\\/gaoé9xd",
+   "*W@=bjR[{:[s4d~\\/gaoé9xd"
+  ],
+  [
+   "W.|d^Pa`=e2[vW,€wK0",
+   "W.|d^Pa`=e2[vW,€wK0",
+   "W.|d^Pa`=e2[vW,€wK0"
+  ],
+  [
+   "nJxh3;?:",
+   "nJxh3;?:",
+   "nJxh3;?:"
+  ],
+  [
+   "x-LlpTSToo!",
+   "x-LlpTSToo!",
+   "x-LlpTSToo!"
+  ],
+  [
+   "iUu5féßbe?$%YAH}Yü@ жP;*NeF",
+   "iUu5féßbe?$%YAH}Yü@жP;*NeF",
+   "iUu5féßbe?$%YAH}Yü@жP;*NeF"
+  ],
+  [
+   "[X>Xe >fS1 ]o",
+   "[X>Xe>fS1]o",
+   "[X>Xe>fS1]o"
+  ],
+  [
+   ";hZiO\"AS€d-jvo^}`;uP漢.MKK!P7",
+   ";hZiOAS€d-jvo^}`;uP漢.MKK!P7",
+   ";hZiOAS€d-jvo^}`;uP漢.MKK!P7"
+  ],
+  [
+   "AΩYt;wü`)ж~5[6e!kßaY@Br",
+   "AΩYt;wü`)ж~5[6e!kßaY@Br",
+   "AΩYt;wü`)ж~5[6e!kßaY@Br"
+  ],
+  [
+   "~mG\\aOklaIWHm:#8@<J^",
+   "~mG\\aOklaIWHm:#8@<J^",
+   "~mG\\aOklaIWHm:8@<J^"
+  ],
+  [
+   "$9mAj\"}ycFJE?AkM)Pf1-f2ü漢D€ze",
+   "$9mAj}ycFJE?AkM)Pf1-f2ü漢D€ze",
+   "$9mAj}ycFJE?AkM)Pf1-f2ü漢D€ze"
+  ],
+  [
+   "S<PL%€XebLΩrDcr)=_$\\PΩ\\y1<)",
+   "S<PL%€XebLΩrDcr)=_$\\PΩ\\y1<)",
+   "S<PL%€XebLΩrDcr)=_$\\PΩ\\y1<)"
+  ],
+  [
+   "n-*<#ROKt?UuKODhжz8i!漢eß",
+   "n-*<#ROKt?UuKODhжz8i!漢eß",
+   "n-*<ROKt?UuKODhжz8i!漢eß"
+  ],
+  [
+   ".F1üuw&aMi>BN&wsW,,zB*e€жy_",
+   ".F1üuw&aMi>BN&wsW,,zB*e€жy_",
+   ".F1üuwaMi>BNwsW,,zB*e€жy_"
+  ],
+  [
+   "V0'f0Kzt%漢DM9(жg@|\\ж3oMl-a%&",
+   "V0f0Kzt%漢DM9(жg@|\\ж3oMl-a%&",
+   "V0f0Kzt%漢DM9(жg@|\\ж3oMl-a%"
+  ],
+  [
+   "op~{V{C8)R}ß$C2wPqE6>jFvbwDQCS",
+   "op~{V{C8)R}ß$C2wPqE6>jFvbwDQCS",
+   "op~{V{C8)R}ß$C2wPqE6>jFvbwDQCS"
+  ],
+  [
+   "MHgT^@k~WXqA^F[RßXB%v-L=?O",
+   "MHgT^@k~WXqA^F[RßXB%v-L=?O",
+   "MHgT^@k~WXqA^F[RßXB%v-L=?O"
+  ],
+  [
+   ".{AWDbO?XieBL`v(9€{|DLutnFs",
+   ".{AWDbO?XieBL`v(9€{|DLutnFs",
+   ".{AWDbO?XieBL`v(9€{|DLutnFs"
+  ],
+  [
+   "|+V_TgU€>h&éx^ !{aC漢xFgk",
+   "|+V_TgU€>h&éx^!{aC漢xFgk",
+   "|+V_TgU€>héx^!{aC漢xFgk"
+  ],
+  [
+   ")ojwzXk8GX+7*iR2/:#vn\"_",
+   ")ojwzXk8GX+7*iR2/:#vn_",
+   ")ojwzXk8GX+7*iR2/:vn_"
+  ],
+  [
+   "N8*l>qRu€E/?Ωll=ERCO",
+   "N8*l>qRu€E/?Ωll=ERCO",
+   "N8*l>qRu€E/?Ωll=ERCO"
+  ],
+  [
+   "+&6`uhpPNU",
+   "+&6`uhpPNU",
+   "+6`uhpPNU"
+  ],
+  [
+   "t{9>I7*RBC)c4K",
+   "t{9>I7*RBC)c4K",
+   "t{9>I7*RBC)c4K"
+  ],
+  [
+   "Rw6Ωéjß<{9.vt,DH(U!_/}JFPReQ",
+   "Rw6Ωéjß<{9.vt,DH(U!_/}JFPReQ",
+   "Rw6Ωéjß<{9.vt,DH(U!_/}JFPReQ"
+  ],
+  [
+   "K(mOI@D*$gP2u",
+   "K(mOI@D*$gP2u",
+   "K(mOI@D*$gP2u"
+  ],
+  [
+   "2NCY&erxI€v~dv[<KW",
+   "2NCY&erxI€v~dv[<KW",
+   "2NCYerxI€v~dv[<KW"
+  ],
+  [
+   " \"*:MY`7?wXwж|",
+   "*:MY`7?wXwж|",
+   "*:MY`7?wXwж|"
+  ],
+  [
+   "zn8MΩжC>B0p{Prsl9ldYIжwu",
+   "zn8MΩжC>B0p{Prsl9ldYIжwu",
+   "zn8MΩжC>B0p{Prsl9ldYIжwu"
+  ],
+  [
+   "Alt<:j,ggTßdQ",
+   "Alt<:j,ggTßdQ",
+   "Alt<:j,ggTßdQ"
+  ],
+  [
+   ":ü+)A6漢|S@YyU漢NYQ<.&I.Re+",
+   ":ü+)A6漢|S@YyU漢NYQ<.&I.Re+",
+   ":ü+)A6漢|S@YyU漢NYQ<.I.Re+"
+  ],
+  [
+   "ozYNi_, 9qCDM*cF:F]+",
+   "ozYNi_,9qCDM*cF:F]+",
+   "ozYNi_,9qCDM*cF:F]+"
+  ],
+  [
+   ")b;LH88KZj",
+   ")b;LH88KZj",
+   ")b;LH88KZj"
+  ],
+  [
+   "#{#+wzxT`0 PPfd0b",
+   "#{#+wzxT`0PPfd0b",
+   "{+wzxT`0PPfd0b"
+  ],
+  [
+   "<z[L)_|/??$",
+   "<z[L)_|/??$",
+   "<z[L)_|/??$"
+  ],
+  [
+   "éßW0zXC<4",
+   "éßW0zXC<4",
+   "éßW0zXC<4"
+  ],
+  [
+   "R,k4pU_cgW:/t`\\a!%ΩNmIlp,MT",
+   "R,k4pU_cgW:/t`\\a!%ΩNmIlp,MT",
+   "R,k4pU_cgW:/t`\\a!%ΩNmIlp,MT"
+  ],
+  [
+   "L4qwtb-ßV;x6oy.eyEQ{",
+   "L4qwtb-ßV;x6oy.eyEQ{",
+   "L4qwtb-ßV;x6oy.eyEQ{"
+  ],
+  [
+   "rlRж<[}?3E+M.I",
+   "rlRж<[}?3E+M.I",
+   "rlRж<[}?3E+M.I"
+  ],
+  [
+   "m%(0{M6n(X?Q8OZl`9WC\"Tg_€*hdsb",
+   "m%(0{M6n(X?Q8OZl`9WCTg_€*hdsb",
+   "m%(0{M6n(X?Q8OZl`9WCTg_€*hdsb"
+  ],
+  [
+   "ßb8%!@`+NT",
+   "ßb8%!@`+NT",
+   "ßb8%!@`+NT"
+  ],
+  [
+   "aRAΩiΩzmfSüKx;1€# :gk@",
+   "aRAΩiΩzmfSüKx;1€#:gk@",
+   "aRAΩiΩzmfSüKx;1€:gk@"
+  ],
+  [
+   "KJwßRy\" B9)O4?8i{ßo",
+   "KJwßRyB9)O4?8i{ßo",
+   "KJwßRyB9)O4?8i{ßo"
+  ],
+  [
+   "LPHqé(XZ$VZKOV<)Q9;ab?:",
+   "LPHqé(XZ$VZKOV<)Q9;ab?:",
+   "LPHqé(XZ$VZKOV<)Q9;ab?:"
+  ],
+  [
+   "Zж`uG#^f$WG]P#t4[qi漢<,}5-4",
+   "Zж`uG#^f$WG]P#t4[qi漢<,}5-4",
+   "Zж`uG^f$WG]Pt4[qi漢<,}5-4"
+  ],
+  [
+   "6G4&$ -r$vß€",
+   "6G4&$-r$vß€",
+   "6G4$-r$vß€"
+  ],
+  [
+   "h\\,Q9s-=!M|&éE$,q=*TwC_~q/:u-@",
+   "h\\,Q9s-=!M|&éE$,q=*TwC_~q/:u-@",
+   "h\\,Q9s-=!M|éE$,q=*TwC_~q/:u-@"
+  ],
+  [
+   "Be6U*#l'Ou#;Ω*hG.:\\Q-Yf_",
+   "Be6U*#lOu#;Ω*hG.:\\Q-Yf_",
+   "Be6U*lOu;Ω*hG.:\\Q-Yf_"
+  ],
+  [
+   "v3]!?,z\\|+2!6vH)L~Hbß",
+   "v3]!?,z\\|+2!6vH)L~Hbß",
+   "v3]!?,z\\|+2!6vH)L~Hbß"
+  ],
+  [
+   "%_ _,+}7FOh8w/%",
+   "%__,+}7FOh8w/%",
+   "%__,+}7FOh8w/%"
+  ],
+  [
+   "]=A<a4hΩt",
+   "]=A<a4hΩt",
+   "]=A<a4hΩt"
+  ],
+  [
+   "&p3P-p_<M",
+   "&p3P-p_<M",
+   "p3P-p_<M"
+  ],
+  [
+   "O^O,9Id Go^kBD",
+   "O^O,9IdGo^kBD",
+   "O^O,9IdGo^kBD"
+  ],
+  [
+   "жEGUao+O]1c",
+   "жEGUao+O]1c",
+   "жEGUao+O]1c"
+  ],
+  [
+   "bNBfß漢UVu_v(Sé@",
+   "bNBfß漢UVu_v(Sé@",
+   "bNBfß漢UVu_v(Sé@"
+  ],
+  [
+   ".33pbYWKyO",
+   ".33pbYWKyO",
+   ".33pbYWKyO"
+  ],
+  [
+   "1D50vLfVZ$SUfK>di%qORwCaqynd",
+   "1D50vLfVZ$SUfK>di%qORwCaqynd",
+   "1D50vLfVZ$SUfK>di%qORwCaqynd"
+  ],
+  [
+   "cjb!UK[g+K}uüaJжym",
+   "cjb!UK[g+K}uüaJжym",
+   "cjb!UK[g+K}uüaJжym"
+  ],
+  [
+   "fΩ2-Bj$ql)7rk=Y%",
+   "fΩ2-Bj$ql)7rk=Y%",
+   "fΩ2-Bj$ql)7rk=Y%"
+  ],
+  [
+   "%ZVM5éF8&y%1)q$i~(.B]3a1J",
+   "%ZVM5éF8&y%1)q$i~(.B]3a1J",
+   "%ZVM5éF8y%1)q$i~(.B]3a1J"
+  ],
+  [
+   ".Fs/NL]g<",
+   ".Fs/NL]g<",
+   ".Fs/NL]g<"
+  ],
+  [
+   "+lß) gqy\"?O",
+   "+lß)gqy?O",
+   "+lß)gqy?O"
+  ],
+  [
+   "vvRtΩYU>uM*rE/!ж9su%?#}HA@\\Cß",
+   "vvRtΩYU>uM*rE/!ж9su%?#}HA@\\Cß",
+   "vvRtΩYU>uM*rE/!ж9su%?}HA@\\Cß"
+  ],
+  [
+   "vpжiU@spW1@QLnxR8VG",
+   "vpжiU@spW1@QLnxR8VG",
+   "vpжiU@spW1@QLnxR8VG"
+  ],
+  [
+   "g{fSüa3jyRj#!x;ayß:W5$c",
+   "g{fSüa3jyRj#!x;ayß:W5$c",
+   "g{fSüa3jyRj!x;ayß:W5$c"
+  ],
+  [
+   "^3;DGSJe,roAßV EжVIt bwiDye",
+   "^3;DGSJe,roAßVEжVItbwiDye",
+   "^3;DGSJe,roAßVEжVItbwiDye"
+  ],
+  [
+   "%^#/ж|zwn\"ujvI2QM@p",
+   "%^#/ж|zwnujvI2QM@p",
+   "%^/ж|zwnujvI2QM@p"
+  ],
+  [
+   "D$9-Q%:yRn;6SS",
+   "D$9-Q%:yRn;6SS",
+   "D$9-Q%:yRn;6SS"
+  ],
+  [
+   "iV6Q$7<$",
+   "iV6Q$7<$",
+   "iV6Q$7<$"
+  ],
+  [
+   "a.ßh€9+U漢LFü漢<ik=8",
+   "a.ßh€9+U漢LFü漢<ik=8",
+   "a.ßh€9+U漢LFü漢<ik=8"
+  ],
+  [
+   "7-G[TO*AMnvtuP%4LΩeü}",
+   "7-G[TO*AMnvtuP%4LΩeü}",
+   "7-G[TO*AMnvtuP%4LΩeü}"
+  ],
+  [
+   "BId4^qFLaCnжS@y-uTBGG+qI~GEa",
+   "BId4^qFLaCnжS@y-uTBGG+qI~GEa",
+   "BId4^qFLaCnжS@y-uTBGG+qI~GEa"
+  ],
+  [
+   "7wVLbc8Bg+4?4r8",
+   "7wVLbc8Bg+4?4r8",
+   "7wVLbc8Bg+4?4r8"
+  ],
+  [
+   "+:C:<I,7ж",
+   "+:C:<I,7ж",
+   "+:C:<I,7ж"
+  ],
+  [
+   "LIaQ|!\\>Az9q}DO%c!-SYC9|K",
+   "LIaQ|!\\>Az9q}DO%c!-SYC9|K",
+   "LIaQ|!\\>Az9q}DO%c!-SYC9|K"
+  ],
+  [
+   "]e'<`_ull\"]T$i",
+   "]e<`_ull]T$i",
+   "]e<`_ull]T$i"
+  ],
+  [
+   "!Y2h]eZ3ZaFdANP5<Vh}",
+   "!Y2h]eZ3ZaFdANP5<Vh}",
+   "!Y2h]eZ3ZaFdANP5<Vh}"
+  ],
+  [
+   "BF]@p+FS)&\\",
+   "BF]@p+FS)&\\",
+   "BF]@p+FS)\\"
+  ],
+  [
+   "L9=%漢)Z`",
+   "L9=%漢)Z`",
+   "L9=%漢)Z`"
+  ],
+  [
+   "076Xg*%Ex=rZ\\QD",
+   "076Xg*%Ex=rZ\\QD",
+   "076Xg*%Ex=rZ\\QD"
+  ],
+  [
+   "88Nad;G,k/",
+   "88Nad;G,k/",
+   "88Nad;G,k/"
+  ],
+  [
+   "LArsCs){€'жlMV",
+   "LArsCs){€жlMV",
+   "LArsCs){€жlMV"
+  ],
+  [
+   "mTw€Yr€TdBΩ'JQoOj~MmI|WL",
+   "mTw€Yr€TdBΩJQoOj~MmI|WL",
+   "mTw€Yr€TdBΩJQoOj~MmI|WL"
+  ],
+  [
+   "*$`éfZXdt}éQH漢",
+   "*$`éfZXdt}éQH漢",
+   "*$`éfZXdt}éQH漢"
+  ],
+  [
+   "fj€mFz4Hw\"a)$[atuv",
+   "fj€mFz4Hwa)$[atuv",
+   "fj€mFz4Hwa)$[atuv"
+  ],
+  [
+   "H33X.'X06oBG!>dV1{x,>Kpzj",
+   "H33X.X06oBG!>dV1{x,>Kpzj",
+   "H33X.X06oBG!>dV1{x,>Kpzj"
+  ],
+  [
+   "#p[WüYN\"жtC2hΩG",
+   "#p[WüYNжtC2hΩG",
+   "p[WüYNжtC2hΩG"
+  ],
+  [
+   "j>ß'$@#@qR4x)(&r4+}aW&<D",
+   "j>ß$@#@qR4x)(&r4+}aW&<D",
+   "j>ß$@@qR4x)(r4+}aW<D"
+  ],
+  [
+   "_PA%psOkrmA=9JAb",
+   "_PA%psOkrmA=9JAb",
+   "_PA%psOkrmA=9JAb"
+  ],
+  [
+   "T漢(45Vé(o%hniY\\.q4}é u9_A漢",
+   "T漢(45Vé(o%hniY\\.q4}éu9_A漢",
+   "T漢(45Vé(o%hniY\\.q4}éu9_A漢"
+  ],
+  [
+   "R€8V=[l5€3q.T*lz",
+   "R€8V=[l5€3q.T*lz",
+   "R€8V=[l5€3q.T*lz"
+  ],
+  [
+   "Q;|4`V\"j3%[,3mF0L9HtIb~$S<6Fw",
+   "Q;|4`Vj3%[,3mF0L9HtIb~$S<6Fw",
+   "Q;|4`Vj3%[,3mF0L9HtIb~$S<6Fw"
+  ],
+  [
+   "7Jz)_QU^uEgo4rmEzA>%+",
+   "7Jz)_QU^uEgo4rmEzA>%+",
+   "7Jz)_QU^uEgo4rmEzA>%+"
+  ],
+  [
+   "2BeXßte~8|ß?6(4*$W+Z{hß%d:",
+   "2BeXßte~8|ß?6(4*$W+Z{hß%d:",
+   "2BeXßte~8|ß?6(4*$W+Z{hß%d:"
+  ],
+  [
+   "}qzf`!Zf&vü1",
+   "}qzf`!Zf&vü1",
+   "}qzf`!Zfvü1"
+  ],
+  [
+   "k|6Fq8JWYHKILR+hoP=OuPü",
+   "k|6Fq8JWYHKILR+hoP=OuPü",
+   "k|6Fq8JWYHKILR+hoP=OuPü"
+  ],
+  [
+   "\\?SD@q:9MU|ACTw}c%8",
+   "\\?SD@q:9MU|ACTw}c%8",
+   "\\?SD@q:9MU|ACTw}c%8"
+  ],
+  [
+   "*lLm;k]ßA}hmgixQ.",
+   "*lLm;k]ßA}hmgixQ.",
+   "*lLm;k]ßA}hmgixQ."
+  ],
+  [
+   "ym;et8_9^Xa.0=+Ix4UI/[",
+   "ym;et8_9^Xa.0=+Ix4UI/[",
+   "ym;et8_9^Xa.0=+Ix4UI/["
+  ],
+  [
+   "Ω%M€-Ω]hé,CaGAb*}*x|/)e'9*w{HJ",
+   "Ω%M€-Ω]hé,CaGAb*}*x|/)e9*w{HJ",
+   "Ω%M€-Ω]hé,CaGAb*}*x|/)e9*w{HJ"
+  ],
+  [
+   "NéAw\"U|yж/€X'aa*3BA9s.PZ/:})",
+   "NéAwU|yж/€Xaa*3BA9s.PZ/:})",
+   "NéAwU|yж/€Xaa*3BA9s.PZ/:})"
+  ],
+  [
+   "\")€1wh%KΩzж/",
+   ")€1wh%KΩzж/",
+   ")€1wh%KΩzж/"
+  ],
+  [
+   "LdlD-PbbF",
+   "LdlD-PbbF",
+   "LdlD-PbbF"
+  ],
+  [
+   "nF€Ké(F?#n-jZu漢G(>/F",
+   "nF€Ké(F?#n-jZu漢G(>/F",
+   "nF€Ké(F?n-jZu漢G(>/F"
+  ],
+  [
+   "é(dj漢Gжéx[a>M6?E\\t€BsriN$s8ü)9",
+   "é(dj漢Gжéx[a>M6?E\\t€BsriN$s8ü)9",
+   "é(dj漢Gжéx[a>M6?E\\t€BsriN$s8ü)9"
+  ],
+  [
+   "PsJg6?%~u{8=ß{vT&xSVA%",
+   "PsJg6?%~u{8=ß{vT&xSVA%",
+   "PsJg6?%~u{8=ß{vTxSVA%"
+  ],
+  [
+   "xr~9yaP4v5QCzb3v&D'f€漢Nжq",
+   "xr~9yaP4v5QCzb3v&Df€漢Nжq",
+   "xr~9yaP4v5QCzb3vDf€漢Nжq"
+  ],
+  [
+   "漢$N6iжW}iODsWzVWD",
+   "漢$N6iжW}iODsWzVWD",
+   "漢$N6iжW}iODsWzVWD"
+  ],
+  [
+   "kx=ß:~'-",
+   "kx=ß:~-",
+   "kx=ß:~-"
+  ],
+  [
+   "$xP!!h&7Ib;*,0}€X€",
+   "$xP!!h&7Ib;*,0}€X€",
+   "$xP!!h7Ib;*,0}€X€"
+  ],
+  [
+   "}e#>漢dKdéOwebTж7xu",
+   "}e#>漢dKdéOwebTж7xu",
+   "}e>漢dKdéOwebTж7xu"
+  ],
+  [
+   "`€Cn&ZkS,'O8E`$i44éOj",
+   "`€Cn&ZkS,O8E`$i44éOj",
+   "`€CnZkS,O8E`$i44éOj"
+  ],
+  [
+   "*6(G*Y?=G_n7#~qL)fh c>u3cVK0&x",
+   "*6(G*Y?=G_n7#~qL)fhc>u3cVK0&x",
+   "*6(G*Y?=G_n7~qL)fhc>u3cVK0x"
+  ],
+  [
+   "R<Hж!])d",
+   "R<Hж!])d",
+   "R<Hж!])d"
+  ],
+  [
+   "+(T.}sL&6AüL-/$?ж$ж@-}Q",
+   "+(T.}sL&6AüL-/$?ж$ж@-}Q",
+   "+(T.}sL6AüL-/$?ж$ж@-}Q"
+  ],
+  [
+   "F5*COf:ж漢~kXB5[ü-€T5Px",
+   "F5*COf:ж漢~kXB5[ü-€T5Px",
+   "F5*COf:ж漢~kXB5[ü-€T5Px"
+  ],
+  [
+   "S++#&3^?2Y-!wN4nH漢?KFljN",
+   "S++#&3^?2Y-!wN4nH漢?KFljN",
+   "S++3^?2Y-!wN4nH漢?KFljN"
+  ],
+  [
+   "-|65lo/1$J/4+X",
+   "-|65lo/1$J/4+X",
+   "-|65lo/1$J/4+X"
+  ],
+  [
+   "!}OsßtvkwI`6tUd1(i'-vp\\Wj7_Cz'",
+   "!}OsßtvkwI`6tUd1(i-vp\\Wj7_Cz",
+   "!}OsßtvkwI`6tUd1(i-vp\\Wj7_Cz"
+  ],
+  [
+   "W ΩO09D@/M漢C{TY0ж",
+   "WΩO09D@/M漢C{TY0ж",
+   "WΩO09D@/M漢C{TY0ж"
+  ],
+  [
+   "ΩéONkf€6",
+   "ΩéONkf€6",
+   "ΩéONkf€6"
+  ],
+  [
+   "X@{VU#|)7CT漢*gkUж",
+   "X@{VU#|)7CT漢*gkUж",
+   "X@{VU|)7CT漢*gkUж"
+  ],
+  [
+   "9PQ@,N^nuж[cmC#o@漢0n!u#Osc9s",
+   "9PQ@,N^nuж[cmC#o@漢0n!u#Osc9s",
+   "9PQ@,N^nuж[cmCo@漢0n!uOsc9s"
+  ],
+  [
+   "0hi hF1ü!w37ARR0 ",
+   "0hihF1ü!w37ARR0",
+   "0hihF1ü!w37ARR0"
+  ],
+  [
+   "]=N5G]l^\"Uc~9!iG#,=Vh€M.u&2n",
+   "]=N5G]l^Uc~9!iG#,=Vh€M.u&2n",
+   "]=N5G]l^Uc~9!iG,=Vh€M.u2n"
+  ],
+  [
+   "d@<`,j)H}CD`TT",
+   "d@<`,j)H}CD`TT",
+   "d@<`,j)H}CD`TT"
+  ],
+  [
+   "FxW漢€d*wCI?[U G+x",
+   "FxW漢€d*wCI?[UG+x",
+   "FxW漢€d*wCI?[UG+x"
+  ],
+  [
+   "|D4:k~]K1p_vZ}R9d3",
+   "|D4:k~]K1p_vZ}R9d3",
+   "|D4:k~]K1p_vZ}R9d3"
+  ],
+  [
+   "I0pvr€ ?$YGzw}",
+   "I0pvr€?$YGzw}",
+   "I0pvr€?$YGzw}"
+  ],
+  [
+   "GG$Dm+djY2[€]]\\5\\4",
+   "GG$Dm+djY2[€]]\\5\\4",
+   "GG$Dm+djY2[€]]\\5\\4"
+  ],
+  [
+   "漢€{!;aQQIΩ7K66:",
+   "漢€{!;aQQIΩ7K66:",
+   "漢€{!;aQQIΩ7K66:"
+  ],
+  [
+   "w^-€zé#T\"vN=qaNLOMß;",
+   "w^-€zé#TvN=qaNLOMß;",
+   "w^-€zéTvN=qaNLOMß;"
+  ],
+  [
+   "yjzgkE$+/vV",
+   "yjzgkE$+/vV",
+   "yjzgkE$+/vV"
+  ],
+  [
+   "`NAüjBr05J;_tl(zvX`jy",
+   "`NAüjBr05J;_tl(zvX`jy",
+   "`NAüjBr05J;_tl(zvX`jy"
+  ],
+  [
+   "MDY\\жk5a-$o",
+   "MDY\\жk5a-$o",
+   "MDY\\жk5a-$o"
+  ],
+  [
+   " $y\\iQzl@E]L&5c?`",
+   "$y\\iQzl@E]L&5c?`",
+   "$y\\iQzl@E]L5c?`"
+  ],
+  [
+   "IFm&i)C2kh",
+   "IFm&i)C2kh",
+   "IFmi)C2kh"
+  ],
+  [
+   "yO}t?\\yh",
+   "yO}t?\\yh",
+   "yO}t?\\yh"
+  ],
+  [
+   "A\"qdLv\\n€{o+V2J9<AL8r",
+   "AqdLv\\n€{o+V2J9<AL8r",
+   "AqdLv\\n€{o+V2J9<AL8r"
+  ],
+  [
+   ".YqV,Ω2Fa>ND",
+   ".YqV,Ω2Fa>ND",
+   ".YqV,Ω2Fa>ND"
+  ],
+  [
+   "hcIk_Avrmz%жq",
+   "hcIk_Avrmz%жq",
+   "hcIk_Avrmz%жq"
+  ],
+  [
+   "Ai;G`KV*QtZ)T]S:z X-CM",
+   "Ai;G`KV*QtZ)T]S:zX-CM",
+   "Ai;G`KV*QtZ)T]S:zX-CM"
+  ],
+  [
+   "JE=BDy?eUFlté6^!ü\\`D:жGyF",
+   "JE=BDy?eUFlté6^!ü\\`D:жGyF",
+   "JE=BDy?eUFlté6^!ü\\`D:жGyF"
+  ],
+  [
+   "\"8gq_aD~Ds漢tkB4On$6ж#&-N",
+   "8gq_aD~Ds漢tkB4On$6ж#&-N",
+   "8gq_aD~Ds漢tkB4On$6ж-N"
+  ],
+  [
+   "TMMdlFel=xQg<qYΩA+LhI,neжC0)OT",
+   "TMMdlFel=xQg<qYΩA+LhI,neжC0)OT",
+   "TMMdlFel=xQg<qYΩA+LhI,neжC0)OT"
+  ],
+  [
+   ")b%H{30|*kLZ",
+   ")b%H{30|*kLZ",
+   ")b%H{30|*kLZ"
+  ],
+  [
+   "b31.<p:Yß_<*hYUßs",
+   "b31.<p:Yß_<*hYUßs",
+   "b31.<p:Yß_<*hYUßs"
+  ],
+  [
+   ":ßgf!y*}&]R9\"PNiI\\^PuS2X",
+   ":ßgf!y*}&]R9PNiI\\^PuS2X",
+   ":ßgf!y*}]R9PNiI\\^PuS2X"
+  ],
+  [
+   ") SV0Xa]",
+   ")SV0Xa]",
+   ")SV0Xa]"
+  ],
+  [
+   "Nb^N :]i*6ü €KlT[",
+   "Nb^N:]i*6ü€KlT[",
+   "Nb^N:]i*6ü€KlT["
+  ],
+  [
+   "R漢éaAp+OжtQq$$WjJDé€",
+   "R漢éaAp+OжtQq$$WjJDé€",
+   "R漢éaAp+OжtQq$$WjJDé€"
+  ],
+  [
+   "rVVGxv]Z-|Gw5GF!N€\\9=F?{~](",
+   "rVVGxv]Z-|Gw5GF!N€\\9=F?{~](",
+   "rVVGxv]Z-|Gw5GF!N€\\9=F?{~]("
+  ],
+  [
+   "Ω&8F€K6ж G+v)j -mW@H",
+   "Ω&8F€K6жG+v)j-mW@H",
+   "Ω8F€K6жG+v)j-mW@H"
+  ],
+  [
+   "JTMlt.\\xt`t@7cx]Joz/5&`C",
+   "JTMlt.\\xt`t@7cx]Joz/5&`C",
+   "JTMlt.\\xt`t@7cx]Joz/5`C"
+  ],
+  [
+   "/VT>01]>FUжé[GE'Ω",
+   "/VT>01]>FUжé[GEΩ",
+   "/VT>01]>FUжé[GEΩ"
+  ],
+  [
+   "€nEIhdT]XD$\"~NY/)|a:Yf8$€1Ql",
+   "€nEIhdT]XD$~NY/)|a:Yf8$€1Ql",
+   "€nEIhdT]XD$~NY/)|a:Yf8$€1Ql"
+  ],
+  [
+   "pQ3P'VEH",
+   "pQ3PVEH",
+   "pQ3PVEH"
+  ],
+  [
+   "ΩU_ Ω0(?H>`}tj0(ßfgoAj}+",
+   "ΩU_Ω0(?H>`}tj0(ßfgoAj}+",
+   "ΩU_Ω0(?H>`}tj0(ßfgoAj}+"
+  ],
+  [
+   "-aZ<tAHJ?3cSZ/<ZC#a",
+   "-aZ<tAHJ?3cSZ/<ZC#a",
+   "-aZ<tAHJ?3cSZ/<ZCa"
+  ],
+  [
+   "t漢_uCs6rd3\\a{+h]ACD",
+   "t漢_uCs6rd3\\a{+h]ACD",
+   "t漢_uCs6rd3\\a{+h]ACD"
+  ],
+  [
+   "vG0tCzJéO0Ωd44cMжR#muiHM-9H>eS",
+   "vG0tCzJéO0Ωd44cMжR#muiHM-9H>eS",
+   "vG0tCzJéO0Ωd44cMжRmuiHM-9H>eS"
+  ],
+  [
+   "~RjB(lLs1)WOO9zm",
+   "~RjB(lLs1)WOO9zm",
+   "~RjB(lLs1)WOO9zm"
+  ],
+  [
+   "433{=E漢4n$~",
+   "433{=E漢4n$~",
+   "433{=E漢4n$~"
+  ],
+  [
+   "XxHY%j4>xAMJ漢%O)e?QE=b€oFdAZVs",
+   "XxHY%j4>xAMJ漢%O)e?QE=b€oFdAZVs",
+   "XxHY%j4>xAMJ漢%O)e?QE=b€oFdAZVs"
+  ],
+  [
+   "BJR8漢n,@ßds7)QR.T~lL4.#m",
+   "BJR8漢n,@ßds7)QR.T~lL4.#m",
+   "BJR8漢n,@ßds7)QR.T~lL4.m"
+  ],
+  [
+   "cdZz}EF8é&fx-0Rcb@Ec-!H:@",
+   "cdZz}EF8é&fx-0Rcb@Ec-!H:@",
+   "cdZz}EF8éfx-0Rcb@Ec-!H:@"
+  ],
+  [
+   "7Mln%PnXüot8qg_?>55T",
+   "7Mln%PnXüot8qg_?>55T",
+   "7Mln%PnXüot8qg_?>55T"
+  ],
+  [
+   "w6Xrq5Hp+JlPw H)p(`u:h'",
+   "w6Xrq5Hp+JlPwH)p(`u:h",
+   "w6Xrq5Hp+JlPwH)p(`u:h"
+  ],
+  [
+   "l=(u.eEüVR4t2`s)ΩжErP",
+   "l=(u.eEüVR4t2`s)ΩжErP",
+   "l=(u.eEüVR4t2`s)ΩжErP"
+  ],
+  [
+   "?}BK4Y'h3ü,BMW$M iжI*@",
+   "?}BK4Yh3ü,BMW$MiжI*@",
+   "?}BK4Yh3ü,BMW$MiжI*@"
+  ],
+  [
+   "E!c2ß3jSj?N€\\:e+GYrG:qZ;jh=HS",
+   "E!c2ß3jSj?N€\\:e+GYrG:qZ;jh=HS",
+   "E!c2ß3jSj?N€\\:e+GYrG:qZ;jh=HS"
+  ],
+  [
+   "c EV0LFj",
+   "cEV0LFj",
+   "cEV0LFj"
+  ],
+  [
+   "eXI{QOFAkMI,@rV_h-.wth",
+   "eXI{QOFAkMI,@rV_h-.wth",
+   "eXI{QOFAkMI,@rV_h-.wth"
+  ],
+  [
+   "{%eTq(PRnPb}Ep;YGHx%жh6+u",
+   "{%eTq(PRnPb}Ep;YGHx%жh6+u",
+   "{%eTq(PRnPb}Ep;YGHx%жh6+u"
+  ],
+  [
+   "728#1Dü,{\\_ж;c",
+   "728#1Dü,{\\_ж;c",
+   "7281Dü,{\\_ж;c"
+  ],
+  [
+   "U^zs:y\\*U*a",
+   "U^zs:y\\*U*a",
+   "U^zs:y\\*U*a"
+  ],
+  [
+   "Ai!{khiAA>té7%6K&;J58F'A",
+   "Ai!{khiAA>té7%6K&;J58FA",
+   "Ai!{khiAA>té7%6K;J58FA"
+  ],
+  [
+   "]>Php9&S[vo{,\"qRrL8ax#&8-]SNQl",
+   "]>Php9&S[vo{,qRrL8ax#&8-]SNQl",
+   "]>Php9S[vo{,qRrL8ax8-]SNQl"
+  ],
+  [
+   "Qj:.*jLui'y5Z_f#漢G_4L",
+   "Qj:.*jLuiy5Z_f#漢G_4L",
+   "Qj:.*jLuiy5Z_f漢G_4L"
+  ],
+  [
+   "6'|OE'J0\"X|ODa@жS$Zeln",
+   "6|OEJ0X|ODa@жS$Zeln",
+   "6|OEJ0X|ODa@жS$Zeln"
+  ],
+  [
+   ";1€q vféGtnéUhplU'l€b37O",
+   ";1€qvféGtnéUhplUl€b37O",
+   ";1€qvféGtnéUhplUl€b37O"
+  ],
+  [
+   "é7p$3cж>dN8?j'cFW?F&0",
+   "é7p$3cж>dN8?jcFW?F&0",
+   "é7p$3cж>dN8?jcFW?F0"
+  ],
+  [
+   "=漢{DtY]$LPov.!Yro>",
+   "=漢{DtY]$LPov.!Yro>",
+   "=漢{DtY]$LPov.!Yro>"
+  ],
+  [
+   "O.7ru;^!$c/$\\~0jQz,a=aH)",
+   "O.7ru;^!$c/$\\~0jQz,a=aH)",
+   "O.7ru;^!$c/$\\~0jQz,a=aH)"
+  ],
+  [
+   "g'Lrk5yS",
+   "gLrk5yS",
+   "gLrk5yS"
+  ],
+  [
+   "i@Z/gü0vhS\"vhFVjGU\"lJ",
+   "i@Z/gü0vhSvhFVjGUlJ",
+   "i@Z/gü0vhSvhFVjGUlJ"
+  ],
+  [
+   "bß^F=)MTr}?Q:a: U(ZEUJvh@Pr",
+   "bß^F=)MTr}?Q:a:U(ZEUJvh@Pr",
+   "bß^F=)MTr}?Q:a:U(ZEUJvh@Pr"
+  ],
+  [
+   ",9;4&_rGTgI",
+   ",9;4&_rGTgI",
+   ",9;4_rGTgI"
+  ],
+  [
+   "zk;3жNk.3XDv]ZcQgLkrUΩJ?t",
+   "zk;3жNk.3XDv]ZcQgLkrUΩJ?t",
+   "zk;3жNk.3XDv]ZcQgLkrUΩJ?t"
+  ],
+  [
+   "fq*-l)Xfa~B C4éHoxC/XP'z-",
+   "fq*-l)Xfa~BC4éHoxC/XPz-",
+   "fq*-l)Xfa~BC4éHoxC/XPz-"
+  ],
+  [
+   "l.k>)#sn:üXq\\^#PΩ>(+4n@k,)L",
+   "l.k>)#sn:üXq\\^#PΩ>(+4n@k,)L",
+   "l.k>)sn:üXq\\^PΩ>(+4n@k,)L"
+  ]
+ ],
+ "fuzz_templates": [
+  "password={pw}",
+  "export DB_PASSWORD={pw}",
+  "env API_TOKEN={pw} ./run",
+  "password='{pw}'",
+  "password=\"{pw}\"",
+  "password=\"pre\\\"{pw}\" x",
+  "password=$(echo {pw})",
+  "password=`echo {pw}`",
+  "{\"password\":\"{pw}\"}",
+  "{\"password\": \"a\\\"b {pw} c\"}",
+  "password: {pw}",
+  "db:\n  password: {pw}\n  host: x",
+  "[db]\npassword = {pw}\nport = 1",
+  "cat <<EOF > .env\nSECRET_KEY={pw}\nEOF",
+  "tool --password={pw} x",
+  "tool --password {pw} x",
+  "mysql -uroot -p{pw} db",
+  "mysql -u root -p {pw} db",
+  "sshpass -p {pw} ssh h",
+  "sshpass -p'{pw}' ssh h",
+  "curl -u user:{pw} https://h",
+  "curl -uuser:{pw} h",
+  "git clone https://user:{pwu}@host/r",
+  "psql postgres://app:{pwu}@db/x",
+  "curl -H \"Authorization: Bearer {pw}\" https://h",
+  "x --token {pw}",
+  "x --api-key={pw}",
+  "echo Bearer {pw}",
+  "client_secret: \"{pw}\"",
+  "curl https://h/api?token={pwq}&x=1",
+  "auth:\n  token: |\n    {pw}\n    {pw}\n\nnext: 1"
+ ]
+}

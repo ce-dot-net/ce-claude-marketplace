@@ -221,3 +221,19 @@ def test_a5_counts_pin_failed_and_backoff_rows(tmp_path):
     r = subprocess.run([sys.executable, str(script)], cwd=str(proj), env=dict(os.environ, HOME=str(home)),
                        capture_output=True, text=True, timeout=30)
     assert "2 lock incident" in r.stdout, r.stdout
+
+
+def test_a5_shows_the_outcome_rule_of_the_newest_execution_row(tmp_path):
+    """8.1.3: doctor names the rule that set success on the newest execution row (pre-8.1.3 when it carries none)."""
+    home = tmp_path / "home"; proj = tmp_path / "proj"
+    (home / ".ace-cache").mkdir(parents=True)
+    logs = proj / ".claude" / "data" / "logs"; logs.mkdir(parents=True)
+    script = tmp_path / "a5.py"; script.write_text(_a5_block(), encoding="utf-8")
+    run = lambda: subprocess.run([sys.executable, str(script)], cwd=str(proj), env=dict(os.environ, HOME=str(home)),  # noqa: E731
+                                 capture_output=True, text=True, timeout=30).stdout
+    (logs / "ace-relevance.1.jsonl").write_text(json.dumps({"event": "execution", "success": False}) + "\n")
+    assert "outcome rule pre-8.1.3" in run()
+    (logs / "ace-relevance.jsonl").write_text(
+        json.dumps({"event": "execution", "success": True}) + "\n"
+        + json.dumps({"event": "execution", "success": True, "failed_steps": 1, "outcome_rule": "8.1.3"}) + "\n")
+    assert "outcome rule 8.1.3" in run()

@@ -49,6 +49,97 @@ All plugin state lives under `$CLAUDE_PLUGIN_DATA` (default `~/.claude/plugins/d
   `ACE_LEARN_INLINE=1` runs it inline for tests. All async hooks print nothing.
 - **pin-backoff**: a failed session pin is dropped and not retried for `ACE_PIN_BACKOFF_MIN` minutes.
 
+### Task outcome (8.1.3)
+
+Contract (agreed with the server team): every automatic trace, both chains (Python Stop/SubagentStop, mod
+turn.complete), carries `result.success` (bool) = the END outcome of the task and `result.failed_steps` (int >= 0) =
+the number of failed steps, informational only, never deciding success. There is no `result.aborted` key: no aborted
+run sends a trace (the mod sees aborts through `turn.complete` `isAborted` / `reason` and on purpose sends no trace for
+them, turn.ts; the classic chain sees no abort, Stop does not fire on one). PermissionDenied traces (`agent_type`
+`permission_gate`) stay `success: false` with `failed_steps: 1`. The server stores `result` unchanged, and the trace
+reaches it unchanged via `ace-cli learn --transcript` / the engine, so the new key needs no SDK change.
+v8.0.0 to 8.1.2 sent `success = no step failed`: one grep without a match, one red test run in a TDD loop or one
+retried call failed the whole task (main-task success fell from about 90 % to about 60 %).
+
+The rule (one implementation per chain, identical semantics: `ace_after_task.task_outcome` / `bash_step`,
+`mod/lib/trace.ts taskOutcome` / `bashStep`; shared fixture `tests-fixtures/task-outcome/` with 400 seeded random
+sequences, run by both suites; tables in ONE place per chain, a test keeps them equal to `tables.json`):
+
+1. Bash command parsing: the command splits into a chain at `&&`, `||`, `;` and newline, each chain item into pipe
+   stages at `|`. Separators inside single or double quotes, backticks, `$(...)`, `(...)` subshells and heredoc bodies
+   do not split. A `(...)` stage is analyzed as its own chain. Redirections (`2>&1`, `> log`), `!`, `VAR=value` and
+   wrappers (`sudo`, `time`, `env`, `nice`, `nohup`, `exec`, `bunx`, `timeout N`, `uv run`, `poetry run`) are skipped.
+   Unparsable input never raises: the first word is the family (`ponytail:`).
+2. A stage's family is its first word (basename), `python -m X` = `X`. For the tools in `SUBCOMMAND_TOOLS` the family
+   adds the first non-flag token (the subcommand or the script basename; `-c`/`-e` count as that token): python,
+   python3, bash, sh, node, bun, deno, ruby, perl, npm, npx, pnpm, yarn, cargo, go, make, terraform, uv, pip, pip3
+   (`python3 deploy.py`, `python3 -c`, `npm publish`, `make test`). gh, git, docker, kubectl, aws, gcloud and claude add
+   up to TWO tokens, the second only when it directly follows the first (`gh pr merge`, `docker compose up`, `claude
+   plugin test`; `git commit -m x` = `git commit`). A token that looks like a URL, holds `@`, is a long hex/base64 run or
+   a secret is never part of a family: the family is then the first word only. In-place editors are their own
+   non-read-only families: `sed-i` (`-i`, `-Ei`, `-i.bak`, `--in-place[=..]`), `awk-i` (`-i inplace`), `perl-pi`
+   (`-i`, `-pi`). curl and wget: the family is the first word.
+2b. The recovery KEY is the family, except: an interpreter (python, python3, bash, sh, node, ruby, perl) running a
+   `-c`/`-e` argument or a heredoc script adds `#` + 8 hex chars of sha256 over the whitespace-collapsed script, and
+   curl/wget add `#METHOD host` (method from `-X`/`--request`/`--method`, POST with `-d`/`--data*`/`-F`/`--json`, else
+   GET; host without userinfo, path or query). So two different `python3 - <<EOF` scripts never recover each other.
+3. A pipeline's family is its LAST stage's (the stage whose exit code the shell reports; no pipefail). A chain's family
+   is its LAST NON-READ-ONLY item's (a trailing read-only item such as `&& echo done` usually never ran and never
+   decides), else its last item's. The step is non-read-only when any item is. Read-only = the family is in
+   `READ_ONLY_BASH` by prefix (`git diff HEAD~1` is in `git diff`); `cd`, `true`, `export`, `set`, `sleep`, `read`,
+   `sed`, `awk` are in it. A stage with an output redirection to a file (`>`, `>>`, `>|` with no fd, fd 1 or `&`; not
+   `2>&1`, not `> /dev/null`, not `2> file`) is never read-only (`awk ... > out`, `echo x >> log`); `tee` is not in the
+   list.
+4. A step fails on: a denial, an interrupt, a known non-zero Bash exit code (structured, or the first line `Exit code
+   N` of the error text: PostToolUseFailure `error`, the mod's `tool.call` `text`), or, without a known exit code,
+   `error` / `is_error`. stderr alone never fails a step and no exit code is guessed from stderr. A code the tool
+   interpreted itself (`returnCodeInterpretation`) is 0.
+5. Benign: exit 1 (only 1) of a step whose family is grep, egrep, fgrep, rg, diff, cmp, test, `[`, `[[`, git diff, git
+   grep, `command -v`, which, type, pgrep, pidof or jq is no failed step at all (so `rstest tests | grep FAIL` with
+   exit 1 is none).
+6. Every other failed step counts in `failed_steps`, test runners included.
+7. A failed step is recovered by a LATER successful step with the same key: Bash = the same key (2b); Edit, Write,
+   MultiEdit, NotebookEdit = the same path (across those tools); any other tool, MCP tools included = the same tool name.
+8. `success` is false only when an unrecovered failed step is decisive, or the run's last step was interrupted.
+   Decisive: non-read-only Bash, Edit, Write, MultiEdit, NotebookEdit, Agent, Task, Workflow, and a state-changing MCP
+   tool: its action name (after the last `__`, split at `_`, `-` and camelCase, case-insensitive) has a word in
+   `MCP_WRITE_VERBS` (save, create, update, delete, remove, send, post, publish, merge, push, comment, reply, upload,
+   write, set, add, assign, close, transfer). Read, Glob, Grep, WebFetch, WebSearch, read-only Bash and other MCP tools
+   (list, get, search, read, whoami, query) never fail the task. No failures or no tool data: `success: true`.
+
+Kept on purpose: a red `rstest` followed by a green `pytest` stays false (different families).
+
+Bash `trajectory[].action` (8.1.3, both chains): `<family> :: <command>`. The family (the one the rule uses, the
+deciding one for pipes and chains) comes first, cut to 60 characters; the command follows with whitespace collapsed,
+the whole action cut to 200 characters; `unknown` when there is no command, never an empty string. The server can filter by the text before
+` :: `. The command is built from `tool_input.command` (complete in every hook input; the old empty or cut actions came
+from our own 60-char cut and from the accumulator's size caps).
+Secrets are redacted FAIL-CLOSED before any cut, in the action, every step `result`, the task and the summary (`redact`,
+both chains; Claude Code does not redact hook inputs): a key (password, passwd, passphrase, pwd, secret, token,
+credential, authorization, api key, `*_KEY`, pass) followed by `:` or `=` redacts from the value start to the end of the
+line and on to the next blank line (at most 500 characters), so quotes, escapes, `$(...)` and backticks in the value
+never end it; inside a `scheme://` token (a URL query) the value ends at `&`, `#` or whitespace. `--password`/`--token`/
+`--secret`/`--api-key`, `mysql`/`sshpass`/`7z -p`, `zip`/`unzip -P`, `ssh-keygen -N`, `openssl -k`/`-pass`/`-passin`/
+`-passout`, `htpasswd`, curl/wget `-u user:pass` and `Bearer` redact to the end of the line; `Cookie:`/`Set-Cookie:`/
+`X-*-Token:`/`X-API-Key:` headers are keys; the `echo`/`printf` stage piped into `--password-stdin`/`--with-token` is
+redacted. Then
+URL userinfo (up to the last `@` of the URL token) and ghp_/gho_/github_pat_/sk-/xoxb-/AKIA/ace_user_/npm_ tokens and
+JWTs. This over-redacts on purpose (the rest of the line is lost; about 0.9 % of the last 10 days' Bash commands
+change, mostly `api_key`/`token`/`tokens` names), never under-redacts. The family is computed from the redacted
+command's rule family but SENT only when every word of it is still in the redacted command (else its first word, else
+`unknown`; so `password=$(echo X)` gives `unknown`). The rule itself (family, read-only and benign checks, recovery
+key) always reads the RAW command, which never leaves the plugin, so redaction never changes `success` (a property
+test: 300 random sequences with a secret vs a harmless word at the same place give the same outcome and keys). A property test (500 random passwords x 31 forms, shared fixture;
+5,000 run locally in both chains with 0 leaks) guards it.
+Known limits: a secret without a keyword or a known prefix (a bare value, a secret on the line BEFORE its keyword, a
+positional password of a tool not listed above) cannot be recognized and is sent; do not write secrets into commands.
+Over-redaction loses the rest of the line after any keyword (`tokens:`, `api_key` in code, `pass:`).
+
+The execution row in `ace-relevance.jsonl` carries `failed_steps` and `outcome_rule: "8.1.3"`; `/ace:ace-doctor` shows
+the rule of the newest row (`pre-8.1.3` for older rows). The user-rejection downvote and `applied_log_ids` are
+unchanged. Heuristics carry `ponytail:` comments (read-only list, MCP verb list, the tokenizer). The numbers behind the
+rule: `python3 tests/probe_success_rule.py --days 10` (local transcripts, counts only).
+
 ### Hook topology
 
 | Event | Mode | Script |

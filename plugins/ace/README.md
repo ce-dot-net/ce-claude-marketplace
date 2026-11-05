@@ -2,6 +2,15 @@
 
 **Agentic Context Engineering** - Self-improving Claude Code plugin using automatic pattern learning.
 
+## 8.1.3 (unreleased): task outcome
+
+`result.success` in a learned trace is the task's END outcome: a grep without a match, a red test that later went
+green or a retried call no longer fail the task, and stderr alone is no failure. `result.failed_steps` counts the
+failed steps (informational). Bash trajectory actions start with the command family (`gh pr merge :: ...`) and
+secrets are redacted (fail-closed after a keyword, a known flag or a known token prefix). Known limit: a secret
+without a keyword or known prefix cannot be recognized, so do not write secrets into commands. The rule:
+docs/technical/ARCHITECTURE.md "Task outcome (8.1.3)".
+
 ## What's new in 8.1.0
 
 - **One binding core.** Every hook (both chains), every command and the statusline take org/project from one resolver
@@ -283,7 +292,7 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Version**: v8.1.2
+**Version**: v8.1.3
 **Maintainer**: CE.NET Team
 **Requires**: Claude Code >= 2.1.311, ace-cli 4.4.2 pinned in package.json (@ace-sdk/core >= 3.8.2; installed with the plugin; a global ace-cli >= the pin is an untested fallback), Python >= 3.10 for the fallback hooks (Ubuntu 22.04+, Debian 12+, Homebrew/pyenv; the macOS system 3.9 is not enough, the mod chain is unaffected). Windows not supported (WSL2 works).
 **Architecture**: mod + Python hooks + CLI/engine (no MCP)

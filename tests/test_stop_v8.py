@@ -594,7 +594,35 @@ def test_stop_adds_tool_calls_the_async_batch_hook_has_not_written_yet(box):
     learns = box.cli_calls("learn")
     assert len(learns) == 1, "the Bash call from the transcript makes the task substantial"
     tools = [st.get("action") for st in learns[0]["trace"]["trajectory"]]
-    assert tools == ["Read app.py", "Ran: pytest -q"], tools  # db row once, the late Bash added, the older task's Write not
+    assert tools == ["Read app.py", "pytest :: pytest -q"], tools  # db row once, the late Bash added, the older task's Write not
+
+
+def test_8_1_3_bash_action_has_the_family_and_no_secret_reaches_the_trace(box):
+    """8.1.3: Bash action = '<family> :: <redacted command>'; a canary token in the prompt, the command, the tool
+    output and the closing answer appears in no field of the sent trace."""
+    canary = "ghp_CANARYcanary0123456789"
+    sid = "sess-canary"
+    box.seed_tools(sid, [("Read", {"file_path": "src/app.py"}, {"content": "x"})])
+    u, y, m = "CANARYurl", "CANARYyaml", "CANARYmysql"
+    prompt = "publish the release with token %s, https://u:%s@h, password: %s please" % (canary, u, y)
+    entries = [{"type": "user", "message": {"role": "user", "content": prompt}}] + \
+        _tool_turn("toolu_sess-canary_0", "Read", {"file_path": "src/app.py"}) + \
+        _tool_turn("toolu_c0", "Bash", {"command": "git clone https://user:%s@github.com/o/r" % u},
+                   "Exit code 128\nfatal: https://user:%s@github.com/o/r" % u) + \
+        _tool_turn("toolu_c2", "Bash", {"command": "mysql -uroot -p%s db" % m}, "password: %s" % y) + \
+        _tool_turn("toolu_c3", "mcp__srv__save_issue", {"body": y}, '{"password":"%s"}' % y) + \
+        _tool_turn("toolu_c1", "Bash", {"command": "GITHUB_TOKEN=%s gh release create v1 && echo done" % canary},
+                   "token %s ok" % canary)
+    box.write_state(sid, user_prompt=prompt)
+    proc = box.run_after_task(box.stop_event(sid, transcript_path=_main_transcript(box, entries),
+                                             last_assistant_message="released with %s, https://user:%s@github.com, password: %s, mysql -p%s" % (canary, u, y, m)),
+                              ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID, ACE_LEARN_INLINE="1")
+    assert proc.returncode == 0, proc.stderr
+    learns = box.cli_calls("learn")
+    assert len(learns) == 1
+    trace = learns[0]["trace"]
+    assert "CANARY" not in json.dumps(trace)
+    assert trace["trajectory"][-1]["action"] == "unknown :: GITHUB_TOKEN=[redacted]"  # fail-closed: the rest of the line goes
 
 
 def test_stop_without_a_transcript_keeps_the_db_rows_only(box):
