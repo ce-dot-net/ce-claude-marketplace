@@ -457,28 +457,64 @@ def mcp_writes(tool):
     return any(x in MCP_WRITE_VERBS for x in regex_module.split(r'[^a-z0-9]+', act))
 
 
-# Secrets in sent text (8.1.3): Claude Code does not redact hook inputs. Applied before any cut.
+# Secrets in sent text (8.1.3), FAIL-CLOSED: Claude Code does not redact hook inputs. Applied before any cut.
+# A secret key (password/passwd/passphrase/pwd/secret/token/credential/authorization/api key/*_KEY/pass) followed by
+# ':' or '=' redacts from the value start to the end of the line, and on to the next blank line (at most
+# REDACT_BLOCK chars) for block values. Inside a scheme:// token (a URL query) the value ends at '&', '#' or whitespace.
+# --password/--token/--secret/--api-key, mysql/sshpass -p, curl/wget -u user:pass and Bearer redact to the end of the line.
+# ponytail: over-redacts on purpose (the rest of the line is lost), never under-redacts.
+REDACT_BLOCK = 500
+_SPAN_RES = (
+    (regex_module.compile(r'''(?:password|passwd|passphrase|pwd|secret|token|credential|authorization|api[-_]?key|_key(?![a-z0-9])|pass(?![a-z]))[A-Za-z0-9_-]*["']?[ \t]*[:=][ \t]*''', regex_module.I | regex_module.A), True),
+    (regex_module.compile(r'''--[A-Za-z0-9-]*(?:token|password|passwd|secret|api[-_]?key|credential)[A-Za-z0-9-]*(?:=|[ \t]+)''', regex_module.I | regex_module.A), False),
+    (regex_module.compile(r'''\b(?:mysql(?:dump|admin|sh)?|sshpass)\b[^\n]*?[ \t]-p[ \t]*''', regex_module.A), False),
+    (regex_module.compile(r'''\b(?:curl|wget)\b[^\n]*?[ \t](?:-u|--user)(?:=|[ \t]+)?(?=["']?[^ \t\n\r"']*:)''', regex_module.A), False),
+    (regex_module.compile(r'''\bBearer[ \t]+''', regex_module.I | regex_module.A), False),
+)
+_BLANK_LINE = regex_module.compile(r'\n[ \t\r]*\n')
+_URL_VALUE_END = regex_module.compile(r'''[&# \t\n\r\x0b\x0c"']''')
+_TOKEN_SEP = ' \t\n\r\x0b\x0c"\''
 _SECRET_RES = (
-    (regex_module.compile(r'''(--[A-Za-z0-9-]*(?:token|password|secret|api[-_]?key)(?:=|[ \t]+))("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)''', regex_module.I | regex_module.A), r'\1[redacted]'),
     (regex_module.compile(r'''(\b[A-Za-z][A-Za-z0-9+.-]*://)[^ \t\n\r\x0b\x0c"']*@''', regex_module.A), r'\1[redacted]@'),
-    (regex_module.compile(r'''(Authorization["']?[ \t]*[:=][ \t]*["']?(?:(?:Bearer|Basic|Token)[ \t]+)?)(?!\[redacted\])[^ \t\n\r\x0b\x0c"',;}]+''', regex_module.I | regex_module.A), r'\1[redacted]'),
-    (regex_module.compile(r'''(\bBearer[ \t]+)(?!\[redacted\])[^ \t\n\r\x0b\x0c"']+''', regex_module.I | regex_module.A), r'\1[redacted]'),
-    (regex_module.compile(r'''(\b[A-Za-z0-9_]*(?:token|secret|password|passwd|pwd|pass|credential)[A-Za-z0-9_]*=)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)''', regex_module.I | regex_module.A), r'\1[redacted]'),
-    (regex_module.compile(r'''(\b[A-Za-z0-9_]*(?:_key|apikey)=)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c;&|"']+)''', regex_module.I | regex_module.A), r'\1[redacted]'),
-    (regex_module.compile(r'''(["']?\b[A-Za-z0-9_-]*(?:password|passwd|pwd|secret|token|api[-_]?key|credentials?)[A-Za-z0-9_-]*["']?[ \t]*[:=][ \t]*)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)''', regex_module.I | regex_module.A), r'\1[redacted]'),
-    (regex_module.compile(r'''(\bmysql(?:dump|admin|sh)?\b[^|;&\n]*?[ \t]-p)(?:(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)|([ \t]+)(?!-)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+))''', regex_module.A), r'\1\3[redacted]'),
-    (regex_module.compile(r'''(\bsshpass\b[^|;&\n]*?[ \t]-p[ \t]*)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)''', regex_module.A), r'\1[redacted]'),
-    (regex_module.compile(r'''((?:^|[ \t])(?:-u|--user)(?:=|[ \t]+)?)(?!\[redacted\])("[^"]*:[^"]*"|'[^']*:[^']*'|[^ \t\n\r\x0b\x0c"':]*:[^ \t\n\r\x0b\x0c"']+)''', regex_module.A), r'\1[redacted]'),
     (regex_module.compile(r'''\b(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abprs]-|ace_user_|sk-)[A-Za-z0-9_-]{8,}|\bnpm_[A-Za-z0-9]{20,}|\bAKIA[0-9A-Z]{12,}|\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+)?''', regex_module.A), '[redacted]'),
 )
 
 
+def _redact_spans(text):
+    out, pos = [], 0
+    while True:
+        best = None
+        for rx, block in _SPAN_RES:
+            m = rx.search(text, pos)
+            if m and (best is None or m.start() < best[0].start()):
+                best = (m, block)
+        if best is None:
+            break
+        m, block = best
+        start, k = m.end(), m.start() - 1
+        while k >= 0 and text[k] not in _TOKEN_SEP:
+            k -= 1
+        if '://' in text[k + 1:m.start()]:  # a URL query value ends at '&', '#' or whitespace
+            e = _URL_VALUE_END.search(text, start)
+            end = e.start() if e else len(text)
+        else:
+            end = text.find('\n', start)
+            end = len(text) if end < 0 else end
+            if block:
+                b = _BLANK_LINE.search(text, start)
+                end = max(end, min(b.start() if b else len(text), start + REDACT_BLOCK))
+        out.append(text[pos:start] + '[redacted]')
+        pos = end
+    out.append(text[pos:])
+    return ''.join(out)
+
+
 def redact(text):
-    """Replace secret values with [redacted]: token/password flags, URL userinfo, Authorization/Bearer, *TOKEN*=/*KEY*=...
-    assignments, password/secret/token/api_key keys (YAML/JSON/INI), mysql -p, -u user:pass, known token prefixes, JWTs.
-    Parity: mod/lib/trace.ts redact."""
+    """Fail-closed secret redaction (see _SPAN_RES), then URL userinfo up to the last '@' of a URL token and known
+    token prefixes / JWTs. Parity: mod/lib/trace.ts redact."""
     if not isinstance(text, str) or not text:
         return text
+    text = _redact_spans(text)
     for rx, rep in _SECRET_RES:
         text = rx.sub(rep, text)
     return text

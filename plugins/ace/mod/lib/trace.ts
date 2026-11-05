@@ -289,23 +289,57 @@ export function mcpWrites(tool: string): boolean {
   return act.split(/[^a-z0-9]+/).some(x => MCP_WRITE_VERBS.includes(x))
 }
 
-// Secrets in sent text (8.1.3): Claude Code does not redact hook inputs. Applied before any cut. Parity: ace_after_task.redact.
+// Secrets in sent text (8.1.3), FAIL-CLOSED (ace_after_task.redact): Claude Code does not redact hook inputs. A secret key
+// followed by ':' or '=' redacts from the value start to the end of the line, and on to the next blank line (at most
+// REDACT_BLOCK code points) for block values; inside a scheme:// token (a URL query) the value ends at '&', '#' or
+// whitespace. --password/--token/--secret/--api-key, mysql/sshpass -p, curl/wget -u user:pass and Bearer redact to the end of the
+// line. ponytail: over-redacts on purpose (the rest of the line is lost), never under-redacts.
+export const REDACT_BLOCK = 500
+const SPAN_RES: [RegExp, boolean][] = [
+  [/(?:password|passwd|passphrase|pwd|secret|token|credential|authorization|api[-_]?key|_key(?![a-z0-9])|pass(?![a-z]))[A-Za-z0-9_-]*["']?[ \t]*[:=][ \t]*/gi, true],
+  [/--[A-Za-z0-9-]*(?:token|password|passwd|secret|api[-_]?key|credential)[A-Za-z0-9-]*(?:=|[ \t]+)/gi, false],
+  [/\b(?:mysql(?:dump|admin|sh)?|sshpass)\b[^\n]*?[ \t]-p[ \t]*/g, false],
+  [/\b(?:curl|wget)\b[^\n]*?[ \t](?:-u|--user)(?:=|[ \t]+)?(?=["']?[^ \t\n\r"']*:)/g, false],
+  [/\bBearer[ \t]+/gi, false],
+]
+const BLANK_LINE = /\n[ \t\r]*\n/g
+const URL_VALUE_END = /[&# \t\n\r\x0b\x0c"']/g
+const TOKEN_SEP = ' \t\n\r\x0b\x0c"\''
 const SECRET_RES: [RegExp, string][] = [
-  [/(--[A-Za-z0-9-]*(?:token|password|secret|api[-_]?key)(?:=|[ \t]+))("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)/gi, '$1[redacted]'],
   [/(\b[A-Za-z][A-Za-z0-9+.-]*:\/\/)[^ \t\n\r\x0b\x0c"']*@/g, '$1[redacted]@'],
-  [/(Authorization["']?[ \t]*[:=][ \t]*["']?(?:(?:Bearer|Basic|Token)[ \t]+)?)(?!\[redacted\])[^ \t\n\r\x0b\x0c"',;}]+/gi, '$1[redacted]'],
-  [/(\bBearer[ \t]+)(?!\[redacted\])[^ \t\n\r\x0b\x0c"']+/gi, '$1[redacted]'],
-  [/(\b[A-Za-z0-9_]*(?:token|secret|password|passwd|pwd|pass|credential)[A-Za-z0-9_]*=)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)/gi, '$1[redacted]'],
-  [/(\b[A-Za-z0-9_]*(?:_key|apikey)=)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c;&|"']+)/gi, '$1[redacted]'],
-  [/(["']?\b[A-Za-z0-9_-]*(?:password|passwd|pwd|secret|token|api[-_]?key|credentials?)[A-Za-z0-9_-]*["']?[ \t]*[:=][ \t]*)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)/gi, '$1[redacted]'],
-  [/(\bmysql(?:dump|admin|sh)?\b[^|;&\n]*?[ \t]-p)(?:(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)|([ \t]+)(?!-)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+))/g, '$1$3[redacted]'],
-  [/(\bsshpass\b[^|;&\n]*?[ \t]-p[ \t]*)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)/g, '$1[redacted]'],
-  [/((?:^|[ \t])(?:-u|--user)(?:=|[ \t]+)?)(?!\[redacted\])("[^"]*:[^"]*"|'[^']*:[^']*'|[^ \t\n\r\x0b\x0c"':]*:[^ \t\n\r\x0b\x0c"']+)/g, '$1[redacted]'],
   [/\b(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abprs]-|ace_user_|sk-)[A-Za-z0-9_-]{8,}|\bnpm_[A-Za-z0-9]{20,}|\bAKIA[0-9A-Z]{12,}|\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+)?/g, '[redacted]'],
 ]
+const searchFrom = (rx: RegExp, s: string, pos: number) => { rx.lastIndex = pos; return rx.exec(s) }
+// The index REDACT_BLOCK code points after start (Python counts code points).
+function cpAdvance(s: string, start: number, n: number): number {
+  let k = start
+  while (k < s.length && n-- > 0) { const c = s.charCodeAt(k); k += c >= 0xd800 && c <= 0xdbff && k + 1 < s.length && (s.charCodeAt(k + 1) & 0xfc00) === 0xdc00 ? 2 : 1 }
+  return k
+}
+function redactSpans(text: string): string {
+  let out = '', pos = 0
+  for (;;) {
+    let best: RegExpExecArray | null = null, block = false
+    for (const [rx, b] of SPAN_RES) { const m = searchFrom(rx, text, pos); if (m && (!best || m.index < best.index)) { best = m; block = b } }
+    if (!best) break
+    const start = best.index + best[0].length
+    let k = best.index - 1
+    while (k >= 0 && !TOKEN_SEP.includes(text[k])) k--
+    let end: number
+    if (text.slice(k + 1, best.index).includes('://')) { const e = searchFrom(URL_VALUE_END, text, start); end = e ? e.index : text.length }  // a URL query value
+    else {
+      end = text.indexOf('\n', start)
+      if (end < 0) end = text.length
+      if (block) { const b = searchFrom(BLANK_LINE, text, start); end = Math.max(end, Math.min(b ? b.index : text.length, cpAdvance(text, start, REDACT_BLOCK))) }
+    }
+    out += text.slice(pos, start) + '[redacted]'
+    pos = end
+  }
+  return out + text.slice(pos)
+}
 export function redact<T>(text: T): T {
   if (typeof text !== 'string' || !text) return text
-  let s: string = text
+  let s: string = redactSpans(text)
   for (const [rx, rep] of SECRET_RES) s = s.replace(rx, rep)
   return s as any
 }
