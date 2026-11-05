@@ -48,7 +48,7 @@ test('8.1.3: Bash action = "<family> :: <redacted command <= 200>", unknown when
   for (const c of ['"', "'", '$(', '`', '((', '))', '<<', '<<EOF', '| |', '&& ;', '\\', 'a |& b', '\x00', 123]) { commandFamily(c); expect(!!summarizeAction('Bash', { command: c })).toBe(true) }
 })
 
-test('8.1.3 fuzz: 300 random passwords x 6 forms reach no sent trace field', () => {
+test('8.1.3 fuzz: 500 random passwords x 13 forms reach no sent trace field', () => {
   const strings = (x: any): string[] => typeof x === 'string' ? [x] : x && typeof x === 'object' ? Object.values(x).flatMap(strings) : []
   const leaks: string[] = []
   for (const pw of TABLES.fuzz_passwords) for (const tpl of TABLES.fuzz_templates) {
