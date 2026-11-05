@@ -83,7 +83,7 @@ export async function toolCall($: HookArgs<'tool.call'>[0], L: Load, e: HookArgs
   let s: Sess | null = null
   try {
     s = await ensure($, L)
-    if (s) await recordTool($, L, s, key, toolRec(e.tool, e, r.result, !!r.isError, r.deny, t0, Date.now()))
+    if (s) await recordTool($, L, s, key, toolRec(e.tool, e, r.result, !!r.isError, r.deny, t0, Date.now(), typeof r.text === 'string' ? r.text : undefined))
     if ((e.tool as string) === HANDBACK_TOOL && key !== 'main' && typeof (e as any).message === 'string') L.handback.set(key, (e as any).message)
   } catch { /* accumulation never breaks a tool call */ }
   const contexts: string[] = []

@@ -33,7 +33,7 @@ export function summarizeAction(tool: string, i: any): string {
   if (tool === 'Edit') return `Edited ${base(i.file_path)}`
   if (tool === 'Write') return `Wrote ${base(i.file_path)}`
   if (tool === 'Read') return `Read ${base(i.file_path)}`
-  if (tool === 'Bash') return `Ran: ${cut(i.command ?? i.description ?? '', 60)}`
+  if (tool === 'Bash') return bashAction(i.command)  // 8.1.3: '<family> :: <redacted command <= 200>'
   if (tool === 'Grep') return `Searched for: ${i.pattern ?? ''}`
   if (tool === 'Glob') return `Found files matching: ${i.pattern ?? ''}`
   if (tool === 'Task' || tool === 'Agent') return `Spawned task: ${cut(i.description ?? i.prompt ?? '', 60)}` // Python names only 'Task'
@@ -45,9 +45,13 @@ export function summarizeAction(tool: string, i: any): string {
 // Mirrors summarize_tool_response on the PostToolUse tool_response shape; the mod sees the tool's
 // structured result plus isError/deny, so failed and denied calls (which Python only sees via
 // PostToolUseFailure / not at all) are recorded too.
-export function summarizeResult(tool: string, res: any, isError = false, denied?: string): string {
+export function summarizeResult(tool: string, res: any, isError = false, denied?: string, text?: string): string {
   if (denied) return `Error: ${denied.slice(0, 100)}`
-  if (isError) return `Error: ${String(typeof res === 'string' ? res : JSON.stringify(res)).slice(0, 100)}`
+  // 8.1.3: secrets out before any cut
+  if (typeof res === 'string') res = redact(res)
+  else if (res && typeof res === 'object' && !Array.isArray(res)) res = Object.fromEntries(Object.entries(res).map(([k, v]) => [k, redact(v)]))
+  else if (Array.isArray(res)) res = redact(JSON.stringify(res))
+  if (isError) return `Error: ${String(typeof text === 'string' ? redact(text) : typeof res === 'string' ? res : JSON.stringify(res)).slice(0, 100)}`
   if (res === null || res === undefined || typeof res !== 'object' || Array.isArray(res))
     return cut(typeof res === 'string' ? res : JSON.stringify(res ?? ''), 100)
   if (res.error) return `Error: ${String(res.error).slice(0, 100)}`
@@ -67,48 +71,93 @@ export function summarizeResult(tool: string, res: any, isError = false, denied?
 export const OUTCOME_RULE = '8.1.3'  // the execution row names the rule that set success; /ace:ace-doctor shows the last one
 export const BENIGN_EXIT1 = ['grep', 'egrep', 'fgrep', 'rg', 'diff', 'cmp', 'test', '[', '[[', 'git diff', 'git grep', 'command -v', 'which', 'type', 'pgrep', 'pidof', 'jq']
 // ponytail: a fixed read-only family list (a failed read-only step never fails the task); grow it from probe data.
-export const READ_ONLY_BASH = ['ls', 'cat', 'head', 'tail', 'wc', 'find', 'grep', 'egrep', 'fgrep', 'rg', 'pwd', 'echo', 'printf', 'which', 'type', 'command -v', 'file', 'stat', 'du', 'df', 'tree', 'jq', 'sort', 'uniq', 'cut', 'tr', 'diff', 'cmp', 'test', '[', '[[', 'date', 'printenv', 'ps', 'pgrep', 'pidof', 'git status', 'git log', 'git show', 'git diff', 'git grep', 'git rev-parse', 'git ls-files', 'git blame']
-// State-changing or verifying tools besides non-read-only Bash. ponytail: MCP tools are never decisive (read vs write
-// is unknown per server); a per-server table is the upgrade path.
+// Membership is by prefix: 'git diff HEAD~1' is in 'git diff'.
+export const READ_ONLY_BASH = ['ls', 'cat', 'head', 'tail', 'wc', 'find', 'grep', 'egrep', 'fgrep', 'rg', 'pwd', 'echo', 'printf', 'which', 'type', 'command -v', 'file', 'stat', 'du', 'df', 'tree', 'jq', 'sort', 'uniq', 'cut', 'tr', 'diff', 'cmp', 'test', '[', '[[', 'date', 'printenv', 'ps', 'pgrep', 'pidof', 'git status', 'git log', 'git show', 'git diff', 'git grep', 'git rev-parse', 'git ls-files', 'git blame', 'cd', 'pushd', 'popd', 'true', 'sleep', 'export', 'set', 'sed', 'awk', 'read']
+// State-changing or verifying tools besides non-read-only Bash and state-changing MCP tools (MCP_WRITE_VERBS).
 export const DECISIVE_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit', 'Agent', 'Task', 'Workflow']
+// Interpreters / multi-tool CLIs: the family adds this many non-flag tokens (subcommand, script basename, -c/-e).
+export const SUBCOMMAND_TOOLS: Record<string, number> = {'python': 1, 'python3': 1, 'bash': 1, 'sh': 1, 'node': 1, 'bun': 1, 'deno': 1, 'ruby': 1, 'perl': 1, 'curl': 1, 'wget': 1, 'npm': 1, 'npx': 1, 'pnpm': 1, 'yarn': 1, 'cargo': 1, 'go': 1, 'make': 1, 'terraform': 1, 'uv': 1, 'pip': 1, 'pip3': 1, 'gh': 2, 'git': 2, 'docker': 2, 'kubectl': 2, 'aws': 2, 'gcloud': 2, 'claude': 2}
+// An MCP tool whose action name (after the last '__') has one of these words is state-changing (decisive).
+// ponytail: a verb heuristic on the tool name; a per-server table is the upgrade path.
+export const MCP_WRITE_VERBS = ['save', 'create', 'update', 'delete', 'remove', 'send', 'post', 'publish', 'merge', 'push', 'comment', 'reply', 'upload', 'write', 'set', 'add', 'assign', 'close', 'transfer']
 const FILE_TOOLS = ['Edit', 'Write', 'MultiEdit', 'NotebookEdit']
-const WRAPPERS = ['sudo', 'time', 'env', 'nice', 'nohup', 'exec', 'npx', 'bunx']
-const SUBCMD = ['git', 'npm', 'pnpm', 'yarn', 'bun', 'cargo', 'go', 'gh', 'docker', 'uv', 'pip', 'pip3', 'claude']
+const WRAPPERS = ['sudo', 'time', 'env', 'nice', 'nohup', 'exec', 'bunx']
+const KW_SKIP = ['do', 'then', 'else', 'elif', 'if', 'while', 'until']  // shell keywords before a command
+const KW_NONE = ['done', 'fi', 'esac', 'for', 'case', 'select', 'in', 'function']  // structure, no command
 const ASSIGN = /^[A-Za-z_][A-Za-z0-9_]*=/
+const REDIR = /^(\d*|&)[<>]/
+const REDIR_OP = /^(\d*|&)[<>]{1,3}[&|]?$/
+const CHAIN = ['&&', '||', ';', '\n']
 
-// Split s at any of seps outside quotes (backslash escapes outside single quotes). Same scan as ace_after_task._split_top.
+// Split s at seps outside quotes, backticks, $(...)/(...) and heredoc bodies (backslash escapes outside single quotes).
+// Same scan as ace_after_task._split_top.
 function splitTop(s: string, seps: string[]): string[] {
-  const out: string[] = []
-  let cur = '', q = '', i = 0
-  while (i < s.length) {
+  const out: string[] = [], pend: string[] = [], n = s.length
+  let cur = '', q = '', bt = false, depth = 0, i = 0
+  while (i < n) {
     const ch = s[i]
     if (q) {
-      if (ch === '\\' && q === '"' && i + 1 < s.length) { cur += s.slice(i, i + 2); i += 2; continue }
+      if (ch === '\\' && q === '"' && i + 1 < n) { cur += s.slice(i, i + 2); i += 2; continue }
       if (ch === q) q = ''
       cur += ch; i++; continue
     }
-    if (ch === '\\' && i + 1 < s.length) { cur += s.slice(i, i + 2); i += 2; continue }
+    if (ch === '\\' && i + 1 < n) { cur += s.slice(i, i + 2); i += 2; continue }
+    if (ch === '`') { bt = !bt; cur += ch; i++; continue }
+    if (bt) { cur += ch; i++; continue }
     if (ch === '"' || ch === "'") { q = ch; cur += ch; i++; continue }
-    const sep = seps.find(x => s.startsWith(x, i))
+    if (s.startsWith('<<', i) && !s.startsWith('<<<', i)) {  // heredoc: remember the delimiter
+      let j = i + 2
+      if (j < n && s[j] === '-') j++
+      while (j < n && ' \t'.includes(s[j])) j++
+      let k = j
+      while (k < n && !' \t\n;|&<>()'.includes(s[k])) k++
+      const d = s.slice(j, k).replace(/['"\\]/g, '')
+      if (d) pend.push(d)
+      cur += s.slice(i, k); i = k; continue
+    }
+    if (ch === '\n' && pend.length) {  // the body runs to the delimiter line; nothing in it splits
+      let j = i + 1, e = n
+      while (pend.length && j <= n) {
+        e = s.indexOf('\n', j)
+        if (e < 0) e = n
+        if (pyStrip(s.slice(j, e), WS) === pend[0]) pend.shift()
+        j = e + 1
+      }
+      pend.length = 0
+      cur += s.slice(i, e); i = e; continue
+    }
+    if (ch === '(') depth++
+    else if (ch === ')') depth = Math.max(0, depth - 1)
+    const sep = depth === 0 ? seps.find(x => s.startsWith(x, i)) : undefined
     if (sep) { out.push(cur); cur = ''; i += sep.length; continue }
     cur += ch; i++
   }
   out.push(cur)
   return out
 }
-const words = (s: string) => splitTop(s.trim(), [' ', '\t']).filter(Boolean).map(w => w.replace(/["']/g, ''))
-const isBlank = (x: string) => !x.trim()
-const stripParens = (x: string) => x.replace(/^[(){}]+|[(){}]+$/g, '')
 
-// Bash command -> its family (ace_after_task.command_family). ponytail: a heuristic tokenizer, not a shell parser;
-// a heredoc body is ignored (first line only).
-export function commandFamily(cmd: unknown): string {
-  let c = String(cmd ?? '')
-  if (c.includes('<<')) c = c.split('\n')[0]
-  const segs = splitTop(c, ['&&', '||', ';', '\n']).filter(x => !isBlank(x))
-  if (!segs.length) return ''
-  let w = words(splitTop(segs[segs.length - 1], ['|'])[0]).map(stripParens).filter(x => x && x !== '!')
-  while (w.length && (WRAPPERS.includes(w[0]) || ASSIGN.test(w[0]) || w[0] === 'timeout' || ((w[0] === 'uv' || w[0] === 'poetry') && w[1] === 'run'))) {
+// fam is in table, by family prefix ('git diff HEAD' is in 'git diff').
+const inTable = (fam: string, table: string[]) => table.some(e => fam === e || fam.startsWith(e + ' '))
+const pyStrip = (x: string, chars: string) => { let a = 0, b = x.length; while (a < b && chars.includes(x[a])) a++; while (b > a && chars.includes(x[b - 1])) b--; return x.slice(a, b) }
+const WS = ' \t\n\r\x0b\x0c'  // Python str.strip()/split() whitespace (ASCII)
+
+// [family, readOnly] of one pipeline stage.
+function stageFamily(text: string): [string, boolean] {
+  if (text.includes('<<')) text = text.split('\n')[0]  // the heredoc body is data
+  const raw = splitTop(pyStrip(text, WS), [' ', '\t', '\n']).filter(x => x && x !== '!')
+  if (raw.length && raw[0].startsWith('(')) {  // subshell: its own chain decides
+    const inner = raw[0].slice(1)
+    const [fam, dec] = analyze(inner.endsWith(')') ? inner.slice(0, -1) : inner)
+    return [fam, !dec]
+  }
+  let w: string[] = [], skip = false
+  for (let x of raw) {
+    x = pyStrip(x.replace(/["']/g, ''), '(){}')
+    if (skip || !x) { skip = false; continue }
+    if (REDIR.test(x)) { skip = REDIR_OP.test(x); continue }  // a redirection; a bare operator takes the next word as its target
+    w.push(x)
+  }
+  while (w.length && (WRAPPERS.includes(w[0]) || KW_SKIP.includes(w[0]) || ASSIGN.test(w[0]) || w[0] === 'timeout' || ((w[0] === 'uv' || w[0] === 'poetry') && w[1] === 'run'))) {
     if (w[0] === 'timeout') {
       w = w.slice(1)
       while (w.length && w[0].startsWith('-')) w = w.slice(1)
@@ -116,24 +165,99 @@ export function commandFamily(cmd: unknown): string {
     } else if ((w[0] === 'uv' || w[0] === 'poetry') && w[1] === 'run') w = w.slice(2)
     else w = w.slice(1)
   }
-  if (!w.length) return ''
+  if (!w.length || KW_NONE.includes(w[0])) return ['', true]
   const first = w[0].split('/').pop()!
-  if ((first === 'python' || first === 'python3') && w.length > 2 && w[1] === '-m') return w[2]
-  if (first === 'command' && (w[1] === '-v' || w[1] === '-V')) return 'command -v'
-  if (!SUBCMD.includes(first)) return first
-  const fam = [first], rest = w.slice(1)
-  while (rest.length && fam.length < (first === 'claude' ? 3 : 2)) {
-    const x = rest.shift()!
-    if (x.startsWith('-')) { if (first === 'git' && (x === '-C' || x === '-c') && rest.length) rest.shift(); continue }
-    fam.push(x)
+  let fam = first
+  if (first === 'sed' && w.slice(1).some(x => x.startsWith('-i') || x === '--in-place')) fam = 'sed-i'  // edits files in place: not read-only
+  else if ((first === 'python' || first === 'python3') && w.length > 2 && w[1] === '-m') fam = w[2]
+  else if (first === 'command' && (w[1] === '-v' || w[1] === '-V')) fam = 'command -v'
+  else if (Object.prototype.hasOwnProperty.call(SUBCOMMAND_TOOLS, first)) {
+    const rest = w.slice(1)
+    let tok: string | null = null
+    while (rest.length) {
+      const x = rest.shift()!
+      if (SUBCOMMAND_TOOLS[first] === 1 && (x === '-c' || x === '-e')) { tok = x; break }
+      if (x.startsWith('-')) { if (first === 'git' && (x === '-C' || x === '-c') && rest.length) rest.shift(); continue }
+      if (/[ \t\n]/.test(x)) continue  // a quoted string is no subcommand or script
+      tok = x.replace(/\/+$/, '').split('/').pop() || x
+      break
+    }
+    if (tok) {
+      fam = `${first} ${tok}`
+      // ponytail: the second token is taken only right after the first (no flag-value parsing)
+      if (SUBCOMMAND_TOOLS[first] === 2 && rest.length && !rest[0].startsWith('-')) fam += ` ${rest[0]}`
+    }
   }
-  return fam.join(' ')
+  return [fam, inTable(fam, READ_ONLY_BASH)]
+}
+
+// [family, decisive] of a Bash command. Pipeline: the LAST stage (its exit code is the one the shell reports).
+// &&, ||, ;, newline chain: the LAST NON-READ-ONLY item (a trailing read-only item never decides), else the last item;
+// decisive if any item is not read-only.
+function analyze(cmd: string): [string, boolean] {
+  const items: [string, boolean][] = []
+  for (const it of splitTop(cmd, CHAIN)) {
+    const stages = splitTop(it, ['|']).filter(x => pyStrip(x, WS))
+    if (stages.length) {
+      const [fam, ro] = stageFamily(pyStrip(pyStrip(stages[stages.length - 1], WS), '&'))
+      if (fam) items.push([fam, ro])
+    }
+  }
+  if (!items.length) return ['', true]
+  const nonro = items.filter(x => !x[1]).map(x => x[0])
+  return [nonro.length ? nonro[nonro.length - 1] : items[items.length - 1][0], nonro.length > 0]
+}
+
+// [family, decisive] of a Bash command (ace_after_task.bash_step); never throws.
+export function bashStep(cmd: unknown): [string, boolean] {
+  const c = typeof cmd === 'string' ? cmd : cmd === null || cmd === undefined ? '' : String(cmd)
+  try { return analyze(c) } catch {  // ponytail: unparsable input falls back to the first word
+    const w = c.split(/[ \t\n\r\x0b\x0c]+/).filter(Boolean), fam = w.length ? w[0].split('/').pop()! : ''
+    return [fam, !inTable(fam, READ_ONLY_BASH)]
+  }
+}
+
+// Bash command -> its family (ace_after_task.command_family). ponytail: a heuristic tokenizer, not a shell parser.
+export const commandFamily = (cmd: unknown) => bashStep(cmd)[0]
+
+// An MCP tool whose action name (after the last '__') has a MCP_WRITE_VERBS word (snake, kebab or camelCase).
+export function mcpWrites(tool: string): boolean {
+  if (!String(tool).startsWith('mcp__')) return false
+  const act = String(tool).split('__').pop()!.replace(/([a-z])([A-Z])/g, '$1_$2').toLowerCase()
+  return act.split(/[^a-z0-9]+/).some(x => MCP_WRITE_VERBS.includes(x))
+}
+
+// Secrets in sent text (8.1.3): Claude Code does not redact hook inputs. Applied before any cut. Parity: ace_after_task.redact.
+const SECRET_RES: [RegExp, string][] = [
+  [/(--[A-Za-z0-9-]*(?:token|password|secret|api[-_]?key)(?:=|[ \t]+))("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)/gi, '$1[redacted]'],
+  [/(Authorization:[ \t]*(?:(?:Bearer|Basic|Token)[ \t]+)?)(?!\[redacted\])[^ \t\n\r\x0b\x0c"']+/gi, '$1[redacted]'],
+  [/(\bBearer[ \t]+)(?!\[redacted\])[^ \t\n\r\x0b\x0c"']+/gi, '$1[redacted]'],
+  [/(\b[A-Za-z0-9_]*(?:token|secret|key|password|pass|credential)[A-Za-z0-9_]*=)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c;&|"']+)/gi, '$1[redacted]'],
+  [/\b(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abprs]-|ace_user_|sk-)[A-Za-z0-9_-]{8,}|\bnpm_[A-Za-z0-9]{20,}|\bAKIA[0-9A-Z]{12,}|\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+)?/g, '[redacted]'],
+]
+export function redact<T>(text: T): T {
+  if (typeof text !== 'string' || !text) return text
+  let s: string = text
+  for (const [rx, rep] of SECRET_RES) s = s.replace(rx, rep)
+  return s as any
+}
+
+export const ACTION_MAX = 200
+// The Bash trajectory action (ace_after_task.bash_action): '<family> :: <command>', the family (never cut) first, the
+// redacted command with whitespace collapsed after it, cut to ACTION_MAX chars; 'unknown' when there is no command.
+export function bashAction(cmd: unknown): string {
+  const c = typeof cmd === 'string' ? cmd : cmd === null || cmd === undefined ? '' : String(cmd)
+  let body = redact(c).split(/[ \t\n\r\x0b\x0c]+/).filter(Boolean).join(' ')
+  if (!body) return 'unknown'
+  if ([...body].length > ACTION_MAX) body = cpSlice(body, ACTION_MAX - 3) + '...'
+  return `${redact(commandFamily(c)) || 'unknown'} :: ${body}`
 }
 
 const EXIT_TEXT = /^Exit code (\d+)/
 // The known exit code (structured, or the "Exit code N" text), else null. A code the tool interpreted itself
 // (returnCodeInterpretation, e.g. grep's no-matches) counts as 0.
-function exitCode(res: any): number | null {
+function exitCode(res: any, text?: string): number | null {
+  if (typeof text === 'string') { const m = EXIT_TEXT.exec(text); if (m) return Number(m[1]) }  // tool.call: "Exit code N" lives in text
   if (typeof res === 'string') { const m = EXIT_TEXT.exec(res); return m ? Number(m[1]) : null }
   if (!res || typeof res !== 'object' || Array.isArray(res)) return null
   if (res.returnCodeInterpretation) return 0
@@ -144,27 +268,27 @@ function exitCode(res: any): number | null {
 
 // 'ok' | 'failed' | 'interrupted'. stderr alone never fails a step; a known Bash exit code decides (benign exit-1
 // families are ok); otherwise isError / error / a denial does.
-function stepStatus(tool: string, input: any, res: any, isError: boolean, denied: string | undefined): 'ok' | 'failed' | 'interrupted' {
+function stepStatus(tool: string, input: any, res: any, isError: boolean, denied: string | undefined, text?: string): 'ok' | 'failed' | 'interrupted' {
   if (res && typeof res === 'object' && res.interrupted === true) return 'interrupted'
   if (denied) return 'failed'
   if (tool === 'Bash') {
-    const c = exitCode(res)
-    if (c !== null) return c === 0 || (c === 1 && BENIGN_EXIT1.includes(commandFamily(input?.command))) ? 'ok' : 'failed'
+    const c = exitCode(res, isError ? text : undefined)
+    if (c !== null) return c === 0 || (c === 1 && inTable(commandFamily(input?.command), BENIGN_EXIT1)) ? 'ok' : 'failed'
   }
   return isError || (res && typeof res === 'object' && !Array.isArray(res) && res.error) ? 'failed' : 'ok'
 }
 
 // The step's recovery key and whether an unrecovered failure of it fails the task.
 function stepKey(tool: string, input: any): { key: string; dec: boolean } {
-  if (tool === 'Bash') { const f = commandFamily(input?.command); return { key: `Bash:${f}`, dec: !READ_ONLY_BASH.includes(f) } }
+  if (tool === 'Bash') { const [f, dec] = bashStep(input?.command); return { key: `Bash:${f}`, dec } }
   const path = input?.file_path || input?.notebook_path
-  return { key: FILE_TOOLS.includes(tool) && path ? `file:${path}` : tool, dec: DECISIVE_TOOLS.includes(tool) }
+  return { key: FILE_TOOLS.includes(tool) && path ? `file:${path}` : tool, dec: DECISIVE_TOOLS.includes(tool) || mcpWrites(tool) }
 }
 
 // success is False only for an unrecovered failed decisive step (a LATER ok step with the same key recovers it) or a
 // run whose last step was interrupted. No tool data -> success, 0. Records from before 8.1.3 (no key) count by tool name.
-// aborted: the run's LAST step was interrupted (a mid-run interrupt the task went on from is no abort). A turn that
-// ends aborted (turn.complete isAborted / reason != 'answer') abstains and sends no trace at all.
+// aborted (internal, not in the trace): the run's LAST step was interrupted, so success is false. The mod sees aborts
+// through turn.complete (isAborted / reason) and on purpose sends no trace for them (turn.ts); the classic chain sees none.
 export function taskOutcome(tools: ToolRec[]): { success: boolean; failed_steps: number; aborted: boolean } {
   const st = tools.map(t => ({ s: t.intr ? 'interrupted' : t.failed ? 'failed' : 'ok', key: t.key ?? t.tool, dec: t.dec ?? DECISIVE_TOOLS.includes(t.tool) }))
   const aborted = st.length > 0 && st[st.length - 1].s === 'interrupted'
@@ -175,9 +299,10 @@ export function taskOutcome(tools: ToolRec[]): { success: boolean; failed_steps:
   return { success, failed_steps: st.filter(x => x.s !== 'ok').length, aborted }
 }
 
-export function toolRec(tool: string, input: any, res: any, isError: boolean, denied: string | undefined, t0: number, t1: number): ToolRec {
-  const status = stepStatus(tool, input, res, isError, denied)
-  const rec: ToolRec = { tool, action: summarizeAction(tool, input), result: summarizeResult(tool, res, isError, denied), failed: status !== 'ok',
+// text: the tool.call result's text (a failed Bash call's "Exit code N" first line lives only there).
+export function toolRec(tool: string, input: any, res: any, isError: boolean, denied: string | undefined, t0: number, t1: number, text?: string): ToolRec {
+  const status = stepStatus(tool, input, res, isError, denied, text)
+  const rec: ToolRec = { tool, action: summarizeAction(tool, input), result: summarizeResult(tool, res, isError, denied, text), failed: status !== 'ok',
     start_ms: t0, end_ms: t1, ...stepKey(tool, input) }
   if (status === 'interrupted') rec.intr = true
   const hay = cpSlice(toolHaystack([input]), 2000)
@@ -223,12 +348,12 @@ export function buildTrace(a: {
   downvote?: number[]  // the previous main task's evidenced ids after a user rejection
   summaryCap?: number  // 2000 for the closing answer, 4000 for a SubagentHandback report (ace_after_task.handback_summary)
 }) {
-  const { success, failed_steps, aborted } = taskOutcome(a.tools)  // 8.1.3: end outcome + informational count
+  const { success, failed_steps } = taskOutcome(a.tools)  // 8.1.3: end outcome + informational count
   const trace: any = {
-    task: `User request: ${cpSlice(a.userPrompt, 2000)}`,
+    task: `User request: ${cpSlice(redact(a.userPrompt), 2000)}`,
     trajectory: a.tools.map((t, k) => ({ step: k + 1, tool: t.tool, action: t.action,
       result: t.result, start_ms: t.start_ms, end_ms: t.end_ms, duration_ms: t.end_ms - t.start_ms })),
-    result: { success, failed_steps, ...(aborted ? { aborted: true } : {}), output: `Executed ${a.tools.length} tool calls`, summary: a.answer ? cpSlice(a.answer, a.summaryCap ?? 2000) : null },
+    result: { success, failed_steps, output: `Executed ${a.tools.length} tool calls`, summary: a.answer ? cpSlice(redact(a.answer), a.summaryCap ?? 2000) : null },
     playbook_used: a.playbookUsed,
     timestamp: a.nowIso,
     agent_type: a.agentType,
