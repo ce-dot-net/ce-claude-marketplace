@@ -30,11 +30,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Bash `trajectory[].action` is never empty, `...` or cut to 60 characters any more: it is `<family> :: <command>`,
   the family first (cut to 60 characters; the server can filter by it), the command after it with whitespace
   collapsed, the whole action cut to 200 characters; a family never holds a URL, userinfo or token; `unknown` when there is no command. Still a string, nothing the server reads changes shape.
-- Secrets never leave in a trace: token flags, URL userinfo (`https://user:pass@host`, `https://token@host`, psql
-  URLs), `Authorization`/`Bearer` values, `*TOKEN*=`/`*KEY*=`/`*SECRET*=`/`*PASS*=`/`*CREDENTIAL*=` assignments,
-  YAML/JSON/INI password/secret/token/api_key/credential keys, `mysql -p`, `sshpass -p`, `-u user:pass`, GitHub/OpenAI/Slack/AWS/npm/ace
-  tokens and JWTs are replaced by `[redacted]`
-  in the action, step results, the task and the summary, before any cut (both chains).
+- Secrets never leave in a trace, redacted FAIL-CLOSED before any cut in the action, step results, the task and the
+  summary (both chains): after a password/secret/token/credential/authorization/api key/`*_KEY` key and `:` or `=`,
+  everything to the end of the line (and a block value to the next blank line, at most 500 characters) becomes
+  `[redacted]`; the same to the end of the line after `--password`/`--token`/`--secret`/`--api-key`, `mysql`/`sshpass
+  -p`, curl `-u user:pass` and `Bearer`; plus URL userinfo and GitHub/OpenAI/Slack/AWS/npm/ace tokens and JWTs. It
+  over-redacts on purpose (the rest of the line), never under-redacts.
 
 ### Added
 - `result.failed_steps` (int, always present, informational, never decides success) on every automatic trace in both

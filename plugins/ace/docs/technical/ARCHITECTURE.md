@@ -113,15 +113,18 @@ Bash `trajectory[].action` (8.1.3, both chains): `<family> :: <command>`. The fa
 deciding one for pipes and chains) comes first, cut to 60 characters; the command follows with whitespace collapsed,
 the whole action cut to 200 characters; `unknown` when there is no command, never an empty string. The server can filter by the text before
 ` :: `. The command is built from `tool_input.command` (complete in every hook input; the old empty or cut actions came
-from our own 60-char cut and from the accumulator's size caps). Secrets are replaced by `[redacted]` before any cut,
-in the action, every step `result`, the task and the summary (`redact`, both chains): values after
-`--token`/`--password`/`--secret`/`--api-key`, URL userinfo (everything from `scheme://` to the LAST `@` of the URL token ->
-`scheme://[redacted]@host`, so `@`, `/`, `:` in a password are covered; psql URLs included), `Authorization:`/`Bearer` (also as a JSON key), `NAME=` assignments
-whose name holds TOKEN/SECRET/PASSWORD/PASS/CREDENTIAL or ends in `_KEY`/`apikey` (not a bare `key=`), YAML/JSON/INI keys holding
-password/passwd/pwd/secret/token/apikey/api_key/credential (value after `:` or `=`, quoted or bare), `mysql -p<v>` /
-`-p <v>`, `sshpass -p <v>`, `-u user:pass` / `-uuser:pass` / `--user`, and ghp_/gho_/github_pat_/sk-/xoxb-/AKIA/ace_user_/npm_ tokens and JWTs.
-The family is computed from the redacted command. A fuzz test (300 random passwords x 6 forms) runs in both chains.
-Claude Code does not redact hook inputs.
+from our own 60-char cut and from the accumulator's size caps).
+Secrets are redacted FAIL-CLOSED before any cut, in the action, every step `result`, the task and the summary (`redact`,
+both chains; Claude Code does not redact hook inputs): a key (password, passwd, passphrase, pwd, secret, token,
+credential, authorization, api key, `*_KEY`, pass) followed by `:` or `=` redacts from the value start to the end of the
+line and on to the next blank line (at most 500 characters), so quotes, escapes, `$(...)` and backticks in the value
+never end it; inside a `scheme://` token (a URL query) the value ends at `&`, `#` or whitespace. `--password`/`--token`/
+`--secret`/`--api-key`, `mysql`/`sshpass -p`, curl/wget `-u user:pass` and `Bearer` redact to the end of the line. Then
+URL userinfo (up to the last `@` of the URL token) and ghp_/gho_/github_pat_/sk-/xoxb-/AKIA/ace_user_/npm_ tokens and
+JWTs. This over-redacts on purpose (the rest of the line is lost; about 0.9 % of the last 10 days' Bash commands
+change, mostly `api_key`/`token`/`tokens` names), never under-redacts. The family is computed from the redacted
+command (so `password=$(echo X)` gives `unknown`). A property test (500 random passwords x 31 forms, shared fixture;
+5,000 run locally in both chains with 0 leaks) guards it.
 
 The execution row in `ace-relevance.jsonl` carries `failed_steps` and `outcome_rule: "8.1.3"`; `/ace:ace-doctor` shows
 the rule of the newest row (`pre-8.1.3` for older rows). The user-rejection downvote and `applied_log_ids` are
