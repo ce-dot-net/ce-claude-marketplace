@@ -227,22 +227,30 @@ def _strings(x):
             yield from _strings(v)
 
 
-def test_fuzz_passwords_reach_no_sent_field():
-    """500 random passwords (printable ASCII, no whitespace/quotes) x 13 forms: the password is in no sent field
-    (action, step result, error text, task, summary). The mod runs the same table through buildTrace."""
+def fuzz_fields(pw_triples, templates):
+    """Every sent text field the Python chain builds from a command: action, step results, task, summary."""
     from ace_after_task import redact, summarize_tool_action, summarize_tool_response
-    leaks = []
-    for pw in TABLES['fuzz_passwords']:
-        for tpl in TABLES['fuzz_templates']:
-            cmd = tpl.replace('{pw}', pw)
+    leaks = {}
+    for pw, pwu, pwq in pw_triples:
+        for tpl in templates:
+            cmd = tpl.replace('{pwu}', pwu).replace('{pwq}', pwq).replace('{pw}', pw)
             sent = [summarize_tool_action('Bash', {'command': cmd}),
                     summarize_tool_response('Bash', {'error': 'Exit code 1\n' + cmd}),
-                    summarize_tool_response('Bash', {'stdout': cmd}),
-                    summarize_tool_response('Bash', 'fatal: ' + cmd),
+                    summarize_tool_response('Bash', {'stdout': cmd}), summarize_tool_response('Bash', {'stderr': cmd}),
+                    summarize_tool_response('Bash', 'fatal: ' + cmd), summarize_tool_response('mcp__x__save', {'text': cmd}),
                     redact('User request: run ' + cmd)[:2000], redact('ran ' + cmd)[:2000]]
-            if any(pw in x for x in _strings(sent)):
-                leaks.append(tpl)
-    assert not leaks, '%d leaks, first forms: %s' % (len(leaks), sorted(set(leaks)))
+            secret = pwq if '{pwq}' in tpl else pwu if '{pwu}' in tpl else pw
+            probes = {secret, ' '.join(secret.split())} - {''}
+            if any(p in x for x in sent for p in probes):
+                leaks[tpl] = leaks.get(tpl, 0) + 1
+    return leaks
+
+
+def test_fuzz_passwords_reach_no_sent_field():
+    """Fail-closed redaction: 500 random passwords (printable ASCII incl. space and quotes, some Unicode) x 31 forms;
+    the password is in no sent field. The mod runs the same table through buildTrace. Full size: --fuzz 5000."""
+    assert len(TABLES['fuzz_templates']) >= 25
+    assert fuzz_fields(TABLES['fuzz_passwords'], TABLES['fuzz_templates']) == {}
 
 
 def test_unparsable_commands_never_crash():
@@ -251,6 +259,18 @@ def test_unparsable_commands_never_crash():
         command_family(cmd)
         assert summarize_tool_action('Bash', {'command': cmd})
 
+
+if __name__ == '__main__' and '--fuzz' in sys.argv:
+    import random
+    import string
+    n = int(sys.argv[sys.argv.index('--fuzz') + 1])
+    base = [c for c in string.printable if c not in '\n\r\t\x0b\x0c'] + list('éüß€漢Ωж')
+    rnd, trip = random.Random(5000), []
+    for _ in range(n):
+        pw = ''.join(rnd.choice(base) for _ in range(rnd.randint(8, 30)))
+        pwu = ''.join(c for c in pw if c not in ' "\'') or 'x'
+        trip.append([pw, pwu, ''.join(c for c in pwu if c not in '&#') or 'x'])
+    print(n, 'passwords x', len(TABLES['fuzz_templates']), 'forms, leaks:', fuzz_fields(trip, TABLES['fuzz_templates']))
 
 if __name__ == '__main__' and '--regen' in sys.argv:
     RANDOM = random_cases()

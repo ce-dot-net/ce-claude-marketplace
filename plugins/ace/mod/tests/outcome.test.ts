@@ -48,18 +48,31 @@ test('8.1.3: Bash action = "<family> :: <redacted command <= 200>", unknown when
   for (const c of ['"', "'", '$(', '`', '((', '))', '<<', '<<EOF', '| |', '&& ;', '\\', 'a |& b', '\x00', 123]) { commandFamily(c); expect(!!summarizeAction('Bash', { command: c })).toBe(true) }
 })
 
-test('8.1.3 fuzz: 500 random passwords x 13 forms reach no sent trace field', () => {
+// Fail-closed redaction fuzz: the shared password table x every form through buildTrace (action, result, task, summary,
+// output). FUZZ_N=5000 runs the full size with the same generator as tests/test_task_outcome.py --fuzz.
+export function fuzzLeaks(trip: string[][], templates: string[]): Record<string, number> {
   const strings = (x: any): string[] => typeof x === 'string' ? [x] : x && typeof x === 'object' ? Object.values(x).flatMap(strings) : []
-  const leaks: string[] = []
-  for (const pw of TABLES.fuzz_passwords) for (const tpl of TABLES.fuzz_templates) {
-    const cmd = tpl.split('{pw}').join(pw)
+  const leaks: Record<string, number> = {}
+  for (const [pw, pwu, pwq] of trip) for (const tpl of templates) {
+    const cmd = tpl.split('{pwu}').join(pwu).split('{pwq}').join(pwq).split('{pw}').join(pw)
     const tools = [toolRec('Bash', { command: cmd }, { stdout: '', stderr: cmd, interrupted: false }, true, undefined, 0, 1, `Exit code 1\n${cmd}`),
-      toolRec('Bash', { command: cmd }, { stdout: cmd, stderr: '', interrupted: false }, false, undefined, 1, 2)]
+      toolRec('Bash', { command: cmd }, { stdout: cmd, stderr: '', interrupted: false }, false, undefined, 1, 2),
+      toolRec('mcp__x__save', {}, { text: cmd }, false, undefined, 2, 3)]
     const t = buildTrace({ userPrompt: `run ${cmd}`, answer: `ran ${cmd}`, playbookUsed: [], agentType: 'main', appliedLogIds: [], nowIso: 'x', effort: 'normal', tools })
-    if (strings(t.trace).some(v => v.includes(pw))) leaks.push(tpl)
+    const secret = tpl.includes('{pwq}') ? pwq : tpl.includes('{pwu}') ? pwu : pw
+    const probes = [secret, secret.split(/\s+/).filter(Boolean).join(' ')].filter(Boolean)
+    if (strings(t.trace).some(v => probes.some(p => v.includes(p)))) leaks[tpl] = (leaks[tpl] ?? 0) + 1
   }
-  expect(leaks).toEqual([])
-})
+  return leaks
+}
+
+// Chunks of 50 passwords keep each test well under the per-test timeout.
+for (let i = 0; i < TABLES.fuzz_passwords.length; i += 50) {
+  test(`8.1.3 fuzz (fail-closed): passwords ${i}-${i + 49} x every form reach no sent trace field`, () => {
+    expect(TABLES.fuzz_templates.length >= 25).toBe(true)
+    expect(fuzzLeaks(TABLES.fuzz_passwords.slice(i, i + 50), TABLES.fuzz_templates)).toEqual({})
+  })
+}
 
 test('8.1.3: canary secrets reach no sent trace field (action, result, summary, task)', () => {
   const C = 'ghp_CANARYcanary0123456789', U = 'CANARYurl', Y = 'CANARYyaml', M = 'CANARYmysql'
@@ -69,7 +82,7 @@ test('8.1.3: canary secrets reach no sent trace field (action, result, summary, 
     toolRec('Bash', { command: `curl -H "Authorization: Bearer ${C}" https://x` }, { stdout: '', stderr: `bad ${C}`, interrupted: false }, true, undefined, 1, 2, `Exit code 22\nbad ${C}`)]
   const t = buildTrace({ userPrompt: `use ${C} and https://u:${U}@h password: ${Y}`, answer: `ran gh with ${C}, git clone https://user:${U}@github.com, password: ${Y}, mysql -p${M}`, playbookUsed: [], agentType: 'main', appliedLogIds: [], nowIso: 'x', effort: 'normal', tools })
   expect(JSON.stringify(t.trace).includes('CANARY')).toBe(false)
-  expect(t.trace.trajectory[3].action.startsWith('gh release create :: ')).toBe(true)
+  expect(t.trace.trajectory[3].action).toBe('unknown :: GITHUB_TOKEN=[redacted]')  // fail-closed: the rest of the line goes
   expect(t.trace.trajectory[0].action).toBe('git :: git clone https://[redacted]@github.com/o/r')
 })
 

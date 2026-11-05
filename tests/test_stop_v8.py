@@ -622,7 +622,7 @@ def test_8_1_3_bash_action_has_the_family_and_no_secret_reaches_the_trace(box):
     assert len(learns) == 1
     trace = learns[0]["trace"]
     assert "CANARY" not in json.dumps(trace)
-    assert trace["trajectory"][-1]["action"] == "gh release create :: GITHUB_TOKEN=[redacted] gh release create v1 && echo done"
+    assert trace["trajectory"][-1]["action"] == "unknown :: GITHUB_TOKEN=[redacted]"  # fail-closed: the rest of the line goes
 
 
 def test_stop_without_a_transcript_keeps_the_db_rows_only(box):
