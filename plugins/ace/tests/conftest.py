@@ -34,6 +34,7 @@ def _hermetic(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv('CLAUDE_PLUGIN_DATA', str(tmp_path / 'ace-plugin-data'))
     monkeypatch.delenv('CLAUDE_PROJECT_DIR', raising=False)
+    monkeypatch.setenv('ACE_AUTO_INSTALL', '0')  # 8.1.1: no background npm from a test
     import ace_relevance_logger
     monkeypatch.setattr(ace_relevance_logger, '_logger', None)
 

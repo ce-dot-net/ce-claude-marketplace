@@ -55,7 +55,11 @@
 
 Claude Code installs the exact `@ace-sdk/cli` version pinned in `package.json` (`package-lock.json`) into the plugin
 directory when you install or update the plugin. Plugin and CLI go hand in hand: every plugin version runs the CLI it was
-tested with, and a new CLI reaches you with the next plugin update. If the CLI is missing, run `/ace:ace-install-cli`.
+tested with, and a new CLI reaches you with the next plugin update. If Claude Code has not installed it (a fresh marketplace
+install), the next session start installs it in the background (`npm ci --ignore-scripts` from the lockfile, then
+`npm rebuild better-sqlite3`, in the plugin directory; no message, no restart; one retry per plugin version per hour after
+a failure, with one band line and `[Erneut versuchen]`). `ACE_AUTO_INSTALL=0` turns that off: ACE then tells you and installs
+only after `/ace:ace-install-cli` and its confirm button. Without npm/node, offline-managed or read-only: the same message.
 
 **Requirements:** Claude Code >= 2.1.311, Node.js (for the CLI), macOS, Linux or WSL2. Windows is not supported (use WSL2).
 
@@ -158,6 +162,7 @@ After completing work, run `/ace-learn`:
 - `ACE_RENDER_FULL_PCT` (default 50, 0 = off): share of conversations the mod renders `full`; see the cost note above.
   The ACE server can switch the share for everyone without a plugin release: a search response field `render_full_pct` (0-100, kept for 7 days in `render-full-pct.json`) applies when the env is unset.
 - `ACE_ENGINE=cli`: never use the in-process engine.
+- `ACE_AUTO_INSTALL=0`: never install the pinned ace-cli in the background at SessionStart (default on).
 
 ### Binding (project context)
 

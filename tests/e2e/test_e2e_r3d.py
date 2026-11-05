@@ -124,7 +124,8 @@ def test_no_hook_ever_runs_npm_view_show_or_install(w):
             rc, _o, se, _w, _b = H._run_hook(w.argv_of(hook), json.dumps(ev), str(w.proj), e)
             assert rc == 0, (name, se)
     used = log.read_text().splitlines() if log.exists() else []
-    assert [l for l in used if l.split()[:1] != ["rebuild"]] == [], used
+    # 8.1.1: besides the rebuild, the background installer's lockfile-only `npm ci --ignore-scripts` (never view/show/install)
+    assert [l for l in used if l.split()[:1] != ["rebuild"] and not l.startswith("ci --ignore-scripts")] == [], used
 
 
 def test_startup_row_has_a_status_message(w):
