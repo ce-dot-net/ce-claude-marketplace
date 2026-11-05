@@ -433,7 +433,7 @@ def _analyze(cmd):
 
 def bash_step(cmd):
     """(family, decisive, key) of a Bash command; never raises."""
-    cmd = cmd if isinstance(cmd, str) else ('' if cmd is None else str(cmd))
+    cmd = redact(cmd if isinstance(cmd, str) else ('' if cmd is None else str(cmd)))  # a family never holds a secret
     try:
         return _analyze(cmd)
     except Exception:  # ponytail: unparsable input falls back to the first word
@@ -460,13 +460,14 @@ def mcp_writes(tool):
 # Secrets in sent text (8.1.3): Claude Code does not redact hook inputs. Applied before any cut.
 _SECRET_RES = (
     (regex_module.compile(r'''(--[A-Za-z0-9-]*(?:token|password|secret|api[-_]?key)(?:=|[ \t]+))("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)''', regex_module.I | regex_module.A), r'\1[redacted]'),
-    (regex_module.compile(r'''(\b[A-Za-z][A-Za-z0-9+.-]*://)(?!\[redacted\]@)[^/ \t\n\r\x0b\x0c"'@]+@''', regex_module.A), r'\1[redacted]@'),
+    (regex_module.compile(r'''(\b[A-Za-z][A-Za-z0-9+.-]*://)[^ \t\n\r\x0b\x0c"']*@''', regex_module.A), r'\1[redacted]@'),
     (regex_module.compile(r'''(Authorization["']?[ \t]*[:=][ \t]*["']?(?:(?:Bearer|Basic|Token)[ \t]+)?)(?!\[redacted\])[^ \t\n\r\x0b\x0c"',;}]+''', regex_module.I | regex_module.A), r'\1[redacted]'),
     (regex_module.compile(r'''(\bBearer[ \t]+)(?!\[redacted\])[^ \t\n\r\x0b\x0c"']+''', regex_module.I | regex_module.A), r'\1[redacted]'),
-    (regex_module.compile(r'''(\b[A-Za-z0-9_]*(?:token|secret|key|password|pass|credential)[A-Za-z0-9_]*=)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c;&|"']+)''', regex_module.I | regex_module.A), r'\1[redacted]'),
-    (regex_module.compile(r'''(["']?\b[A-Za-z0-9_-]*(?:password|passwd|pwd|secret|token|api[-_]?key|credentials?)[A-Za-z0-9_-]*["']?[ \t]*[:=][ \t]*)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c,;}&|"']+)''', regex_module.I | regex_module.A), r'\1[redacted]'),
-    (regex_module.compile(r'''(\bmysql(?:dump|admin|sh)?\b[^|;&\n]*?[ \t]-p[ \t]*)(?!\[redacted\])(?!-)("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)''', regex_module.A), r'\1[redacted]'),
-    (regex_module.compile(r'''((?:^|[ \t])(?:-u|--user)(?:=|[ \t]+))(?!\[redacted\])("[^"]*:[^"]*"|'[^']*:[^']*'|[^ \t\n\r\x0b\x0c"':]*:[^ \t\n\r\x0b\x0c"']+)''', regex_module.A), r'\1[redacted]'),
+    (regex_module.compile(r'''(\b(?:[A-Za-z0-9_]*(?:token|secret|password|pass|credential)[A-Za-z0-9_]*|[A-Za-z0-9_]*(?:_key|apikey))=)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c;&|"']+)''', regex_module.I | regex_module.A), r'\1[redacted]'),
+    (regex_module.compile(r'''(["']?\b[A-Za-z0-9_-]*(?:password|passwd|pwd|secret|token|api[-_]?key|credentials?)[A-Za-z0-9_-]*["']?[ \t]*[:=][ \t]*)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)''', regex_module.I | regex_module.A), r'\1[redacted]'),
+    (regex_module.compile(r'''(\bmysql(?:dump|admin|sh)?\b[^|;&\n]*?[ \t]-p)(?:(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)|([ \t]+)(?!-)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+))''', regex_module.A), r'\1\3[redacted]'),
+    (regex_module.compile(r'''(\bsshpass\b[^|;&\n]*?[ \t]-p[ \t]*)(?!\[redacted\])("[^"]*"|'[^']*'|[^ \t\n\r\x0b\x0c"']+)''', regex_module.A), r'\1[redacted]'),
+    (regex_module.compile(r'''((?:^|[ \t])(?:-u|--user)(?:=|[ \t]+)?)(?!\[redacted\])("[^"]*:[^"]*"|'[^']*:[^']*'|[^ \t\n\r\x0b\x0c"':]*:[^ \t\n\r\x0b\x0c"']+)''', regex_module.A), r'\1[redacted]'),
     (regex_module.compile(r'''\b(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abprs]-|ace_user_|sk-)[A-Za-z0-9_-]{8,}|\bnpm_[A-Za-z0-9]{20,}|\bAKIA[0-9A-Z]{12,}|\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+)?''', regex_module.A), '[redacted]'),
 )
 
