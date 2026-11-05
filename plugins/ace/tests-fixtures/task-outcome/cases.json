@@ -1116,7 +1116,7 @@
    }
   },
   {
-   "name": "heredoc: only the first line names the family",
+   "name": "heredoc: a different script body is a different key (no recovery)",
    "steps": [
     {
      "tool": "Bash",
@@ -1131,7 +1131,7 @@
     }
    ],
    "expect": {
-    "success": true,
+    "success": false,
     "failed_steps": 1
    }
   },
@@ -1549,7 +1549,7 @@
    }
   },
   {
-   "name": "heredoc body with && and | does not split; recovered by python3 again",
+   "name": "heredoc body with && and | does not split; the same script again recovers",
    "steps": [
     {
      "tool": "Bash",
@@ -1559,7 +1559,7 @@
     },
     {
      "tool": "Bash",
-     "command": "python3 - <<'EOF'\nprint(1)\nEOF",
+     "command": "python3 - <<'EOF'\nimport os && x | y\nEOF",
      "exit": 0
     }
    ],
@@ -1693,7 +1693,7 @@
    }
   },
   {
-   "name": "bash -c is one family: bash -c failed, bash -c ok recovers",
+   "name": "bash -c with a different script does not recover",
    "steps": [
     {
      "tool": "Bash",
@@ -1708,7 +1708,7 @@
     }
    ],
    "expect": {
-    "success": true,
+    "success": false,
     "failed_steps": 1
    }
   },
@@ -1891,6 +1891,279 @@
    "expect": {
     "success": false,
     "failed_steps": 2
+   }
+  },
+  {
+   "name": "SF1 redirect: awk > out writes, so it is decisive",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "awk '{print $1}' a > out.txt",
+     "exit": 2,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "SF1 redirect: sed -n > file is decisive",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "sed -n 1p a > b",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "SF1 redirect: echo >> log is decisive",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "echo x >> log",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "SF1 redirect: cat &> out and printf 1> f are decisive",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "cat a &> out",
+     "exit": 1,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "printf x 1> f",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 2
+   }
+  },
+  {
+   "name": "SF1 redirect: > /dev/null and 2>&1 stay read-only",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "ls /missing > /dev/null 2>&1",
+     "exit": 2,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "cat missing 2>&1",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 2
+   }
+  },
+  {
+   "name": "SF1 redirect: tee file is decisive",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "rstest tests | tee out.log",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "SF2 in place: sed -Ei is decisive",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "sed -Ei 's/a/b/' f",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "SF2 in place: sed -i.bak and --in-place=.bak are decisive",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "sed -i.bak s/a/b/ f",
+     "exit": 1,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "sed --in-place=.bak s/a/b/ g",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 2
+   }
+  },
+  {
+   "name": "SF2 in place: awk -i inplace is decisive",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "awk -i inplace '{print}' f",
+     "exit": 2,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "SF2 in place: perl -pi -e is decisive, recovered by perl -pi again",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "perl -pi -e 's/a/b/' f",
+     "exit": 2,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "perl -pi -e 's/a/c/' f",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "SF4 key: the same python3 heredoc retried recovers",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "python3 - <<'EOF'\nprint(1)\nEOF",
+     "exit": 1,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "python3 - <<'EOF'\nprint(1)\nEOF",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "SF4 key: python3 -c with a different script does not recover",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "python3 -c \"import a\"",
+     "exit": 1,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "python3 -c \"import b\"",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "SF4 key: curl POST to another host does not recover",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "curl -X POST https://a.example.com/x",
+     "exit": 22,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "curl -X POST https://b.example.com/x",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "SF4 key: curl POST to the same host recovers",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "curl -sS -X POST https://a.example.com/x?q=1",
+     "exit": 22,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "curl -X POST https://u:p@a.example.com/other",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "SF4 key: curl GET does not recover a failed curl POST",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "curl -d a=1 https://a.example.com/x",
+     "exit": 22,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "curl https://a.example.com/x",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
    }
   }
  ]

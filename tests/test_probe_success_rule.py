@@ -39,5 +39,5 @@ def test_probe_prints_no_transcript_text(tmp_path):
                        env={**os.environ, 'PYTHONDONTWRITEBYTECODE': '1'})
     out = p.stdout + p.stderr
     assert p.returncode == 0, out[-2000:]
-    assert 'total' in out and 'bash actions: 3 steps' in out and 'SF4 mcp write' in out and "('kubectl apply', 1)" in out
+    assert 'total' in out and 'bash actions: 3 steps' in out and 'mcp write' in out and "('kubectl apply', 1)" in out
     assert CANARY.lower() not in out.lower(), 'the probe printed transcript text'

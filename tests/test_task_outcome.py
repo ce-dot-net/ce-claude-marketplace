@@ -90,6 +90,20 @@ def test_bash_action(cmd, action):
     assert summarize_tool_action('Bash', {} if cmd is None else {'command': cmd}) == action
 
 
+@pytest.mark.parametrize('cmd,key', TABLES['keys'], ids=[c[:40] for c, _ in TABLES['keys']])
+def test_bash_recovery_key(cmd, key):
+    """The recovery key: the family, plus a script hash (interpreter -c/-e/heredoc) or method+host (curl/wget)."""
+    from ace_after_task import bash_step
+    assert bash_step(cmd)[2] == key
+
+
+def test_family_never_holds_a_secret_or_userinfo():
+    from ace_after_task import command_family
+    for cmd in ['git clone https://u:Zq7c@github.com/o/r', 'git push https://Zq7c@h/o/r', 'gh auth login Zq7cZq7cZq7cZq7cZq7cZq7c0',
+                'curl -u a:Zq7c https://h', 'npm publish --token=Zq7c', 'docker login ghp_Zq7cZq7cZq7c']:
+        assert 'Zq7c' not in command_family(cmd), cmd
+
+
 @pytest.mark.parametrize('text,out', TABLES['redact'], ids=[t[:30] for t, _ in TABLES['redact']])
 def test_redact(text, out):
     from ace_after_task import redact
@@ -97,7 +111,7 @@ def test_redact(text, out):
 
 
 # ---- property test: random step sequences, Python computes, the mod must agree (outcome.test.ts runs RANDOM) ----
-_CMDS = ['make', 'make test', 'make && echo done', 'npm test', 'npm publish', 'echo y | npm publish', 'rstest tests',
+_CMDS = ['curl -X POST https://a.x/y', 'curl -X POST https://b.x/y', 'awk 1 a > out', 'sed -i s/a/b/ f', 'bash -c "echo hi"', 'make', 'make test', 'make && echo done', 'npm test', 'npm publish', 'echo y | npm publish', 'rstest tests',
          'rstest tests | grep FAIL', 'grep -rn x src', 'cd /p && grep x f', 'cat cfg | kubectl apply -f -', 'kubectl get pods',
          'gh pr merge 1', 'gh pr view 1', 'git push origin main', 'git diff --quiet', 'git commit -m "a && b"',
          'python3 deploy.py', 'python3 -c "x"', "python3 - <<'EOF'\nimport a && b\nEOF", '(cd sub && make test)',
