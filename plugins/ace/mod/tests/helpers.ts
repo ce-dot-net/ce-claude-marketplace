@@ -50,6 +50,7 @@ export type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; 
   learnExit?: number; early?: (agentId: string) => Promise<unknown>; beforeWrite?: (path: string) => Promise<unknown>
   selfEval?: boolean; model?: (req: any) => any; compact?: (files: Map<string, string>) => any
   cli?: (args: string[], stdin?: string) => SearchAnswer | undefined; noSettings?: boolean; ignored?: boolean; root?: string; cwd?: string; noPython?: boolean
+  installer?: (args: string[]) => { state: string, detail?: string }  // ace_cli_installer.py answers (8.1.1)
   realpaths?: Record<string, string> }  // REALPATH_SH answers (a symlinked path); default: the path as given
 export type Run = { argv: string[]; stdin?: string; env?: Record<string, string>; timeoutMs?: number; files: Set<string> }
 
@@ -109,6 +110,7 @@ export function host(on: any, o: Opts = {}) {
       return res(a.exitCode ?? 0, a.stdout ?? '', a.stderr ?? '')
     }
     if (o.cli && cliOf(argv)) { const a = o.cli(cliOf(argv)!, init.stdin); if (a) { now += a.advanceMs ?? 0; if (a.killed) throw new Error('ace: $.process.run aborted: still running after timeoutMs'); return res(a.exitCode ?? 0, a.stdout ?? '', a.stderr ?? '') } }
+    if (o.installer && argv.some(a => a.endsWith('/ace_cli_installer.py'))) return res(0, JSON.stringify(o.installer(argv.slice(argv.findIndex(a => a.endsWith('/ace_cli_installer.py')) + 1))) + '\n')
     if (argv[0].endsWith('/scripts/ace-python')) return o.noPython ? res(1, '') : res(0, '/usr/bin/python3.13\n')
     if (argv[0] === '/bin/sh' && argv[2] === REALPATH_SH) return res(0, o.realpaths?.[argv[4]] ?? argv[4])
     if (argv[0] === '/bin/sh' && argv[2] === REPO_WRITE_SH) { const t = `${argv[4]}/${argv[5]}`; if ((o.links ?? []).some(l => t === l || t.startsWith(l + '/'))) return res(3, ''); put(t, init.stdin ?? ''); if (argv[5] === '.gitignore') put(`${argv[4]}/.gitignore-fixed`, ''); return res(0, '') }

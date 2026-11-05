@@ -6,6 +6,7 @@ import { type Ctx, WARN_LINES, bindInit, cliIds, cliInit, repoWrite, writeBindin
 import { REMOVE_SHADOW_SH, REPO_WRITE_WHY } from '../lib/sh.ts'
 import { run } from '../io/fs.ts'
 import { cliRun, cap } from '../io/cli.ts'
+import { installer } from '../io/installer.ts'
 import { type Load } from '../io/state.ts'
 
 const BAND = { plugin: 'ace', key: 'band' } as const
@@ -94,11 +95,11 @@ export async function startLogin($: any, L: Load) {
     await rebind($, L, await $.session.root())
   })().catch(() => undefined)
 }
+// The same installer SessionStart starts in the background (io/installer.ts); a press is never throttled.
 export async function install($: any, L: Load) {
   $.ui.toast('ACE: ace-cli wird installiert')
-  const a = await run($, ['npm', 'ci', '--ignore-scripts'], { cwd: $.plugin.root, timeoutMs: 300_000 })
-  const b = a?.exitCode === 0 ? await run($, ['npm', 'rebuild', 'better-sqlite3'], { cwd: $.plugin.root, timeoutMs: 300_000 }) : null
-  $.ui.toast(b?.exitCode === 0 ? 'ACE: ace-cli installiert' : 'ACE: Installation fehlgeschlagen')
+  const r = await installer($, ['--run'], 600_000)
+  $.ui.toast(r.state === 'ok' ? 'ACE: ace-cli installiert' : `ACE: Installation fehlgeschlagen${r.detail ? ` (${r.detail.slice(0, 120)})` : ''}`)
   await rebind($, L, await $.session.root())
 }
 
@@ -138,7 +139,7 @@ export async function renderBand($: any, L: Load, e: any, next: any) {
     case 'config_refused':
       return h(Box, null, line, h(Button, { key: 'clean', label: 'Bereinigt neu schreiben', onPress: () => cleanRewrite($, L) }), close)
     case 'cli_missing':
-      return h(Box, null, line, h(Button, { key: 'install', label: 'ace-cli installieren', onPress: () => install($, L) }), close)
+      return h(Box, null, line, h(Button, { key: 'install', label: band.retry ? 'Erneut versuchen' : 'ace-cli installieren', onPress: () => install($, L) }), close)
   }
   return h(Box, null, line, close)
 }

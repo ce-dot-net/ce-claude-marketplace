@@ -227,6 +227,14 @@ def disabled_flag(project_id: Optional[str], session_id: Optional[str]) -> Path:
     return _file(session_dir(project_id, session_id, create=False) / "disabled.flag")
 
 
+def cli_install_lock() -> Path:
+    return _file(data_root() / "cli-install.lock")
+
+
+def cli_install_state() -> Path:
+    return _file(data_root() / "cli-install.json")
+
+
 def pin_backoff_file() -> Path:
     return _file(data_root() / "pin-backoff")
 

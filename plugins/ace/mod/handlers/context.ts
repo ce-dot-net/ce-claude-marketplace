@@ -3,6 +3,7 @@
 import { ADOPT_LINE, WARN_LINES, type Ctx, type State, adopt, cliIds, contextRow, exportEnv, localState, problemLine, remember, untracked, verify } from '../context/index.ts'
 import { run, writePrivate } from '../io/fs.ts'
 import { cliRun } from '../io/cli.ts'
+import { installer } from '../io/installer.ts'
 import { nowIso } from '../io/log.ts'
 import { type Load, dataRoot, resolveContextOnce } from '../io/state.ts'
 import { pyDumps } from '../lib/pyjson.ts'
@@ -38,15 +39,17 @@ export function suggest(projects: { orgId: string, projectId: string, name: stri
   if (!name) return null
   return projects.find(p => p.name.toLowerCase() === name) ?? projects.find(p => p.name.toLowerCase().includes(name) || name.includes(p.name.toLowerCase())) ?? null
 }
-export async function publish($: any, L: Load, c: Ctx, state: State | null) {
+export const INSTALL_FAILED = 'ACE ▼ ace-cli konnte nicht automatisch installiert werden'
+// `retry`: the automatic install failed; the band's one action is then [Erneut versuchen] (the same installer).
+export async function publish($: any, L: Load, c: Ctx, state: State | null, retry?: string) {
   L.ctxState = state
   showStatus($, state)
   let projects: { orgId: string, projectId: string, name: string }[] = []
   if (state === 'unbound' || state === 'project_not_found' || state === 'no_access') projects = await projectList($, c)
-  const band = { state, line: problemLine(state), projectId: (c as any).projectId ?? null,
+  const band = { state, line: retry ? INSTALL_FAILED : problemLine(state), retry: retry ?? null, projectId: (c as any).projectId ?? null,
     suggestion: state === 'unbound' ? suggest(projects, c.root) : null, projects, picking: false, dismissed: false }
   await $.state.set(BAND, band)
-  $.ui.log(`ace band ${JSON.stringify({ state, suggestion: band.suggestion })}`, { to: 'debug' })  // the debug log says what the band shows
+  $.ui.log(`ace band ${JSON.stringify({ state, suggestion: band.suggestion, retry: band.retry })}`, { to: 'debug' })  // the debug log says what the band shows
 }
 // The whole step. Never throws: the hooks still run on whatever binding resolved.
 export async function startContext($: any, L: Load, cwd: string) {
@@ -68,8 +71,19 @@ export async function startContext($: any, L: Load, cwd: string) {
       return
     }
     L.verifying = (async () => {
-      const st = await verify(c, argv => cliRun($, c as any, argv, { timeoutMs: 20_000 }))
-      await publish($, L, c, st === 'ok' ? null : st)
+      const probe = () => verify(c, argv => cliRun($, c as any, argv, { timeoutMs: 20_000 }))
+      let st = await probe()
+      let retry: string | undefined
+      if (st === 'cli_missing') {  // 8.1.1: the pinned CLI is installed in the background; quiet while it runs, a band only on failure
+        const e = await installer($, ['--ensure'], 30_000)
+        if (e.state === 'started' || e.state === 'running') {
+          await publish($, L, c, null)
+          const w = await installer($, ['--wait'], 450_000)
+          if (w.state === 'ok') st = await probe()  // the CLI is resolved per call: no restart
+          else retry = w.detail || w.state
+        } else if (e.state === 'failed') retry = e.detail || 'failed'
+      }
+      await publish($, L, c, st === 'ok' ? null : st, st === 'cli_missing' ? retry : undefined)
       await logOnce($, L, c, st)
     })().catch(() => undefined)
   } catch { /* the hooks keep the binding they resolved */ }

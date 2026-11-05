@@ -198,7 +198,8 @@ Recommended Actions:
 ### Check 4: CLI Availability (plugin-local pin)
 
 Each plugin version runs exactly the ace-cli it was tested with: the exact pin in `package.json`, installed by
-Claude Code into `${CLAUDE_PLUGIN_ROOT}/node_modules` on plugin install/update. A global ace-cli is only a fallback.
+Claude Code into `${CLAUDE_PLUGIN_ROOT}/node_modules` on plugin install/update; when it is missing, SessionStart installs it
+in the background (8.1.1; `ACE_AUTO_INSTALL=0` opts out). A global ace-cli is only a fallback.
 
 **What to Check**:
 ```bash
@@ -220,6 +221,10 @@ test -f "$PLUGIN_ROOT/node_modules/better-sqlite3/build/Release/better_sqlite3.n
 GLOBAL_CLI="$(command -v 'ace-cli')"
 test -n "$GLOBAL_CLI" && echo "global ace-cli: $GLOBAL_CLI $("$GLOBAL_CLI" --version 2>/dev/null)"
 
+# auto-install state (ok | started | running | failed | off | unavailable + detail) and its last result
+python3 "$PLUGIN_ROOT/shared-hooks/utils/ace_cli_installer.py" --status
+test -r "$DATA/cli-install.json" && cat "$DATA/cli-install.json"
+
 # ace_engine.py --status: which engine runs search/learn, and why ("lib" = in-process @ace-sdk/core, "cli" = ace-cli spawn)
 python3 "$PLUGIN_ROOT/shared-hooks/utils/ace_engine.py" --status
 
@@ -234,6 +239,7 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli --version
 - ⚠️ packages not installed: run `claude plugin update ace@ce-dot-net-marketplace`; if still missing, `/ace:ace-install-cli`
 - ⚠️ sqlite binary missing: starts working after the next session start (SessionStart runs `npm rebuild better-sqlite3` once per plugin version)
 - ❌ neither: run `/ace:ace-install-cli`
+- ℹ️ auto-install: `ok` nothing to do; `running`/`started` the install is in progress (no message by design); `failed` the detail is npm's error (one retry per plugin version per hour, `/ace:ace-install-cli` retries now); `off` = `ACE_AUTO_INSTALL=0`; `unavailable` = no npm/node, offline-managed (`CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC`), read-only plugin dir or a refused `node_modules` symlink, so only `/ace:ace-install-cli` or `claude plugin update` helps
 - ✅ Engine: lib (core version from the status JSON)
 - ℹ️ Engine: cli, with the `reason` from the status JSON. This is a working fallback, not an error, so report it without alarm. `ACE_ENGINE=cli` forces it. `core_missing` is normal on volta, asdf and pnpm wrappers, where ace-cli itself is fine. `core_too_old`, `core_too_new`, `file_missing` and `export_missing` mean the core found does not pass the gate; to get the engine back, suggest `/ace:ace-install-cli`.
 
