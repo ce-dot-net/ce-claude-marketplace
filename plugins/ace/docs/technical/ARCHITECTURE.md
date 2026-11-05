@@ -119,12 +119,21 @@ both chains; Claude Code does not redact hook inputs): a key (password, passwd, 
 credential, authorization, api key, `*_KEY`, pass) followed by `:` or `=` redacts from the value start to the end of the
 line and on to the next blank line (at most 500 characters), so quotes, escapes, `$(...)` and backticks in the value
 never end it; inside a `scheme://` token (a URL query) the value ends at `&`, `#` or whitespace. `--password`/`--token`/
-`--secret`/`--api-key`, `mysql`/`sshpass -p`, curl/wget `-u user:pass` and `Bearer` redact to the end of the line. Then
+`--secret`/`--api-key`, `mysql`/`sshpass`/`7z -p`, `zip`/`unzip -P`, `ssh-keygen -N`, `openssl -k`/`-pass`/`-passin`/
+`-passout`, `htpasswd`, curl/wget `-u user:pass` and `Bearer` redact to the end of the line; `Cookie:`/`Set-Cookie:`/
+`X-*-Token:`/`X-API-Key:` headers are keys; the `echo`/`printf` stage piped into `--password-stdin`/`--with-token` is
+redacted. Then
 URL userinfo (up to the last `@` of the URL token) and ghp_/gho_/github_pat_/sk-/xoxb-/AKIA/ace_user_/npm_ tokens and
 JWTs. This over-redacts on purpose (the rest of the line is lost; about 0.9 % of the last 10 days' Bash commands
 change, mostly `api_key`/`token`/`tokens` names), never under-redacts. The family is computed from the redacted
-command (so `password=$(echo X)` gives `unknown`). A property test (500 random passwords x 31 forms, shared fixture;
+command's rule family but SENT only when every word of it is still in the redacted command (else its first word, else
+`unknown`; so `password=$(echo X)` gives `unknown`). The rule itself (family, read-only and benign checks, recovery
+key) always reads the RAW command, which never leaves the plugin, so redaction never changes `success` (a property
+test: 300 random sequences with a secret vs a harmless word at the same place give the same outcome and keys). A property test (500 random passwords x 31 forms, shared fixture;
 5,000 run locally in both chains with 0 leaks) guards it.
+Known limits: a secret without a keyword or a known prefix (a bare value, a secret on the line BEFORE its keyword, a
+positional password of a tool not listed above) cannot be recognized and is sent; do not write secrets into commands.
+Over-redaction loses the rest of the line after any keyword (`tokens:`, `api_key` in code, `pass:`).
 
 The execution row in `ace-relevance.jsonl` carries `failed_steps` and `outcome_rule: "8.1.3"`; `/ace:ace-doctor` shows
 the rule of the newest row (`pre-8.1.3` for older rows). The user-rejection downvote and `applied_log_ids` are
