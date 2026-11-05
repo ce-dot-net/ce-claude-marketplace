@@ -1,7 +1,7 @@
 // ACE mod suite, 8.1.3 end-outcome rule: the shared fixture (tests-fixtures/task-outcome, wrapper ./fixtures/outcome_cases.ts).
 // Mirror runner: tests/test_task_outcome.py (same cases, same expectations; it also guards table parity and the wrapper sync).
 import { expect, test } from 'claude-code/testing'
-import { CASES, RANDOM, TABLES } from './fixtures/outcome_cases.ts'
+import { CASES, PAIRS, RANDOM, TABLES } from './fixtures/outcome_cases.ts'
 import { BENIGN_EXIT1, DECISIVE_TOOLS, MCP_WRITE_VERBS, READ_ONLY_BASH, SUBCOMMAND_TOOLS, bashStep, buildTrace, commandFamily, redact, summarizeAction, taskOutcome, toolRec } from '../lib/trace.ts'
 
 // A neutral fixture step -> the tool.call result the mod sees -> the real toolRec.
@@ -73,6 +73,14 @@ for (let i = 0; i < TABLES.fuzz_passwords.length; i += 50) {
     expect(fuzzLeaks(TABLES.fuzz_passwords.slice(i, i + 50), TABLES.fuzz_templates)).toEqual({})
   })
 }
+
+test('8.1.3 property: a secret at a slot never changes the outcome or the keys (the rule reads the raw command)', () => {
+  expect(PAIRS.length).toBe(300)
+  for (const [a, b] of PAIRS) {
+    const ra = a.map(rec), rb = b.map(rec)
+    expect([taskOutcome(ra), ra.map((r: any) => [r.key, r.dec])]).toEqual([taskOutcome(rb), rb.map((r: any) => [r.key, r.dec])])
+  }
+})
 
 test('8.1.3: canary secrets reach no sent trace field (action, result, summary, task)', () => {
   const C = 'ghp_CANARYcanary0123456789', U = 'CANARYurl', Y = 'CANARYyaml', M = 'CANARYmysql'

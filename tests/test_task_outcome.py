@@ -20,13 +20,15 @@ CASES = json.loads((FIX / 'cases.json').read_text())['cases']
 TABLES = json.loads((FIX / 'tables.json').read_text())
 RANDOM_FILE = FIX / 'random_cases.json'
 RANDOM = json.loads(RANDOM_FILE.read_text()) if RANDOM_FILE.exists() else []
+PAIRS_FILE = FIX / 'secret_pairs.json'
+PAIRS = json.loads(PAIRS_FILE.read_text()) if PAIRS_FILE.exists() else []
 
 
 def wrapper_text():
     return ('// GENERATED from tests-fixtures/task-outcome/{cases,tables}.json (mods load only .ts); '
             'tests/test_task_outcome.py guards the sync.\n'
-            'export const CASES = %s\nexport const TABLES = %s\nexport const RANDOM = %s\n'
-            % (json.dumps(CASES), json.dumps(TABLES), json.dumps(RANDOM)))
+            'export const CASES = %s\nexport const TABLES = %s\nexport const RANDOM = %s\nexport const PAIRS = %s\n'
+            % (json.dumps(CASES), json.dumps(TABLES), json.dumps(RANDOM), json.dumps(PAIRS)))
 
 
 def native(step, i):
@@ -253,6 +255,50 @@ def test_fuzz_passwords_reach_no_sent_field():
     assert fuzz_fields(TABLES['fuzz_passwords'], TABLES['fuzz_templates']) == {}
 
 
+_SLOTS = [('TOKEN=s3cr3tv4l', 'FOO=s3cr3tv4l'), ('PASSWORD=hunter2x', 'FOO=hunter2x'), ('export API_KEY=abc123;', 'export FOO=abc123;'),
+          ('GITHUB_TOKEN=ghp_abcdefghijklmnop1234', 'FOO=bar'), ('SECRET=$(cat .s)', 'FOO=$(cat .s)')]
+_FLAGS = [('--token s3cr3t', '--level s3cr3t'), ('-H "Authorization: Bearer abc"', '-H "Accept: text/plain"'),
+          ('--password=pw1', '--verbose=pw1')]
+
+
+def secret_pairs(n=300, seed=8135):
+    """Random step sequences twice: once with a secret at a slot, once with a harmless word at the same place."""
+    import random
+    rnd = random.Random(seed)
+    out = []
+    for k in range(n):
+        a, b = [], []
+        for _ in range(rnd.randint(1, 5)):
+            base = rnd.choice([c for c in _CMDS if c])
+            if rnd.random() < 0.6 or '\n' in base:  # a flag appended after a heredoc would land in its body
+                sec, harm = rnd.choice(_SLOTS)
+                ca, cb = sec + ' ' + base, harm + ' ' + base
+            else:
+                sec, harm = rnd.choice(_FLAGS)
+                ca, cb = base + ' ' + sec, base + ' ' + harm
+            st = {'tool': 'Bash', 'exit': rnd.choice([0, 0, 1, 2])}
+            if st['exit']:
+                st['is_error'] = True
+            a.append(dict(st, command=ca))
+            b.append(dict(st, command=cb))
+        out.append([a, b])
+    return out
+
+
+def test_secret_pairs_in_sync():
+    assert len(PAIRS) == 300 and PAIRS == secret_pairs(), 'run: python3 tests/test_task_outcome.py --regen'
+
+
+def test_a_secret_never_changes_the_outcome():
+    """Property: the rule reads the RAW command; a secret at a slot gives the same outcome and keys as a harmless word."""
+    from ace_after_task import bash_step, task_outcome
+    for a, b in PAIRS:
+        ta = task_outcome([native(s, i) for i, s in enumerate(a)])
+        tb = task_outcome([native(s, i) for i, s in enumerate(b)])
+        assert ta == tb, (a, b)
+        assert [bash_step(s['command']) for s in a] == [bash_step(s['command']) for s in b]
+
+
 def test_unparsable_commands_never_crash():
     from ace_after_task import command_family, summarize_tool_action
     for cmd in ['"', "'", '$(', '`', '((', '))', '<<', '<<EOF', '| |', '&& ;', '\\', 'a |& b', '\x00', 123]:
@@ -275,5 +321,7 @@ if __name__ == '__main__' and '--fuzz' in sys.argv:
 if __name__ == '__main__' and '--regen' in sys.argv:
     RANDOM = random_cases()
     RANDOM_FILE.write_text(json.dumps(RANDOM, separators=(',', ':')) + '\n')
+    PAIRS = secret_pairs()
+    PAIRS_FILE.write_text(json.dumps(PAIRS, separators=(',', ':')) + '\n')
     WRAPPER.write_text(wrapper_text())
     print('wrote', RANDOM_FILE, WRAPPER)

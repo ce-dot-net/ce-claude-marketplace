@@ -2165,6 +2165,96 @@
     "success": false,
     "failed_steps": 1
    }
+  },
+  {
+   "name": "raw command decides: export TOKEN=abc; make deploy (exit 2) fails",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "export TOKEN=abc; make deploy",
+     "exit": 2,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "raw command decides: TOKEN=1 npx playwright test | grep -c passed (exit 1) is benign",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "TOKEN=1 npx playwright test | grep -c passed",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 0
+   }
+  },
+  {
+   "name": "raw command decides: export FOO=abc; make deploy (exit 2) fails",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "export FOO=abc; make deploy",
+     "exit": 2,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "raw command decides: FOO=1 npx playwright test | grep -c passed (exit 1) is benign",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "FOO=1 npx playwright test | grep -c passed",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 0
+   }
+  },
+  {
+   "name": "raw command decides: export PASSWORD=abc; make deploy (exit 2) fails",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "export PASSWORD=abc; make deploy",
+     "exit": 2,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "raw command decides: PASSWORD=1 npx playwright test | grep -c passed (exit 1) is benign",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "PASSWORD=1 npx playwright test | grep -c passed",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 0
+   }
   }
  ]
 }
