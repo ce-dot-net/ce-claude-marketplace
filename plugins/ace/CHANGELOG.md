@@ -5,6 +5,54 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.1.3] - 2026-11-05
+
+### Fixed
+- `result.success` is the END outcome of the task again. Since v8.0.0 any failed step failed the whole task: a grep
+  without a match (exit 1), a red test run in the TDD phase, a diff, a retried call. Main-task success fell from about
+  90 % to about 60 % and the server learned negative rewards from it. The rule (both chains, identical, full text in
+  docs/technical/ARCHITECTURE.md "Task outcome (8.1.3)"): `success` is false only when a DECISIVE step failed and no
+  LATER successful step with the same key recovered it, or the run's last step was interrupted. Decisive = non-read-only
+  Bash, Edit, Write, MultiEdit, NotebookEdit, Agent, Task, Workflow, and state-changing MCP tools (action name has
+  save/create/update/delete/remove/send/post/publish/merge/push/comment/reply/upload/write/set/add/assign/close/transfer).
+  Key = the Bash command family, the file path for Edit/Write/MultiEdit/NotebookEdit, else the tool name. A Bash family
+  is taken from the LAST pipe stage and the LAST NON-READ-ONLY `&&`/`||`/`;` item (a trailing `&& echo done` never
+  decides), with the subcommand or script for interpreters and multi-tool CLIs (`gh pr merge`, `python3 deploy.py`,
+  `python3 -c`); quotes, heredocs, `$(...)`, backticks and subshells do not split. An output redirection to a file
+  (`awk ... > out`, `echo x >> log`) and in-place editors (`sed -i`/`-Ei`/`-i.bak`, `awk -i inplace`, `perl -pi`) make a
+  step decisive. The recovery key adds a script hash for `python`/`bash`/`node`/... `-c`/`-e`/heredoc scripts and
+  method+host for curl/wget, so a different script or host never recovers a failure. Exit 1 of grep/rg/diff/cmp/test/`[`/
+  git diff/git grep/`command -v`/which/type/pgrep/pidof/jq (as the deciding family) is no failed step. Failed
+  read-only steps (Read, Glob, Grep, WebFetch, WebSearch, read-only Bash, read MCP tools) never fail the task.
+- stderr alone is no failure: a Bash step with exit code 0 succeeds whatever it wrote to stderr (git progress, npm/pip
+  notices, node warnings). Before, the mod counted any stderr as a failed step. The mod reads a failed call's exit code
+  from the `tool.call` text (`Exit code N`), as the Python chain does from PostToolUseFailure.
+- Bash `trajectory[].action` is never empty, `...` or cut to 60 characters any more: it is `<family> :: <command>`,
+  the family first (cut to 60 characters; the server can filter by it), the command after it with whitespace
+  collapsed, the whole action cut to 200 characters; a family never holds a URL, userinfo or token; `unknown` when there is no command. Still a string, nothing the server reads changes shape.
+- Secrets never leave in a trace, redacted FAIL-CLOSED before any cut in the action, step results, the task and the
+  summary (both chains): after a password/secret/token/credential/authorization/api key/`*_KEY` key and `:` or `=`,
+  everything to the end of the line (and a block value to the next blank line, at most 500 characters) becomes
+  `[redacted]`; the same to the end of the line after `--password`/`--token`/`--secret`/`--api-key`, `mysql`/`sshpass
+  -p`, curl `-u user:pass` and `Bearer`; plus URL userinfo and GitHub/OpenAI/Slack/AWS/npm/ace tokens and JWTs. It
+  over-redacts on purpose (the rest of the line), never under-redacts.
+  Also: `Cookie`/`Set-Cookie`/`X-*-Token`/`X-API-Key` headers, `ssh-keygen -N`, `openssl -k/-pass/-passin/-passout`,
+  `7z -p`, `zip`/`unzip -P`, `htpasswd`, and the `echo`/`printf` piped into `--password-stdin`/`--with-token`. The
+  outcome rule always reads the raw command (it never leaves the plugin), so redaction never changes `success`.
+  Known limit: a secret without a keyword or known prefix (a bare value, a secret before its keyword) cannot be
+  recognized; do not write secrets into commands.
+
+### Added
+- `result.failed_steps` (int, always present, informational, never decides success) on every automatic trace in both
+  chains; PermissionDenied traces keep `success: false` and send `failed_steps: 1`. The server stores `result`
+  unchanged, so no SDK change. There is no `result.aborted`: the mod sees aborts via `turn.complete` and on purpose
+  sends no trace for them, and the classic chain sees no abort (Claude Code fires no Stop on a user interrupt).
+- The execution row carries `failed_steps` and `outcome_rule`; `/ace:ace-doctor` (mod and markdown) shows the outcome
+  rule of the newest execution row.
+- Shared fixture `tests-fixtures/task-outcome/` (116 step sequences, 400 seeded random sequences, the family, key, action and
+  redaction tables), run by the Python and the mod suite; a parity test keeps the two chains' tables equal.
+- `tests/probe_success_rule.py --days N`: the old vs new rule over local transcripts, counts only.
+
 ## [8.1.2] - 2026-11-05
 
 ### Fixed

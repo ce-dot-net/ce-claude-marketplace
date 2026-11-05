@@ -51,6 +51,7 @@ from validation import is_valid_pattern_id
 
 # Import re at module level for quality filters
 import re as regex_module
+import hashlib
 import time
 
 # render_cohort: imported here for render_variant trace stamping (MUST-FIX 2).
@@ -154,25 +155,480 @@ def has_substantial_work_from_accumulated(tools: list) -> bool:
     return False
 
 
-def tool_failed(resp) -> bool:
-    """A failed step: error / stderr, or (fix 5a) a non-zero exit code - structured or the transcript's
-    "Exit code N" text - unless the tool interpreted it (grep exit 1 = no matches). Parity: mod/lib/trace.ts toolRec."""
-    if not isinstance(resp, dict):
-        return False
-    if resp.get('error') or resp.get('stderr'):
-        return True
-    c = resp.get('content')
-    if isinstance(c, str):
-        m = regex_module.match(r'Exit code (\d+)', c)
-        if m and int(m.group(1)) != 0:
-            return True
-    if resp.get('returnCodeInterpretation'):
-        return False
-    code = resp.get('exit_code', resp.get('exitCode', 0))
+# ---- 8.1.3 task outcome (docs/technical/ARCHITECTURE.md "Task outcome"; parity: mod/lib/trace.ts, fixture tests-fixtures/task-outcome) ----
+# result.success = the END outcome of the task; result.failed_steps = how many steps failed (informational).
+# Exit 1 of these families means "no match / differs / false", never a failure (not even a failed step); exit >= 2 is.
+BENIGN_EXIT1 = ("grep", "egrep", "fgrep", "rg", "diff", "cmp", "test", "[", "[[", "git diff", "git grep", "command -v",
+                "which", "type", "pgrep", "pidof", "jq")
+# ponytail: a fixed read-only family list (a failed read-only step never fails the task); grow it from probe data.
+# Membership is by prefix: 'git diff HEAD~1' is in 'git diff'.
+READ_ONLY_BASH = ("ls", "cat", "head", "tail", "wc", "find", "grep", "egrep", "fgrep", "rg", "pwd", "echo", "printf",
+                  "which", "type", "command -v", "file", "stat", "du", "df", "tree", "jq", "sort", "uniq", "cut",
+                  "tr", "diff", "cmp", "test", "[", "[[", "date", "printenv", "ps", "pgrep", "pidof", "git status",
+                  "git log", "git show", "git diff", "git grep", "git rev-parse", "git ls-files", "git blame", "cd",
+                  "pushd", "popd", "true", "sleep", "export", "set", "sed", "awk", "read")
+OUTCOME_RULE = "8.1.3"  # the execution row names the rule that set success; /ace:ace-doctor shows the last one
+# State-changing or verifying tools besides non-read-only Bash and state-changing MCP tools (MCP_WRITE_VERBS).
+DECISIVE_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit", "Agent", "Task", "Workflow")
+# Interpreters / multi-tool CLIs: the family adds this many non-flag tokens (subcommand, script basename, -c/-e).
+SUBCOMMAND_TOOLS = {"python": 1, "python3": 1, "bash": 1, "sh": 1, "node": 1, "bun": 1, "deno": 1, "ruby": 1, "perl": 1,
+                    "npm": 1, "npx": 1, "pnpm": 1, "yarn": 1, "cargo": 1, "go": 1, "make": 1,
+                    "terraform": 1, "uv": 1, "pip": 1, "pip3": 1, "gh": 2, "git": 2, "docker": 2, "kubectl": 2, "aws": 2,
+                    "gcloud": 2, "claude": 2}
+# An MCP tool whose action name (after the last '__') has one of these words is state-changing (decisive).
+# ponytail: a verb heuristic on the tool name; a per-server table is the upgrade path.
+MCP_WRITE_VERBS = ("save", "create", "update", "delete", "remove", "send", "post", "publish", "merge", "push", "comment",
+                   "reply", "upload", "write", "set", "add", "assign", "close", "transfer")
+_FILE_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
+_WRAPPERS = ("sudo", "time", "env", "nice", "nohup", "exec", "bunx")
+_KW_SKIP = ("do", "then", "else", "elif", "if", "while", "until")  # shell keywords before a command
+_KW_NONE = ("done", "fi", "esac", "for", "case", "select", "in", "function")  # structure, no command
+_ASSIGN = regex_module.compile(r'[A-Za-z_][A-Za-z0-9_]*=')
+_REDIR = regex_module.compile(r'(\d*|&)(<<<|<<-?|<>|<&|<|>>|>&|>\||>)([\s\S]*)')
+_SHORT_I = regex_module.compile(r'-[A-Za-z]*i')  # sed -i, -Ei, -i.bak
+_PERL_I = regex_module.compile(r'-[A-Za-z0-9]*i')  # perl -i, -pi, -0pi, -i.bak
+_AWK_INPLACE = regex_module.compile(r' (?:-i ?|--include[= ])inplace ')
+_LONG_RUN = regex_module.compile(r'(?:[A-Fa-f0-9]{24,}|(?=[^a-z]*[a-z])(?=[^A-Z]*[A-Z])(?=[^0-9]*[0-9])[A-Za-z0-9+/_-]{24,}={0,2})$')
+_SCHEME = regex_module.compile(r'[A-Za-z][A-Za-z0-9+.-]*://')
+_HASH_INTERP = ("python", "python3", "bash", "sh", "node", "ruby", "perl")  # -c/-e/heredoc script hashed into the key
+_EXIT_TEXT = regex_module.compile(r'Exit code (\d+)')
+_CHAIN = ('&&', '||', ';', '\n')
+_WS = ' \t\n\r\x0b\x0c'  # ASCII whitespace only (the mod's twin matches it exactly)
+
+
+def _split_top(s, seps):
+    """Split s at seps outside quotes, backticks, $(...)/(...) and heredoc bodies (backslash escapes outside single
+    quotes). Same scan as mod/lib/trace.ts splitTop."""
+    out, cur, q, bt, depth, i, pend = [], '', None, False, 0, 0, []
+    n = len(s)
+    while i < n:
+        ch = s[i]
+        if q:
+            if ch == '\\' and q == '"' and i + 1 < n:
+                cur += s[i:i + 2]
+                i += 2
+                continue
+            if ch == q:
+                q = None
+            cur += ch
+            i += 1
+            continue
+        if ch == '\\' and i + 1 < n:
+            cur += s[i:i + 2]
+            i += 2
+            continue
+        if ch == '`':
+            bt = not bt
+            cur += ch
+            i += 1
+            continue
+        if bt:
+            cur += ch
+            i += 1
+            continue
+        if ch in ('"', "'"):
+            q = ch
+            cur += ch
+            i += 1
+            continue
+        if s.startswith('<<', i) and not s.startswith('<<<', i):  # heredoc: remember the delimiter
+            j = i + 2
+            if j < n and s[j] == '-':
+                j += 1
+            while j < n and s[j] in ' \t':
+                j += 1
+            k = j
+            while k < n and s[k] not in ' \t\n;|&<>()':
+                k += 1
+            d = s[j:k].replace("'", '').replace('"', '').replace('\\', '')
+            if d:
+                pend.append(d)
+            cur += s[i:k]
+            i = k
+            continue
+        if ch == '\n' and pend:  # the body runs to the delimiter line; nothing in it splits
+            j, e = i + 1, n
+            while pend and j <= n:
+                e = s.find('\n', j)
+                e = n if e < 0 else e
+                if s[j:e].strip(_WS) == pend[0]:
+                    pend.pop(0)
+                j = e + 1
+            pend = []
+            cur += s[i:e]
+            i = e
+            continue
+        if ch == '(':
+            depth += 1
+        elif ch == ')':
+            depth = max(0, depth - 1)
+        sep = next((x for x in seps if s.startswith(x, i)), None) if depth == 0 else None
+        if sep:
+            out.append(cur)
+            cur = ''
+            i += len(sep)
+            continue
+        cur += ch
+        i += 1
+    out.append(cur)
+    return out
+
+
+def _in(fam, table):
+    """fam is in table, by family prefix ('git diff HEAD' is in 'git diff')."""
+    return any(fam == e or fam.startswith(e + ' ') for e in table)
+
+
+def _norm_hash(text):
+    """8 hex chars of sha256 over the whitespace-collapsed text (the mod's sha256Hex, UTF-8)."""
+    norm = ' '.join(x for x in regex_module.split('[%s]+' % _WS, text) if x)
+    return hashlib.sha256(norm.encode('utf-8', 'surrogatepass')).hexdigest()[:8]
+
+
+def _suspicious(tok):
+    """A token that must never be in a family: a URL, anything with '@', a long hex/base64 run, a secret."""
+    return '://' in tok or '@' in tok or bool(_LONG_RUN.match(tok)) or redact(tok) != tok
+
+
+def _http_key(first, w):
+    """curl/wget recovery key: method + host (no userinfo, path or query)."""
+    method, host, i = None, '', 1
+    while i < len(w):
+        x = w[i]
+        if x in ('-X', '--request', '--method') and i + 1 < len(w):
+            method = method or w[i + 1].upper()
+            i += 1
+        elif x.startswith('--request=') or x.startswith('--method='):
+            method = method or x.split('=', 1)[1].upper()
+        elif x.startswith('-X') and len(x) > 2 and not x.startswith('--'):
+            method = method or x[2:].upper()
+        elif x in ('-d', '-F', '--form', '--json') or x.startswith('--data') or x.startswith('--post-'):
+            method = method or 'POST'
+        elif not host and _SCHEME.match(x):
+            h = x.split('://', 1)[1]
+            for c in '/?#':
+                h = h.split(c, 1)[0]
+            host = h.rsplit('@', 1)[-1].lower()
+        i += 1
+    return '%s#%s%s' % (first, method or 'GET', (' ' + host) if host else '')
+
+
+def _stage_family(text):
+    """(family, read_only, key) of one pipeline stage. key = the recovery key: the family, plus a script hash for an
+    interpreter's -c/-e/heredoc script, or method+host for curl/wget."""
+    body = ''
+    if '<<' in text:  # the heredoc body is data (hashed into the key)
+        text, _, body = text.partition('\n')
+    raw = [x for x in _split_top(text.strip(_WS), (' ', '\t', '\n')) if x and x != '!']
+    if raw and raw[0].startswith('('):  # subshell: its own chain decides
+        inner = raw[0][1:]
+        fam, dec, key = _analyze(inner[:-1] if inner.endswith(')') else inner)
+        return fam, not dec, key
+    w, skip, writes, out_redir = [], False, False, False
+    for x in raw:
+        x = _clean(x)
+        if skip:  # the target of a bare redirection operator
+            skip = False
+            writes = writes or (out_redir and _writes_to(x))
+            continue
+        if not x:
+            continue
+        m = _REDIR.match(x)
+        if m:  # a redirection: '>'/'>>'/'1>'/'&>' to a file writes (not '2>&1', not '> /dev/null')
+            out_redir = m.group(2) in ('>', '>>', '>|') and m.group(1) in ('', '1', '&')
+            if m.group(3):
+                writes = writes or (out_redir and _writes_to(m.group(3)))
+            else:
+                skip = True
+            continue
+        w.append(x)
+    while w and (w[0] in _WRAPPERS or w[0] in _KW_SKIP or _ASSIGN.match(w[0]) or w[0] == 'timeout' or (w[0] in ('uv', 'poetry') and w[1:2] == ['run'])):
+        if w[0] == 'timeout':
+            w = w[1:]
+            while w and w[0].startswith('-'):
+                w = w[1:]
+            w = w[1:]
+        elif w[0] in ('uv', 'poetry') and w[1:2] == ['run']:
+            w = w[2:]
+        else:
+            w = w[1:]
+    if not w or w[0] in _KW_NONE:
+        return '', True, ''
+    first = w[0].rsplit('/', 1)[-1]
+    fam, script = first, None
+    if first == 'sed' and any(_SHORT_I.match(x) or x == '--in-place' or x.startswith('--in-place=') for x in w[1:]):
+        fam = 'sed-i'  # edits in place: not read-only (a 'sed ...' family would be, by prefix)
+    elif first in ('awk', 'gawk') and _AWK_INPLACE.search(' ' + ' '.join(w[1:]) + ' '):
+        fam = 'awk-i'
+    elif first == 'perl' and any(_PERL_I.match(x) for x in w[1:]):
+        fam = 'perl-pi'
+    elif first in ('curl', 'wget'):
+        return first, not writes and _in(first, READ_ONLY_BASH), _http_key(first, w)
+    elif first in ('python', 'python3') and len(w) > 2 and w[1] == '-m':
+        fam = w[2]
+    elif first == 'command' and w[1:2] in (['-v'], ['-V']):
+        fam = 'command -v'
+    elif first in SUBCOMMAND_TOOLS:
+        rest, tok, sus = w[1:], None, False
+        while rest:
+            x = rest.pop(0)
+            if SUBCOMMAND_TOOLS[first] == 1 and x in ('-c', '-e'):
+                tok = x
+                script = rest[0] if rest else ''
+                break
+            if x.startswith('-'):
+                if first == 'git' and x in ('-C', '-c') and rest:
+                    rest.pop(0)
+                continue
+            if any(c in x for c in ' \t\n'):  # a quoted string is no subcommand or script
+                continue
+            sus = _suspicious(x)
+            tok = x.rstrip('/').rsplit('/', 1)[-1] or x
+            break
+        if tok and not sus:
+            fam = first + ' ' + tok
+            # ponytail: the second token is taken only right after the first (no flag-value parsing)
+            if SUBCOMMAND_TOOLS[first] == 2 and rest and not rest[0].startswith('-'):
+                if _suspicious(rest[0]):
+                    fam = first  # never a URL, userinfo or token in a family: the first word only
+                else:
+                    fam += ' ' + rest[0]
+    key = fam
+    if first in _HASH_INTERP and (script is not None or body):
+        key = fam + '#' + _norm_hash(script if script is not None else body)
+    return fam, not writes and _in(fam, READ_ONLY_BASH), key
+
+
+def _clean(x):
+    """A word without quotes, braces and unbalanced outer parentheses ('make)' -> 'make', 'f()' stays)."""
+    x = x.replace('"', '').replace("'", '').strip('{}')
+    while x.endswith(')') and x.count(')') > x.count('('):
+        x = x[:-1]
+    while x.startswith('(') and x.count('(') > x.count(')'):
+        x = x[1:]
+    return x
+
+
+def _writes_to(target):
+    return bool(target) and target != '/dev/null' and not target.startswith('&')
+
+
+def _analyze(cmd):
+    """(family, decisive, key) of a Bash command. Pipeline: the LAST stage (its exit code is the one the shell reports).
+    &&, ||, ;, newline chain: the LAST NON-READ-ONLY item (a trailing read-only item never decides), else the last item;
+    decisive if any item is not read-only."""
+    items = []
+    for it in _split_top(cmd, _CHAIN):
+        stages = [x for x in _split_top(it, ('|',)) if x.strip(_WS)]
+        if stages:
+            fam, ro, key = _stage_family(stages[-1].strip(_WS).strip('&'))
+            if fam:
+                items.append((fam, ro, key))
+    if not items:
+        return '', True, ''
+    nonro = [x for x in items if not x[1]]
+    pick = nonro[-1] if nonro else items[-1]
+    return pick[0], bool(nonro), pick[2]
+
+
+def bash_step(cmd):
+    """(family, decisive, key) of a Bash command; never raises."""
+    cmd = cmd if isinstance(cmd, str) else ('' if cmd is None else str(cmd))  # the RAW command: it never leaves the plugin
     try:
-        return int(code or 0) != 0
-    except (TypeError, ValueError):
+        return _analyze(cmd)
+    except Exception:  # ponytail: unparsable input falls back to the first word
+        w = [x for x in regex_module.split('[%s]+' % _WS, cmd) if x]
+        fam = w[0].rsplit('/', 1)[-1] if w else ''
+        fam = '' if _suspicious(fam) else fam
+        return fam, not _in(fam, READ_ONLY_BASH), fam
+
+
+def command_family(cmd):
+    """Bash command -> its family (docs/technical/ARCHITECTURE.md "Task outcome"). ponytail: a heuristic tokenizer,
+    not a shell parser."""
+    return bash_step(cmd)[0]
+
+
+def mcp_writes(tool):
+    """An MCP tool whose action name (after the last '__') has a MCP_WRITE_VERBS word (snake, kebab or camelCase)."""
+    if not str(tool).startswith('mcp__'):
         return False
+    act = regex_module.sub(r'([a-z])([A-Z])', r'\1_\2', str(tool).rsplit('__', 1)[-1]).lower()
+    return any(x in MCP_WRITE_VERBS for x in regex_module.split(r'[^a-z0-9]+', act))
+
+
+# Secrets in sent text (8.1.3), FAIL-CLOSED: Claude Code does not redact hook inputs. Applied before any cut.
+# A secret key (password/passwd/passphrase/pwd/secret/token/credential/authorization/api key/*_KEY/pass) followed by
+# ':' or '=' redacts from the value start to the end of the line, and on to the next blank line (at most
+# REDACT_BLOCK chars) for block values. Inside a scheme:// token (a URL query) the value ends at '&', '#' or whitespace.
+# --password/--token/--secret/--api-key, mysql/sshpass -p, curl/wget -u user:pass and Bearer redact to the end of the line.
+# ponytail: over-redacts on purpose (the rest of the line is lost), never under-redacts.
+REDACT_BLOCK = 500
+_SPAN_RES = (
+    (regex_module.compile(r'''(?:password|passwd|passphrase|pwd|secret|token|credential|authorization|cookie|api[-_]?key|_key(?![a-z0-9])|pass(?![a-z]))[A-Za-z0-9_-]*["']?[ \t]*[:=][ \t]*''', regex_module.I | regex_module.A), True),
+    (regex_module.compile(r'''--[A-Za-z0-9-]*(?:token|password|passwd|secret|api[-_]?key|credential)[A-Za-z0-9-]*(?:=|[ \t]+)''', regex_module.I | regex_module.A), False),
+    (regex_module.compile(r'''\b(?:mysql(?:dump|admin|sh)?|sshpass|7z[a-z]?)\b[^\n]*?[ \t]-p[ \t]*''', regex_module.A), False),
+    (regex_module.compile(r'''\b(?:unzip|zip)\b[^\n]*?[ \t]-P[ \t]*''', regex_module.A), False),
+    (regex_module.compile(r'''\bssh-keygen\b[^\n]*?[ \t]-N[ \t]*''', regex_module.A), False),
+    (regex_module.compile(r'''\bopenssl\b[^\n]*?[ \t]-(?:k|pass|passin|passout)[ \t]+''', regex_module.A), False),
+    (regex_module.compile(r'''\bhtpasswd\b[ \t]*''', regex_module.A), False),
+    (regex_module.compile(r'''\b(?:curl|wget)\b[^\n]*?[ \t](?:-u|--user)(?:=|[ \t]+)?(?=["']?[^ \t\n\r"']*:)''', regex_module.A), False),
+    (regex_module.compile(r'''\bBearer[ \t]+''', regex_module.I | regex_module.A), False),
+)
+_BLANK_LINE = regex_module.compile(r'\n[ \t\r]*\n')
+_URL_VALUE_END = regex_module.compile(r'''[&# \t\n\r\x0b\x0c"']''')
+_TOKEN_SEP = ' \t\n\r\x0b\x0c"\''
+_SECRET_RES = (
+    # the echo/printf stage that pipes a secret into --password-stdin / --with-token
+    (regex_module.compile(r'''\b(echo|printf)\b[^\n]*\|(?=[^|\n]*--(?:password-stdin|with-token))''', regex_module.A), r'\1 [redacted] |'),
+    (regex_module.compile(r'''(\b[A-Za-z][A-Za-z0-9+.-]*://)[^ \t\n\r\x0b\x0c"']*@''', regex_module.A), r'\1[redacted]@'),
+    (regex_module.compile(r'''\b(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abprs]-|ace_user_|sk-)[A-Za-z0-9_-]{8,}|\bnpm_[A-Za-z0-9]{20,}|\bAKIA[0-9A-Z]{12,}|\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+)?''', regex_module.A), '[redacted]'),
+)
+
+
+def _redact_spans(text):
+    out, pos = [], 0
+    while True:
+        best = None
+        for rx, block in _SPAN_RES:
+            m = rx.search(text, pos)
+            if m and (best is None or m.start() < best[0].start()):
+                best = (m, block)
+        if best is None:
+            break
+        m, block = best
+        start, k = m.end(), m.start() - 1
+        while k >= 0 and text[k] not in _TOKEN_SEP:
+            k -= 1
+        if '://' in text[k + 1:m.start()]:  # a URL query value ends at '&', '#' or whitespace
+            e = _URL_VALUE_END.search(text, start)
+            end = e.start() if e else len(text)
+        else:
+            end = text.find('\n', start)
+            end = len(text) if end < 0 else end
+            if block:
+                b = _BLANK_LINE.search(text, start)
+                end = max(end, min(b.start() if b else len(text), start + REDACT_BLOCK))
+        out.append(text[pos:start] + '[redacted]')
+        pos = end
+    out.append(text[pos:])
+    return ''.join(out)
+
+
+def redact(text):
+    """Fail-closed secret redaction (see _SPAN_RES), then URL userinfo up to the last '@' of a URL token and known
+    token prefixes / JWTs. Parity: mod/lib/trace.ts redact."""
+    if not isinstance(text, str) or not text:
+        return text
+    text = _redact_spans(text)
+    for rx, rep in _SECRET_RES:
+        text = rx.sub(rep, text)
+    return text
+
+
+ACTION_MAX, FAMILY_MAX = 200, 60
+
+
+def visible_family(cmd):
+    """The family to SEND: computed from the raw command (as the rule uses it), kept only if every word of it is still in
+    the redacted command and holds no secret; else its first word under the same test; else 'unknown'."""
+    fam, red = command_family(cmd), redact(cmd)
+    ok = lambda w: w in red and redact(w) == w and not _suspicious(w)
+    if fam and all(ok(w) for w in fam.split(' ')):
+        return fam
+    first = fam.split(' ')[0] if fam else ''
+    return first if first and ok(first) else 'unknown'
+
+
+def bash_action(cmd):
+    """The Bash trajectory action: '<family> :: <command>', the family first (cut to FAMILY_MAX), the redacted command
+    with whitespace collapsed after it, the whole cut to ACTION_MAX chars; 'unknown' when there is no command."""
+    cmd = cmd if isinstance(cmd, str) else ('' if cmd is None else str(cmd))
+    body = ' '.join(x for x in regex_module.split('[%s]+' % _WS, redact(cmd)) if x)
+    if not body:
+        return 'unknown'
+    fam = visible_family(cmd)
+    if len(fam) > FAMILY_MAX:
+        fam = fam[:FAMILY_MAX - 3] + '...'
+    room = ACTION_MAX - len(fam) - 4
+    if len(body) > room:
+        body = body[:room - 3] + '...'
+    return '%s :: %s' % (fam, body)
+
+
+def _exit_code(resp):
+    """The known exit code (structured, or the "Exit code N" text of error/content), else None. A code the tool
+    interpreted itself (returnCodeInterpretation, e.g. grep's no-matches) counts as 0."""
+    if not isinstance(resp, dict):
+        return None
+    if resp.get('returnCodeInterpretation'):
+        return 0
+    for k in ('exit_code', 'exitCode'):
+        if resp.get(k) is not None:
+            try:
+                return int(resp[k])
+            except (TypeError, ValueError):
+                pass
+    for k in ('error', 'content'):
+        m = _EXIT_TEXT.match(resp[k]) if isinstance(resp.get(k), str) else None
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _step_status(tool, tin, resp):
+    """'ok' | 'failed' | 'interrupted'. stderr alone never fails a step; a known Bash exit code decides
+    (benign exit-1 families are ok); otherwise error / is_error (incl. permission denials) does."""
+    if isinstance(resp, dict) and resp.get('interrupted') is True:
+        return 'interrupted'
+    if tool == 'Bash':
+        code = _exit_code(resp)
+        if code is not None:
+            if code == 0 or (code == 1 and _in(command_family(tin.get('command')), BENIGN_EXIT1)):
+                return 'ok'
+            return 'failed'
+    return 'failed' if isinstance(resp, dict) and resp.get('error') else 'ok'
+
+
+def tool_failed(resp) -> bool:
+    """A failed step (8.1.3: stderr alone is not one). Parity: mod/lib/trace.ts toolRec."""
+    return _step_status('Bash', {}, resp) == 'failed'
+
+
+def task_outcome(tools):
+    """(success, failed_steps, aborted) from the 8-tuples (name, input_json, response_json, ...). docs/technical/ARCHITECTURE.md "Task outcome":
+    a failed step is recovered by a LATER ok step with the same key (Bash: command family; file tools: the path;
+    else the tool name). success is False only for an unrecovered failed DECISIVE step (non-read-only Bash, DECISIVE_TOOLS
+    or a state-changing MCP tool, see mcp_writes) or an aborted run (last step interrupted). Returns (success, failed_steps, aborted);
+    no tool data -> (True, 0, False)."""
+    steps = []
+    for name, tin_json, tresp_json, *_ in tools:
+        try:
+            tin = json.loads(tin_json) if tin_json else {}
+        except (TypeError, ValueError):
+            tin = {}
+        try:
+            resp = json.loads(tresp_json) if tresp_json else {}
+        except (TypeError, ValueError):
+            resp = {}
+        tin = tin if isinstance(tin, dict) else {}
+        if name == 'Bash':
+            _fam, decisive, bkey = bash_step(tin.get('command'))
+            key = 'Bash:' + bkey
+        else:
+            path = tin.get('file_path') or tin.get('notebook_path')
+            key = ('file:' + str(path)) if name in _FILE_TOOLS and path else name
+            decisive = name in DECISIVE_TOOLS or mcp_writes(name)
+        steps.append((_step_status(name, tin, resp), key, decisive))
+    # aborted (internal, not in the trace): the run's LAST step was interrupted (PostToolUseFailure is_interrupt), so
+    # success is False; a mid-run interrupt the task went on from is no abort. This chain sees no user abort: Stop does
+    # not fire on one. The mod sees aborts via turn.complete and on purpose sends no trace for them.
+    aborted = bool(steps) and steps[-1][0] == 'interrupted'
+    success = not aborted
+    for i, (st, key, decisive) in enumerate(steps):
+        if st == 'failed' and decisive and not any(s == 'ok' and k == key for s, k, _ in steps[i + 1:]):
+            success = False
+    return success, sum(1 for s, _, _ in steps if s != 'ok'), aborted
 
 
 def summarize_tool_action(tool_name: str, tool_input: dict) -> str:
@@ -194,10 +650,7 @@ def summarize_tool_action(tool_name: str, tool_input: dict) -> str:
         return f"Read {Path(file_path).name}"
 
     elif tool_name == 'Bash':
-        command = tool_input.get('command', tool_input.get('description', ''))
-        if len(command) > 60:
-            command = command[:60] + '...'
-        return f"Ran: {command}"
+        return bash_action(tool_input.get('command'))  # 8.1.3: '<family> :: <redacted command <= 200>'
 
     elif tool_name == 'Grep':
         pattern = tool_input.get('pattern', '')
@@ -230,9 +683,14 @@ def summarize_tool_response(tool_name: str, tool_response: dict) -> str:
 
     Per ACE Research Paper Page 19: Trajectory should show execution feedback.
     """
+    # 8.1.3: secrets out before any cut
+    if isinstance(tool_response, dict):
+        tool_response = {k: redact(v) if isinstance(v, str) else v for k, v in tool_response.items()}
+    elif isinstance(tool_response, str):
+        tool_response = redact(tool_response)
     if not isinstance(tool_response, dict):
         # str, or the content ARRAY MCP tools return (crashed the dict-only path)
-        tool_response = tool_response if isinstance(tool_response, str) else str(tool_response)
+        tool_response = redact(tool_response if isinstance(tool_response, str) else str(tool_response))
         if tool_name in ['Edit', 'Write']:  # PostToolBatch serializes the tool_result text (§9 G4)
             return "Failed" if 'tool_use_error' in tool_response else "Success"
         if len(tool_response) > 100:
@@ -277,14 +735,14 @@ def summarize_tool_response(tool_name: str, tool_response: dict) -> str:
         files = tool_response.get('files', [])
         if isinstance(files, list):
             return f"Found {len(files)} files"
-        return str(tool_response)[:100]
+        return redact(str(tool_response))[:100]
 
     elif tool_name == 'Task':
         return "Task completed"
 
     else:
         # Generic response summary
-        response_str = str(tool_response)
+        response_str = redact(str(tool_response))
         if len(response_str) > 100:
             return response_str[:100] + '...'
         return response_str
@@ -1000,15 +1458,12 @@ def main():
             sys.exit(0)
 
         # STEP 5: Build ExecutionTrace (ACE Paper compliant format)
-        # Check for errors in tool responses
-        has_errors = False
-        for _, _, tool_response_json, _, *_ in tools:
-            try:
-                if tool_failed(json.loads(tool_response_json) if tool_response_json else {}):
-                    has_errors = True
-                    break
-            except Exception:
-                pass
+        # 8.1.3: success = the END outcome (docs/technical/ARCHITECTURE.md "Task outcome"), failed_steps = failed steps (informational)
+        try:
+            task_success, failed_steps, aborted = task_outcome(tools)
+        except Exception:
+            task_success, failed_steps, aborted = True, 0, False
+        has_errors = not task_success
 
         # v7.1.3 R1 — SubagentStop read_key==transcript_uuid invariant monitor.
         # Guarded — never break the learn pipeline.
@@ -1165,13 +1620,14 @@ def main():
 
         # Build the trace
         trace = {
-            "task": f"User request: {user_prompt[:2000]}",
+            "task": f"User request: {redact(user_prompt)[:2000]}",
             "trajectory": trajectory,
             "result": {
                 "success": not has_errors,
+                "failed_steps": failed_steps,
                 "output": f"Executed {len(tools)} tool calls",
-                "summary": (_handback_full[:4000] if _handback_full else None)
-                           or (last_assistant_message[:2000] if last_assistant_message else None),  # v5.5.0: CC 2.1.51+
+                "summary": (redact(_handback_full)[:4000] if _handback_full else None)
+                           or (redact(last_assistant_message)[:2000] if last_assistant_message else None),  # v5.5.0: CC 2.1.51+
             },
             "playbook_used": playbook_used,
             "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
@@ -1265,7 +1721,7 @@ def main():
                     "session_id": session_id, "patterns_used": playbook_used,
                     "tools_executed": len(tools),
                     "state_changing_tools": sum(1 for t in tools if any(x in t[0] for x in state_changing_tools)),
-                    "success": not has_errors,
+                    "success": not has_errors, "failed_steps": failed_steps, "outcome_rule": OUTCOME_RULE,
                     "execution_time_seconds": time.time() - execution_start_time,
                     "project_id": context.get('project'), "agent_type": agent_type,
                     "used_ids_count": len(_used), "used_source": "tokens" if _used else "none",

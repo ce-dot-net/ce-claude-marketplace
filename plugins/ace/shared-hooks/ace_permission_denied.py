@@ -319,6 +319,7 @@ def _build_trace(event: dict) -> dict:
         "trajectory": trajectory,
         "result": {
             "success": False,
+            "failed_steps": 1,  # 8.1.3 contract: always present; the denied call is the one failed step
             "output": f"denied: {reason}",
         },
         "playbook_used": [],
