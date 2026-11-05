@@ -18,12 +18,15 @@ sys.path.insert(0, str(REPO / 'plugins/ace/shared-hooks'))
 
 CASES = json.loads((FIX / 'cases.json').read_text())['cases']
 TABLES = json.loads((FIX / 'tables.json').read_text())
+RANDOM_FILE = FIX / 'random_cases.json'
+RANDOM = json.loads(RANDOM_FILE.read_text()) if RANDOM_FILE.exists() else []
 
 
 def wrapper_text():
     return ('// GENERATED from tests-fixtures/task-outcome/{cases,tables}.json (mods load only .ts); '
             'tests/test_task_outcome.py guards the sync.\n'
-            'export const CASES = %s\nexport const TABLES = %s\n' % (json.dumps(CASES), json.dumps(TABLES)))
+            'export const CASES = %s\nexport const TABLES = %s\nexport const RANDOM = %s\n'
+            % (json.dumps(CASES), json.dumps(TABLES), json.dumps(RANDOM)))
 
 
 def native(step, i):
@@ -76,10 +79,80 @@ def test_python_tables_equal_fixture():
     assert list(a.BENIGN_EXIT1) == TABLES['benign_exit1']
     assert list(a.READ_ONLY_BASH) == TABLES['read_only_bash']
     assert list(a.DECISIVE_TOOLS) == TABLES['decisive_tools']
+    assert dict(a.SUBCOMMAND_TOOLS) == TABLES['subcommand_tools']
+    assert list(a.MCP_WRITE_VERBS) == TABLES['mcp_write_verbs']
+
+
+@pytest.mark.parametrize('cmd,action', TABLES['actions'], ids=[repr(c)[:40] for c, _ in TABLES['actions']])
+def test_bash_action(cmd, action):
+    """Bash trajectory action: '<family> :: <redacted command, whitespace collapsed, <= 200 chars>'; 'unknown' if none."""
+    from ace_after_task import summarize_tool_action
+    assert summarize_tool_action('Bash', {} if cmd is None else {'command': cmd}) == action
+
+
+@pytest.mark.parametrize('text,out', TABLES['redact'], ids=[t[:30] for t, _ in TABLES['redact']])
+def test_redact(text, out):
+    from ace_after_task import redact
+    assert redact(text) == out
+
+
+# ---- property test: random step sequences, Python computes, the mod must agree (outcome.test.ts runs RANDOM) ----
+_CMDS = ['make', 'make test', 'make && echo done', 'npm test', 'npm publish', 'echo y | npm publish', 'rstest tests',
+         'rstest tests | grep FAIL', 'grep -rn x src', 'cd /p && grep x f', 'cat cfg | kubectl apply -f -', 'kubectl get pods',
+         'gh pr merge 1', 'gh pr view 1', 'git push origin main', 'git diff --quiet', 'git commit -m "a && b"',
+         'python3 deploy.py', 'python3 -c "x"', "python3 - <<'EOF'\nimport a && b\nEOF", '(cd sub && make test)',
+         'echo $(make && echo ok)', 'make || true', 'make; make install', 'ls /missing', 'cat a | sort | head -1',
+         'docker compose up', 'bash -c "make"', 'echo "unterminated && make', 'FOO=1 ./run.sh', '']
+_TOOLS = ['Read', 'Edit', 'Write', 'Glob', 'Agent', 'Workflow', 'WebFetch', 'mcp__plugin_linear_linear__save_issue',
+          'mcp__plugin_linear_linear__list_issues', 'mcp__srv__sendMessage']
+
+
+def random_cases(n=400, seed=813):
+    import random
+    from ace_after_task import task_outcome
+    rnd = random.Random(seed)
+    out = []
+    for k in range(n):
+        steps = []
+        for _ in range(rnd.randint(1, 7)):
+            if rnd.random() < 0.6:
+                st = {'tool': 'Bash', 'command': rnd.choice(_CMDS)}
+                r = rnd.random()
+                if r < 0.45:
+                    st['exit'] = 0
+                elif r < 0.9:
+                    st['exit'], st['is_error'] = rnd.choice([1, 1, 2, 127]), True
+                elif r < 0.95:
+                    st['denied'] = True
+                else:
+                    st['interrupted'] = True
+            else:
+                st = {'tool': rnd.choice(_TOOLS)}
+                if st['tool'] in ('Read', 'Edit', 'Write'):
+                    st['file_path'] = rnd.choice(['/p/a.py', '/p/b.py'])
+                r = rnd.random()
+                if r < 0.3:
+                    st['is_error'] = True
+                elif r < 0.35:
+                    st['denied'] = True
+            steps.append(st)
+        success, failed, aborted = task_outcome([native(s, i) for i, s in enumerate(steps)])
+        exp = {'success': success, 'failed_steps': failed}
+        if aborted:
+            exp['aborted'] = True
+        out.append({'name': 'random %d' % k, 'steps': steps, 'expect': exp})
+    return out
+
+
+def test_random_property_cases_in_sync():
+    """400 seeded random sequences; the stored expectations are what the Python chain computes now, and the mod suite
+    asserts it computes the same (parity property test). Regenerate with --regen after a rule change."""
+    assert len(RANDOM) == 400 and RANDOM == random_cases(), 'run: python3 tests/test_task_outcome.py --regen'
+    assert any(not c['expect']['success'] for c in RANDOM) and any(c['expect']['success'] for c in RANDOM)
 
 
 def _ts_array(name):
-    m = re.search(r'export const %s = (\[[^\]]*\])' % re.escape(name), TRACE_TS.read_text())
+    m = re.search(r'export const %s(?:: [^=]+)? = (\[[^\]]*\]|\{[^}]*\})' % re.escape(name), TRACE_TS.read_text())
     assert m, name + ' not found in mod/lib/trace.ts'
     return json.loads(m.group(1).replace("'", '"'))
 
@@ -89,6 +162,8 @@ def test_mod_tables_equal_fixture():
     assert _ts_array('BENIGN_EXIT1') == TABLES['benign_exit1']
     assert _ts_array('READ_ONLY_BASH') == TABLES['read_only_bash']
     assert _ts_array('DECISIVE_TOOLS') == TABLES['decisive_tools']
+    assert _ts_array('SUBCOMMAND_TOOLS') == TABLES['subcommand_tools']
+    assert _ts_array('MCP_WRITE_VERBS') == TABLES['mcp_write_verbs']
 
 
 def test_mod_wrapper_in_sync():
@@ -99,6 +174,7 @@ def test_mod_runs_the_shared_fixture():
     """Parity: the mod suite runs the same cases against the same expectations."""
     t = (REPO / 'plugins/ace/mod/tests/outcome.test.ts').read_text()
     assert "from './fixtures/outcome_cases.ts'" in t and 'taskOutcome' in t and 'toolRec' in t
+    assert 'RANDOM' in t and 'TABLES.actions' in t and 'TABLES.redact' in t
 
 
 # ---- shapes beyond the neutral fixture ----
@@ -126,6 +202,15 @@ def test_tool_failed_stderr_alone_is_not_a_failure():
     assert tool_failed({'error': 'boom'}) is True
 
 
+def test_unparsable_commands_never_crash():
+    from ace_after_task import command_family, summarize_tool_action
+    for cmd in ['"', "'", '$(', '`', '((', '))', '<<', '<<EOF', '| |', '&& ;', '\\', 'a |& b', '\x00', 123]:
+        command_family(cmd)
+        assert summarize_tool_action('Bash', {'command': cmd})
+
+
 if __name__ == '__main__' and '--regen' in sys.argv:
+    RANDOM = random_cases()
+    RANDOM_FILE.write_text(json.dumps(RANDOM, separators=(',', ':')) + '\n')
     WRAPPER.write_text(wrapper_text())
-    print('wrote', WRAPPER)
+    print('wrote', RANDOM_FILE, WRAPPER)

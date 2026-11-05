@@ -96,9 +96,9 @@ def test_failed_bash_reaches_learn_trajectory(box):
     assert "aborted" not in trace["result"]
 
 
-def test_interrupt_as_last_step_sends_aborted(box):
-    """8.1.3: a run whose last recorded step was an abort (PostToolUseFailure is_interrupt) is success=false,
-    aborted=true; a run without one carries no `aborted` key (contract: only when true)."""
+def test_interrupt_as_last_step_fails_the_run_without_an_aborted_key(box):
+    """8.1.3: a run whose last recorded step was an abort (PostToolUseFailure is_interrupt) is success=false; the trace
+    carries no `aborted` key (dropped from the contract: no aborted run sends a trace)."""
     sid = "sess-abort"
     ev = _failure_event(box, sid)
     ev.update(is_interrupt=True, error="Interrupted")
@@ -109,4 +109,4 @@ def test_interrupt_as_last_step_sends_aborted(box):
             "last_assistant_message": "stopped", "background_tasks": []}
     assert box.run_after_task(stop, ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID).returncode == 0
     result = box.cli_calls("learn")[0]["trace"]["result"]
-    assert (result["success"], result["failed_steps"], result.get("aborted")) == (False, 1, True)
+    assert (result["success"], result["failed_steps"], "aborted" in result) == (False, 1, False)
