@@ -1,22 +1,24 @@
 // ACE mod suite, 8.1.3 end-outcome rule: the shared fixture (tests-fixtures/task-outcome, wrapper ./fixtures/outcome_cases.ts).
 // Mirror runner: tests/test_task_outcome.py (same cases, same expectations; it also guards table parity and the wrapper sync).
 import { expect, test } from 'claude-code/testing'
-import { CASES, TABLES } from './fixtures/outcome_cases.ts'
-import { BENIGN_EXIT1, DECISIVE_TOOLS, READ_ONLY_BASH, buildTrace, commandFamily, taskOutcome, toolRec } from '../lib/trace.ts'
+import { CASES, RANDOM, TABLES } from './fixtures/outcome_cases.ts'
+import { BENIGN_EXIT1, DECISIVE_TOOLS, MCP_WRITE_VERBS, READ_ONLY_BASH, SUBCOMMAND_TOOLS, buildTrace, commandFamily, redact, summarizeAction, taskOutcome, toolRec } from '../lib/trace.ts'
 
 // A neutral fixture step -> the tool.call result the mod sees -> the real toolRec.
 function rec(s: any, i: number) {
   const input: any = {}
   if (s.command !== undefined) input.command = s.command
   if (s.file_path !== undefined) input.file_path = s.file_path
-  let res: any, isError = false, denied: string | undefined
+  let res: any, isError = false, denied: string | undefined, text: string | undefined
   if (s.interrupted) res = { stdout: '', stderr: '', interrupted: true }
   else if (s.denied) denied = `Permission to use ${s.tool} has been denied.`
-  else if (s.is_error) { isError = true; res = s.exit !== undefined ? `Exit code ${s.exit}\n${s.stderr ?? ''}` : (s.stderr || 'failed') }
+  else if (s.is_error && s.tool === 'Bash' && s.exit !== undefined) {  // tool.call: result keeps stdout/stderr, "Exit code N" is only in text
+    isError = true; res = { stdout: '', stderr: s.stderr ?? '', interrupted: false }; text = `Exit code ${s.exit}\n${s.stderr ?? ''}`
+  } else if (s.is_error) { isError = true; res = s.stderr || 'failed' }
   else if (s.tool === 'Bash') res = { stdout: s.stdout ?? '', stderr: s.stderr ?? '', interrupted: false, ...(s.exit !== undefined ? { exitCode: s.exit } : {}) }
   else if (s.tool === 'Edit' || s.tool === 'Write') res = { filePath: s.file_path }
   else res = { type: 'text' }
-  return toolRec(s.tool, input, res, isError, denied, i, i + 1)
+  return toolRec(s.tool, input, res, isError, denied, i, i + 1, text)
 }
 
 test('8.1.3: every shared fixture case gives the expected {success, failed_steps}', () => {
@@ -27,7 +29,29 @@ test('8.1.3: every shared fixture case gives the expected {success, failed_steps
 
 test('8.1.3: command families and tables equal the shared fixture', () => {
   expect(TABLES.families.map(([cmd]: string[]) => [cmd, commandFamily(cmd)])).toEqual(TABLES.families)
-  expect([BENIGN_EXIT1, READ_ONLY_BASH, DECISIVE_TOOLS]).toEqual([TABLES.benign_exit1, TABLES.read_only_bash, TABLES.decisive_tools])
+  expect([BENIGN_EXIT1, READ_ONLY_BASH, DECISIVE_TOOLS, SUBCOMMAND_TOOLS, MCP_WRITE_VERBS]).toEqual(
+    [TABLES.benign_exit1, TABLES.read_only_bash, TABLES.decisive_tools, TABLES.subcommand_tools, TABLES.mcp_write_verbs])
+})
+
+test('8.1.3 property: the 400 seeded random sequences give what the Python chain computed', () => {
+  expect(RANDOM.length).toBe(400)
+  const got = RANDOM.map((c: any) => { const o = taskOutcome(c.steps.map(rec)); return { name: c.name, success: o.success, failed_steps: o.failed_steps, ...(o.aborted ? { aborted: true } : {}) } })
+  expect(got).toEqual(RANDOM.map((c: any) => ({ name: c.name, ...c.expect })))
+})
+
+test('8.1.3: Bash action = "<family> :: <redacted command <= 200>", unknown when there is none; redaction table', () => {
+  expect(TABLES.actions.map(([cmd]: any[]) => [cmd, summarizeAction('Bash', cmd === null ? {} : { command: cmd })])).toEqual(TABLES.actions)
+  expect(TABLES.redact.map(([t]: string[]) => [t, redact(t)])).toEqual(TABLES.redact)
+  for (const c of ['"', "'", '$(', '`', '((', '))', '<<', '<<EOF', '| |', '&& ;', '\\', 'a |& b', '\x00', 123]) { commandFamily(c); expect(!!summarizeAction('Bash', { command: c })).toBe(true) }
+})
+
+test('8.1.3: canary secrets reach no sent trace field (action, result, summary, task)', () => {
+  const C = 'ghp_CANARYcanary0123456789'
+  const tools = [toolRec('Bash', { command: `GITHUB_TOKEN=${C} gh release create v1` }, { stdout: `token ${C}`, stderr: '', interrupted: false }, false, undefined, 0, 1),
+    toolRec('Bash', { command: `curl -H "Authorization: Bearer ${C}" https://x` }, { stdout: '', stderr: `bad ${C}`, interrupted: false }, true, undefined, 1, 2, `Exit code 22\nbad ${C}`)]
+  const t = buildTrace({ userPrompt: `use ${C} to publish`, answer: `ran gh with ${C}`, playbookUsed: [], agentType: 'main', appliedLogIds: [], nowIso: 'x', effort: 'normal', tools })
+  expect(JSON.stringify(t.trace).includes('CANARY')).toBe(false)
+  expect(t.trace.trajectory[0].action.startsWith('gh release create :: ')).toBe(true)
 })
 
 test('8.1.3: the trace carries result.success (end outcome) and result.failed_steps', () => {
@@ -36,9 +60,9 @@ test('8.1.3: the trace carries result.success (end outcome) and result.failed_st
   const a = { userPrompt: 'fix it', answer: 'done', playbookUsed: [], agentType: 'main', appliedLogIds: [], nowIso: 'x', effort: 'normal' }
   const ok = buildTrace({ ...a, tools })
   expect([ok.success, ok.trace.result.success, ok.trace.result.failed_steps]).toEqual([true, true, 1])
-  expect('aborted' in ok.trace.result).toBe(false)  // contract: result.aborted only when true
+  expect('aborted' in ok.trace.result).toBe(false)  // 8.1.3: no result.aborted (no aborted run sends a trace)
   const cut = buildTrace({ ...a, tools: [...tools, rec({ tool: 'Bash', command: 'rstest tests', interrupted: true }, 3)] })
-  expect([cut.trace.result.success, cut.trace.result.failed_steps, cut.trace.result.aborted]).toEqual([false, 2, true])
+  expect([cut.trace.result.success, cut.trace.result.failed_steps, 'aborted' in cut.trace.result]).toEqual([false, 2, false])  // no aborted key in the contract
   const none = buildTrace({ ...a, tools: [] })
   expect([none.trace.result.success, none.trace.result.failed_steps]).toEqual([true, 0])
   const red = buildTrace({ ...a, tools: tools.slice(0, 2) })

@@ -407,7 +407,7 @@
    }
   },
   {
-   "name": "cd prefix: the last && segment is the family",
+   "name": "cd prefix: the last non-read-only && segment is the family",
    "steps": [
     {
      "tool": "Bash",
@@ -451,7 +451,7 @@
    }
   },
   {
-   "name": "pipe: the first stage of the last segment is the family",
+   "name": "pipe: the LAST stage is the family (tail never fails the task)",
    "steps": [
     {
      "tool": "Bash",
@@ -1189,6 +1189,708 @@
    "expect": {
     "success": true,
     "failed_steps": 1
+   }
+  },
+  {
+   "name": "review MF1: make && echo done (exit 2) fails the task",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "make && echo done",
+     "exit": 2,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "review MF1: git merge feat && echo merged (exit 1) fails the task",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "git merge feat && echo merged",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "review MF2: cat cfg | kubectl apply -f - (exit 1) fails the task",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "cat cfg | kubectl apply -f -",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "review MF2: echo y | npm publish (exit 1) fails the task",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "echo y | npm publish",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "review MF2: echo $T | gh secret set (exit 1) fails the task",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "echo $T | gh secret set FOO",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "review MF2: rstest tests | grep FAIL (exit 1) is not a failed step",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "rstest tests | grep FAIL",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 0
+   }
+  },
+  {
+   "name": "review SF3: gh pr merge failed, gh pr view ok does not recover",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "gh pr merge 41 --squash",
+     "exit": 1,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "gh pr view 41",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "review SF3: python3 deploy.py failed, python3 -c ok does not recover",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "python3 deploy.py",
+     "exit": 1,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "python3 -c \"print(1)\"",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "review SF4: failed linear save_issue, then ok save_issue recovers",
+   "steps": [
+    {
+     "tool": "mcp__plugin_linear_linear__save_issue",
+     "is_error": true
+    },
+    {
+     "tool": "mcp__plugin_linear_linear__save_issue"
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "review SF4: failed linear save_issue unrecovered fails the task",
+   "steps": [
+    {
+     "tool": "mcp__plugin_linear_linear__save_issue",
+     "is_error": true
+    },
+    {
+     "tool": "Edit",
+     "file_path": "/p/a.py"
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "review SF4: failed linear list_issues never fails the task",
+   "steps": [
+    {
+     "tool": "mcp__plugin_linear_linear__list_issues",
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "SF4: save_issue failed, a different write tool (save_comment) ok does not recover",
+   "steps": [
+    {
+     "tool": "mcp__plugin_linear_linear__save_issue",
+     "is_error": true
+    },
+    {
+     "tool": "mcp__plugin_linear_linear__save_comment"
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "SF4: hyphenated MCP write verb (create-design) is decisive",
+   "steps": [
+    {
+     "tool": "mcp__claude_ai_Canva__create-design",
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "SF4: camelCase MCP write verb (sendMessage) is decisive",
+   "steps": [
+    {
+     "tool": "mcp__srv__sendMessage",
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "SF4: MCP read verbs (get/search/whoami/query) never fail the task",
+   "steps": [
+    {
+     "tool": "mcp__srv__get_status_updates",
+     "is_error": true
+    },
+    {
+     "tool": "mcp__srv__search_docs",
+     "is_error": true
+    },
+    {
+     "tool": "mcp__srv__whoami",
+     "is_error": true
+    },
+    {
+     "tool": "mcp__srv__query_run",
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 4
+   }
+  },
+  {
+   "name": "quotes: && inside double quotes does not split (git commit)",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "git commit -m \"fix && echo ok\"",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "quotes: ; inside single quotes does not split, npm test decides",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "echo 'a; rm -rf x' && npm test",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "cd is read-only: cd && grep exit 1 is benign",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "cd /p && grep -rn x src",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 0
+   }
+  },
+  {
+   "name": "|| true: exit 0 is ok",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "make || true",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 0
+   }
+  },
+  {
+   "name": "a || b: b decides (make clean failed, unrecovered)",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "make || make clean",
+     "exit": 2,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "; chain: the last non-read-only segment decides",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "make; make install",
+     "exit": 2,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "make",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "; chain recovered by the same family",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "make; make install",
+     "exit": 2,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "make install",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "heredoc body with && and | does not split; recovered by python3 again",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "python3 - <<'EOF'\nimport os && x | y\nEOF",
+     "exit": 1,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "python3 - <<'EOF'\nprint(1)\nEOF",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "$(...) does not split: echo $(make build && echo ok) is read-only",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "echo $(make build && echo ok)",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "backticks do not split: echo `date | tr a b` is read-only",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "echo `date | tr a b`",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "subshell: (cd sub && make test) failed, make test ok recovers",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "(cd sub && make test)",
+     "exit": 2,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "make test",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "subshell: (cd sub && make test) failed unrecovered",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "(cd sub && make test)",
+     "exit": 2,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "nested pipes: the last stage npm run decides",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "cat a | sort | uniq -c | npm run lint",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "nested read-only pipes: a failed step that never fails the task",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "cat log | grep -c ERROR | head -1",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "pipe into tail exits 0",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "rstest tests 2>&1 | tail -20",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 0
+   }
+  },
+  {
+   "name": "negated grep exit 1 is benign",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "! grep -q TODO src/a.py",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 0
+   }
+  },
+  {
+   "name": "bash -c is one family: bash -c failed, bash -c ok recovers",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "bash -c \"make deploy\"",
+     "exit": 2,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "bash -c \"echo hi\"",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "docker compose up failed, docker compose down ok does not recover",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "docker compose up -d",
+     "exit": 1,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "docker compose down",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "git push origin failed, git push origin --force-with-lease ok recovers",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "git push origin main",
+     "exit": 1,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "git push origin main --force-with-lease",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "unbalanced quote never crashes (read-only echo)",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "echo \"unterminated && make",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "script path basename: FOO=1 ./scripts/release.sh failed",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "FOO=1 BAR=2 ./scripts/release.sh --dry",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "npx is a multi-tool: timeout npx vitest failed, npx vitest ok recovers",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "timeout 30 npx vitest run",
+     "exit": 1,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "npx vitest run",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "kubectl apply failed, kubectl get ok does not recover",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "kubectl apply -f k8s/",
+     "exit": 1,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "kubectl get pods",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "redirections are ignored: make > log 2>&1 failed, make ok recovers",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "make > build.log 2>&1",
+     "exit": 2,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "make",
+     "exit": 0
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "loop keywords: for/do/done never are a family; make in the body decides",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "for f in a b; do make $f; done",
+     "exit": 2,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "loop of read-only commands is read-only",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "for f in a b; do cat $f; done",
+     "exit": 1,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": true,
+    "failed_steps": 1
+   }
+  },
+  {
+   "name": "sed -n is read-only; sed -i is decisive",
+   "steps": [
+    {
+     "tool": "Bash",
+     "command": "sed -n 1,20p missing.txt",
+     "exit": 2,
+     "is_error": true
+    },
+    {
+     "tool": "Bash",
+     "command": "sed -i '' s/a/b/ f.txt",
+     "exit": 2,
+     "is_error": true
+    }
+   ],
+   "expect": {
+    "success": false,
+    "failed_steps": 2
    }
   }
  ]
