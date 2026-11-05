@@ -228,7 +228,7 @@ def _strings(x):
 
 
 def test_fuzz_passwords_reach_no_sent_field():
-    """300 random passwords (printable ASCII, no whitespace/quotes) x 6 forms: the password is in no sent field
+    """500 random passwords (printable ASCII, no whitespace/quotes) x 13 forms: the password is in no sent field
     (action, step result, error text, task, summary). The mod runs the same table through buildTrace."""
     from ace_after_task import redact, summarize_tool_action, summarize_tool_response
     leaks = []
