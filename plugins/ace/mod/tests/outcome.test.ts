@@ -2,7 +2,7 @@
 // Mirror runner: tests/test_task_outcome.py (same cases, same expectations; it also guards table parity and the wrapper sync).
 import { expect, test } from 'claude-code/testing'
 import { CASES, RANDOM, TABLES } from './fixtures/outcome_cases.ts'
-import { BENIGN_EXIT1, DECISIVE_TOOLS, MCP_WRITE_VERBS, READ_ONLY_BASH, SUBCOMMAND_TOOLS, buildTrace, commandFamily, redact, summarizeAction, taskOutcome, toolRec } from '../lib/trace.ts'
+import { BENIGN_EXIT1, DECISIVE_TOOLS, MCP_WRITE_VERBS, READ_ONLY_BASH, SUBCOMMAND_TOOLS, bashStep, buildTrace, commandFamily, redact, summarizeAction, taskOutcome, toolRec } from '../lib/trace.ts'
 
 // A neutral fixture step -> the tool.call result the mod sees -> the real toolRec.
 function rec(s: any, i: number) {
@@ -42,16 +42,22 @@ test('8.1.3 property: the 400 seeded random sequences give what the Python chain
 test('8.1.3: Bash action = "<family> :: <redacted command <= 200>", unknown when there is none; redaction table', () => {
   expect(TABLES.actions.map(([cmd]: any[]) => [cmd, summarizeAction('Bash', cmd === null ? {} : { command: cmd })])).toEqual(TABLES.actions)
   expect(TABLES.redact.map(([t]: string[]) => [t, redact(t)])).toEqual(TABLES.redact)
+  expect(TABLES.keys.map(([c]: string[]) => [c, bashStep(c)[2]])).toEqual(TABLES.keys)
+  for (const c of ['git clone https://u:Zq7c@github.com/o/r', 'git push https://Zq7c@h/o/r', 'gh auth login Zq7cZq7cZq7cZq7cZq7cZq7c0',
+    'curl -u a:Zq7c https://h', 'npm publish --token=Zq7c', 'docker login ghp_Zq7cZq7cZq7c']) expect(commandFamily(c).includes('Zq7c')).toBe(false)
   for (const c of ['"', "'", '$(', '`', '((', '))', '<<', '<<EOF', '| |', '&& ;', '\\', 'a |& b', '\x00', 123]) { commandFamily(c); expect(!!summarizeAction('Bash', { command: c })).toBe(true) }
 })
 
 test('8.1.3: canary secrets reach no sent trace field (action, result, summary, task)', () => {
-  const C = 'ghp_CANARYcanary0123456789'
-  const tools = [toolRec('Bash', { command: `GITHUB_TOKEN=${C} gh release create v1` }, { stdout: `token ${C}`, stderr: '', interrupted: false }, false, undefined, 0, 1),
+  const C = 'ghp_CANARYcanary0123456789', U = 'CANARYurl', Y = 'CANARYyaml', M = 'CANARYmysql'
+  const tools = [toolRec('Bash', { command: `git clone https://user:${U}@github.com/o/r` }, { stdout: '', stderr: `fatal: https://user:${U}@github.com`, interrupted: false }, true, undefined, 0, 1, `Exit code 128\nfatal: https://user:${U}@github.com/o/r`),
+    toolRec('Bash', { command: `mysql -uroot -p${M} db` }, { stdout: `password: ${Y}`, stderr: '', interrupted: false }, false, undefined, 0, 1),
+    toolRec('mcp__srv__save_issue', { body: Y }, `{"password":"${Y}"}`, true, undefined, 0, 1),toolRec('Bash', { command: `GITHUB_TOKEN=${C} gh release create v1` }, { stdout: `token ${C}`, stderr: '', interrupted: false }, false, undefined, 0, 1),
     toolRec('Bash', { command: `curl -H "Authorization: Bearer ${C}" https://x` }, { stdout: '', stderr: `bad ${C}`, interrupted: false }, true, undefined, 1, 2, `Exit code 22\nbad ${C}`)]
-  const t = buildTrace({ userPrompt: `use ${C} to publish`, answer: `ran gh with ${C}`, playbookUsed: [], agentType: 'main', appliedLogIds: [], nowIso: 'x', effort: 'normal', tools })
+  const t = buildTrace({ userPrompt: `use ${C} and https://u:${U}@h password: ${Y}`, answer: `ran gh with ${C}, git clone https://user:${U}@github.com, password: ${Y}, mysql -p${M}`, playbookUsed: [], agentType: 'main', appliedLogIds: [], nowIso: 'x', effort: 'normal', tools })
   expect(JSON.stringify(t.trace).includes('CANARY')).toBe(false)
-  expect(t.trace.trajectory[0].action.startsWith('gh release create :: ')).toBe(true)
+  expect(t.trace.trajectory[3].action.startsWith('gh release create :: ')).toBe(true)
+  expect(t.trace.trajectory[0].action).toBe('git :: git clone https://[redacted]@github.com/o/r')
 })
 
 test('8.1.3: the trace carries result.success (end outcome) and result.failed_steps', () => {
