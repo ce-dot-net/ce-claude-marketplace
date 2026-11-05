@@ -32,9 +32,9 @@ def load_new():
     return ace_after_task
 
 
-def load_old(ref):
-    code = subprocess.run(['git', '-C', str(REPO), 'show', '%s:%s' % (ref, SRC)], capture_output=True, text=True,
-                          check=True).stdout
+def load_old(ref, path=None):
+    code = Path(path).read_text() if path else subprocess.run(
+        ['git', '-C', str(REPO), 'show', '%s:%s' % (ref, SRC)], capture_output=True, text=True, check=True).stdout
     mod = types.ModuleType('ace_after_task_old')
     mod.__file__ = str(HOOKS / 'ace_after_task_old.py')
     exec(compile(code, mod.__file__, 'exec'), mod.__dict__)
@@ -129,9 +129,10 @@ def main(argv=None):
     ap = argparse.ArgumentParser()
     ap.add_argument('--days', type=int, default=10)
     ap.add_argument('--old-ref', default='ea5dafb', help='git ref of the old rule (ea5dafb = 8.1.3 before the review)')
+    ap.add_argument('--old-file', help='an ace_after_task.py to use as the old rule instead of --old-ref')
     ap.add_argument('--root', default=str(Path.home() / '.claude' / 'projects'))
     a = ap.parse_args(argv)
-    new, old = load_new(), load_old(a.old_ref)
+    new, old = load_new(), load_old(a.old_ref, a.old_file)
     since = time.time() - a.days * 86400
     cutoff_day = time.strftime('%Y-%m-%d', time.gmtime(since))
     per_day = collections.defaultdict(lambda: [0, 0, 0])  # turns, old false, new false
