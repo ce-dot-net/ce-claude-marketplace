@@ -242,10 +242,23 @@ def test_update_check_machinery_is_gone():
 def test_only_npm_spawn_in_production_is_the_sqlite_rebuild():
     spawns = []
     for p in PROD:
+        if p.name == "ace_cli_installer.py":  # 8.1.1: the one installer, asserted below
+            continue
         for m in re.finditer(r"\[\s*['\"]npm['\"][^\]]*\]", p.read_text()):
             spawns.append((p.name, re.sub(r"\s+", " ", m.group(0))))
     assert spawns, "the §23 rebuild must exist"
     assert all("rebuild" in s and "better-sqlite3" in s for _, s in spawns), spawns
+
+
+def test_the_installer_runs_only_ci_and_the_sqlite_rebuild():
+    """8.1.1: the one other npm user. `npm ci` from the lock + the rebuild; never `npm install`; one place."""
+    src = (PLUGIN / "shared-hooks" / "utils" / "ace_cli_installer.py").read_text()
+    calls = re.findall(r"_npm\(\[([^\]]*)\]", src)
+    assert [re.sub(r"\s+", " ", c) for c in calls] == ['"ci", "--ignore-scripts", "--no-audit", "--no-fund"', '"rebuild", "better-sqlite3"'], calls
+    assert not re.search(r"""['"]install['"]""", src)
+    assert "replace_registry_host" in src and "never" in src
+    others = [p.name for p in PROD if p.name != "ace_cli_installer.py" and "ace_cli_installer" in p.read_text() and "subprocess" in p.read_text() and '"npm"' in p.read_text()]
+    assert others == ["ace_install_cli.py"], others  # only its sqlite rebuild (the pre-existing async row)
 
 
 def test_sync_sessionstart_never_touches_npm(tmp_path):

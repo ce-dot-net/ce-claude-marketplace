@@ -133,6 +133,48 @@ test('cli missing: verify says cli_missing (band offers the install, nothing run
   expect(h.runs.some((r: any) => r.argv[0] === 'npm')).toBe(false)
 })
 
+// ---- 8.1.1: the pinned CLI is installed in the background; quiet while it runs, a band only on failure ----
+const missing = (installed: () => boolean) => (a: string[]) => a[0] === 'status'
+  ? (installed() ? { exitCode: 0, stdout: '{"playbook":{"total_patterns":1}}' } : { exitCode: 1, stderr: "Error: Cannot find module '/x/cli.js'" }) : undefined
+const instCalls = (h: any) => h.runs.filter((r: any) => r.argv.some((a: string) => a.endsWith('/ace_cli_installer.py'))).map((r: any) => r.argv[r.argv.length - 1])
+
+test('cli missing + background install: no band, no ▼ while it runs, none after success; the CLI is re-verified (no restart)', async ($, on) => {
+  let done = false
+  const h = host(on, { cli: missing(() => done), installer: a => a[0] === '--wait' ? (done = true, { state: 'ok', detail: '4.4.2' }) : { state: 'started' } })
+  await start($)
+  await tick()
+  expect(instCalls(h)).toEqual(['--ensure', '--wait'])
+  expect(h.band()?.state ?? null).toBe(null)
+  expect(h.statuses.filter((s: any) => s && s.includes('▼'))).toEqual([])
+  expect(statusRuns(h).length).toBe(2)  // before and after the install
+  expect(h.runs.some((r: any) => r.argv[0] === 'npm')).toBe(false)  // the mod never runs npm itself
+})
+
+test('cli missing + install failed: ONE band line with [Erneut versuchen] (retry set)', async ($, on) => {
+  const h = host(on, { cli: missing(() => false), installer: a => a[0] === '--wait' ? { state: 'failed', detail: 'npm ci exit 1' } : { state: 'started' } })
+  await start($)
+  await tick()
+  expect(h.band()).toMatchObject({ state: 'cli_missing', retry: 'npm ci exit 1' })
+})
+
+test('cli missing + a recent failure (throttled): the band shows at once, no second install', async ($, on) => {
+  const h = host(on, { cli: missing(() => false), installer: () => ({ state: 'failed', detail: 'timeout' }) })
+  await start($)
+  await tick()
+  expect(instCalls(h)).toEqual(['--ensure'])
+  expect(h.band()).toMatchObject({ state: 'cli_missing', retry: 'timeout' })
+})
+
+for (const state of ['off', 'unavailable']) {
+  test(`cli missing + auto-install ${state}: the old behaviour (band offers the confirm install)`, async ($, on) => {
+    const h = host(on, { cli: missing(() => false), installer: () => ({ state, detail: 'x' }) })
+    await start($)
+    await tick()
+    expect(h.band()).toMatchObject({ state: 'cli_missing', retry: null })
+    expect(instCalls(h)).toEqual(['--ensure'])
+  })
+}
+
 // ---- worktrees / subfolders: already-bound repos work with zero steps ----
 const MAIN = '/repo', WT = '/repo/.claude/worktrees/w1'
 const worktreeFiles = (extra: Record<string, string> = {}) => ({

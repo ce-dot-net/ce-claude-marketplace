@@ -2,7 +2,7 @@
 
 **Agentic Context Engineering** - Self-improving Claude Code plugin using automatic pattern learning.
 
-## What's new in 8.1.0 (unreleased)
+## What's new in 8.1.0
 
 - **One binding core.** Every hook (both chains), every command and the statusline take org/project from one resolver
   (`mod/context/`, `shared-hooks/utils/ace_project_context.py`, contract: the SDK spec `project-context`). Precedence:
@@ -55,7 +55,11 @@
 
 Claude Code installs the exact `@ace-sdk/cli` version pinned in `package.json` (`package-lock.json`) into the plugin
 directory when you install or update the plugin. Plugin and CLI go hand in hand: every plugin version runs the CLI it was
-tested with, and a new CLI reaches you with the next plugin update. If the CLI is missing, run `/ace:ace-install-cli`.
+tested with, and a new CLI reaches you with the next plugin update. If Claude Code has not installed it (a fresh marketplace
+install), the next session start installs it in the background (`npm ci --ignore-scripts` from the lockfile, then
+`npm rebuild better-sqlite3`, in the plugin directory; no message, no restart; one retry per plugin version per hour after
+a failure, with one band line and `[Erneut versuchen]`). `ACE_AUTO_INSTALL=0` turns that off: ACE then tells you and installs
+only after `/ace:ace-install-cli` and its confirm button. Without npm/node, offline-managed or read-only: the same message.
 
 **Requirements:** Claude Code >= 2.1.311, Node.js (for the CLI), macOS, Linux or WSL2. Windows is not supported (use WSL2).
 
@@ -158,6 +162,7 @@ After completing work, run `/ace-learn`:
 - `ACE_RENDER_FULL_PCT` (default 50, 0 = off): share of conversations the mod renders `full`; see the cost note above.
   The ACE server can switch the share for everyone without a plugin release: a search response field `render_full_pct` (0-100, kept for 7 days in `render-full-pct.json`) applies when the env is unset.
 - `ACE_ENGINE=cli`: never use the in-process engine.
+- `ACE_AUTO_INSTALL=0`: never install the pinned ace-cli in the background at SessionStart (default on).
 
 ### Binding (project context)
 
@@ -276,7 +281,7 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Version**: v8.1.0
+**Version**: v8.1.1
 **Maintainer**: CE.NET Team
 **Requires**: Claude Code >= 2.1.311, ace-cli 4.4.2 pinned in package.json (@ace-sdk/core >= 3.8.2; installed with the plugin; a global ace-cli >= the pin is an untested fallback), Python >= 3.10 for the fallback hooks (Ubuntu 22.04+, Debian 12+, Homebrew/pyenv; the macOS system 3.9 is not enough, the mod chain is unaffected). Windows not supported (WSL2 works).
 **Architecture**: mod + Python hooks + CLI/engine (no MCP)

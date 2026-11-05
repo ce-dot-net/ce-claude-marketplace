@@ -5,6 +5,28 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.1.1] - 2026-11-05
+
+### Added
+- A fresh marketplace install (cache dir without `node_modules`) now gets its pinned ace-cli by itself. At SessionStart
+  (both chains) a missing or wrong plugin-local CLI is installed in the background: detached, never blocking the start,
+  `npm ci --ignore-scripts` from the lockfile only (never `npm install`, the lock is never touched), then
+  `npm rebuild better-sqlite3`, in the plugin dir (never the project), 240 s per step, registry = the lockfile's
+  resolved URLs (`replace-registry-host=never`; a non-https URL in the lock refuses the install). One installer at a
+  time (`cli-install.lock` in CLAUDE_PLUGIN_DATA); after a failure at most one attempt per plugin version per hour
+  (`cli-install.json`). Refused (old message instead) when `npm`/`node` are missing, the plugin dir is read-only,
+  `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` is set, or `node_modules` is a symlink leaving the plugin dir. One line per
+  install in `ace-hook-errors.log`. `ACE_AUTO_INSTALL=0` opts out: detect and tell, install only on the confirm button.
+- UI: no band or message while it runs or after success (the CLI is resolved per call: hooks and commands use it right
+  away, no restart); only on failure one band line with `[Erneut versuchen]` (the Python chain: one systemMessage line).
+- `/ace:ace-doctor` shows the auto-install state (`ok | running | failed | off | unavailable` + the last result).
+
+### Changed
+- One installer for everything: `shared-hooks/utils/ace_cli_installer.py` (`--ensure`, `--wait`, `--run`, `--status`).
+  The band button, `/ace:ace-install-cli` (mod and markdown) and SessionStart only call it; the npm commands that were
+  copied into the band and the markdown command are gone.
+- The `npm rebuild better-sqlite3` of the async SessionStart row skips while the installer holds its lock.
+
 ## [8.1.0] - 2026-11-04
 
 Requires: Claude Code >= 2.1.311, ace-cli 4.4.2 (pinned exactly; @ace-sdk/core >= 3.8.2), Python >= 3.10 for the fallback hooks (the mod chain needs none).

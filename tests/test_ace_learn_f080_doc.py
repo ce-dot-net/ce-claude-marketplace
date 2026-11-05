@@ -159,3 +159,29 @@ class TestEnrichedTraceClaimCorrected:
             "hooks now send enriched trace via #24/#25; "
             "--retrieval-id and/or --applied-log-ids must be documented"
         )
+
+
+# ---------------------------------------------------------------------------
+# 8.1.1: the md fallback must send a complete trace (like the mod: flags)
+# ---------------------------------------------------------------------------
+
+class TestLearnFallbackSendsCompleteTrace:
+    def test_no_partial_stdin_payload(self, doc_text):
+        """The old {task,output,success,git} stdin payload had no result/trajectory/playbook_used."""
+        assert "LEARN_PAYLOAD" not in doc_text
+        assert "learn --stdin" not in doc_text
+
+    def test_uses_the_flags_the_mod_uses(self, doc_text):
+        import re
+        call = re.search(r"learn\b[^\n]*--task[^\n]*", doc_text) or re.search(r"\n\s*learn\s+\\?\n?[^\n]*--task", doc_text)
+        assert call, "learn call must pass --task"
+        assert "--output" in doc_text and '"$SUCCESS_FLAG"' in doc_text
+        # the CLI (core storeExecutionTrace shape) builds trajectory/result/playbook_used from these flags
+        mod = (DOC.parent.parent / "mod" / "commands" / "learn.ts").read_text()
+        for f in ("--task", "--output", "--success"):
+            assert f in mod
+
+    def test_pin_session_and_flag_docs_are_correct(self, doc_text):
+        assert "group all task events" not in doc_text
+        assert "weight retrieval results accordingly" not in doc_text
+        assert "ignores a client-supplied `task_intent`" in doc_text
