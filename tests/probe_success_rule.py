@@ -86,8 +86,8 @@ def unrecovered_decisive(new, tools):
         tin, resp = json.loads(tin_json or '{}'), json.loads(tresp_json or '{}')
         tin = tin if isinstance(tin, dict) else {}
         if name == 'Bash':
-            fam, dec = new.bash_step(tin.get('command'))
-            key = 'Bash:' + fam
+            _fam, dec, bkey = new.bash_step(tin.get('command'))
+            key = 'Bash:' + bkey
         else:
             key, dec = name, name in new.DECISIVE_TOOLS or new.mcp_writes(name)
         steps.append((new._step_status(name, tin, resp), key, dec, tin))
@@ -96,18 +96,26 @@ def unrecovered_decisive(new, tools):
 
 
 def why(old, new, tools, i, step):
+    """Heuristic label of the fix that made this unrecovered decisive step fail the turn."""
     name = tools[i][0]
     if name.startswith('mcp__'):
-        return 'SF4 mcp write', name
+        return 'mcp write', name
     cmd = step[3].get('command') or ''
-    fam = new.command_family(cmd)
+    fam, _dec, key = new.bash_step(cmd)
     old_fam = old.command_family(cmd)
-    old_ro = old_fam in old.READ_ONLY_BASH
+    old_in = getattr(old, '_in', lambda f, t: f in t)
+    old_ro = old_in(old_fam, old.READ_ONLY_BASH)
     resp = json.loads(tools[i][2] or '{}')
+    if fam in ('sed-i', 'awk-i', 'perl-pi') and old_fam != fam:
+        return 'in-place edit', fam
+    if old_ro and new._in(fam, new.READ_ONLY_BASH):  # read-only program, decisive only through the redirect
+        return 'output redirect', fam
+    if '#' in key:
+        return 'script/host key', fam
     if old._step_status(name, step[3], resp) == 'ok' or old_ro:
         pipe = len(new._split_top(new._split_top(cmd, new._CHAIN)[-1], ('|',))) > 1
-        return ('MF2 pipeline last stage' if pipe else 'MF1 chain last non-read-only'), fam
-    return 'SF3 finer family', fam
+        return ('pipeline last stage' if pipe else 'chain last non-read-only'), fam
+    return 'finer family', fam
 
 
 def bash_action_stats(old, new, tools, acc):
