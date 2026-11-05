@@ -509,13 +509,17 @@ cutoff = time.time() - 24 * 3600
 locked = 0
 counts = {"learn_retry": 0, "learn_failed": 0}
 ctx = {}
+rule = None  # 8.1.3: the outcome rule of the newest execution row
 for path in (log, os.path.join(logs, "ace-relevance.1.jsonl")):  # also the rotated file (ace-relevance.1.jsonl)
+    file_rule = None
     try:
         with open(path, encoding="utf-8", errors="replace") as fh:
             for line in fh:
                 try:
                     row = json.loads(line)
                     ev = row.get("event")
+                    if ev == "execution":
+                        file_rule = row.get("outcome_rule") or "pre-8.1.3"
                     if ev == "learn_retry":
                         counts["learn_retry"] += 1
                     elif ev == "execution" and row.get("learning_sent") is False:
@@ -535,8 +539,11 @@ for path in (log, os.path.join(logs, "ace-relevance.1.jsonl")):  # also the rota
                     locked += 1
     except OSError:
         pass
+    rule = rule or file_rule
 print("INFO: learn retries %d, failed learns %d; binding source/state: %s" % (
     counts["learn_retry"], counts["learn_failed"], ", ".join("%s %d" % kv for kv in ctx.items()) or "none"))
+if rule:  # 8.1.3: success = the task's end outcome, failed_steps = failed steps (docs/technical/ARCHITECTURE.md "Task outcome")
+    print("INFO: outcome rule %s (success = end outcome since 8.1.3)" % rule)
 if locked:
     warned = True
     print("WARN: %d lock incident(s) ('database is locked' / pin_failed / pin backoff) in ace-relevance.jsonl in the last 24 h" % locked)

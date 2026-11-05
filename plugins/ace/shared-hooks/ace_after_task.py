@@ -154,25 +154,182 @@ def has_substantial_work_from_accumulated(tools: list) -> bool:
     return False
 
 
-def tool_failed(resp) -> bool:
-    """A failed step: error / stderr, or (fix 5a) a non-zero exit code - structured or the transcript's
-    "Exit code N" text - unless the tool interpreted it (grep exit 1 = no matches). Parity: mod/lib/trace.ts toolRec."""
+# ---- 8.1.3 task outcome (docs/technical/ARCHITECTURE.md "Task outcome"; parity: mod/lib/trace.ts, fixture tests-fixtures/task-outcome) ----
+# result.success = the END outcome of the task; result.failed_steps = how many steps failed (informational).
+# Exit 1 of these families means "no match / differs / false", never a failure (not even a failed step); exit >= 2 is.
+BENIGN_EXIT1 = ("grep", "egrep", "fgrep", "rg", "diff", "cmp", "test", "[", "[[", "git diff", "git grep", "command -v",
+                "which", "type", "pgrep", "pidof", "jq")
+# ponytail: a fixed read-only family list (a failed read-only step never fails the task); grow it from probe data.
+READ_ONLY_BASH = ("ls", "cat", "head", "tail", "wc", "find", "grep", "egrep", "fgrep", "rg", "pwd", "echo", "printf",
+                  "which", "type", "command -v", "file", "stat", "du", "df", "tree", "jq", "sort", "uniq", "cut", "tr",
+                  "diff", "cmp", "test", "[", "[[", "date", "printenv", "ps", "pgrep", "pidof", "git status", "git log",
+                  "git show", "git diff", "git grep", "git rev-parse", "git ls-files", "git blame")
+# State-changing or verifying tools besides non-read-only Bash. ponytail: MCP tools are never decisive (read vs write is
+# unknown per server); a per-server table is the upgrade path.
+OUTCOME_RULE = "8.1.3"  # the execution row names the rule that set success; /ace:ace-doctor shows the last one
+DECISIVE_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit", "Agent", "Task", "Workflow")
+_FILE_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit")
+_WRAPPERS = ("sudo", "time", "env", "nice", "nohup", "exec", "npx", "bunx")
+_SUBCMD = ("git", "npm", "pnpm", "yarn", "bun", "cargo", "go", "gh", "docker", "uv", "pip", "pip3", "claude")
+_ASSIGN = regex_module.compile(r'[A-Za-z_][A-Za-z0-9_]*=')
+_EXIT_TEXT = regex_module.compile(r'Exit code (\d+)')
+
+
+def _split_top(s, seps):
+    """Split s at any of seps outside quotes (backslash escapes outside single quotes)."""
+    out, cur, q, i = [], '', None, 0
+    while i < len(s):
+        ch = s[i]
+        if q:
+            if ch == '\\' and q == '"' and i + 1 < len(s):
+                cur += s[i:i + 2]
+                i += 2
+                continue
+            if ch == q:
+                q = None
+            cur += ch
+            i += 1
+            continue
+        if ch == '\\' and i + 1 < len(s):
+            cur += s[i:i + 2]
+            i += 2
+            continue
+        if ch in ('"', "'"):
+            q = ch
+            cur += ch
+            i += 1
+            continue
+        sep = next((x for x in seps if s.startswith(x, i)), None)
+        if sep:
+            out.append(cur)
+            cur = ''
+            i += len(sep)
+            continue
+        cur += ch
+        i += 1
+    out.append(cur)
+    return out
+
+
+def _words(s):
+    """Whitespace-split outside quotes, quotes removed."""
+    return [w.replace('"', '').replace("'", '') for w in _split_top(s.strip(), (' ', '\t')) if w]
+
+
+def command_family(cmd):
+    """Bash command -> its family: the first word of the last top-level segment (&&, ||, ;, newline), first pipe stage,
+    wrappers and VAR=value skipped, plus the subcommand for git/npm/... tools (two levels for claude).
+    ponytail: a heuristic tokenizer, not a shell parser; a heredoc body is ignored (first line only)."""
+    cmd = str(cmd or '')
+    if '<<' in cmd:
+        cmd = cmd.split('\n', 1)[0]
+    segs = [x for x in _split_top(cmd, ('&&', '||', ';', '\n')) if x.strip()]
+    if not segs:
+        return ''
+    w = [x.strip('(){}') for x in _words(_split_top(segs[-1], ('|',))[0])]
+    w = [x for x in w if x and x != '!']
+    while w and (w[0] in _WRAPPERS or _ASSIGN.match(w[0]) or w[0] == 'timeout' or (w[0] in ('uv', 'poetry') and w[1:2] == ['run'])):
+        if w[0] == 'timeout':
+            w = w[1:]
+            while w and w[0].startswith('-'):
+                w = w[1:]
+            w = w[1:]
+        elif w[0] in ('uv', 'poetry') and w[1:2] == ['run']:
+            w = w[2:]
+        else:
+            w = w[1:]
+    if not w:
+        return ''
+    first = w[0].rsplit('/', 1)[-1]
+    if first in ('python', 'python3') and len(w) > 2 and w[1] == '-m':
+        return w[2]
+    if first == 'command' and w[1:2] in (['-v'], ['-V']):
+        return 'command -v'
+    if first not in _SUBCMD:
+        return first
+    fam, rest = [first], w[1:]
+    while rest and len(fam) < (3 if first == 'claude' else 2):
+        x = rest.pop(0)
+        if x.startswith('-'):
+            if first == 'git' and x in ('-C', '-c') and rest:
+                rest.pop(0)
+            continue
+        fam.append(x)
+    return ' '.join(fam)
+
+
+def _exit_code(resp):
+    """The known exit code (structured, or the "Exit code N" text of error/content), else None. A code the tool
+    interpreted itself (returnCodeInterpretation, e.g. grep's no-matches) counts as 0."""
     if not isinstance(resp, dict):
-        return False
-    if resp.get('error') or resp.get('stderr'):
-        return True
-    c = resp.get('content')
-    if isinstance(c, str):
-        m = regex_module.match(r'Exit code (\d+)', c)
-        if m and int(m.group(1)) != 0:
-            return True
+        return None
     if resp.get('returnCodeInterpretation'):
-        return False
-    code = resp.get('exit_code', resp.get('exitCode', 0))
-    try:
-        return int(code or 0) != 0
-    except (TypeError, ValueError):
-        return False
+        return 0
+    for k in ('exit_code', 'exitCode'):
+        if resp.get(k) is not None:
+            try:
+                return int(resp[k])
+            except (TypeError, ValueError):
+                pass
+    for k in ('error', 'content'):
+        m = _EXIT_TEXT.match(resp[k]) if isinstance(resp.get(k), str) else None
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _step_status(tool, tin, resp):
+    """'ok' | 'failed' | 'interrupted'. stderr alone never fails a step; a known Bash exit code decides
+    (benign exit-1 families are ok); otherwise error / is_error (incl. permission denials) does."""
+    if isinstance(resp, dict) and resp.get('interrupted') is True:
+        return 'interrupted'
+    if tool == 'Bash':
+        code = _exit_code(resp)
+        if code is not None:
+            if code == 0 or (code == 1 and command_family(tin.get('command')) in BENIGN_EXIT1):
+                return 'ok'
+            return 'failed'
+    return 'failed' if isinstance(resp, dict) and resp.get('error') else 'ok'
+
+
+def tool_failed(resp) -> bool:
+    """A failed step (8.1.3: stderr alone is not one). Parity: mod/lib/trace.ts toolRec."""
+    return _step_status('Bash', {}, resp) == 'failed'
+
+
+def task_outcome(tools):
+    """(success, failed_steps, aborted) from the 8-tuples (name, input_json, response_json, ...). docs/technical/ARCHITECTURE.md "Task outcome":
+    a failed step is recovered by a LATER ok step with the same key (Bash: command family; file tools: the path;
+    else the tool name). success is False only for an unrecovered failed DECISIVE step (non-read-only Bash or
+    DECISIVE_TOOLS) or an aborted run (last step interrupted). Returns (success, failed_steps, aborted);
+    no tool data -> (True, 0, False)."""
+    steps = []
+    for name, tin_json, tresp_json, *_ in tools:
+        try:
+            tin = json.loads(tin_json) if tin_json else {}
+        except (TypeError, ValueError):
+            tin = {}
+        try:
+            resp = json.loads(tresp_json) if tresp_json else {}
+        except (TypeError, ValueError):
+            resp = {}
+        tin = tin if isinstance(tin, dict) else {}
+        if name == 'Bash':
+            fam = command_family(tin.get('command'))
+            key, decisive = 'Bash:' + fam, fam not in READ_ONLY_BASH
+        else:
+            path = tin.get('file_path') or tin.get('notebook_path')
+            key = ('file:' + str(path)) if name in _FILE_TOOLS and path else name
+            decisive = name in DECISIVE_TOOLS
+        steps.append((_step_status(name, tin, resp), key, decisive))
+    # aborted: the run's LAST step was interrupted (PostToolUseFailure is_interrupt). A mid-run interrupt the task went
+    # on from is no abort. Stop does not fire on a user interrupt (doc), so a turn cut by the user sends no trace at all.
+    aborted = bool(steps) and steps[-1][0] == 'interrupted'
+    success = not aborted
+    for i, (st, key, decisive) in enumerate(steps):
+        if st == 'failed' and decisive and not any(s == 'ok' and k == key for s, k, _ in steps[i + 1:]):
+            success = False
+    return success, sum(1 for s, _, _ in steps if s != 'ok'), aborted
 
 
 def summarize_tool_action(tool_name: str, tool_input: dict) -> str:
@@ -1000,15 +1157,12 @@ def main():
             sys.exit(0)
 
         # STEP 5: Build ExecutionTrace (ACE Paper compliant format)
-        # Check for errors in tool responses
-        has_errors = False
-        for _, _, tool_response_json, _, *_ in tools:
-            try:
-                if tool_failed(json.loads(tool_response_json) if tool_response_json else {}):
-                    has_errors = True
-                    break
-            except Exception:
-                pass
+        # 8.1.3: success = the END outcome (docs/technical/ARCHITECTURE.md "Task outcome"), failed_steps = failed steps (informational)
+        try:
+            task_success, failed_steps, aborted = task_outcome(tools)
+        except Exception:
+            task_success, failed_steps, aborted = True, 0, False
+        has_errors = not task_success
 
         # v7.1.3 R1 — SubagentStop read_key==transcript_uuid invariant monitor.
         # Guarded — never break the learn pipeline.
@@ -1169,6 +1323,8 @@ def main():
             "trajectory": trajectory,
             "result": {
                 "success": not has_errors,
+                "failed_steps": failed_steps,
+                **({"aborted": True} if aborted else {}),  # 8.1.3 contract: only when true
                 "output": f"Executed {len(tools)} tool calls",
                 "summary": (_handback_full[:4000] if _handback_full else None)
                            or (last_assistant_message[:2000] if last_assistant_message else None),  # v5.5.0: CC 2.1.51+
@@ -1265,7 +1421,7 @@ def main():
                     "session_id": session_id, "patterns_used": playbook_used,
                     "tools_executed": len(tools),
                     "state_changing_tools": sum(1 for t in tools if any(x in t[0] for x in state_changing_tools)),
-                    "success": not has_errors,
+                    "success": not has_errors, "failed_steps": failed_steps, "outcome_rule": OUTCOME_RULE,
                     "execution_time_seconds": time.time() - execution_start_time,
                     "project_id": context.get('project'), "agent_type": agent_type,
                     "used_ids_count": len(_used), "used_source": "tokens" if _used else "none",

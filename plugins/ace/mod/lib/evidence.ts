@@ -4,7 +4,8 @@ import { PyFloat, num, pyFloatRepr } from './pyjson.ts'
 import { cps, cpSlice, normWs } from './text.ts'
 
 export type ToolRec = { tool: string; action: string; result: string; failed: boolean; start_ms: number; end_ms: number; commit?: string
-  hay?: string }  // hay: the call's toolHaystack (item H2 used check), never sent in the trace
+  hay?: string  // hay: the call's toolHaystack (item H2 used check), never sent in the trace
+  key?: string; dec?: boolean; intr?: true }  // 8.1.3 outcome: recovery key, decisive step, interrupted (lib/trace.ts taskOutcome)
 
 // ace_after_task.parse_ace_review
 export function parseAceReview(msg: string): { quality_pct: number; time_saved: string } | null {

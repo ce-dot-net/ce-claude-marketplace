@@ -5,6 +5,34 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.1.3] - Unreleased
+
+### Fixed
+- `result.success` is the END outcome of the task again. Since v8.0.0 any failed step failed the whole task: a grep
+  without a match (exit 1), a red test run in the TDD phase, a diff, a retried call. Main-task success fell from about
+  90 % to about 60 % and the server learned negative rewards from it. Now (both chains, one rule, see
+  docs/technical/ARCHITECTURE.md "Task outcome (8.1.3)"): benign exit 1 of grep/rg/diff/cmp/test/`[`/git diff/git
+  grep/`command -v`/which/type/pgrep/pidof/jq is no failure; a failed step that a later step of the same command
+  family (Bash) or the same file (Edit/Write) or tool fixes is recovered; only an unrecovered failure of a
+  state-changing or verifying step (non-read-only Bash, Edit, Write, NotebookEdit, Agent/Task/Workflow, test runners)
+  or a run that ended interrupted makes `success: false`. Failed read-only steps (Read, Glob, Grep, WebFetch,
+  WebSearch, ls-like Bash) and MCP tools never do.
+- stderr alone is no failure: a Bash step with exit code 0 succeeds whatever it wrote to stderr (git progress, npm/pip
+  notices, node warnings). Before, the mod counted any stderr as a failed step.
+
+### Added
+- `result.failed_steps` (int, always present, informational, never decides success) on every automatic trace in both
+  chains; PermissionDenied traces keep `success: false` and send `failed_steps: 1`. The server stores `result`
+  unchanged, so no SDK change.
+- `result.aborted: true` (only when true, absent otherwise) when the run's last recorded step was interrupted; such a
+  run is `success: false`. A mid-run interrupt the task went on from and a user rejection are no abort. Limit: Claude
+  Code fires no Stop on a user interrupt and the mod abstains on an aborted turn, so a turn the user cut off still
+  sends no trace in either chain (docs/technical/ARCHITECTURE.md "Task outcome (8.1.3)").
+- The execution row carries `failed_steps` and `outcome_rule`; `/ace:ace-doctor` (mod and markdown) shows the outcome
+  rule of the newest execution row.
+- Shared fixture `tests-fixtures/task-outcome/` (59 step sequences, the family tables), run by the Python and the mod
+  suite; a parity test keeps the two chains' tables equal.
+
 ## [8.1.2] - 2026-11-05
 
 ### Fixed
