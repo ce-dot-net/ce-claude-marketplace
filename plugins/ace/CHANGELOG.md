@@ -5,7 +5,7 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [8.1.2] - Unreleased
+## [8.1.2] - 2026-11-05
 
 ### Fixed
 - A `node_modules` with the pinned ace-cli but NO better-sqlite3 native binding (`npm ci --ignore-scripts` without the
