@@ -216,6 +216,35 @@ def test_tool_failed_stderr_alone_is_not_a_failure():
     assert tool_failed({'error': 'boom'}) is True
 
 
+def _strings(x):
+    if isinstance(x, str):
+        yield x
+    elif isinstance(x, dict):
+        for v in x.values():
+            yield from _strings(v)
+    elif isinstance(x, list):
+        for v in x:
+            yield from _strings(v)
+
+
+def test_fuzz_passwords_reach_no_sent_field():
+    """300 random passwords (printable ASCII, no whitespace/quotes) x 6 forms: the password is in no sent field
+    (action, step result, error text, task, summary). The mod runs the same table through buildTrace."""
+    from ace_after_task import redact, summarize_tool_action, summarize_tool_response
+    leaks = []
+    for pw in TABLES['fuzz_passwords']:
+        for tpl in TABLES['fuzz_templates']:
+            cmd = tpl.replace('{pw}', pw)
+            sent = [summarize_tool_action('Bash', {'command': cmd}),
+                    summarize_tool_response('Bash', {'error': 'Exit code 1\n' + cmd}),
+                    summarize_tool_response('Bash', {'stdout': cmd}),
+                    summarize_tool_response('Bash', 'fatal: ' + cmd),
+                    redact('User request: run ' + cmd)[:2000], redact('ran ' + cmd)[:2000]]
+            if any(pw in x for x in _strings(sent)):
+                leaks.append(tpl)
+    assert not leaks, '%d leaks, first forms: %s' % (len(leaks), sorted(set(leaks)))
+
+
 def test_unparsable_commands_never_crash():
     from ace_after_task import command_family, summarize_tool_action
     for cmd in ['"', "'", '$(', '`', '((', '))', '<<', '<<EOF', '| |', '&& ;', '\\', 'a |& b', '\x00', 123]:
