@@ -21,7 +21,7 @@ LOG = sys.argv[2]
 # 8.1.4: FAKE_TRACE_SCRIPT = JSON list, one item per POST /traces with a NEW Idempotency-Key (per the server team's
 # reading of prod): store | not_stored | slow:<s> | 429:<retry-after> | 503pg:<retry-after> | 504 (commits, then
 # answers 504) | 500 | 401 | 422. A key seen before: in progress -> 200 stored:true duplicate:true "duplicate in
-# progress"; stored -> 200 stored:true duplicate:true; not_stored -> 200 stored:false duplicate:true (nothing stored).
+# progress"; stored -> 200 stored:true duplicate:true; an object item {status, body} is answered verbatim; not_stored -> 200 stored:false duplicate:true (nothing stored).
 # Every stored trace appends {"key", "task"} to <log>.stored.
 SCRIPT = {"items": json.loads(os.environ.get("FAKE_TRACE_SCRIPT") or "null"), "keys": {}, "lock": threading.Lock()}
 _502 = {"left": int(os.environ.get("FAKE_TRACE_502") or 0), "lock": threading.Lock()}
@@ -89,6 +89,11 @@ class H(BaseHTTPRequestHandler):
             return self._raw(200, {"stored": True, "duplicate": True, "message": "Trace stored."})
         if seen == "not_stored":
             return self._raw(200, {"stored": False, "duplicate": True, "message": "Trace stored."})
+        if isinstance(item, dict):  # {"status", "body"}: answer exactly this (tests-fixtures/trace-delivery/stored_cases.json)
+            if item["body"].get("stored") is True and item["body"].get("duplicate") is not True:
+                SCRIPT["keys"][key] = "stored"
+                self._store(key, body)
+            return self._raw(item["status"], item["body"])
         kind, _, arg = item.partition(":")
         if kind == "store":
             SCRIPT["keys"][key] = "stored"

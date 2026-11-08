@@ -580,3 +580,34 @@ def test_in_progress_then_duplicate_deletes_only_after_a_real_answer(qdir):
     assert e["answered"] is True and e["next_at"] >= now + 75 * 60
     rows = Q.replay(qdir, lambda e: (6, R(200, stored=True, duplicate=True, message="Trace stored.")), now=e["next_at"])
     assert rows[-1]["event"] == "learn_replayed" and entries(qdir) == []
+
+
+# ---------- the `stored` field (server fix: stored:null while the first send runs) ----------
+
+STORED_CASES = json.loads((Path(__file__).resolve().parent.parent / "plugins" / "ace" / "tests-fixtures" / "trace-delivery"
+                           / "stored_cases.json").read_text())
+
+
+def _engine_line(c):
+    """What engine/learn.js writes for an answer: `stored` only when the key is present (null when not a boolean)."""
+    b = c["body"]
+    r = {"status": c["status"], "duplicate": b.get("duplicate") is True, "message": b.get("message")}
+    if "stored" in b:
+        r["stored"] = b["stored"] if isinstance(b["stored"], bool) else None
+    return Q.RESPONSE_TAG + json.dumps(r)
+
+
+@pytest.mark.parametrize("c", STORED_CASES, ids=[c["name"] for c in STORED_CASES])
+def test_stored_field_cases(c):
+    assert Q.classify(c["engine_exit"], _engine_line(c)) == (c["action"], c["cls"])
+
+
+def test_in_progress_waits_75_min_and_is_not_a_failed_attempt(qdir):
+    Q.settle(qdir, qid(1), trace(), META, 1, DEAD_NET, now=T0)
+    now = T0 + 61
+    for _ in range(8):  # more than MAX_ATTEMPTS waits: never given up for it
+        rows = Q.replay(qdir, lambda e: (6, _engine_line({"status": 200, "body": {"stored": None}})), now=now)
+        e = json.loads((qdir / (qid(1) + ".json")).read_text())
+        assert rows[-1]["error_class"] == "in_progress" and e["next_at"] == now + 75 * 60 and e["attempts"] == 1
+        now = e["next_at"]
+    assert dead(qdir) == []

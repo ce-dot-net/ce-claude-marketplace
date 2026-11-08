@@ -1,0 +1,108 @@
+[
+ {
+  "name": "stored true",
+  "status": 200,
+  "body": {
+   "stored": true,
+   "message": "Trace stored."
+  },
+  "engine_exit": 0,
+  "action": "ok",
+  "cls": null
+ },
+ {
+  "name": "stored true (202)",
+  "status": 202,
+  "body": {
+   "stored": true
+  },
+  "engine_exit": 0,
+  "action": "ok",
+  "cls": null
+ },
+ {
+  "name": "stored false: new key",
+  "status": 200,
+  "body": {
+   "stored": false,
+   "message": "Trace stored."
+  },
+  "engine_exit": 6,
+  "action": "requeue",
+  "cls": "not_stored"
+ },
+ {
+  "name": "stored null: first send still running (server fix)",
+  "status": 200,
+  "body": {
+   "stored": null,
+   "message": "Trace stored."
+  },
+  "engine_exit": 6,
+  "action": "requeue",
+  "cls": "in_progress"
+ },
+ {
+  "name": "stored null (202)",
+  "status": 202,
+  "body": {
+   "stored": null
+  },
+  "engine_exit": 6,
+  "action": "requeue",
+  "cls": "in_progress"
+ },
+ {
+  "name": "stored missing (old server)",
+  "status": 200,
+  "body": {
+   "message": "Trace stored."
+  },
+  "engine_exit": 0,
+  "action": "ok",
+  "cls": null
+ },
+ {
+  "name": "stored missing + duplicate",
+  "status": 200,
+  "body": {
+   "duplicate": true,
+   "message": "Trace stored."
+  },
+  "engine_exit": 6,
+  "action": "requeue",
+  "cls": "in_progress"
+ },
+ {
+  "name": "stored the string true",
+  "status": 200,
+  "body": {
+   "stored": "true"
+  },
+  "engine_exit": 6,
+  "action": "requeue",
+  "cls": "in_progress"
+ },
+ {
+  "name": "stored the number 1",
+  "status": 200,
+  "body": {
+   "stored": 1
+  },
+  "engine_exit": 6,
+  "action": "requeue",
+  "cls": "in_progress"
+ },
+ {
+  "name": "duplicate in progress",
+  "status": 200,
+  "body": {
+   "stored": true,
+   "duplicate": true,
+   "message": "duplicate in progress"
+  },
+  "engine_exit": 6,
+  "action": "requeue",
+  "cls": "in_progress"
+ }
+]
