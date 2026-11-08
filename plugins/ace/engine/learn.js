@@ -37,8 +37,10 @@ async function observe(url, init) {
     try { body = await r.clone().json(); } catch (_) { /* not JSON */ }
     const b = body && typeof body === 'object' ? body : {};
     last = { status: r.status, path, retry_after: str(r.headers.get('Retry-After'), 40),
-      error_code: str(b.error_code, 80), stored: typeof b.stored === 'boolean' ? b.stored : null,
-      duplicate: b.duplicate === true, message: str(b.message, 200) };
+      error_code: str(b.error_code, 80), duplicate: b.duplicate === true, message: str(b.message, 200),
+      // `stored` only when the server sent it: a boolean as is, anything else (null while the first send still runs,
+      // "true", 1) as null = not proven stored. Absent = an older server without the field.
+      ...('stored' in b ? { stored: typeof b.stored === 'boolean' ? b.stored : null } : {}) };
   }
   return r;
 }
@@ -71,7 +73,7 @@ function errLine(e) {  // the ace-cli shape (core classifyError, plugin side): a
     process.stderr.write('ace_trace_quota_exceeded ' + String(result.quota_error_code || '') + '\n');
     process.exit(5);
   }
-  if (last && (last.stored === false || last.duplicate === true)) process.exit(6);  // answered, not proven stored
+  if (last && (('stored' in last && last.stored !== true) || last.duplicate === true)) process.exit(6);  // answered, not proven stored
   client.invalidateCache();
   process.stdout.write(JSON.stringify({
     success: true,
