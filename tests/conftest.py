@@ -36,7 +36,7 @@ _STRIP_EXACT = (
 )
 
 # Test-harness switches, not plugin config: survive the ACE_* strip.
-_KEEP = ("ACE_E2E", "ACE_PLUGIN_ROOT_UNDER_TEST", "ACE_E2E_CLI", "ACE_PRERELEASE_PREFIX")
+_KEEP = ("ACE_E2E", "ACE_PLUGIN_ROOT_UNDER_TEST", "ACE_E2E_CLI", "ACE_PRERELEASE_PREFIX", "ACE_REQUIRE_REALCORE")
 
 FAKE_SEARCH_OUTPUT = {"count": 0, "similar_patterns": []}
 

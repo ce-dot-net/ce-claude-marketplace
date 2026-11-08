@@ -18,6 +18,12 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 MODE = os.environ.get("FAKE_MODE", "ok")
 LOG = sys.argv[2]
+# 8.1.4: FAKE_TRACE_SCRIPT = JSON list, one item per POST /traces with a NEW Idempotency-Key (per the server team's
+# reading of prod): store | not_stored | slow:<s> | 429:<retry-after> | 503pg:<retry-after> | 504 (commits, then
+# answers 504) | 500 | 401 | 422. A key seen before: in progress -> 200 stored:true duplicate:true "duplicate in
+# progress"; stored -> 200 stored:true duplicate:true; not_stored -> 200 stored:false duplicate:true (nothing stored).
+# Every stored trace appends {"key", "task"} to <log>.stored.
+SCRIPT = {"items": json.loads(os.environ.get("FAKE_TRACE_SCRIPT") or "null"), "keys": {}, "lock": threading.Lock()}
 _502 = {"left": int(os.environ.get("FAKE_TRACE_502") or 0), "lock": threading.Lock()}
 
 PATTERN = {"id": "ctx-fake-0001", "content": "use jq -n --arg for hook JSON", "section": "strategies",
@@ -54,6 +60,59 @@ class H(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(b)
 
+    def _raw(self, code, obj, headers=None):
+        b = json.dumps(obj).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", "application/json")
+        for k, v in (headers or {}).items():
+            self.send_header(k, v)
+        self.send_header("Content-Length", str(len(b)))
+        self.end_headers()
+        self.wfile.write(b)
+
+    def _store(self, key, body):
+        try:
+            task = json.loads(body).get("task")
+        except ValueError:
+            task = None
+        with open(LOG + ".stored", "a") as f:
+            f.write(json.dumps({"key": key, "task": task}) + "\n")
+
+    def _scripted(self, body):
+        key = self.headers.get("Idempotency-Key") or ""
+        with SCRIPT["lock"]:
+            seen = SCRIPT["keys"].get(key)
+            item = None if seen else (SCRIPT["items"].pop(0) if SCRIPT["items"] else "store")
+        if seen == "in_progress":
+            return self._raw(200, {"stored": True, "duplicate": True, "message": "duplicate in progress"})
+        if seen == "stored":
+            return self._raw(200, {"stored": True, "duplicate": True, "message": "Trace stored."})
+        if seen == "not_stored":
+            return self._raw(200, {"stored": False, "duplicate": True, "message": "Trace stored."})
+        kind, _, arg = item.partition(":")
+        if kind == "store":
+            SCRIPT["keys"][key] = "stored"
+            self._store(key, body)
+            return self._raw(200, {"stored": True, "message": "Trace stored.", "trace_id": "t"})
+        if kind == "not_stored":
+            SCRIPT["keys"][key] = "not_stored"
+            return self._raw(200, {"stored": False, "message": "Trace stored."})
+        if kind == "slow":
+            SCRIPT["keys"][key] = "in_progress"
+            time.sleep(float(arg))
+            SCRIPT["keys"][key] = "stored"
+            self._store(key, body)
+            return self._raw(200, {"stored": True, "message": "Trace stored."})
+        if kind == "429":
+            return self._raw(429, {"error": "quota_exceeded", "message": "quota"}, {"Retry-After": arg or "1"})
+        if kind == "503pg":
+            return self._raw(503, {"error_code": "PG_STATEMENT_TIMEOUT", "message": "busy"}, {"Retry-After": arg or "1"})
+        if kind == "504":
+            SCRIPT["keys"][key] = "stored"
+            self._store(key, body)
+            return self._raw(504, {"message": "gateway timeout"})
+        return self._raw(int(kind), {"message": "x"})
+
     def do_GET(self):
         self._log(None)
         if self.path.startswith("/analytics"):  # `ace-cli status` (8.1.0 context verify): FAKE_STATUS=ok|401|403|404|500
@@ -83,6 +142,8 @@ class H(BaseHTTPRequestHandler):
         n = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(n).decode() if n else ""
         self._log(body)
+        if self.path.startswith("/traces") and SCRIPT["items"] is not None:
+            return self._scripted(body)
         if self.path.startswith("/traces"):
             if MODE == "401":
                 b = json.dumps({"message": "token expired"}).encode()
