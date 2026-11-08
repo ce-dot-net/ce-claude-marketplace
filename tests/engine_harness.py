@@ -246,7 +246,7 @@ class FakeServer:
             portfile.unlink()
         self.proc = subprocess.Popen([sys.executable, str(FAKE_SERVER), str(port), str(self.log), str(portfile)],
                                      env=dict(os.environ, FAKE_MODE=mode, **env))
-        for _ in range(100):
+        for _ in range(600):  # 30 s: a loaded 3-core CI runner starts python slowly
             if portfile.exists() and portfile.read_text().strip():
                 break
             time.sleep(0.05)
