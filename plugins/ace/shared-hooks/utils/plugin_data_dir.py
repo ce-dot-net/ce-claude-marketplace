@@ -202,9 +202,10 @@ def valid_client_policy(v):
         if k not in v:
             continue
         x = v[k]
-        if not isinstance(x, str) or len(x) > _POLICY_TEXT_MAX:
+        if not isinstance(x, str) or len(x) > _POLICY_TEXT_MAX:  # len = Unicode code points (mod: [...x].length)
             return None, "bad_" + k
-        if re.search(r"[\x00-\x1f\x7f-\x9f\u200e\u200f\u202a-\u202e\u2066-\u2069]", x):
+        import unicodedata  # Cc, Cf, Zl, Zp (controls, bidi/zero-width/BOM, line/paragraph separators): refused, never stripped
+        if any(unicodedata.category(ch) in ("Cc", "Cf", "Zl", "Zp") for ch in x):
             return None, "bad_" + k
         if k.endswith("_version") and not re.fullmatch(_VERSION_RE, x):
             return None, "bad_" + k

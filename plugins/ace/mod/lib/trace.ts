@@ -585,7 +585,7 @@ if queue:
             with open(res,errors='replace') as f:
                 out=f.read()
             at=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())
-            for r in Q.settle(os.path.join(q['root'],'trace-queue'),q['id'],body,q['meta'],code,out,on=q.get('on',True)):
+            for r in Q.settle(os.path.join(q['root'],'trace-queue'),q['id'],body,q['meta'],code,out,on=q.get('on',True),keyed=bool(fb) and cut is None):
                 rows.append(json.dumps(dict(timestamp=at,**r,session_id=q['meta'].get('session_id'),source='mod')))
     except Exception:
         pass
@@ -618,6 +618,14 @@ if Q is not None and code==0:
 const LEARN_LAUNCHER = `import subprocess,sys
 subprocess.Popen([sys.executable,'-I','-c',${JSON.stringify(LEARN_CHILD)}]+sys.argv[1:],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,close_fds=True,start_new_session=True)
 `
+// 8.1.4: the launcher parent gave up on the launcher (LAUNCHER_MS or a non-zero exit) but the child may already own the
+// trace. Claim it by rename(2): the parked path when the parent won (no child read it: nothing was sent), null when the
+// child had it (it writes the rows and releases the lock). Never rm the trace here (the 8.1.3 ENOENT).
+export async function reclaimTrace(run: (argv: string[]) => Promise<{ exitCode: number | null } | null>, traceFile: string): Promise<string | null> {
+  const parked = `${traceFile}.parent`
+  const r = await run(['mv', '-n', traceFile, parked])
+  return r && r.exitCode === 0 ? parked : null
+}
 // ponytail: POSIX-shaped; on Windows the bare `ace-cli` (a .cmd shim) would need a shell. The Python chain covers
 // Windows until the mod is proven there (§13.1 m2: Windows untested).
 export function detachedLearnArgv(j: { learnArgv: string[]; trace: string; lock: string; log: string; rowOk: string; rowFail: string; errLog?: string; python?: string

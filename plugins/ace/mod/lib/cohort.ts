@@ -101,15 +101,15 @@ export const CLIENT_POLICY_FILE = 'client-policy.json'
 export const CLIENT_POLICY_KEYS = ['min_plugin_version', 'recommended_plugin_version', 'message', 'url'] as const
 const VERSION_RE = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/
 const POLICY_TEXT_MAX = 200
-// eslint-disable-next-line no-control-regex
-const POLICY_BAD_CHARS = /[\x00-\x1f\x7f-\x9f‎‏‪-‮⁦-⁩]/
+// Cc, Cf, Zl, Zp (controls, bidi/zero-width/BOM, line/paragraph separators): refused, never stripped
+const POLICY_BAD_CHARS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u
 export function validClientPolicy(v: unknown): { policy: Record<string, string> } | { why: string } {
   if (!v || typeof v !== 'object' || Array.isArray(v)) return { why: 'not_an_object' }
   const out: Record<string, string> = {}
   for (const k of CLIENT_POLICY_KEYS) {
     if (!(k in (v as any))) continue
     const x = (v as any)[k]
-    if (typeof x !== 'string' || x.length > POLICY_TEXT_MAX || POLICY_BAD_CHARS.test(x)) return { why: 'bad_' + k }
+    if (typeof x !== 'string' || [...x].length > POLICY_TEXT_MAX || POLICY_BAD_CHARS.test(x)) return { why: 'bad_' + k }  // code points, as Python len
     if (k.endsWith('_version') && !VERSION_RE.test(x)) return { why: 'bad_' + k }
     if (k === 'url' && (!x.startsWith('https://') || /[\s"'<>\\`]/.test(x))) return { why: 'bad_' + k }
     out[k] = x

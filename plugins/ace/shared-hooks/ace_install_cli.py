@@ -230,6 +230,10 @@ def main():
         try:
             sweep_orphans(ev.get("session_id"))
             import ace_trace_queue  # 8.1.4: traces a past session could not send (detached, bounded, own process)
+            from plugin_data_dir import data_root
+            from ace_relevance_logger import log_event
+            for r in ace_trace_queue.sweep_orphans(data_root()):  # leftovers of a killed learn child
+                log_event(r.pop("event"), **r)
             ace_trace_queue.spawn_replay(cwd=os.getcwd())
             rebuild_sqlite()
         except Exception:
