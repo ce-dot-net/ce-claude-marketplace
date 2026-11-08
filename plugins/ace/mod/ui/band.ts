@@ -8,10 +8,13 @@ import { run } from '../io/fs.ts'
 import { cliRun, cap } from '../io/cli.ts'
 import { installer } from '../io/installer.ts'
 import { type Load } from '../io/state.ts'
+import { CLIENT_POLICY_FILE, clientPolicyBand } from '../lib/cohort.ts'
+import { readText } from '../io/fs.ts'
 
 const BAND = { plugin: 'ace', key: 'band' } as const
 const PENDING = { plugin: 'ace', key: 'pending' } as const
 const SHADOW = { plugin: 'ace', key: 'shadow' } as const  // a worktree-local .ace/config.json that overrides main's
+const POLICY = { plugin: 'ace', key: 'policy' } as const  // 8.1.4: the dismissed client_policy line
 export const ACTION: Record<string, string | undefined> = { unbound: 'Verbinden', not_logged_in: 'Anmelden', expired: 'Anmelden',
   project_not_found: 'Anderes wählen', no_access: 'Anderes wählen', config_refused: 'Bereinigt neu schreiben', cli_missing: 'ace-cli installieren' }
 
@@ -118,7 +121,16 @@ export async function renderBand($: any, L: Load, e: any, next: any) {
     return h(Box, null, h(Text, null, `${WARN_LINES.worktree_file_shadows_main} `),
       h(Button, { key: 'rm-shadow', label: 'Entfernen', onPress: () => removeShadow($, L) }), dismiss(() => $.state.set(SHADOW, null)))
   }
-  if (!band || band.dismissed || !band.state || band.state === 'ok' || band.state === 'server_error') return next(e)
+  if (!band || band.dismissed || !band.state || band.state === 'ok' || band.state === 'server_error') {
+    // 8.1.4 client_policy below min (dormant until the server sends it): ONE line, one action (dismiss). Never an
+    // update, never code fetched; ACE stays on and keeps learning.
+    const s = L.sess
+    const text = s ? await readText($, `${s.root}/${CLIENT_POLICY_FILE}`) : undefined
+    const pline = s && text ? clientPolicyBand(text, s.clientId.slice(s.clientId.lastIndexOf('/') + 1), await $.clock.now()) : undefined
+    if (pline && (await $.state.get(POLICY)).value !== pline)
+      return h(Box, null, h(Text, null, `${pline} `), dismiss(() => $.state.set(POLICY, pline)))
+    return next(e)
+  }
   const close = dismiss(() => $.state.set(BAND, { ...band, dismissed: true }))
   const line = h(Text, { color: band.state.startsWith('config') ? 'error' : undefined }, `${band.line ?? 'ACE ▼'} `)
   if (band.picking && band.projects?.length) {

@@ -21,8 +21,9 @@ export type AcePending = {
   projectId?: string
 } | null
 export type AceShadow = { path: string; root: string } | null  // band [Entfernen] (cli 4.4.1 worktree_file_shadows_main)
+export type AcePolicy = string | null  // 8.1.4: the dismissed client_policy band line
 declare module 'claude-code' {
   interface PluginState {
-    ace: { band: AceBand; pending: AcePending; shadow: AceShadow }
+    ace: { band: AceBand; pending: AcePending; shadow: AceShadow; policy: AcePolicy }
   }
 }
