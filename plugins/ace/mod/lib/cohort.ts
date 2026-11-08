@@ -93,3 +93,50 @@ export const serverDownvote = (resp: any): boolean | undefined => typeof resp?.f
 export function storedDownvote(text: string | undefined, nowMs: number): boolean {
   try { const d = JSON.parse(text as string); return d?.on === true && typeof d.at === 'number' && nowMs / 1000 - d.at < RENDER_FULL_PCT_MAX_AGE_S } catch { return false }
 }
+
+// 8.1.4 client_policy (DORMANT until the server sends it): plugin_data_dir.valid_client_policy / client_policy_state,
+// same rules (shared cases: tests-fixtures/client-policy). A search response MAY carry a top-level object
+// client_policy {min_plugin_version, recommended_plugin_version, message, url}, stored as {policy, at (epoch s)}, < 7 days.
+export const CLIENT_POLICY_FILE = 'client-policy.json'
+export const CLIENT_POLICY_KEYS = ['min_plugin_version', 'recommended_plugin_version', 'message', 'url'] as const
+const VERSION_RE = /^\d{1,4}\.\d{1,4}\.\d{1,4}$/
+const POLICY_TEXT_MAX = 200
+// Cc, Cf, Zl, Zp (controls, bidi/zero-width/BOM, line/paragraph separators): refused, never stripped
+const POLICY_BAD_CHARS = /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u
+export function validClientPolicy(v: unknown): { policy: Record<string, string> } | { why: string } {
+  if (!v || typeof v !== 'object' || Array.isArray(v)) return { why: 'not_an_object' }
+  const out: Record<string, string> = {}
+  for (const k of CLIENT_POLICY_KEYS) {
+    if (!(k in (v as any))) continue
+    const x = (v as any)[k]
+    if (typeof x !== 'string' || [...x].length > POLICY_TEXT_MAX || POLICY_BAD_CHARS.test(x)) return { why: 'bad_' + k }  // code points, as Python len
+    if (k.endsWith('_version') && !VERSION_RE.test(x)) return { why: 'bad_' + k }
+    if (k === 'url' && (!x.startsWith('https://') || /[\s"'<>\\`]/.test(x))) return { why: 'bad_' + k }
+    out[k] = x
+  }
+  return { policy: out }
+}
+const ver = (v: unknown): number[] | null => typeof v === 'string' && VERSION_RE.test(v) ? v.split('.').map(Number) : null
+const below = (a: number[], b: number[]) => { for (let i = 0; i < 3; i++) if (a[i] !== b[i]) return a[i]! < b[i]!; return false }
+export function storedClientPolicy(text: string | undefined, nowMs: number): Record<string, string> | undefined {
+  try {
+    const d = JSON.parse(text as string), v = validClientPolicy(d?.policy)
+    return 'policy' in v && typeof d.at === 'number' && nowMs / 1000 - d.at < RENDER_FULL_PCT_MAX_AGE_S ? v.policy : undefined
+  } catch { return undefined }
+}
+export function clientPolicyState(text: string | undefined, version: string, nowMs: number): 'min' | 'recommended' | undefined {
+  const pol = storedClientPolicy(text, nowMs), mine = ver(version)
+  if (!pol || !mine) return undefined
+  const mn = ver(pol.min_plugin_version), rec = ver(pol.recommended_plugin_version)
+  if (mn && below(mine, mn)) return 'min'
+  if (rec && below(mine, rec)) return 'recommended'
+  return undefined
+}
+export const clientPolicyBand = (text: string | undefined, version: string, nowMs: number): string | undefined =>
+  clientPolicyState(text, version, nowMs) === 'min' ? `ACE ${version} ist zu alt, bitte /plugin update ausführen` : undefined
+export function clientPolicyLine(text: string | undefined, version: string, nowMs: number): string | undefined {
+  const st = clientPolicyState(text, version, nowMs), pol = storedClientPolicy(text, nowMs)
+  if (!st || !pol) return undefined
+  if (st === 'min') return `update   ACE ${version} ist zu alt (min ${pol.min_plugin_version}), bitte /plugin update ausführen`
+  return `update   ACE ${version} · empfohlen ${pol.recommended_plugin_version}${pol.message ? `: ${pol.message}` : ''}${pol.url ? ` · ${pol.url}` : ''}`
+}

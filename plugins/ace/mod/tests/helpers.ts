@@ -51,7 +51,8 @@ export type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; 
   selfEval?: boolean; model?: (req: any) => any; compact?: (files: Map<string, string>) => any
   cli?: (args: string[], stdin?: string) => SearchAnswer | undefined; noSettings?: boolean; ignored?: boolean; root?: string; cwd?: string; noPython?: boolean
   installer?: (args: string[]) => { state: string, detail?: string }  // ace_cli_installer.py answers (8.1.1)
-  realpaths?: Record<string, string> }  // REALPATH_SH answers (a symlinked path); default: the path as given
+  realpaths?: Record<string, string>  // REALPATH_SH answers (a symlinked path); default: the path as given
+  claimed?: boolean }  // 8.1.4: the detached learn child already claimed the trace (the parent's `mv` finds nothing)
 export type Run = { argv: string[]; stdin?: string; env?: Record<string, string>; timeoutMs?: number; files: Set<string> }
 
 // In-memory engine: fs (with mtimes on the mocked clock), env, clock, session, process. Every argv is recorded.
@@ -120,6 +121,11 @@ export function host(on: any, o: Opts = {}) {
     if ((argv[0] === 'git' || argv[0].endsWith('/git')) && argv.includes('--error-unmatch')) return res(1, '')
     if (argv[0] === 'git' || argv[0].endsWith('/git')) return res(0, git(argv))
     if (o.learnExit !== undefined && argv.includes('ace-cli') && argv.includes('learn')) return res(o.learnExit, '')
+    if (argv[0] === 'mv' && argv[1] === '-n') {  // rename(2): the trace hand-over between launcher and child (8.1.4)
+      if (o.claimed) files.delete(argv[2])
+      if (!files.has(argv[2])) return res(1, '')
+      put(argv[3], files.get(argv[2])!); files.delete(argv[2]); return res(0, '')
+    }
     if (argv.some(a => /(^|[\s;&|(])rm($|\s)/.test(a) || a === 'rm'))
       for (const a of argv) for (const k of [...files.keys()]) if (k === a || k.startsWith(a + '/')) files.delete(k)
     return res(0, '')

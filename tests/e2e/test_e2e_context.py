@@ -258,7 +258,7 @@ def fake_server(tmp, mode):
     port = tmp / ('port-' + mode)
     env = dict(os.environ, FAKE_STATUS=mode)
     proc = subprocess.Popen([sys.executable, str(REPO / 'tests/engine_fake_server.py'), '0', str(tmp / 'srv.log'), str(port)], env=env)
-    for _ in range(100):
+    for _ in range(600):  # 30 s: a loaded 3-core CI runner starts python slowly
         if port.exists():
             return proc, 'http://127.0.0.1:%s' % port.read_text().strip()
         time.sleep(0.05)

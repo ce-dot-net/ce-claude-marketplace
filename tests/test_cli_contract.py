@@ -135,13 +135,14 @@ def test_global_flags_exist(run, flag):
 
 def test_flags_table_covers_ace_cli_py():
     """If the plugin starts passing a new flag, it must land in FLAGS (and so in the contract).
-    ace_engine.py builds the ace-cli argv (search_command/learn_command); its own `--status` is not an ace-cli flag."""
+    ace_engine.py builds the ace-cli argv (search_command/learn_command); its own `--status` is not an ace-cli flag, and
+    8.1.4 `--idempotency-key` goes to engine/learn.js only (test_trace_delivery: never in an ace-cli argv)."""
     used = set()
     for name in ("ace_cli.py", "ace_engine.py"):
         src = (PLUGIN / "shared-hooks" / "utils" / name).read_text()
         used |= set(re.findall(r"""['"](--[a-z][a-z-]+)['"]""", src))
     known = {f for fs in FLAGS.values() for f in fs} | set(GLOBAL_FLAGS)
-    assert used - known - {"--status"} == set()
+    assert used - known - {"--status", "--idempotency-key"} == set()
 
 
 def test_search_session_id_reaches_the_server_without_pinning(run, server, tmp_path):

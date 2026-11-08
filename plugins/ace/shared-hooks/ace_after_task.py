@@ -167,7 +167,7 @@ READ_ONLY_BASH = ("ls", "cat", "head", "tail", "wc", "find", "grep", "egrep", "f
                   "tr", "diff", "cmp", "test", "[", "[[", "date", "printenv", "ps", "pgrep", "pidof", "git status",
                   "git log", "git show", "git diff", "git grep", "git rev-parse", "git ls-files", "git blame", "cd",
                   "pushd", "popd", "true", "sleep", "export", "set", "sed", "awk", "read")
-OUTCOME_RULE = "8.1.3"  # the execution row names the rule that set success; /ace:ace-doctor shows the last one
+from ace_trace_meta import RULE_END as OUTCOME_RULE, stamp as _stamp_trace  # noqa: E402  8.1.4: one fixed list (ace_trace_meta.OUTCOME_RULES)
 # State-changing or verifying tools besides non-read-only Bash and state-changing MCP tools (MCP_WRITE_VERBS).
 DECISIVE_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit", "Agent", "Task", "Workflow")
 # Interpreters / multi-tool CLIs: the family adds this many non-flag tokens (subcommand, script basename, -c/-e).
@@ -1227,6 +1227,15 @@ def dispatch_learn(job, session_id):
         try:
             import uuid
             f = plugin_data_dir.session_dir(job['project'], session_id) / ('learn-job-%s.json' % uuid.uuid4().hex)
+            try:  # 8.1.4: signed, so the SessionStart sweep may queue it when the child never started
+                import ace_trace_queue
+                job = dict(job)
+                job.pop('sig', None)
+                key = ace_trace_queue.load_key(plugin_data_dir.data_root() / 'trace-queue')
+                if key:
+                    job['sig'] = ace_trace_queue.sign(key, job)
+            except Exception:
+                pass
             plugin_data_dir.private_write(f, json.dumps(job))  # §24: the job holds the trace (user prompt)
             try:
                 Path(job['lock']).touch()
@@ -1633,6 +1642,7 @@ def main():
             "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "agent_type": agent_type  # v5.4.11: Attribute learning to agent type
         }
+        _stamp_trace(trace, OUTCOME_RULE)  # 8.1.4: result.plugin_version + result.outcome_rule
         # per-task session_id: use task_session_id if stored; else OMIT session_id entirely.
         # Do NOT fall back to CC conversation session_id — that creates false correlation
         # across tasks (the exact bug this fixes). NULL on the server is better than wrong.

@@ -69,7 +69,11 @@ export function summarizeResult(tool: string, res: any, isError = false, denied?
 // ---------- 8.1.3 task outcome (docs/technical/ARCHITECTURE.md "Task outcome"; parity: ace_after_task.py, fixture tests-fixtures/task-outcome) ----------
 // result.success = the END outcome of the task; result.failed_steps = how many steps failed (informational).
 // Exit 1 of these families means "no match / differs / false", never a failure (not even a failed step); exit >= 2 is.
-export const OUTCOME_RULE = '8.1.3'  // the execution row names the rule that set success; /ace:ace-doctor shows the last one
+// 8.1.4: result.outcome_rule is one value of this fixed list (ace_trace_meta.OUTCOME_RULES, parity test): end-outcome-1 =
+// the 8.1.3 end-outcome rule (Stop, SubagentStop, turn.complete), permission-gate-1 = a PermissionDenied trace (Python).
+// A future rule change bumps the number and adds a value in both lists. The execution row names the same value.
+export const OUTCOME_RULES = ['end-outcome-1', 'permission-gate-1'] as const
+export const OUTCOME_RULE = OUTCOME_RULES[0]
 export const BENIGN_EXIT1 = ['grep', 'egrep', 'fgrep', 'rg', 'diff', 'cmp', 'test', '[', '[[', 'git diff', 'git grep', 'command -v', 'which', 'type', 'pgrep', 'pidof', 'jq']
 // ponytail: a fixed read-only family list (a failed read-only step never fails the task); grow it from probe data.
 // Membership is by prefix: 'git diff HEAD~1' is in 'git diff'.
@@ -468,13 +472,15 @@ export function buildTrace(a: {
   usedIds?: { used_ids_model: number; used_ids_tokens: number }  // per-source counters (Haiku, H2), 0 when none
   downvote?: number[]  // the previous main task's evidenced ids after a user rejection
   summaryCap?: number  // 2000 for the closing answer, 4000 for a SubagentHandback report (ace_after_task.handback_summary)
+  pluginVersion?: string  // 8.1.4: the manifest x.y.z (the version in X-ACE-Client)
 }) {
   const { success, failed_steps } = taskOutcome(a.tools)  // 8.1.3: end outcome + informational count
   const trace: any = {
     task: `User request: ${cpSlice(redact(a.userPrompt), 2000)}`,
     trajectory: a.tools.map((t, k) => ({ step: k + 1, tool: t.tool, action: t.action,
       result: t.result, start_ms: t.start_ms, end_ms: t.end_ms, duration_ms: t.end_ms - t.start_ms })),
-    result: { success, failed_steps, output: `Executed ${a.tools.length} tool calls`, summary: a.answer ? cpSlice(redact(a.answer), a.summaryCap ?? 2000) : null },
+    result: { success, failed_steps, output: `Executed ${a.tools.length} tool calls`, summary: a.answer ? cpSlice(redact(a.answer), a.summaryCap ?? 2000) : null,
+      plugin_version: a.pluginVersion ?? '0.0.0', outcome_rule: OUTCOME_RULE },  // 8.1.4: inside result (the server keeps result)
     playbook_used: a.playbookUsed,
     timestamp: a.nowIso,
     agent_type: a.agentType,
@@ -522,9 +528,19 @@ export const RETRY_RE = String.raw`\[ace\] trace retry attempt=(\d+)/(\d+) reaso
 export const FALLBACK_ON_3 = '--ace-fallback-on-3--'
 // v8.0.1: every '[ace] trace retry ...' line the learn printed (core >= 3.7.0, engine and ace-cli alike) becomes a
 // learn_retry row (retry = the base row JSON), appended with the execution row through APPEND_SH when cwd is known.
+// 8.1.4: the child first CLAIMS the trace (rename to .owned); a launcher parent that gave up on the launcher claims it
+// with its own rename (.parent) instead, so exactly one side owns the file and the reader never loses it. After a
+// failed learn the child hands the trace to ace_trace_queue.settle (queue job = argv[9]); after a good one it starts
+// the detached replay.
 const LEARN_CHILD = `import json,os,re,subprocess,sys,time
-trace,lock,log,ok,fail,errlog,retry,cwd=sys.argv[1:9]
-cmds=sys.argv[9:]
+trace,lock,log,ok,fail,errlog,retry,cwd,queue=sys.argv[1:10]
+cmds=sys.argv[10:]
+own=trace+'.owned'
+try:
+    os.rename(trace,own)
+except OSError:
+    sys.exit(0)
+cmds=[own if a==trace else a for a in cmds]
 fb=[]
 if '${FALLBACK_ON_3}' in cmds:
     k=cmds.index('${FALLBACK_ON_3}')
@@ -557,6 +573,22 @@ if retry:
                     reason=m.group(3),idempotency_key=m.group(4),at=m.group(5),engine=eng,learning_sent=code==0)))
     except (OSError,ValueError):
         pass
+Q=None
+if queue:
+    try:
+        q=json.loads(queue)
+        sys.path.insert(0,q['utils'])
+        import ace_trace_queue as Q
+        if code!=0:
+            with open(own) as f:
+                body=json.load(f)
+            with open(res,errors='replace') as f:
+                out=f.read()
+            at=time.strftime('%Y-%m-%dT%H:%M:%SZ',time.gmtime())
+            for r in Q.settle(os.path.join(q['root'],'trace-queue'),q['id'],body,q['meta'],code,out,on=q.get('on',True),keyed=bool(fb) and cut is None):
+                rows.append(json.dumps(dict(timestamp=at,**r,session_id=q['meta'].get('session_id'),source='mod')))
+    except Exception:
+        pass
 rows.append(ok if code==0 else fail)
 text=chr(10).join(rows)+chr(10)
 try:
@@ -575,20 +607,30 @@ if code!=0 and errlog:
             g.write('ace-cli learn (mod) exit %d: %s'%(code,f.read()[-500:])+chr(10))
     except OSError:
         pass
-for p in (res,trace,lock):
+for p in (res,own,lock):
     try:
         os.unlink(p)
     except OSError:
         pass
+if Q is not None and code==0:
+    Q.spawn_replay(cwd=cwd or None,data_root=q['root'])
 `
 const LEARN_LAUNCHER = `import subprocess,sys
 subprocess.Popen([sys.executable,'-I','-c',${JSON.stringify(LEARN_CHILD)}]+sys.argv[1:],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,close_fds=True,start_new_session=True)
 `
+// 8.1.4: the launcher parent gave up on the launcher (LAUNCHER_MS or a non-zero exit) but the child may already own the
+// trace. Claim it by rename(2): the parked path when the parent won (no child read it: nothing was sent), null when the
+// child had it (it writes the rows and releases the lock). Never rm the trace here (the 8.1.3 ENOENT).
+export async function reclaimTrace(run: (argv: string[]) => Promise<{ exitCode: number | null } | null>, traceFile: string): Promise<string | null> {
+  const parked = `${traceFile}.parent`
+  const r = await run(['mv', '-n', traceFile, parked])
+  return r && r.exitCode === 0 ? parked : null
+}
 // ponytail: POSIX-shaped; on Windows the bare `ace-cli` (a .cmd shim) would need a shell. The Python chain covers
 // Windows until the mod is proven there (§13.1 m2: Windows untested).
 export function detachedLearnArgv(j: { learnArgv: string[]; trace: string; lock: string; log: string; rowOk: string; rowFail: string; errLog?: string; python?: string
-  retryRow?: string; cwd?: string }): string[] {
-  return [j.python || 'python3', '-I', '-c', LEARN_LAUNCHER, j.trace, j.lock, j.log, j.rowOk, j.rowFail, j.errLog ?? '', j.retryRow ?? '', j.cwd ?? '', ...j.learnArgv]
+  retryRow?: string; cwd?: string; queue?: string }): string[] {
+  return [j.python || 'python3', '-I', '-c', LEARN_LAUNCHER, j.trace, j.lock, j.log, j.rowOk, j.rowFail, j.errLog ?? '', j.retryRow ?? '', j.cwd ?? '', j.queue ?? '', ...j.learnArgv]
 }
 
 // ace_after_task._delegated_running (§16 P2): a running subagent/workflow of this task defers the main learn.

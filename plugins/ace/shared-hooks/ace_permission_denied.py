@@ -329,6 +329,8 @@ def _build_trace(event: dict) -> dict:
         # Domain tag — client-side classification; server respects this for searchPatterns
         "domains": ["permission-boundary"],
     }
+    from ace_trace_meta import RULE_PERMISSION, stamp
+    stamp(trace, RULE_PERMISSION)  # 8.1.4: result.plugin_version + result.outcome_rule
     if session_id:  # §31: the stable CC session id; never send ''
         trace["conversation_id"] = str(session_id)[:512]
     variant = _render_variant(session_id)
