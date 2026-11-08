@@ -7,7 +7,7 @@ import { traceVariant } from '../lib/cohort.ts'
 import { type ToolRec, appliedLogIds, parseAceReview, parseUsedIds, selfEvalPrompt, usedPatternIds } from '../lib/evidence.ts'
 import { pyDumps, pyLoads } from '../lib/pyjson.ts'
 import { safeComponent as safe } from '../lib/state.ts'
-import { FALLBACK_ON_3, OUTCOME_RULE, buildTrace, detachedLearnArgv, hasSubstantialWork, isTrivialTask, learnArgv } from '../lib/trace.ts'
+import { FALLBACK_ON_3, OUTCOME_RULE, buildTrace, detachedLearnArgv, hasSubstantialWork, isTrivialTask, learnArgv, reclaimTrace } from '../lib/trace.ts'
 import { learnLine } from '../ui/status.ts'
 import { anchorRun, checkPlaceholder } from './agent.ts'
 
@@ -72,8 +72,10 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
     } catch { /* git context is optional */ }
     const { trace, success, failed_steps } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
       tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied, usedIds: bySource, downvote,
-      nowIso: await nowIso($), renderVariant: variant, conversationId: s.sessionId, effort, git, summaryCap })
-    const traceFile = `${s.root}/tmp/ace-trace-${uuid()}.json`
+      nowIso: await nowIso($), renderVariant: variant, conversationId: s.sessionId, effort, git, summaryCap,
+      pluginVersion: s.clientId.slice(s.clientId.lastIndexOf('/') + 1) })
+    const qid = uuid()  // 8.1.4: the trace queue id = the engine's Idempotency-Key = the temp file name
+    const traceFile = `${s.root}/tmp/ace-trace-${qid}.json`
     await writePrivate($, traceFile, pyDumps(trace))
     const row = async (sent: boolean) => ({ timestamp: await nowIso($), event: 'execution', hook, session_id: s.sessionId,
       project_id: s.project, agent_type: agentType, patterns_used_count: playbook.length, pattern_ids: playbook.slice(0, 20),
@@ -87,16 +89,29 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
     const cliLearn = [...learnArgv(traceFile, state.retrieval_id ?? undefined, applied, verbosity, [...await cliHead($), 'learn']), ...ids(s)]
     const engLearn = await engineScript($, 'learn.js')
     const learnCmd = engLearn  // §14: the engine learns; ace-cli only when it exits 3 (nothing sent)
-      ? [...learnArgv(traceFile, state.retrieval_id ?? undefined, applied, verbosity, ['node', engLearn]), ...ids(s), FALLBACK_ON_3, ...cliLearn]
+      ? [...learnArgv(traceFile, state.retrieval_id ?? undefined, applied, verbosity, ['node', engLearn]), '--idempotency-key', qid, ...ids(s), FALLBACK_ON_3, ...cliLearn]
       : cliLearn
+    const utils = `${$.plugin.root}/shared-hooks/utils`
+    const queue = pyDumps({ id: qid, root: s.root, utils, log, cwd: s.logRoot, on: (await $.env.get('ACE_TRACE_QUEUE')) !== '0',
+      meta: { org: s.org ?? null, project: s.project, retrieval_id: state.retrieval_id ?? null, applied_log_ids: applied, hook,
+        agent_type: agentType, session_id: s.sessionId } })
     const argv = detachedLearnArgv({ learnArgv: learnCmd,
       trace: traceFile, lock, log, rowOk: pyDumps(await row(true)), rowFail: pyDumps(await row(false)), errLog: `${s.root}/logs/ace-hook-errors.log`, python,
       retryRow: pyDumps({ event: 'learn_retry', hook, session_id: s.sessionId, conversation_id: s.sessionId, task_session_id: tsid ?? null,
-        agent_id: agentId ?? null, source: 'mod' }), cwd: s.logRoot })
+        agent_id: agentId ?? null, source: 'mod' }), cwd: s.logRoot, queue })
     const spawned = await run($, argv, { env: aceEnv(s), timeoutMs: LAUNCHER_MS })
-    if (!spawned || spawned.exitCode !== 0) {  // no child will clean up, or write the metrics row
-      await rm($, lock, traceFile)
-      await relLog($, s, await row(false))
+    if (!spawned || spawned.exitCode !== 0) {
+      // 8.1.4: the launcher may have started the child before it failed or was killed at LAUNCHER_MS; removing the
+      // trace here was the ENOENT race. Claim it by rename first: success = no child has it (nothing was sent), so it
+      // is queued; failure = the child owns it, and writes the rows and releases the lock itself.
+      const parked = await reclaimTrace((argv: string[]) => run($, argv), traceFile)
+      if (parked) {
+        const q = await run($, [python || 'python3', '-I', `${utils}/ace_trace_queue.py`, '--enqueue', parked, queue], { timeoutMs: 5000 })
+        await rm($, lock, parked)
+        await relLog($, s, await row(false))
+        if (!q || q.exitCode !== 0) await relLog($, s, { timestamp: await nowIso($), event: 'learn_lost', reason: 'enqueue_failed',
+          error_class: 'not_sent', attempts: 1, trace_id: qid, agent_type: agentType, hook, project_id: s.project, session_id: s.sessionId, source: 'mod' })
+      }
     }
     await relLog($, s, { timestamp: await nowIso($), event: 'learn_dispatched', hook, session_id: s.sessionId, agent_id: agentId ?? null,
       agent_type: agentType, task_session_id: tsid ?? null, parent_task_id: state.parent_task_id ?? null, retrieval_id: state.retrieval_id ?? null,

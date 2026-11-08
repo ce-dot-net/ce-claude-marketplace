@@ -50,11 +50,18 @@ S=$(ls -td "$DATA"/projects/*/sessions/* 2>/dev/null | head -1)
 for m in mod-active mod-classic; do test -f "$S/$m" && python3 -c 'import os,sys,time; print(sys.argv[1], "age_s=%d" % (time.time() - os.path.getmtime(sys.argv[2])))' "$m" "$S/$m" || echo "$m absent"; done
 # Full render share (§31) and its source: env ACE_RENDER_FULL_PCT > server render_full_pct (render-full-pct.json, < 7 days) > default 50
 CLAUDE_PLUGIN_DATA="$DATA" python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from ace_pattern_render import full_pct_source; print("render full share = %d%% (source: %s)" % full_pct_source())' "${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils"
+# 8.1.4 trace delivery: queue depth, oldest entry, dead/ (kept 7 days), replayed/expired rows of the last 7 days
+LOGS=$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --logs 2>/dev/null || echo "$PWD/.claude/data/logs")
+python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); import ace_trace_queue as q; print(q.doctor_line(sys.argv[2] + "/trace-queue", sys.argv[3]))' "${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils" "$DATA" "$LOGS"
+# 8.1.4 client_policy (dormant until the server sends it): one line when this version is below recommended/min
+CLAUDE_PLUGIN_DATA="$DATA" python3 -c 'import sys; sys.path.insert(0, sys.argv[1]); from ace_env import plugin_version; from plugin_data_dir import client_policy_line; l = client_policy_line(plugin_version()); print(l) if l else None' "${CLAUDE_PLUGIN_ROOT}/shared-hooks/utils"
 ```
 
 **Report**:
 - PASS: Claude Code >= 2.1.311, python_path present, ace-hook-errors.log empty or absent
 - WARN: Claude Code older than 2.1.311, or python_path missing (start a new session), or errors in ace-hook-errors.log
+- INFO: `delivery queue N · oldest X · 7d replayed A · dead B · expired C` (8.1.4): N traces wait for a replay (sent at the next session start or after the next good learn); dead = rejected (4xx) or given up after 6 attempts, kept 7 days; WARN when N grows or the oldest is older than a day (server unreachable for that long)
+- WARN: `update   ACE <v> ist zu alt (min …)` / INFO `update   ACE <v> · empfohlen …` (8.1.4 client_policy from the server; absent while the server sends none)
 - INFO: render full share = N% (source: env | server | default); server = the ACE server set `render_full_pct` in a search response (0 = full off for everyone)
 - INFO: chain = mod (mod-active younger than 15 s for UserPromptSubmit/Agent stash/SubagentStart/Stop/SubagentStop, 120 s for the hooks after a tool: domain shift, tool accumulation; `plugin_data_dir.MOD_HANDOFF_S` / `MOD_AFTER_TOOL_S`), Python (absent or older), or mod + Python learn (mod-active fresh, mod-classic absent or older: the managed-settings guard filters the mod's classic hooks)
 

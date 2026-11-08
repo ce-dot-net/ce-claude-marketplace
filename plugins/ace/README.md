@@ -2,7 +2,19 @@
 
 **Agentic Context Engineering** - Self-improving Claude Code plugin using automatic pattern learning.
 
-## 8.1.3 (unreleased): task outcome
+## 8.1.4 (unreleased): no silent trace loss
+
+A learned trace that could not be sent is no longer lost without a trace of its own. When the server did not store
+it (or, with the engine's stable `Idempotency-Key`, might not have), it is kept in a private, signed queue under the
+plugin data dir and sent again at the next session start or after the next good learn, within 23 h. The decision reads
+the server's `stored`/`duplicate` answer, never its message. A rejected trace (401/403/422/4xx) is never sent again. Every outcome is a row in
+`ace-relevance.jsonl` (`learn_requeued`, `learn_replayed`, `learn_lost`, `learn_expired`), and `/ace:ace-doctor` shows
+the queue. `ACE_TRACE_QUEUE=0` turns the queue off. Limits: a trace is still lost when the machine is off before the
+learn finished, the plugin data dir is wiped, the queue is full (200 traces / 50 MB), the trace is older than 23 h, or
+the ace-cli fallback (no engine) got a 5xx or a timeout. Details: docs/technical/ARCHITECTURE.md "Trace delivery
+(8.1.4)".
+
+## 8.1.3: task outcome
 
 `result.success` in a learned trace is the task's END outcome: a grep without a match, a red test that later went
 green or a retried call no longer fail the task, and stderr alone is no failure. `result.failed_steps` counts the
@@ -174,6 +186,7 @@ After completing work, run `/ace-learn`:
   The ACE server can switch the share for everyone without a plugin release: a search response field `render_full_pct` (0-100, kept for 7 days in `render-full-pct.json`) applies when the env is unset.
 - `ACE_ENGINE=cli`: never use the in-process engine.
 - `ACE_AUTO_INSTALL=0`: never install the pinned ace-cli in the background at SessionStart (default on).
+- `ACE_TRACE_QUEUE=0`: never keep a failed trace for a later replay; the loss is still logged (`learn_lost`).
 
 ### Binding (project context)
 
@@ -292,7 +305,7 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Version**: v8.1.3
+**Version**: v8.1.4
 **Maintainer**: CE.NET Team
 **Requires**: Claude Code >= 2.1.311, ace-cli 4.4.2 pinned in package.json (@ace-sdk/core >= 3.8.2; installed with the plugin; a global ace-cli >= the pin is an untested fallback), Python >= 3.10 for the fallback hooks (Ubuntu 22.04+, Debian 12+, Homebrew/pyenv; the macOS system 3.9 is not enough, the mod chain is unaffected). Windows not supported (WSL2 works).
 **Architecture**: mod + Python hooks + CLI/engine (no MCP)

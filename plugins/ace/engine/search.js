@@ -28,7 +28,7 @@ const { AceClient, createContext } = loadCoreOrExit();
   if (rawRequest) client.request = async (endpoint, method, body) => {
     const r = await rawRequest(endpoint, method, body);
     if (typeof endpoint === 'string' && endpoint.startsWith('/patterns/search') && r && typeof r === 'object') {
-      for (const k of ['render_full_pct', 'feedback_downvote']) if (k in r) switches[k] = r[k];
+      for (const k of ['render_full_pct', 'feedback_downvote', 'client_policy']) if (k in r) switches[k] = r[k];  // 8.1.4: client_policy (dormant)
     }
     return r;
   };

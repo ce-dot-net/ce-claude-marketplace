@@ -55,6 +55,9 @@ with open(os.environ["ACE_FAKE_CLI_LOG"], "a") as f:
 if argv[:1] == ["search"]:
     print(json.dumps({"count": 0, "similar_patterns": []}))
 elif argv[:1] == ["learn"]:
+    if os.environ.get("ACE_FAKE_LEARN_RC"):  # 8.1.4: a failed send (dead letter, 4xx, ...) on stderr
+        sys.stderr.write(os.environ.get("ACE_FAKE_LEARN_ERR", "") + "\n")
+        sys.exit(int(os.environ["ACE_FAKE_LEARN_RC"]))
     print(json.dumps({"learning_statistics": {"patterns_created": 1}}))
 else:
     print("{}")

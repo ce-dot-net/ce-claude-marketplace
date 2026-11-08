@@ -182,11 +182,108 @@ def feedback_downvote_file() -> Path:
     return data_root() / "feedback-downvote.json"
 
 
+CLIENT_POLICY_KEYS = ("min_plugin_version", "recommended_plugin_version", "message", "url")
+_VERSION_RE = r"\d{1,4}\.\d{1,4}\.\d{1,4}"
+_POLICY_TEXT_MAX = 200
+
+
+def client_policy_file() -> Path:
+    """8.1.4 (dormant until the server sends it): the search response's `client_policy`, {"policy": {...}, "at": <epoch>}."""
+    return data_root() / "client-policy.json"
+
+
+def valid_client_policy(v):
+    """(policy, None) with only the known keys, or (None, reason). Same rules as mod lib/cohort.ts validClientPolicy."""
+    import re
+    if not isinstance(v, dict):
+        return None, "not_an_object"
+    out = {}
+    for k in CLIENT_POLICY_KEYS:
+        if k not in v:
+            continue
+        x = v[k]
+        if not isinstance(x, str) or len(x) > _POLICY_TEXT_MAX:  # len = Unicode code points (mod: [...x].length)
+            return None, "bad_" + k
+        import unicodedata  # Cc, Cf, Zl, Zp (controls, bidi/zero-width/BOM, line/paragraph separators): refused, never stripped
+        if any(unicodedata.category(ch) in ("Cc", "Cf", "Zl", "Zp") for ch in x):
+            return None, "bad_" + k
+        if k.endswith("_version") and not re.fullmatch(_VERSION_RE, x):
+            return None, "bad_" + k
+        if k == "url" and (not x.startswith("https://") or re.search(r"[\s\"'<>\\`]", x)):
+            return None, "bad_" + k
+        out[k] = x
+    return out, None
+
+
+def _ver(v):
+    import re
+    return tuple(int(x) for x in v.split(".")) if isinstance(v, str) and re.fullmatch(_VERSION_RE, v) else None
+
+
+def stored_client_policy(now=None):
+    """The stored policy when valid and younger than 7 days, else None."""
+    try:
+        import json, time
+        d = json.loads(client_policy_file().read_text())
+        at = d.get("at")
+        pol, _ = valid_client_policy(d.get("policy"))
+        if pol is not None and isinstance(at, (int, float)) and (time.time() if now is None else now) - at < RENDER_FULL_PCT_MAX_AGE:
+            return pol
+    except Exception:
+        pass
+    return None
+
+
+def client_policy_state(version, now=None):
+    """None (quiet) | "recommended" | "min" for the running plugin version; unknown version forms stay quiet."""
+    pol, mine = stored_client_policy(now), _ver(version)
+    if not pol or mine is None:
+        return None
+    mn, rec = _ver(pol.get("min_plugin_version")), _ver(pol.get("recommended_plugin_version"))
+    if mn and mine < mn:
+        return "min"
+    if rec and mine < rec:
+        return "recommended"
+    return None
+
+
+def client_policy_band(version):
+    """The ONE line below min (mod band, Python SessionStart message). ACE stays on and keeps learning."""
+    return "ACE %s ist zu alt, bitte /plugin update ausführen" % version if client_policy_state(version) == "min" else None
+
+
+def client_policy_line(version):
+    """The /ace:ace-doctor line, or None."""
+    st = client_policy_state(version)
+    if not st:
+        return None
+    pol = stored_client_policy() or {}
+    if st == "min":
+        return "update   ACE %s ist zu alt (min %s), bitte /plugin update ausführen" % (version, pol["min_plugin_version"])
+    line = "update   ACE %s · empfohlen %s" % (version, pol["recommended_plugin_version"])
+    if pol.get("message"):
+        line += ": " + pol["message"]
+    if pol.get("url"):
+        line += " · " + pol["url"]
+    return line
+
+
 def store_server_switches(resp) -> None:
     """Persist the valid top-level server switches of a search response (latest wins; a missing or invalid field keeps
-    the stored value): `render_full_pct` (int 0-100) and `feedback_downvote` (bool). Never raises."""
+    the stored value): `render_full_pct` (int 0-100), `feedback_downvote` (bool), 8.1.4 `client_policy` (object; an
+    invalid one is dropped and logged as client_policy_invalid with the reason only). Never raises."""
     import json, time
     r = resp if isinstance(resp, dict) else {}
+    if "client_policy" in r:
+        try:
+            pol, why = valid_client_policy(r["client_policy"])
+            if pol is not None:
+                private_write(client_policy_file(), json.dumps({"policy": pol, "at": int(time.time())}))
+            else:
+                from ace_relevance_logger import log_event
+                log_event("client_policy_invalid", reason=why)
+        except Exception:
+            pass
     try:
         if _valid_pct(r.get("render_full_pct")):
             private_write(render_full_pct_file(), json.dumps({"pct": r["render_full_pct"], "at": int(time.time())}))
