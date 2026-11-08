@@ -139,6 +139,7 @@ test('engine present: the detached learn runs engine/learn.js and falls back to 
   const i = a.indexOf(`${PROOT}/engine/learn.js`), sep = a.indexOf('--ace-fallback-on-3--')
   expect(a[i - 1]).toBe('node')
   expect(sep > i).toBe(true)
-  expect(a.slice(i + 1, sep)).toEqual(a.slice(sep + 3))  // same flags on both engines
+  const k = a.indexOf('--idempotency-key')  // 8.1.4: engine only (ace-cli has no such flag)
+  expect([...a.slice(i + 1, k), ...a.slice(k + 2, sep)]).toEqual(a.slice(sep + 3))  // otherwise the same flags on both engines
   expect(a.slice(sep + 1, sep + 3)).toEqual(['ace-cli', 'learn'])
 })

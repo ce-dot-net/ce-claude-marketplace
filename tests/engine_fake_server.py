@@ -3,7 +3,7 @@
 
 Logs every request (method, path, headers with Authorization masked, JSON body) as one
 JSON line to the log file. Answers /api/v1/config, /patterns/search, /traces,
-/traces/stream and /api/v1/auth/refresh like the real server. FAKE_MODE=401|500 makes
+/traces/stream and /api/v1/auth/refresh like the real server. FAKE_MODE=401|500|400 makes
 the trace POSTs fail; FAKE_REFRESH=429|reuse fails the token refresh; FAKE_SEARCH=401 rejects searches; FAKE_GRAPH_DELAY=<s> stalls the graph edge refresh;
 FAKE_STATUS=401|403|404|500 fails GET /analytics (ace-cli status);
 FAKE_TRACE_502=<n> answers the first n trace POSTs 502 with Retry-After: 0 (the SDK retries at once). Usage: engine_fake_server.py <port|0> <log> [<portfile>]
@@ -94,6 +94,8 @@ class H(BaseHTTPRequestHandler):
                 return self.wfile.write(b)
             if MODE == "500":
                 return self._send(500, {"message": "boom"})
+            if MODE == "400":  # 8.1.4: a rejected trace (never replayed)
+                return self._send(400, {"message": "invalid trace"})
             with _502["lock"]:
                 gateway = _502["left"] > 0
                 _502["left"] -= gateway
