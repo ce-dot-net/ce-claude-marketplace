@@ -415,3 +415,23 @@ def test_401_and_422_are_dead_never_replayed(world, chain):
         world.send(chain)
     assert world.qfiles() == [] and len(list((world.pd / "trace-queue" / "dead").glob("*.json"))) == 2
     assert sorted(r["error_class"] for r in world.rows("learn_lost")) == ["auth", "invalid"]
+
+
+STORED_CASES = json.loads((SRC / "tests-fixtures" / "trace-delivery" / "stored_cases.json").read_text())
+
+
+@pytest.mark.parametrize("chain", ["python", "mod"])
+@pytest.mark.parametrize("case", STORED_CASES, ids=[c["name"] for c in STORED_CASES])
+def test_the_engine_reads_stored_as_the_fixture_says(world, chain, case):
+    """The real engine against each `stored` answer: a stored trace is done; null, non-boolean, false or a duplicate
+    in progress is never counted as stored (stored:null = the server fix while the first send still runs)."""
+    world.server(FAKE_TRACE_SCRIPT=json.dumps([{"status": case["status"], "body": case["body"]}]))
+    world.send(chain)
+    if case["action"] == "ok":
+        assert world.qfiles() == [] and not world.rows("learn_requeued") and not world.rows("learn_lost")
+    else:
+        r = world.rows("learn_requeued")
+        assert r and r[0]["error_class"] == case["cls"], world.rows()
+        if case["cls"] == "in_progress":
+            e = json.loads(world.qfiles()[0].read_text())
+            assert e["next_at"] - time.time() > 70 * 60
