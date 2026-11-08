@@ -492,11 +492,14 @@ def settle(qdir, entry_id, trace, meta, code, output, now=None, on=None, keyed=T
 def _prune(qdir, now, key):
     rows = []
     infl = os.path.join(qdir, "inflight")
-    for n in _names(infl):
+    for n in _names(infl):  # <id>.<claim epoch>.json: the claim time travels with the rename (an mtime would not)
         p = os.path.join(infl, n)
+        stem, _, at = n[:-5].rpartition(".")
         try:
-            if not os.path.islink(p) and now - os.path.getmtime(p) > CLAIM_STALE:
-                os.rename(p, os.path.join(qdir, n))  # a crashed replayer's claim (its attempt is already counted)
+            if os.path.islink(p) or not valid_id(stem) or not at.isdigit():
+                _to_dead(qdir, p, stem, now)
+            elif now - int(at) > CLAIM_STALE:
+                os.rename(p, os.path.join(qdir, stem + ".json"))  # a crashed replayer's claim (attempt already counted)
         except OSError:
             pass
     dead = os.path.join(qdir, "dead")
@@ -583,14 +586,13 @@ def replay(qdir, send, now=None, limit=PER_RUN):
     for _, name in sorted(due):
         if sent >= limit:
             break
-        claimed = os.path.join(qdir, "inflight", name)
+        claimed = os.path.join(qdir, "inflight", "%s.%d.json" % (name[:-5], int(now)))
         try:
-            os.rename(os.path.join(qdir, name), claimed)  # the claim: whoever renames it owns it
+            os.rename(os.path.join(qdir, name), claimed)  # the claim: whoever renames it owns it, with its time
         except OSError:
             continue
         e = None
         try:
-            os.utime(claimed, (now, now))
             e, why = _load(claimed, name, key)
             if e is None:
                 _to_dead(qdir, claimed, name[:-5], now)
