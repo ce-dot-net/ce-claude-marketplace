@@ -85,9 +85,10 @@ def search_command(query, *, org=None, project=None, session_id=None, top_k=None
 
 
 def learn_command(trace_path, *, retrieval_id=None, applied_log_ids=None, verbosity='detailed',
-                  timeout=300, node=None, cli=None, ids=()):
+                  timeout=300, node=None, cli=None, ids=(), idempotency_key=None):
     """argv for the same flags on either engine (org/project travel via ACE_ORG_ID/ACE_PROJECT_ID, and as
-    --org/--project for the CLI)."""
+    --org/--project for the CLI). 8.1.4: the engine sends idempotency_key as the POST's Idempotency-Key (the trace
+    queue id, the same on every replay); ace-cli has no such flag and always draws its own key."""
     head = [node, str(ENGINE_DIR / 'learn.js')] if node else list(cli or (CLI_BIN,)) + ['learn']
     # --no-stream: stream mode exits 0 on server 401/500 (m3)
     argv = head + ['--transcript', trace_path, '--json', '--timeout', str(int(timeout * 1000)),
@@ -96,6 +97,8 @@ def learn_command(trace_path, *, retrieval_id=None, applied_log_ids=None, verbos
         argv += ['--retrieval-id', retrieval_id]
     if applied_log_ids:
         argv += ['--applied-log-ids', ','.join(str(x) for x in applied_log_ids)]
+    if node and idempotency_key:
+        argv += ['--idempotency-key', str(idempotency_key)]
     return argv + list(ids)
 
 

@@ -167,7 +167,7 @@ READ_ONLY_BASH = ("ls", "cat", "head", "tail", "wc", "find", "grep", "egrep", "f
                   "tr", "diff", "cmp", "test", "[", "[[", "date", "printenv", "ps", "pgrep", "pidof", "git status",
                   "git log", "git show", "git diff", "git grep", "git rev-parse", "git ls-files", "git blame", "cd",
                   "pushd", "popd", "true", "sleep", "export", "set", "sed", "awk", "read")
-OUTCOME_RULE = "8.1.3"  # the execution row names the rule that set success; /ace:ace-doctor shows the last one
+from ace_trace_meta import RULE_END as OUTCOME_RULE, stamp as _stamp_trace  # noqa: E402  8.1.4: one fixed list (ace_trace_meta.OUTCOME_RULES)
 # State-changing or verifying tools besides non-read-only Bash and state-changing MCP tools (MCP_WRITE_VERBS).
 DECISIVE_TOOLS = ("Edit", "Write", "MultiEdit", "NotebookEdit", "Agent", "Task", "Workflow")
 # Interpreters / multi-tool CLIs: the family adds this many non-flag tokens (subcommand, script basename, -c/-e).
@@ -1633,6 +1633,7 @@ def main():
             "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "agent_type": agent_type  # v5.4.11: Attribute learning to agent type
         }
+        _stamp_trace(trace, OUTCOME_RULE)  # 8.1.4: result.plugin_version + result.outcome_rule
         # per-task session_id: use task_session_id if stored; else OMIT session_id entirely.
         # Do NOT fall back to CC conversation session_id — that creates false correlation
         # across tasks (the exact bug this fixes). NULL on the server is better than wrong.
