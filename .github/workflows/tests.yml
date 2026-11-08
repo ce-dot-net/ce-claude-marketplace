@@ -36,15 +36,18 @@ jobs:
         run: rstest tests -q -p no:cacheprovider
       - name: Plugin-local tests
         run: rstest plugins/ace/tests -q -p no:cacheprovider
-      - name: Hook e2e (v8 target behavior)
-        env:
-          ACE_E2E: "1"
-        run: rstest tests/e2e -q -p no:cacheprovider
       - name: Pinned ace-cli (what Claude Code installs on plugin install/update)
         working-directory: plugins/ace
         run: |
           npm ci --ignore-scripts
           npm rebuild better-sqlite3
+      # 8.1.4: e2e AFTER the pinned install: the trace delivery e2e runs the real plugin-local @ace-sdk/core against the
+      # fake server (tests copy the plugin, so the hooks stay hermetic). ACE_REQUIRE_REALCORE turns a skip into a failure.
+      - name: Hook e2e (v8 target behavior, real pinned core)
+        env:
+          ACE_E2E: "1"
+          ACE_REQUIRE_REALCORE: "1"
+        run: rstest tests/e2e -q -p no:cacheprovider
       - name: CLI contract test (every flag and field the plugin uses, against the pinned CLI)
         run: rstest tests/test_cli_contract.py -q -p no:cacheprovider
       - name: claude plugin validate --strict (Claude Code floor)

@@ -1227,6 +1227,15 @@ def dispatch_learn(job, session_id):
         try:
             import uuid
             f = plugin_data_dir.session_dir(job['project'], session_id) / ('learn-job-%s.json' % uuid.uuid4().hex)
+            try:  # 8.1.4: signed, so the SessionStart sweep may queue it when the child never started
+                import ace_trace_queue
+                job = dict(job)
+                job.pop('sig', None)
+                key = ace_trace_queue.load_key(plugin_data_dir.data_root() / 'trace-queue')
+                if key:
+                    job['sig'] = ace_trace_queue.sign(key, job)
+            except Exception:
+                pass
             plugin_data_dir.private_write(f, json.dumps(job))  # §24: the job holds the trace (user prompt)
             try:
                 Path(job['lock']).touch()

@@ -7,7 +7,7 @@ import { traceVariant } from '../lib/cohort.ts'
 import { type ToolRec, appliedLogIds, parseAceReview, parseUsedIds, selfEvalPrompt, usedPatternIds } from '../lib/evidence.ts'
 import { pyDumps, pyLoads } from '../lib/pyjson.ts'
 import { safeComponent as safe } from '../lib/state.ts'
-import { FALLBACK_ON_3, OUTCOME_RULE, buildTrace, detachedLearnArgv, hasSubstantialWork, isTrivialTask, learnArgv } from '../lib/trace.ts'
+import { FALLBACK_ON_3, OUTCOME_RULE, buildTrace, detachedLearnArgv, hasSubstantialWork, isTrivialTask, learnArgv, reclaimTrace } from '../lib/trace.ts'
 import { learnLine } from '../ui/status.ts'
 import { anchorRun, checkPlaceholder } from './agent.ts'
 
@@ -104,9 +104,8 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
       // 8.1.4: the launcher may have started the child before it failed or was killed at LAUNCHER_MS; removing the
       // trace here was the ENOENT race. Claim it by rename first: success = no child has it (nothing was sent), so it
       // is queued; failure = the child owns it, and writes the rows and releases the lock itself.
-      const parked = `${traceFile}.parent`
-      const claim = await run($, ['mv', '-n', traceFile, parked])
-      if (claim && claim.exitCode === 0) {
+      const parked = await reclaimTrace((argv: string[]) => run($, argv), traceFile)
+      if (parked) {
         const q = await run($, [python || 'python3', '-I', `${utils}/ace_trace_queue.py`, '--enqueue', parked, queue], { timeoutMs: 5000 })
         await rm($, lock, parked)
         await relLog($, s, await row(false))
