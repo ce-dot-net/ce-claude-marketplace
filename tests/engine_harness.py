@@ -96,11 +96,14 @@ class AceClient {
     }
     return RESP;
   }
-  async request(endpoint) { log({ op: 'raw', endpoint }); return { ...RESP, feedback_downvote: false, render_full_pct: 9 }; }
-  async storeExecutionTrace(t) {
-    log({ op: 'learn', trace: t });
+  async request(endpoint) { log({ op: 'raw', endpoint }); return { ...RESP, feedback_downvote: false, render_full_pct: 9, client_policy: { min_plugin_version: '8.1.0' } }; }
+  async storeExecutionTrace(t, o) {
+    log({ op: 'learn', trace: t, opts: o || null });
     if (mode() === 'hang') await new Promise(() => setInterval(() => {}, 1000));
     if (mode() === 'throw') throw new Error('Server error (500): boom');
+    // 8.1.4: the real core's exhausted POST /traces retry (stderr dead letter, then the 502 error)
+    if (mode() === 'deadletter') { process.stderr.write(JSON.stringify({ event: 'ace_trace_dead_letter', attempts: 4, status: 502, error: 'Server error (502)', timestamp: 'x' }) + '\n'); throw new Error('Server error (502): '); }
+    if (mode() === 'quota') return { stored: false, analysis_performed: false, learning_queued: false, quota_exceeded: true, quota_error_code: 'TRACES_LIMIT', message: 'quota' };
     return { analysis_performed: true, learning_statistics: { patterns_created: 1, patterns_updated: 0 } };
   }
   async storeExecutionTraceStream(t) { log({ op: 'learn_stream', trace: t }); return { analysis_performed: true }; }
@@ -236,10 +239,12 @@ def ace_config(xdg: Path, server_url="http://127.0.0.1:1"):
 
 
 class FakeServer:
-    def __init__(self, root: Path, mode="ok", **env):
+    def __init__(self, root: Path, mode="ok", port=0, **env):
         self.log = root / "requests.jsonl"
         portfile = root / "port"
-        self.proc = subprocess.Popen([sys.executable, str(FAKE_SERVER), "0", str(self.log), str(portfile)],
+        if portfile.exists():
+            portfile.unlink()
+        self.proc = subprocess.Popen([sys.executable, str(FAKE_SERVER), str(port), str(self.log), str(portfile)],
                                      env=dict(os.environ, FAKE_MODE=mode, **env))
         for _ in range(100):
             if portfile.exists() and portfile.read_text().strip():
