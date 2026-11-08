@@ -27,6 +27,8 @@ sys.path.insert(0, str(UTILS))
 import ace_trace_queue as Q  # noqa: E402
 
 DEAD_502 = '{"event":"ace_trace_dead_letter","attempts":4,"status":502,"error":"Server error (502)","timestamp":"t"}'
+# ace-cli has no stable key: only a send that never reached the server is queued (connection refused)
+DEAD_NET = '{"event":"ace_trace_dead_letter","attempts":4,"error":"fetch failed","timestamp":"t"}\nError: connect ECONNREFUSED 127.0.0.1:1'
 VERSION = json.loads((PLUGIN / ".claude-plugin" / "plugin.json").read_text())["version"]
 needs_node = pytest.mark.skipif(E.node_bin() is None, reason="node not installed")
 
@@ -55,17 +57,34 @@ def _rows(box, ev):
 
 # ---------- requeue / dead / disabled ----------
 
-def test_dead_letter_502_queues_the_exact_body_with_a_requeued_row(box):
-    _stop(box, "s-q1", ACE_FAKE_LEARN_RC="1", ACE_FAKE_LEARN_ERR=DEAD_502)
+def test_cli_path_connection_error_queues_the_exact_body_with_a_requeued_row(box):
+    _stop(box, "s-q1", ACE_FAKE_LEARN_RC="1", ACE_FAKE_LEARN_ERR=DEAD_NET)
     sent = box.cli_calls("learn")[0]["trace"]
     files = _qfiles(box)
     assert len(files) == 1
     e = json.loads(files[0].read_text())
     assert e["trace"] == sent, "the queue keeps the body that was sent, nothing rebuilt"
+    assert "id" not in e and len(e["hmac"]) == 64
     assert e["meta"]["project"] == PROJECT_ID and e["meta"]["org"] == ORG_ID and e["meta"]["hook"] == "Stop"
     r = _rows(box, "learn_requeued")
-    assert len(r) == 1 and r[0]["error_class"] == "gateway_5xx" and r[0]["trace_id"] == e["id"] == files[0].stem
+    assert len(r) == 1 and r[0]["error_class"] == "network" and r[0]["trace_id"] == files[0].stem
     assert r[0]["agent_type"] == "main" and r[0]["attempts"] == 1
+
+
+def test_cli_path_502_is_lost_not_queued(box):
+    """Behind the ace-cli fallback the first send had a random key: a replay could not be merged by the server."""
+    _stop(box, "s-q502", ACE_FAKE_LEARN_RC="8", ACE_FAKE_LEARN_ERR=DEAD_502)
+    assert _qfiles(box) == []
+    r = _rows(box, "learn_lost")
+    assert r and r[0]["reason"] == "maybe_sent" and r[0]["error_class"] == "server_5xx"
+
+
+@pytest.mark.parametrize("rc,err", [("3", '{"error":{"code":"not_logged_in","status":null,"message":"Not logged in"}}'),
+                                    ("4", '{"error":{"code":"token_expired","status":401,"message":"expired"}}')])
+def test_cli_auth_failure_goes_to_dead_as_never_sent(box, rc, err):
+    _stop(box, "s-auth" + rc, ACE_FAKE_LEARN_RC=rc, ACE_FAKE_LEARN_ERR=err)
+    assert _qfiles(box) == [] and len(list((box.pd / "trace-queue" / "dead").glob("*.json"))) == 1
+    assert _rows(box, "learn_lost")[0]["error_class"] == "auth"
 
 
 def test_400_goes_to_dead_and_is_never_replayed(box):
@@ -77,13 +96,13 @@ def test_400_goes_to_dead_and_is_never_replayed(box):
 
 
 def test_queue_off_logs_learn_lost_only(box):
-    _stop(box, "s-q3", ACE_FAKE_LEARN_RC="1", ACE_FAKE_LEARN_ERR=DEAD_502, ACE_TRACE_QUEUE="0")
+    _stop(box, "s-q3", ACE_FAKE_LEARN_RC="1", ACE_FAKE_LEARN_ERR=DEAD_NET, ACE_TRACE_QUEUE="0")
     assert not (box.pd / "trace-queue").exists() or not list((box.pd / "trace-queue").rglob("*.json"))
     r = _rows(box, "learn_lost")
-    assert r and r[0]["reason"] == "queue_disabled" and r[0]["error_class"] == "gateway_5xx"
+    assert r and r[0]["reason"] == "queue_disabled" and r[0]["error_class"] == "network"
 
 
-def test_a_timeout_is_lost_not_queued(box):
+def test_a_cli_timeout_is_lost_not_queued(box):
     _stop(box, "s-q4", ACE_FAKE_LEARN_RC="1", ACE_FAKE_LEARN_ERR="Request timed out after 300000ms")
     assert _qfiles(box) == []
     assert _rows(box, "learn_lost")[0]["error_class"] == "timeout"
@@ -102,7 +121,7 @@ def test_canary_secrets_never_reach_the_queue_or_a_log(box):
     proc = box.run_after_task(box.stop_event(sid, transcript_path=_main_transcript(box, entries),
                                              last_assistant_message="done with %s and password: %s" % (canary, y)),
                               ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID, ACE_LEARN_INLINE="1",
-                              ACE_FAKE_LEARN_RC="1", ACE_FAKE_LEARN_ERR=DEAD_502)
+                              ACE_FAKE_LEARN_RC="1", ACE_FAKE_LEARN_ERR=DEAD_NET)
     assert proc.returncode == 0, proc.stderr
     assert _qfiles(box), "the failed send was queued"
     scanned = 0
@@ -117,7 +136,7 @@ def test_canary_secrets_never_reach_the_queue_or_a_log(box):
 # ---------- replay entry point (next session) ----------
 
 def test_replay_entry_point_sends_the_queued_body_and_logs_replayed(box):
-    _stop(box, "s-q5", ACE_FAKE_LEARN_RC="1", ACE_FAKE_LEARN_ERR=DEAD_502)
+    _stop(box, "s-q5", ACE_FAKE_LEARN_RC="1", ACE_FAKE_LEARN_ERR=DEAD_NET)
     f = _qfiles(box)[0]
     e = json.loads(f.read_text())
     e["next_at"] = 0
@@ -127,16 +146,14 @@ def test_replay_entry_point_sends_the_queued_body_and_logs_replayed(box):
     assert p.returncode == 0, p.stderr
     learns = box.cli_calls("learn")
     assert len(learns) == 2 and learns[1]["trace"] == e["trace"]
-    a = learns[1]["argv"]
-    assert a[a.index("--retrieval-id") + 1] == e["meta"]["retrieval_id"] if e["meta"].get("retrieval_id") else True
-    assert "--idempotency-key" not in a, "ace-cli has no such flag"
+    assert "--idempotency-key" not in learns[1]["argv"], "ace-cli has no such flag"
     assert _qfiles(box) == []
     r = _rows(box, "learn_replayed")
-    assert len(r) == 1 and r[0]["trace_id"] == e["id"] and r[0]["attempts"] == 2
+    assert len(r) == 1 and r[0]["trace_id"] == f.stem and r[0]["attempts"] == 2
 
 
 def test_a_good_learn_starts_a_replay_when_the_queue_is_not_empty(box):
-    _stop(box, "s-q6", ACE_FAKE_LEARN_RC="1", ACE_FAKE_LEARN_ERR=DEAD_502)
+    _stop(box, "s-q6", ACE_FAKE_LEARN_RC="1", ACE_FAKE_LEARN_ERR=DEAD_NET)
     f = _qfiles(box)[0]
     e = json.loads(f.read_text())
     e["next_at"] = 0
@@ -248,12 +265,12 @@ def test_engine_quota_exceeded_is_not_counted_as_sent(eng, tmp_path, monkeypatch
     out, _ = eng.run_learn({"task": "t", "trajectory": [], "result": {}}, org="o", project="p", hook_event_name="Stop")
     assert out is None
     rows = E.read_jsonl(tmp_path / ".claude" / "data" / "logs" / "ace-relevance.jsonl")
-    assert any(r.get("event") == "learn_lost" and r.get("error_class") == "quota" for r in rows), rows
+    assert any(r.get("event") == "learn_requeued" and r.get("error_class") == "quota" for r in rows), rows
 
 
 def test_async_session_start_replays_the_queue(box):
     """The next session: the async SessionStart row (ace_install_cli --update-check) starts the replay."""
-    _stop(box, "s-ss", ACE_FAKE_LEARN_RC="1", ACE_FAKE_LEARN_ERR=DEAD_502)
+    _stop(box, "s-ss", ACE_FAKE_LEARN_RC="1", ACE_FAKE_LEARN_ERR=DEAD_NET)
     f = _qfiles(box)[0]
     e = json.loads(f.read_text())
     e["next_at"] = 0
@@ -270,3 +287,44 @@ def test_async_session_start_replays_the_queue(box):
         time.sleep(0.1)
     assert _qfiles(box) == [] and len(box.cli_calls("learn")) == 2
     assert _rows(box, "learn_replayed")
+
+
+
+def test_session_start_requeues_a_signed_orphan_job_of_a_killed_child(box):
+    """Should-fix c: the detached Python learn child died before it read its job file: nothing was sent."""
+    sid = "s-orphan"
+    sdir = box.session_dir(sid)
+    sdir.mkdir(parents=True, exist_ok=True)
+    job = {"trace": {"task": "User request: orphan", "trajectory": [], "result": {}}, "retrieval_id": None,
+           "applied_log_ids": [], "org": ORG_ID, "project": PROJECT_ID, "hook_event_name": "Stop", "lock": "x",
+           "metrics": {"agent_type": "main"}}
+    job["sig"] = Q.sign(Q.load_key(box.pd / "trace-queue"), job)
+    f = sdir / "learn-job-orphan.json"
+    f.write_text(json.dumps(job))
+    old = __import__("time").time() - Q.HANDOVER_STALE - 10
+    os.utime(str(f), (old, old))
+    ev = {"session_id": "s-next2", "cwd": str(box.project), "hook_event_name": "SessionStart", "source": "startup"}
+    p = subprocess.run([sys.executable, str(PLUGIN / "shared-hooks" / "ace_install_cli.py"), "--update-check"],
+                       input=json.dumps(ev), capture_output=True, text=True, timeout=60, cwd=str(box.project),
+                       env=box.env(ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID))
+    assert p.returncode == 0, p.stderr
+    assert not f.exists()
+    r = [x for x in _rows(box, "learn_requeued") if x.get("reason") == "child_killed"]
+    assert len(r) == 1
+
+
+def test_the_python_job_file_is_signed(box, monkeypatch):
+    """dispatch_learn signs the job (the orphan sweep queues only signed jobs)."""
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(box.pd))
+    monkeypatch.delenv("ACE_LEARN_INLINE", raising=False)
+    sys.path.insert(0, str(PLUGIN / "shared-hooks"))
+    import plugin_data_dir
+    importlib.reload(plugin_data_dir)
+    import ace_after_task as A
+    monkeypatch.setattr(A.subprocess, "Popen", lambda *a, **k: None)  # the child never starts: the job file stays
+    job = {"trace": {"task": "t"}, "org": ORG_ID, "project": PROJECT_ID, "hook_event_name": "Stop",
+           "lock": str(box.root / "lock"), "metrics": {"agent_type": "main"}}
+    A.dispatch_learn(job, "s-sig")
+    f = next(box.session_dir("s-sig").glob("learn-job-*.json"))
+    j = json.loads(f.read_text())
+    assert j["sig"] == Q.sign(Q.load_key(box.pd / "trace-queue"), {k: v for k, v in j.items() if k != "sig"})

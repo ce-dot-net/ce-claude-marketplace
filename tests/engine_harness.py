@@ -252,6 +252,10 @@ class FakeServer:
             time.sleep(0.05)
         self.url = "http://127.0.0.1:" + portfile.read_text().strip()
 
+    def stored(self):
+        f = Path(str(self.log) + ".stored")
+        return [json.loads(l) for l in f.read_text().splitlines() if l.strip()] if f.exists() else []
+
     def requests(self):
         if not self.log.exists():
             return []

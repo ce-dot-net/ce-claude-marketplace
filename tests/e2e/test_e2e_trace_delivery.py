@@ -32,11 +32,20 @@ SRC = REPO / "plugins" / "ace"
 REAL_CORE = SRC / "node_modules" / "@ace-sdk" / "core"
 NODE = shutil.which("node")
 
-pytestmark = [
-    pytest.mark.skipif(os.environ.get("ACE_E2E") != "1", reason="e2e target tests: set ACE_E2E=1"),
+# CI sets ACE_REQUIRE_REALCORE=1 (after `npm ci --ignore-scripts` in plugins/ace): a missing node or core is then a
+# failure, never a silent skip (review must-fix 2: these were the only tests that caught a dropped Idempotency-Key).
+REQUIRE = os.environ.get("ACE_REQUIRE_REALCORE") == "1"
+pytestmark = [pytest.mark.skipif(os.environ.get("ACE_E2E") != "1", reason="e2e target tests: set ACE_E2E=1")] + ([] if REQUIRE else [
     pytest.mark.skipif(not NODE, reason="node not installed"),
     pytest.mark.skipif(not (REAL_CORE / "package.json").exists(), reason="plugin-local @ace-sdk/core not installed (npm ci in plugins/ace)"),
-]
+])
+
+
+def test_the_real_core_is_there_when_required():
+    if not REQUIRE:
+        pytest.skip("ACE_REQUIRE_REALCORE is not set")
+    assert NODE, "node missing although ACE_REQUIRE_REALCORE=1"
+    assert (REAL_CORE / "package.json").exists(), "plugins/ace/node_modules/@ace-sdk/core missing although ACE_REQUIRE_REALCORE=1 (run npm ci --ignore-scripts in plugins/ace before the e2e step)"
 TRACE = {"task": "User request: e2e trace delivery", "trajectory": [{"step": 1, "tool": "Edit", "action": "Edit x.py", "result": "ok"}],
          "result": {"success": True, "failed_steps": 0, "output": "Executed 1 tool calls", "plugin_version": "8.1.4",
                     "outcome_rule": "end-outcome-1"}, "playbook_used": [], "timestamp": "2026-11-08T00:00:00Z", "agent_type": "main"}
@@ -103,8 +112,8 @@ def world(tmp_path):
                 p.wait(timeout=120)
             return p
 
-        def send(self, chain, trace=TRACE):
-            return (_send_python if chain == "python" else _send_mod)(self, trace)
+        def send(self, chain, trace=TRACE, **kw):
+            return (_send_python if chain == "python" else _send_mod)(self, trace, **kw)
 
     w = W()
     w.plugin, w.pd, w.proj = plugin, pd, proj
@@ -113,11 +122,11 @@ def world(tmp_path):
         s.stop()
 
 
-def _send_python(w, trace):
+def _send_python(w, trace, timeout=300):
     code = ("import json,sys; sys.path.insert(0, sys.argv[1]); import ace_cli; "
-            "out,_ = ace_cli.run_learn(json.loads(sys.argv[2]), org='org_fake', project='prj_fake', hook_event_name='Stop'); "
-            "print(json.dumps(out))")
-    p = subprocess.run([sys.executable, "-c", code, str(w.plugin / "shared-hooks" / "utils"), json.dumps(trace)],
+            "out,_ = ace_cli.run_learn(json.loads(sys.argv[2]), org='org_fake', project='prj_fake', hook_event_name='Stop', "
+            "timeout=int(sys.argv[3])); print(json.dumps(out))")
+    p = subprocess.run([sys.executable, "-c", code, str(w.plugin / "shared-hooks" / "utils"), json.dumps(trace), str(timeout)],
                        cwd=str(w.proj), env=w.env(), capture_output=True, text=True, timeout=180)
     assert p.returncode == 0, p.stderr
 
@@ -180,7 +189,7 @@ def test_502_four_times_queues_then_the_replay_arrives_exactly_once(world, chain
     world.send(chain)
     files = world.qfiles()
     assert len(files) == 1, world.rows()
-    qid = json.loads(files[0].read_text())["id"]
+    qid = files[0].stem
     r = world.rows("learn_requeued")
     assert len(r) == 1 and r[0]["error_class"] == "gateway_5xx" and r[0]["trace_id"] == qid
     world.make_due()
@@ -188,6 +197,7 @@ def test_502_four_times_queues_then_the_replay_arrives_exactly_once(world, chain
     t = world.traces()
     assert len(t) == 5, "4 failed attempts + 1 replay"
     assert set(_keys(t)) == {qid}, "the queue id is the Idempotency-Key of the first send and of the replay"
+    assert {r["path"] for r in t} == {"/traces"}, "only POST /traces, never /traces/stream"
     assert world.qfiles() == [] and len(world.rows("learn_replayed")) == 1
     body = t[-1]["body"]
     assert body["result"]["plugin_version"] and body["result"]["outcome_rule"] == "end-outcome-1"
@@ -237,10 +247,19 @@ def test_two_parallel_replays_never_duplicate(world):
     assert world.qfiles() == [] and len(world.rows("learn_replayed")) == 2
 
 
+RECLAIM_JS = """
+import { reclaimTrace } from %(trace)s
+import { spawnSync } from 'node:child_process'
+const run = async (argv) => { const r = spawnSync(argv[0], argv.slice(1)); return r.error ? null : { exitCode: r.status } }
+process.stdout.write(JSON.stringify(await reclaimTrace(run, process.argv[2])))
+"""
+
+
 def test_the_race_a_delayed_reader_keeps_its_trace(world):
-    """The 8.1.3 ENOENT: the mod parent removed the trace when the launcher outlived LAUNCHER_MS while the child was
-    about to read it. Now the parent claims by rename; once the child owns the file the claim fails and the reader
-    finds its file."""
+    """The 8.1.3 ENOENT, end to end with the code turn.ts runs: the launcher outlives LAUNCHER_MS, so the parent gives
+    up on it (lib/trace.ts reclaimTrace) while the detached child is about to read the trace (a learn that reads it
+    1.5 s late). The child owns the file, the parent's claim fails, the reader finds its file and the learn succeeds.
+    The old parent code (rm trace) fails this test: the reader gets ENOENT and the row says learning_sent false."""
     world.server()
     bin_dir = world.root / "slowbin"
     bin_dir.mkdir()
@@ -260,14 +279,51 @@ def test_the_race_a_delayed_reader_keeps_its_trace(world):
                            "rowOk": '{"event": "execution", "learning_sent": true}', "rowFail": '{"event": "execution", "learning_sent": false}',
                            "cwd": str(world.proj), "queue": queue})
     subprocess.run(argv, env=world.env(), timeout=30, check=True)
-    time.sleep(0.5)  # the parent gives up on the launcher now (old code: rm trace -> ENOENT in the reader)
-    claim = subprocess.run(["mv", "-n", str(f), str(f) + ".parent"], capture_output=True)
-    assert claim.returncode != 0, "the child already owns the trace"
+    time.sleep(0.5)  # LAUNCHER_MS is over: the parent gives up on the launcher now
+    js = world.root / "reclaim.mjs"
+    js.write_text(RECLAIM_JS % {"trace": json.dumps((SRC / "mod" / "lib" / "trace.ts").as_uri())})
+    p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", str(js), str(f)], capture_output=True, text=True, timeout=30)
+    assert p.returncode == 0, p.stderr
+    assert json.loads(p.stdout) is None, "the child already owns the trace: the parent must not take it"
     deadline = time.monotonic() + 15
     while lock.exists() and time.monotonic() < deadline:
         time.sleep(0.1)
     assert world.rows("execution") == [{"event": "execution", "learning_sent": True}]
     assert world.qfiles() == [] and not list((world.pd / "tmp").iterdir())
+
+
+def test_the_parent_gives_up_before_the_child_starts_the_trace_is_queued_not_lost(world):
+    """The other order: the loaded machine starts the child after LAUNCHER_MS. The parent's claim (reclaimTrace) wins,
+    it queues the trace (ace_trace_queue --enqueue, as turn.ts), and the late child finds nothing and sends nothing.
+    A parent that removes the trace instead (the old rm) loses it without a row: this test fails then."""
+    world.server()
+    qid = str(uuid.uuid4())
+    (world.pd / "tmp").mkdir(mode=0o700, exist_ok=True)
+    f = world.pd / "tmp" / ("ace-trace-%s.json" % qid)
+    f.write_text(json.dumps(TRACE))
+    lock = world.root / "lock"
+    lock.write_text("")
+    log = world.proj / ".claude" / "data" / "logs" / "ace-relevance.jsonl"
+    queue = json.dumps({"id": qid, "root": str(world.pd), "utils": str(world.plugin / "shared-hooks" / "utils"), "log": str(log),
+                        "cwd": str(world.proj), "on": True, "meta": {"project": "prj_fake", "hook": "Stop", "agent_type": "main"}})
+    js = world.root / "reclaim.mjs"
+    js.write_text(RECLAIM_JS % {"trace": json.dumps((SRC / "mod" / "lib" / "trace.ts").as_uri())})
+    p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", str(js), str(f)], capture_output=True, text=True, timeout=30)
+    parked = json.loads(p.stdout)
+    if parked:  # what turn.ts does with a won claim
+        subprocess.run([sys.executable, "-I", str(world.plugin / "shared-hooks" / "utils" / "ace_trace_queue.py"), "--enqueue",
+                        parked, queue], env=world.env(), timeout=30, check=True)
+        os.unlink(parked)
+    learn = ["node", str(world.plugin / "engine" / "learn.js"), "--transcript", str(f), "--json", "--idempotency-key", qid,
+             "--org", "org_fake", "--project", "prj_fake"]
+    argv = _launcher_argv({"learnArgv": learn, "trace": str(f), "lock": str(lock), "log": str(log),
+                           "rowOk": '{"event": "execution", "learning_sent": true}', "rowFail": '{"event": "execution", "learning_sent": false}',
+                           "cwd": str(world.proj), "queue": queue})
+    subprocess.run(argv, env=world.env(), timeout=30, check=True)  # the late child
+    time.sleep(2)
+    assert world.traces() == [], "the late child sent nothing"
+    assert [x.stem for x in world.qfiles()] == [qid], "the trace waits in the queue"
+    assert [r["error_class"] for r in world.rows("learn_requeued")] == ["not_sent"]
 
 
 def test_stop_trace_at_the_server_has_version_and_rule_and_no_canary(world):
@@ -301,3 +357,61 @@ def test_stop_trace_at_the_server_has_version_and_rule_and_no_canary(world):
     assert res["plugin_version"] == version and re.fullmatch(r"\d+\.\d+\.\d+", version)
     assert res["outcome_rule"] == "end-outcome-1"
     assert "CANARY" not in json.dumps(t[0]["body"])
+
+
+# ---------- the server's idempotency semantics (server team, read from prod code) ----------
+
+def _drain(world, rounds=4):
+    for _ in range(rounds):
+        if not world.qfiles():
+            return
+        world.make_due()
+        world.replay()
+
+
+@pytest.mark.parametrize("chain", ["python", "mod"])
+@pytest.mark.parametrize("script,first_class", [
+    (["not_stored"], "not_stored"),                                       # trap A: a new key for the replay
+    (["429:1"], "quota"),                                                 # quota, Retry-After honoured
+    (["503pg:1", "503pg:1", "503pg:1", "503pg:1"], "pg_timeout"),         # PG statement timeout x4 (the core's tries)
+    (["504"], "in_progress"),                                             # committed, then 504; the core's retry sees duplicate
+])
+def test_server_semantics_the_trace_is_stored_exactly_once(world, chain, script, first_class):
+    world.server(FAKE_TRACE_SCRIPT=json.dumps(script))
+    world.send(chain)
+    r = world.rows("learn_requeued")
+    assert r and r[0]["error_class"] == first_class, world.rows()
+    _drain(world)
+    stored = world.srv.stored()
+    assert len(stored) == 1, stored
+    assert world.qfiles() == [] and world.rows("learn_replayed")
+    assert {x["path"] for x in world.traces()} == {"/traces"}
+    if first_class == "not_stored":
+        assert stored[0]["key"].endswith("-r1"), "stored:false: the replay used a new key"
+
+
+def test_timeout_then_duplicate_in_progress_then_stored_once(world):
+    """Trap B: the first send times out while the server still writes; the replay answers 'duplicate in progress'
+    (no proof): the entry stays and waits; the next answer with the same key, after a real 200, deletes it."""
+    world.server(FAKE_TRACE_SCRIPT=json.dumps(["slow:6"]))
+    world.send("python", timeout=3)
+    assert world.rows("learn_requeued")[0]["error_class"] == "timeout"
+    world.make_due()
+    world.replay()
+    r = world.rows("learn_requeued")
+    assert r[-1]["error_class"] == "in_progress" and len(world.qfiles()) == 1
+    e = json.loads(world.qfiles()[0].read_text())
+    assert e["answered"] is True and e["next_at"] - time.time() > 70 * 60, "waits >= 75 min"
+    time.sleep(4)  # the server finishes writing
+    world.make_due()
+    world.replay()
+    assert world.qfiles() == [] and len(world.srv.stored()) == 1 and world.rows("learn_replayed")
+
+
+@pytest.mark.parametrize("chain", ["python", "mod"])
+def test_401_and_422_are_dead_never_replayed(world, chain):
+    for code in ("401", "422"):
+        world.server(FAKE_TRACE_SCRIPT=json.dumps([code]))
+        world.send(chain)
+    assert world.qfiles() == [] and len(list((world.pd / "trace-queue" / "dead").glob("*.json"))) == 2
+    assert sorted(r["error_class"] for r in world.rows("learn_lost")) == ["auth", "invalid"]
