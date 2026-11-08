@@ -55,6 +55,14 @@ def _rows(box, ev):
     return box.relevance_rows(ev)
 
 
+def _wait_replayed(box, timeout=30):
+    """The detached replay: done when its learn_replayed row is written (the claim empties the queue dir earlier)."""
+    import time
+    end = time.monotonic() + timeout
+    while time.monotonic() < end and not _rows(box, "learn_replayed"):
+        time.sleep(0.1)
+
+
 # ---------- requeue / dead / disabled ----------
 
 def test_cli_path_connection_error_queues_the_exact_body_with_a_requeued_row(box):
@@ -159,11 +167,7 @@ def test_a_good_learn_starts_a_replay_when_the_queue_is_not_empty(box):
     e["next_at"] = 0
     f.write_text(json.dumps(e))
     _stop(box, "s-q7")  # this learn succeeds, then a detached replay runs
-    import time
-    for _ in range(100):
-        if not _qfiles(box):
-            break
-        time.sleep(0.1)
+    _wait_replayed(box)
     assert _qfiles(box) == []
     assert len(box.cli_calls("learn")) == 3
 
@@ -280,11 +284,7 @@ def test_async_session_start_replays_the_queue(box):
                        input=json.dumps(ev), capture_output=True, text=True, timeout=60, cwd=str(box.project),
                        env=box.env(ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID))
     assert p.returncode == 0, p.stderr
-    import time
-    for _ in range(100):
-        if not _qfiles(box):
-            break
-        time.sleep(0.1)
+    _wait_replayed(box)
     assert _qfiles(box) == [] and len(box.cli_calls("learn")) == 2
     assert _rows(box, "learn_replayed")
 
