@@ -5,6 +5,53 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.1.4] - Unreleased
+
+### Fixed
+- Traces lost without a log line. The mod's launcher parent removed the trace file when the launcher did not return in
+  15 s, while the detached child was about to read it (`ace-cli learn (mod) exit 1: ENOENT ... ace-trace-<uuid>.json`,
+  "Failed to read transcript file"). The child now claims the file by rename before it reads it; a parent that gives up
+  claims it by rename too, and only the winner touches it (the parent then queues it: nothing was sent).
+- A quota rejection (the core returns `quota_exceeded` instead of throwing) counted as "learning sent" on the engine
+  path. engine/learn.js now exits 5 with an `ace_trace_quota_exceeded` line; the trace goes to `dead/`.
+
+### Added
+- Durable retry queue for learn traces, both chains, one module (`shared-hooks/utils/ace_trace_queue.py`). After the
+  SDK's own 4 attempts, a send that provably never reached the server (dead letter with 502/503/504, connection error,
+  trace never read) is kept with the exact redacted body in `<plugin data>/trace-queue` (0700/0600, atomic, no
+  symlinks; max 200 files, 5 MB each, 50 MB, 7 days). Replay from the async SessionStart row and after every good learn:
+  oldest first, at most 5 per run, backoff 1 min, 5 min, 30 min, 2 h, 12 h, given up after 6 attempts (`dead/`, kept 7
+  days). Never replayed: 4xx/auth/quota (to `dead/`), 500 and timeouts (the server may have stored them). Two sessions
+  or chains never send the same entry (claim by rename). `ACE_TRACE_QUEUE=0` disables it (`learn_lost` rows only).
+- The engine sends the queue id as the `Idempotency-Key` of the first POST and of every replay
+  (`engine/learn.js --idempotency-key`). ace-cli has no such flag: a replay through ace-cli carries a new key.
+- Relevance rows `learn_requeued`, `learn_replayed`, `learn_lost`, `learn_expired` (reason, error_class, attempts,
+  trace_id, agent_type, hook, project_id; never trace content or command text), the same in both chains.
+- `/ace:ace-doctor`: `delivery queue N · oldest X · 7d replayed A · dead B · expired C`.
+- `result.plugin_version` (manifest x.y.z, as in `X-ACE-Client`) and `result.outcome_rule` in every automatic trace
+  (Stop, SubagentStop, mod turn.complete, PermissionDenied), inside `result` because the server keeps only task,
+  trajectory, result, playbook_used, timestamp, git. `outcome_rule` is one value of a fixed list (both chains, parity
+  test); a future rule change bumps the number and adds a value:
+
+  | value | meaning | since |
+  |---|---|---|
+  | `end-outcome-1` | `result.success` = the task's end outcome (Stop, SubagentStop, mod turn.complete) | 8.1.3 |
+  | `permission-gate-1` | PermissionDenied trace (success false, one failed step) | 7.1.14 |
+
+  The local execution row's `outcome_rule` changes from `8.1.3` to `end-outcome-1` (same rule).
+- `client_policy` reader, DORMANT: it does nothing until the server sends the field. A search response's top-level
+  `client_policy` {`min_plugin_version`, `recommended_plugin_version`, `message`, `url`} (optional strings, x.y.z,
+  https only, <= 200 characters, no control characters) is stored for 7 days like `render_full_pct`; an invalid one is
+  dropped and logged (`client_policy_invalid`, reason only). Below recommended: one `/ace:ace-doctor` line. Below min:
+  one line "ACE <version> ist zu alt, bitte /plugin update ausführen" (mod band with a dismiss; Python chain:
+  SessionStart message). ACE never turns itself off, never updates itself, and keeps learning. The ace-cli search
+  fallback may drop the field; then nothing changes.
+
+### Known limits
+- A trace is still lost when the machine is off before the learn finished, the plugin data dir is wiped, a queue cap
+  is hit, the server answered 500 or not in time, or it is older than 7 days. A gateway timeout (504) after the server
+  stored a trace sent through ace-cli (no engine) can make the replay a duplicate: only the engine carries the key.
+
 ## [8.1.3] - 2026-11-05
 
 ### Fixed

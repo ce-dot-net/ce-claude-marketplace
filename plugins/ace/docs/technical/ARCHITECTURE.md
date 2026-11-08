@@ -140,6 +140,88 @@ the rule of the newest row (`pre-8.1.3` for older rows). The user-rejection down
 unchanged. Heuristics carry `ponytail:` comments (read-only list, MCP verb list, the tokenizer). The numbers behind the
 rule: `python3 tests/probe_success_rule.py --days 10` (local transcripts, counts only).
 
+### Trace delivery (8.1.4)
+
+A built trace is never lost without a row in `ace-relevance.jsonl`. Both chains use ONE module,
+`shared-hooks/utils/ace_trace_queue.py` (the Python hooks in-process; the mod's detached learn child imports it), so the
+behaviour is identical by construction.
+
+**Hand-over (the 8.1.3 ENOENT race).** The mod's launcher parent used to delete the trace file when the launcher did
+not return within `LAUNCHER_MS` (15 s) or exited non-zero, although the launcher may already have started the detached
+child: `ace-cli learn` then failed with `ENOENT ... ace-trace-<uuid>.json` / "Failed to read transcript file". Now the
+child first claims the file by `rename(trace, trace.owned)`; a parent that gives up claims it with
+`mv -n trace trace.parent`. Exactly one rename wins: if the child has it, the parent does nothing (the child writes the
+rows and releases the lock); if the parent has it, no child sent anything, so the parent queues it
+(`ace_trace_queue.py --enqueue`). The Python chain was not affected (`ace_cli._learn` removes its temp file only after
+`subprocess.run` returned). Nothing sweeps `<data>/tmp`; SessionEnd and the 7-day sweep touch only session dirs.
+
+**What the SDK does (ace-cli 4.4.2 / core 3.8.2, read-only).** `POST /traces` is tried 4 times (waits about 2, 8, 20 s,
+±20 %, `Retry-After` honoured) on 502/503/504 and on connection errors; never on 4xx, 500 or a timeout/abort. When the
+attempts are exhausted the core writes ONE stderr line `{"event":"ace_trace_dead_letter",...}`, nothing on disk.
+Every attempt carries the same `Idempotency-Key` header (the core comment says the server de-duplicates by it); the key
+is random per `storeExecutionTrace` call. ace-cli has no flag for it, so every ace-cli run draws a new key. A quota
+rejection is swallowed by the core (`{quota_exceeded: true}`) and ace-cli prints success.
+
+**Queue.** `<data>/trace-queue/<id>.json` = `{v, id, created_at, next_at, attempts, last_error, meta, trace}` with the
+exact, already redacted body that was sent and the F-080 flags (`meta`: org, project, retrieval_id, applied_log_ids,
+hook, agent_type). Dir 0700, files 0600, atomic temp + rename (`O_EXCL|O_NOFOLLOW`), a symlinked dir or entry is never
+used. `id` = the engine's `--idempotency-key` on the first send AND on every replay (engine/learn.js passes it to the
+core), so the server sees the same key for the same trace. Caps: 200 files, 5 MB per file, 50 MB in all (over a cap:
+`learn_lost` `queue_full`/`too_large`), 7 days (`learn_expired`).
+
+**Replay policy (conservative: only what provably never reached the trace store is sent again).**
+
+| learn outcome | class | action |
+|---|---|---|
+| dead letter with 502/503/504 (the core's 4 attempts used up) | `gateway_5xx` | queue, replay |
+| dead letter without status, ECONNREFUSED/ENOTFOUND/fetch failed | `network` | queue, replay |
+| trace file unreadable, CLI missing, launcher never started a child | `not_sent` | queue, replay |
+| 4xx, 401/403/not logged in, quota exceeded (engine exit 5) | `4xx`/`auth`/`quota` | `dead/`, never replayed |
+| 500 (the server answered; it may have stored), timeout, anything unknown | `server_5xx`/`timeout`/`unknown` | `learn_lost`, never replayed |
+
+Replay runs detached from the async SessionStart row and after every good learn: due entries oldest first, at most 5
+per run, 60 s per send, backoff after failed attempt 1..5 = 1 min, 5 min, 30 min, 2 h, 12 h; after 6 attempts the entry
+goes to `dead/` (`learn_lost` `gave_up`). `dead/` is kept 7 days for debugging. Two replayers (two sessions, two chains)
+claim an entry by renaming it into `inflight/`; whoever renamed it sends it; a claim older than 15 min (crashed
+replayer) goes back. A replay goes through the engine with the stable key; when only ace-cli is available the replay
+has no key (the policy above still only replays what never reached the store).
+
+**Rows** (both chains, same fields, no trace content, no command text): `learn_requeued`, `learn_replayed`,
+`learn_lost`, `learn_expired` with `reason` (send_failed, replay_failed, rejected, maybe_sent, gave_up, queue_disabled,
+queue_full, too_large, unsafe_dir, write_failed, enqueue_failed, max_age), `error_class`, `attempts`, `trace_id` (= queue
+id), `agent_type`, `hook`, `project_id`. `/ace:ace-doctor`: `delivery queue N · oldest X · 7d replayed A · dead B ·
+expired C`. `ACE_TRACE_QUEUE=0`: no queue, `learn_lost` rows only. The sync Stop path does no queue work (it already
+hands the learn to a detached child); everything here runs in the detached child, the async hooks or the replay process.
+
+**Limits (honest).** A trace is lost when the machine is off or the process is killed before the learn finished, the
+plugin data dir is wiped, a cap is hit, the server answered 500 or did not answer in time (it may have stored it), or
+it is older than 7 days. A trace ace-cli sent (engine unavailable) and the gateway timed out (504) after the app stored
+it can arrive twice: only the engine path carries the stable key.
+
+**`result.plugin_version` and `result.outcome_rule`.** The server keeps only task, trajectory, result, playbook_used,
+timestamp, git of a trace, so both fields live inside `result`, in every automatic trace (Stop, SubagentStop, mod
+turn.complete, PermissionDenied). `plugin_version` = the manifest version (x.y.z, the same as in
+`X-ACE-Client: claude-code-plugin/<version>`). `outcome_rule` is one value of a fixed list
+(`ace_trace_meta.OUTCOME_RULES` = `mod/lib/trace.ts OUTCOME_RULES`, parity test):
+
+| value | meaning | since |
+|---|---|---|
+| `end-outcome-1` | `result.success` = the end outcome of the task (Task outcome 8.1.3); Stop, SubagentStop, mod turn.complete | 8.1.3 (named in 8.1.4) |
+| `permission-gate-1` | a PermissionDenied trace: success false, one failed step | 7.1.14 (named in 8.1.4) |
+
+A future rule change bumps the number (`end-outcome-2`) and adds a row here and in both lists. The local execution row
+carries the same value (`/ace:ace-doctor` shows it).
+
+**`client_policy` (dormant: no effect until the server sends the field).** A search response MAY carry a top-level
+object `client_policy` with `min_plugin_version`, `recommended_plugin_version` (x.y.z), `message` (<= 200 characters),
+`url` (https only, <= 200), all optional strings without control or bidi characters. The engine passes it through
+(engine/search.js raw capture, like `render_full_pct`); the ace-cli fallback may drop it, then nothing changes. A valid
+one is stored in `<data>/client-policy.json` `{policy, at}` (atomic, 0600, 7 days); an invalid one is dropped and
+logged as `client_policy_invalid` with the reason only. Below recommended: one `/ace:ace-doctor` line. Below min: one
+line "ACE <version> ist zu alt, bitte /plugin update ausführen" (mod: the band, with a dismiss; Python chain: the
+SessionStart message). Versions compare numerically, unknown forms are ignored. ACE never turns itself off, never
+updates itself and never fetches code because of it; it keeps learning. Shared cases: `tests-fixtures/client-policy`.
+
 ### Hook topology
 
 | Event | Mode | Script |
