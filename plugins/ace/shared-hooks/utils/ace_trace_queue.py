@@ -115,6 +115,8 @@ def classify(code, output, keyed=True, answered=False):
         if st in (200, 202):
             if resp.get("stored") is False:
                 return "requeue", "not_stored"
+            if "stored" in resp and resp["stored"] is not True:  # null (server fix: the first send still runs) or junk
+                return "requeue", "in_progress"
             if resp.get("duplicate") is True:
                 msg = str(resp.get("message") or "").lower()
                 if "in progress" in msg or not answered:
@@ -184,10 +186,10 @@ def _retry_after(output):
 
 def _next_at(cls, attempts, now, output):
     """When to try again after failed attempt `attempts` (1-based)."""
-    base = BACKOFF[min(attempts, len(BACKOFF)) - 1]
+    base = BACKOFF[min(max(attempts, 1), len(BACKOFF)) - 1]
     ra = _retry_after(output)
     if cls == "in_progress":
-        return now + max(IN_PROGRESS_WAIT, base)
+        return now + IN_PROGRESS_WAIT
     if cls == "quota":
         return now + (ra if ra is not None else QUOTA_WAIT)
     if ra is not None:
@@ -541,7 +543,9 @@ def _settle_replay(qdir, name, claimed, e, res, now):
             return _row("learn_lost", e["id"], e["meta"], att, cls, "gave_up")
         e["key_gen"] += 1
         e["answered"] = False  # a new key starts a new server-side record
-    if action == "requeue" and att < MAX_ATTEMPTS:
+    if action == "requeue" and cls == "in_progress":
+        e["attempts"] = att = att - 1  # waiting for the first send is no failed attempt (the 23 h window bounds it)
+    if action == "requeue" and (att < MAX_ATTEMPTS or cls == "in_progress"):
         e["next_at"] = _next_at(cls, att, now, out)
         if e["next_at"] - e["created_at"] > REPLAY_WINDOW:
             os.unlink(claimed)

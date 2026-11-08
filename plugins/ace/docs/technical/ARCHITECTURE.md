@@ -169,7 +169,9 @@ the answer. Only `stored` tells: 200/202 with `stored: true` = stored; `message`
 `stored: false`. Trap A: a `stored: false` answer is remembered for 24 h, so a replay with the SAME key gets
 `duplicate: true` and stores nothing: the replay needs a new key. Trap B: `stored: true, duplicate: true, message:
 "duplicate in progress"` is no proof: the first request is still writing. 401, 422, 429 (checked before the write) and
-`stored: false` are certainly not stored. `/traces/stream` always answers `stored: true`, even when the write failed:
+`stored: false` are certainly not stored. Contract change with the server fix (built, not deployed): while a first
+send still runs the server answers 200/202 with `stored: null`, and a `stored: false` is no longer remembered (a retry
+with the same key really writes); the plugin's new key after `stored: false` stays correct either way. `/traces/stream` always answers `stored: true`, even when the write failed:
 the queue never uses it. A database error inside the dedup lets the request through without dedup: rare duplicates
 remain possible.
 
@@ -193,6 +195,8 @@ rename (`O_EXCL|O_NOFOLLOW`), symlinks never used. Caps: 200 files, 5 MB per fil
 | answer | engine (stable key) | ace-cli fallback (random key) |
 |---|---|---|
 | 200/202 `stored: true`, no `duplicate` | stored, done | exit 0: done (ace-cli shows no `stored`) |
+| 200/202 `stored` present but `null` (server fix: the first send still runs) or not a boolean (`"true"`, `1`) | keep, retry after 75 min, never counted as stored, not a failed attempt | (not visible) |
+| 200/202 without `stored` (an older server), no `duplicate` | stored, done | exit 0: done |
 | 200 `stored: false` | requeue with a NEW key `<id>-r<n>` (max 3), then dead | (not visible) |
 | 200 `duplicate: true` + "in progress" | keep, retry after >= 75 min | (not visible) |
 | 200 `duplicate: true`, not in progress, after an earlier real 200/202 for this key | stored, done | (not visible) |
@@ -209,6 +213,7 @@ rename (`O_EXCL|O_NOFOLLOW`), symlinks never used. Caps: 200 files, 5 MB per fil
 | anything else | lost (`unknown`) | lost (`unknown`) |
 
 Backoff after failed attempt 1..5: 1 min, 5 min, 30 min, 2 h, 12 h (a `Retry-After` or the waits above may be longer).
+An in-progress wait (75 min) is not a failed attempt: only the 23 h window bounds it. Cases: `tests-fixtures/trace-delivery/stored_cases.json`.
 `attempts` rises BEFORE each send, so a replayer killed mid-send cannot loop: its claim comes back after 15 min and the
 entry ends in `dead/` after 6 attempts. Replay window: 23 h from the first send (`REPLAY_WINDOW`, one constant: the
 server's 24 h key memory minus a margin); a wait that would end later, or an older entry, is `learn_expired`.

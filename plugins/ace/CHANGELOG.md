@@ -21,7 +21,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   redacted body in `<plugin data>/trace-queue` and sent again from the async SessionStart row and after every good
   learn: oldest first, at most 5 per run, backoff 1 min, 5 min, 30 min, 2 h, 12 h, at most 6 attempts, within 23 h of
   the first send (the server remembers a key for 24 h). The decision reads the server's `stored`/`duplicate` fields,
-  never `message` (status table: docs/technical/ARCHITECTURE.md "Trace delivery (8.1.4)"): `stored: false` is replayed
+  never `message` (status table: docs/technical/ARCHITECTURE.md "Trace delivery (8.1.4)"): `stored` present but `null`
+  (the server fix while a first send still runs) or not a boolean is never counted as stored and waits 75 min (not a
+  failed attempt); `stored` absent (an older server) counts as stored unless `duplicate` is true; `stored: false` is replayed
   with a new key (`<id>-r<n>`, at most 3), "duplicate in progress" waits 75 min, 429 waits for `Retry-After` (else
   12 h), 503 `PG_STATEMENT_TIMEOUT` honours `Retry-After`, 502/503/504/500/timeouts are replayed with the stable key,
   401/403 and ace-cli `not_logged_in`/`token_expired` go to `dead/` (auth), 422 to `dead/` (invalid). Behind the ace-cli
