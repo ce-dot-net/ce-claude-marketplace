@@ -293,9 +293,8 @@ def test_a_stale_claim_of_a_crashed_replayer_is_taken_back_with_its_attempt_coun
 
     with pytest.raises(KeyboardInterrupt):
         Q.replay(qdir, crash, now=T0 + 61)
-    claimed = qdir / "inflight" / (qid(1) + ".json")
+    claimed = qdir / "inflight" / ("%s.%d.json" % (qid(1), T0 + 61))
     assert json.loads(claimed.read_text())["attempts"] == 2, "attempts rose BEFORE the send"
-    os.utime(str(claimed), (T0, T0))
     sent = []
     rows = Q.replay(qdir, ok_send(sent), now=T0 + 61 + Q.CLAIM_STALE + 1)
     assert sent == [qid(1)] and rows[-1]["attempts"] == 3
@@ -309,8 +308,6 @@ def test_a_crash_loop_ends_in_dead_after_6_attempts(qdir):
             Q.replay(qdir, lambda e: (_ for _ in ()).throw(KeyboardInterrupt()), now=now)
         except KeyboardInterrupt:
             pass
-        for p in (qdir / "inflight").glob("*.json"):
-            os.utime(str(p), (T0, T0))
         now += Q.CLAIM_STALE + 1  # the crashed claim comes back; its next_at has passed
     assert entries(qdir) == [] and not list((qdir / "inflight").glob("*.json")) and dead(qdir) == [qid(1) + ".json"]
 
@@ -611,3 +608,19 @@ def test_in_progress_waits_75_min_and_is_not_a_failed_attempt(qdir):
         assert rows[-1]["error_class"] == "in_progress" and e["next_at"] == now + 75 * 60 and e["attempts"] == 1
         now = e["next_at"]
     assert dead(qdir) == []
+
+
+def test_a_fresh_claim_is_never_taken_back_even_when_the_entry_file_is_old(qdir):
+    """rename() keeps the entry's old mtime: the claim time must come from the claim, or a second replayer's stale
+    sweep could take a live claim back and send it twice."""
+    f = queue(qdir, 1, now=T0)
+    old = T0 - 10 * HOUR
+    os.utime(str(f), (old, old))
+    seen = []
+
+    def send(e):
+        seen.append(Q.replay(qdir, lambda e2: pytest.fail("sent twice"), now=T0 + 120))  # a second replayer, mid-send
+        return 0, "{}"
+
+    Q.replay(qdir, send, now=T0 + 120)
+    assert seen == [[]] and entries(qdir) == []
