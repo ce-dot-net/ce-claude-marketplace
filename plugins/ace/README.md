@@ -2,7 +2,19 @@
 
 **Agentic Context Engineering** - Self-improving Claude Code plugin using automatic pattern learning.
 
-## 8.1.3 (unreleased): task outcome
+## 8.1.4 (unreleased): no silent trace loss
+
+A learned trace that could not be sent is no longer lost without a trace of its own. A send that provably never reached
+the server (the gateway answered 502/503/504 four times, the connection failed, the file never reached the CLI) is kept
+in a private queue under the plugin data dir and sent again at the next session start or after the next good learn,
+with the same `Idempotency-Key`. A rejected trace (4xx) is never sent again. Every outcome is a row in
+`ace-relevance.jsonl` (`learn_requeued`, `learn_replayed`, `learn_lost`, `learn_expired`), and `/ace:ace-doctor` shows
+the queue. `ACE_TRACE_QUEUE=0` turns the queue off. Limits: a trace is still lost when the machine is off before the
+learn finished, the plugin data dir is wiped, the queue is full (200 traces / 50 MB) or older than 7 days, or the
+server answered 500 or not in time (it may have stored it). Details: docs/technical/ARCHITECTURE.md "Trace delivery
+(8.1.4)".
+
+## 8.1.3: task outcome
 
 `result.success` in a learned trace is the task's END outcome: a grep without a match, a red test that later went
 green or a retried call no longer fail the task, and stderr alone is no failure. `result.failed_steps` counts the
@@ -174,6 +186,7 @@ After completing work, run `/ace-learn`:
   The ACE server can switch the share for everyone without a plugin release: a search response field `render_full_pct` (0-100, kept for 7 days in `render-full-pct.json`) applies when the env is unset.
 - `ACE_ENGINE=cli`: never use the in-process engine.
 - `ACE_AUTO_INSTALL=0`: never install the pinned ace-cli in the background at SessionStart (default on).
+- `ACE_TRACE_QUEUE=0`: never keep a failed trace for a later replay; the loss is still logged (`learn_lost`).
 
 ### Binding (project context)
 
