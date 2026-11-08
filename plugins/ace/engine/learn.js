@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 'use strict';
 // `node learn.js --transcript F --json [--retrieval-id R] [--applied-log-ids a,b] [--verbosity V]
-// [--timeout MS] [--no-stream] [--org O] [--project P]`: the same requests as `ace-cli learn --no-stream`.
+// [--timeout MS] [--no-stream] [--org O] [--project P] [--idempotency-key K]`: the same requests as `ace-cli learn --no-stream`.
+// 8.1.4: K (the plugin's trace queue id) is the POST's Idempotency-Key on the first send and every replay, so the
+// server can drop a duplicate. A quota rejection the core swallows ({quota_exceeded}) exits 5 with a marker line:
+// the trace was not stored, never a success.
 // Always a sync POST, so --verbosity/--timeout/--no-stream are accepted and have no effect.
 // Exit 3 = nothing was sent (safe to fall back to ace-cli). Exit 1 = the POST may have reached the
 // server: a retry could duplicate the trace and double F-080 credit.
@@ -33,7 +36,11 @@ const logger = { warn: (m) => process.stderr.write(m + '\n'), error: () => {}, i
     if (config?.runtime_settings?.learningEnabled === false) process.stderr.write('warn: learning disabled on the server\n');
   } catch (_) { /* like ace-cli: proceed without the config */ }
   sent = true;
-  const result = await client.storeExecutionTrace(trace);
+  const result = await client.storeExecutionTrace(trace, opt('--idempotency-key') ? { idempotencyKey: opt('--idempotency-key') } : undefined);
+  if (result && result.quota_exceeded) {
+    process.stderr.write('ace_trace_quota_exceeded ' + String(result.quota_error_code || '') + '\n');
+    process.exit(5);
+  }
   client.invalidateCache();
   process.stdout.write(JSON.stringify({
     success: true,

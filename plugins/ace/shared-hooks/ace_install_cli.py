@@ -204,6 +204,14 @@ def startup(ev, sid, pid, cli=None):
             Path(".claude/data/logs", stale).unlink()
         except OSError:
             pass
+    try:  # 8.1.4 client_policy below min: one line; ACE stays on and keeps learning (no update, no code fetched)
+        from ace_env import plugin_version
+        from plugin_data_dir import client_policy_band
+        band = client_policy_band(plugin_version())
+        if band:
+            msgs.append(band)
+    except Exception:
+        pass
     env_file = os.environ.get("CLAUDE_ENV_FILE")
     if env_file and not os.environ.get("ACE_CLIENT_ID"):  # DESIGN §8: same id as _ace_env.sh
         try:
@@ -221,6 +229,8 @@ def main():
     if "--update-check" in sys.argv[1:]:  # async row (name kept for hooks.json): sweep + sqlite rebuild
         try:
             sweep_orphans(ev.get("session_id"))
+            import ace_trace_queue  # 8.1.4: traces a past session could not send (detached, bounded, own process)
+            ace_trace_queue.spawn_replay(cwd=os.getcwd())
             rebuild_sqlite()
         except Exception:
             pass

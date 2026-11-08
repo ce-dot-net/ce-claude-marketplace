@@ -396,20 +396,54 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
               org: str = None, project: str = None, verbosity: str = 'detailed',
               timeout: int = 300,
               hook_event_name: str = "Stop") -> Tuple[Optional[Dict[str, Any]], int]:
-    """ONE engine or `ace-cli learn --transcript <tmpfile>` spawn (F-080 flags kept).
+    """ONE engine or `ace-cli learn --transcript <tmpfile>` spawn (F-080 flags kept), then 8.1.4 trace delivery:
+    a send that provably never reached the server is queued (ace_trace_queue), 4xx goes to dead/, anything else that
+    failed is a learn_lost row; a good learn starts a detached replay of the queue. Returns (parsed_json_or_None, ms).
+    The engine sends the queue id as Idempotency-Key, so a replay of the same trace is the same request."""
+    import uuid
+    qid = uuid.uuid4().hex
+    parsed, ms, code, out = _learn(trace, retrieval_id=retrieval_id, applied_log_ids=applied_log_ids, org=org,
+                                   project=project, verbosity=verbosity, timeout=timeout,
+                                   hook_event_name=hook_event_name, idempotency_key=qid)
+    try:
+        import ace_trace_queue
+        import plugin_data_dir
+        if parsed is None:
+            meta = {"org": org, "project": project, "retrieval_id": retrieval_id,
+                    "applied_log_ids": list(applied_log_ids or []), "hook": hook_event_name,
+                    "agent_type": (trace.get("agent_type") if isinstance(trace, dict) else None) or "main"}
+            from ace_relevance_logger import log_event
+            for r in ace_trace_queue.settle(plugin_data_dir.data_root() / "trace-queue", qid, trace, meta, code, out):
+                log_event(r.pop("event"), **r)
+        else:
+            ace_trace_queue.spawn_replay(cwd=os.getcwd())
+    except Exception:
+        pass
+    return parsed, ms
+
+
+def learn_once(trace, *, retrieval_id=None, applied_log_ids=None, org=None, project=None, verbosity='detailed',
+               timeout=60, hook_event_name="replay", idempotency_key=None):
+    """One send for the queue replay, no queueing of its own: (exit_code_or_None, output)."""
+    _p, _ms, code, out = _learn(trace, retrieval_id=retrieval_id, applied_log_ids=applied_log_ids, org=org,
+                                project=project, verbosity=verbosity, timeout=timeout,
+                                hook_event_name=hook_event_name, idempotency_key=idempotency_key)
+    return code, out
+
+
+def _learn(trace, *, retrieval_id, applied_log_ids, org, project, verbosity, timeout, hook_event_name, idempotency_key):
+    """(parsed_or_None, ms, exit_code_or_None, output) of one send.
 
     The engine falls back to ace-cli only when it exited 3 (nothing sent) or could not spawn.
-
-    The trace goes through a temp file (learn --stdin breaks above ~64KB pipe
-    buffer); the file is always removed. Returns (parsed_json_or_None, ms).
-    """
+    The trace goes through a temp file (learn --stdin breaks above ~64KB pipe buffer); the file is removed
+    only after the spawn returned (subprocess.run waits for the reader), never before."""
     t0 = time.monotonic()
     try:  # plugin-data tmp (S10), so a SIGKILLed learn leaves nothing in the system tmp
         import plugin_data_dir
         _tmp = str(plugin_data_dir.private_dir(plugin_data_dir.data_root() / 'tmp'))  # §24: traces hold prompts
     except Exception as e:  # never the system tmp: the trace holds the prompt (hard rule, §24)
         _log_engine("lib", "learn skipped: no private tmp dir: %s" % str(e)[:200], hook_event_name, ok=False, ms=_ms(t0))
-        return None, _ms(t0)
+        return None, _ms(t0), None, 'nothing sent: no private tmp dir'
     fd, path = tempfile.mkstemp(prefix='ace-trace-', suffix='.json', dir=_tmp)
     retries, sent = [], False
     try:
@@ -418,7 +452,7 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
         def spawn(node, to):
             cmd = ace_engine.learn_command(path, retrieval_id=retrieval_id, applied_log_ids=applied_log_ids,
                                            verbosity=verbosity, timeout=timeout, node=node, cli=None if node else _cmd(),
-                                           ids=_ids(org, project))
+                                           ids=_ids(org, project), idempotency_key=idempotency_key)
             r = subprocess.run(cmd, text=True, capture_output=True, timeout=to, env=_env(org, project))
             retries.extend(learn_retries(r.stderr, 'lib' if node else 'cli'))
             return r
@@ -445,27 +479,28 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
         if result is None:
             _log_engine("cli", reason, hook_event_name)
             result = spawn(None, timeout)
+        out = _text(result.stdout) + '\n' + _text(result.stderr)
         if result.returncode != 0:
             _log_cli_error("ace_cli_learn_nonzero_exit", result.returncode, _text(result.stdout),
                            clean_stderr(_text(result.stderr)), project_id=project, hook_event_name=hook_event_name)
-            return None, _ms(t0)
+            return None, _ms(t0), result.returncode, out
         try:
             parsed = json.loads(result.stdout)
             sent = True
-            return parsed, _ms(t0)
+            return parsed, _ms(t0), 0, out
         except (json.JSONDecodeError, TypeError) as _je:
             _log_cli_error("ace_cli_learn_json_parse_failed", result.returncode,
                            _text(result.stdout), _text(result.stderr), project_id=project,
                            hook_event_name=hook_event_name, extra={"parse_error": str(_je)[:200]})
-            return None, _ms(t0)
+            return None, _ms(t0), 0, out  # exit 0: the CLI says it sent; never queued
     except subprocess.TimeoutExpired:
         _log_cli_error("ace_cli_learn_timeout", -1, '', '', project_id=project,
                        hook_event_name=hook_event_name)
-        return None, _ms(t0)
+        return None, _ms(t0), None, 'timeout'
     except FileNotFoundError:
         _log_cli_error("ace_cli_learn_not_found", -1, '', '', project_id=project,
                        hook_event_name=hook_event_name)
-        return None, _ms(t0)
+        return None, _ms(t0), None, 'cli_not_found'
     finally:
         try:
             os.unlink(path)
