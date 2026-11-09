@@ -43,12 +43,15 @@ function parse(text: string): Raw[] {
 
 // Nothing leaves as plain text: the raw text is redacted, then a fail-closed rule redacts from any secret-key word through a ':' or '='
 // (scope lists, brackets and punctuation in between) to the end of the line, then redact runs again (normalizing can create a new match).
-const KEY_RE = /(?:pass(?:word|wd)?|pwd|secret|token|api[-_ ]?key|access[-_ ]?key|private[-_ ]?key|credential|bearer)[^:=\n]{0,40}[:=][^\n]*/gi
+const KEY_RE = /(?:pass(?:word|wd)?|pwd|secret|token|api[-_ ]?key|access[-_ ]?key|private[-_ ]?key|credential|bearer|authorization|cookie|session|\w[_-]key\b)[^:=\n]*[:=][^\n]*/gi
 function safeText(s: string): string {
   const once = (x: string) => redact(x).replace(KEY_RE, '[redacted]')
   return once(once(s))
 }
 
+function normalize(s: string): string {
+  return s.replace(/^\w+\(([^)]*)\)\s*!?\s*:/, '$1:').replace(/\(([^)]*)\)\s*!?\s*:/g, ' $1:')
+}
 // "fix(auth)!: msg (#42)" -> "auth: msg"; other subjects only lose a trailing "(#N)".
 function clean(subject: string): string {
   const s = subject.replace(/\s*\(#\d+\)\s*$/, '')
@@ -62,7 +65,7 @@ const isTrivial = (s: string) => s.length < 12 || TRIVIAL_RE.test(s)
 export function readGitLog(text: string, o: Opts): GitTask[] {
   const raws = parse(text).filter(r => FIX_RE.test(r.subject) && !isTrivial(r.subject))
   const tasks: (GitTask & { _s: string })[] = raws.map(r => ({
-    key: gitTaskKey(o.projectId, r.sha), sha: r.sha, task: safeText(clean(safeText(r.subject.replace(/^\w+\(([^)]*)\)\s*!?\s*:/, '$1:').replace(/\(([^)]*)\)\s*!?\s*:/g, ' $1:')))), steps: r.files.map(f => redact(f)),
+    key: gitTaskKey(o.projectId, r.sha), sha: r.sha, task: safeText(clean(safeText(normalize(safeText(r.subject))))), steps: r.files.map(f => safeText(f)),
     success: !REVERT_RE.test(r.subject), failedThenFixed: false, decisive: 0, endMs: r.ms, _s: r.subject }))
   // revert pairing: the sha in "This reverts commit <sha>" wins, else the quoted subject; only commits in the window pair
   raws.forEach(r => {
