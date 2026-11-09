@@ -57,7 +57,7 @@ export function batches(items: Item[]): { batches: Item[][], skipped: number } {
 }
 
 export type Class =
-  | { kind: 'accepted', job_id: string, accepted: number, duplicates: number, statusUrl: string }
+  | { kind: 'accepted', job_id: string, accepted: number, duplicates: number, statusUrl: string, poll: boolean }
   | { kind: 'capability_off' }
   | { kind: 'too_large', code: string, limit: number }
   | { kind: 'invalid', status: number, detail: string }
@@ -78,7 +78,8 @@ export function classify(status: number, body: unknown, nowMs: number = Date.now
   const j = obj(body)
   if (status === 202) {
     const id = str(j.job_id, 100)
-    return id ? { kind: 'accepted', job_id: id, accepted: num(j.accepted), duplicates: num(j.duplicates), statusUrl: str(j.status_url) } : { kind: 'retry', status }
+    // accepted 0 = the batch held only duplicates: already submitted, and GET on that job id answers 404, so the caller must not poll
+    return id ? { kind: 'accepted', job_id: id, accepted: num(j.accepted), duplicates: num(j.duplicates), statusUrl: str(j.status_url), poll: num(j.accepted) > 0 } : { kind: 'retry', status }
   }
   if (status === 404) return { kind: 'capability_off' }
   if (status === 413) return { kind: 'too_large', code: str(j.code, 60), limit: num(j.limit) }
