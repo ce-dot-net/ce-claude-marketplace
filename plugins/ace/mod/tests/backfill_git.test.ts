@@ -115,3 +115,10 @@ test('a key-prefixed subject is redacted before the prefix is cleaned (plain and
   const scoped = readGitLog(c(S3, '2026-03-02T10:00:00Z', 'fix(DB_PASSWORD): hunter2 leaked in the logger'), { projectId: 'prj' })
   expect(JSON.stringify([plain, keyed, scoped])).not.toContain('hunter2')
 })
+
+test('scope punctuation never hides a key from redaction, for any type (hotfix, bug, bugfix, regression, with !)', () => {
+  const subs = ['hotfix(DB_PASSWORD): hunter2 leaked', 'bug(API_KEY)!: hunter2 leaked', 'bugfix(TOKEN) : hunter2 leaked', 'regression(SECRET)!:hunter2 in logs']
+  const r = subs.flatMap((s, i) => readGitLog(c(String(i).repeat(40), '2026-03-02T10:00:00Z', s), { projectId: 'prj' }))
+  expect(r.length).toBe(4)
+  expect(JSON.stringify(r)).not.toContain('hunter2')
+})

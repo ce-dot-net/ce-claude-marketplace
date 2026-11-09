@@ -54,7 +54,7 @@ const isTrivial = (s: string) => s.length < 12 || TRIVIAL_RE.test(s)
 export function readGitLog(text: string, o: Opts): GitTask[] {
   const raws = parse(text).filter(r => FIX_RE.test(r.subject) && !isTrivial(r.subject))
   const tasks: (GitTask & { _s: string })[] = raws.map(r => ({
-    key: gitTaskKey(o.projectId, r.sha), sha: r.sha, task: redact(clean(redact(r.subject))), steps: r.files.map(f => redact(f)),
+    key: gitTaskKey(o.projectId, r.sha), sha: r.sha, task: redact(clean(redact(r.subject.replace(/^\w+\(([^)]*)\)\s*!?\s*:/, '$1:')))), steps: r.files.map(f => redact(f)),
     success: !REVERT_RE.test(r.subject), failedThenFixed: false, decisive: 0, endMs: r.ms, _s: r.subject }))
   // revert pairing: the sha in "This reverts commit <sha>" wins, else the quoted subject; only commits in the window pair
   raws.forEach(r => {
