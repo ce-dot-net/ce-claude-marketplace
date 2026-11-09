@@ -1,6 +1,6 @@
 // 8.2.0 backfill orchestration with every I/O faked (post, get, sleep, now, ledger store): flow, stops, polling, ledger writes.
 import { expect, test } from 'claude-code/testing'
-import { buildItems, DEFAULT_LIMIT, MAX_LIMIT, previewLines, runBackfill, parseLimit, type Deps } from '../lib/backfill_run.ts'
+import { buildItems, DEFAULT_LIMIT, MAX_LIMIT, previewLines, runBackfill, parseLimit, stepBackfill, newRun, runActive, startLine, RUN_TTL_MS, type Deps } from '../lib/backfill_run.ts'
 import { emptyLedger, add, parse, serialize, statusOf, type Ledger } from '../lib/ledger.ts'
 
 const K = (n: number) => 'bootstrap:' + n.toString(16).padStart(32, '0')
@@ -190,4 +190,28 @@ test('previewLines: counts, cap, duration (70 s per trace), data-leaves sentence
   for (const x of ['60', '70', '4', '100', 'Stunden', 'verlassen den Rechner']) expect(on).toContain(x)
   expect(previewLines(b, { flag: false, limit: 100 }).join('\n')).toBe('Backfill: Server unterstützt es noch nicht')
   expect(previewLines({ items: [], sessionTasks: 0, gitTasks: 0, skipped: 0 }, { flag: true, limit: 100 }).join('\n')).toContain('0 Aufgaben')
+})
+
+test('stepBackfill: one GET per step, the state is plain JSON between steps (a reload continues from it), never more than one poll per call', async () => {
+  const all = items(2)
+  const f = fake({ posts: [acc('j', 2)], gets: [ok(200, { state: 'processing', items: [] }), ok(200, { state: 'processing', items: [] }), ok(200, jobBody(all.map(i => i.idempotency_key)))] })
+  let st = newRun(2, 1)
+  expect((await stepBackfill(all, st, f.d)).done).toBe(false)
+  expect(f.log.filter(x => x.startsWith('get:')).length).toBe(1)
+  st = JSON.parse(JSON.stringify(st))                 // the marker round trip
+  expect((await stepBackfill(all, st, f.d)).done).toBe(false)
+  st = JSON.parse(JSON.stringify(st))
+  expect(f.log.filter(x => x.startsWith('get:')).length).toBe(2)
+  expect((await stepBackfill(all, st, f.d)).done).toBe(true)
+  expect(f.posted.length).toBe(1)                     // the resumed steps never re-post the batch
+  expect(st.report.sent).toBe(2)
+  expect(st.report.finished).toBe(true)
+})
+
+test('run marker: active within 3 h of the last beat, stale after; start line has count and minutes', () => {
+  expect(runActive({ beat: 1000 }, 1000 + RUN_TTL_MS - 1)).toBe(true)
+  expect(runActive({ beat: 1000 }, 1000 + RUN_TTL_MS)).toBe(false)
+  expect(runActive(null, 5)).toBe(false)
+  expect(runActive({ beat: 'x' }, 5)).toBe(false)
+  expect(startLine(100)).toBe('Backfill gestartet: 100 Aufgaben, läuft im Hintergrund (ca. 117 Min). Ergebnis folgt als Meldung.')
 })
