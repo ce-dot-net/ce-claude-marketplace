@@ -7,6 +7,7 @@ import { REMOVE_SHADOW_SH, REPO_WRITE_WHY } from '../lib/sh.ts'
 import { run } from '../io/fs.ts'
 import { cliRun, cap } from '../io/cli.ts'
 import { installer } from '../io/installer.ts'
+import { execExport, execPending } from '../io/pending.ts'
 import { type Load } from '../io/state.ts'
 import { CLIENT_POLICY_FILE, clientPolicyBand } from '../lib/cohort.ts'
 import { readText } from '../io/fs.ts'
@@ -76,19 +77,13 @@ export async function runPending($: any, L: Load, p: any) {
   if (p.kind === 'login') return startLogin($, L)
   if (p.kind === 'install') return install($, L)
   if (p.kind === 'export') return exportTo($, L, p.path)
-  const r = p.kind === 'exec' ? await run($, p.argv, { timeoutMs: 30_000 }) : await cliRun($, c, p.argv, { stdin: p.stdin, timeoutMs: 300_000, cwd: c?.root })
-  const ok = r && r.exitCode === 0
-  $.ui.toast(`ACE: ${p.label} ${ok ? 'erledigt' : `fehlgeschlagen (exit ${r?.exitCode})`}`)
-  const out = String((ok ? r?.stdout : r?.stderr) ?? '').trim()
-  if (out) $.ui.log(cap(out, 2000))
+  const d = await execPending($, c, p)
+  $.ui.toast(d.toast)
+  if (d.out) $.ui.log(d.out)
 }
-// export: stdout of `ace-cli export`, written inside the repo root through REPO_WRITE_SH (no symlink, never outside).
+// export: see io/pending.ts execExport (stdout of `ace-cli export`, written inside the repo root).
 export async function exportTo($: any, L: Load, rel: string) {
-  const c: any = L.ctx
-  const r = await cliRun($, c, ['export', ...cliIds(c)], { timeoutMs: 120_000, cwd: c.root })
-  if (r.exitCode !== 0) { $.ui.toast(`ACE: Export fehlgeschlagen (exit ${r.exitCode})`); return }
-  try { await repoWrite((argv, init) => run($, argv, init), c.root, rel, r.stdout) } catch (err) { $.ui.toast(`ACE: Export nicht geschrieben (${String((err as Error).message).slice(0, 120)})`); return }
-  $.ui.toast(`ACE: exportiert nach ${c.root}/${rel}`)
+  $.ui.toast((await execExport($, L.ctx, rel)).toast)
 }
 export async function startLogin($: any, L: Load) {
   $.ui.toast('ACE: Login im Browser bestätigen')

@@ -17,6 +17,7 @@ export type AcePending = {
   path?: string
   argv?: string[]
   stdin?: string
+  report?: string  // 8.2.0 kind 'cli': the NAME of a result formatter (lib/reports.ts reportLine); absent = the raw stdout
   orgId?: string
   projectId?: string
 } | null
