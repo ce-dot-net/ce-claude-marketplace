@@ -135,7 +135,8 @@ export async function resumeBackfill($: any): Promise<void> {
 }
 // The backfill phase after a confirmed bootstrap: flag on, engine there, resume time passed, no run active, then the run is STARTED
 // (marker + first tick) and the command returns at once; the result arrives as a toast and a log line. Returns the lines to show.
-export async function backfillPhase($: any, c: C, o: { days: number, limit: number }): Promise<string[]> {
+export async function backfillPhase($: any, bound: C, o: { days: number, limit: number, project?: string, org?: string }): Promise<string[]> {
+  const c: C = { ...bound, projectId: o.project ?? bound.projectId, orgId: o.org ?? bound.orgId }  // --target-project: only the destination changes (ledger, keys, engine args, marker)
   if (!await flagOn($, c.root)) return ['Backfill: Server unterstützt es noch nicht']
   const script = await engineScript($, 'backfill.js')
   if (!script) return ['Backfill: Engine nicht verfügbar (engine/backfill.js fehlt oder ACE_ENGINE=cli), nichts gesendet']

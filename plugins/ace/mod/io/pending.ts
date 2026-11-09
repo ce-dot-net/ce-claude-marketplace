@@ -9,8 +9,9 @@ import { reportLine } from '../lib/reports.ts'
 export type Done = { ok: boolean, toast: string, out: string }
 // kind cli | exec. The result line: `<label> erledigt` / `fehlgeschlagen (exit N)`; out = the named report line, else stdout/stderr (2000 chars).
 export async function execPending($: any, c: any, p: any): Promise<Done> {
-  const r = p.kind === 'exec' ? await run($, p.argv, { timeoutMs: 30_000 }) : await cliRun($, c, p.argv, { stdin: p.stdin, timeoutMs: 300_000, cwd: c?.root })
-  const ok = !!r && r.exitCode === 0
+  const only = p.kind === 'cli' && p.backfill?.only === true  // --backfill-only: the legacy CLI bootstrap never runs
+  const r = only ? null : p.kind === 'exec' ? await run($, p.argv, { timeoutMs: 30_000 }) : await cliRun($, c, p.argv, { stdin: p.stdin, timeoutMs: 300_000, cwd: c?.root })
+  const ok = only || (!!r && r.exitCode === 0)
   const raw = String((ok ? r?.stdout : r?.stderr) ?? '').trim()
   const rep = ok && p.report ? reportLine(String(p.report), raw) : undefined
   let out = rep ?? (raw ? cap(raw, 2000) : '')
@@ -18,7 +19,7 @@ export async function execPending($: any, c: any, p: any): Promise<Done> {
     const bf = await backfillPhase($, c, p.backfill).catch(err => [`Backfill: Fehler ${String(err).slice(0, 160)}`])
     out = [out, ...bf].filter(Boolean).join('\n')
   }
-  return { ok, toast: `ACE: ${p.label} ${ok ? 'erledigt' : `fehlgeschlagen (exit ${r?.exitCode})`}`, out }
+  return { ok, toast: only ? `ACE: ${p.label}` : `ACE: ${p.label} ${ok ? 'erledigt' : `fehlgeschlagen (exit ${r?.exitCode})`}`, out }
 }
 // export: stdout of `ace-cli export`, written inside the repo root through REPO_WRITE_SH (no symlink, never outside).
 export async function execExport($: any, c: any, rel: string): Promise<Done> {
