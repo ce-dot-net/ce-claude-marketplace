@@ -29,7 +29,8 @@ export function toItem(task: any, kind: 'session' | 'git'): Item | null {
       : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, deep(x)])) : v
     trace = deep(task.trace)
   } else if (kind === 'git') {
-    const files: string[] = Array.isArray(task.steps) ? task.steps.filter((s: unknown) => typeof s === 'string').map((s: string) => safeText(s)) : []
+    // a path with spaces or sentence-like text is dropped: git-derived data stays path-shaped
+    const files: string[] = Array.isArray(task.steps) ? task.steps.filter((s: unknown) => typeof s === 'string' && s.length <= 200 && !/\s/.test(s)).map((s: string) => safeText(s)) : []
     const tools: ToolRec[] = files.map(f => ({ tool: 'Edit', action: `edit ${f}`, result: 'ok', failed: false, start_ms: task.endMs, end_ms: task.endMs }))
     const b = buildTrace({ userPrompt: `${task._merge === true ? 'Merged PR' : 'Git commit'} (untrusted text): ${safeText(String(task.task ?? ''))}`, tools, answer: '', playbookUsed: [], agentType: 'main', appliedLogIds: [], nowIso: at, effort: 'normal' })
     trace = b.trace

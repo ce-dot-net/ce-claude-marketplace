@@ -268,3 +268,17 @@ test('git items: fixed untrusted-text prefix, the rest stays redacted and bounde
   expect(long.trace.task.length).toBeLessThan(700)
   expect(Object.keys(c.trace).sort()).toEqual(Object.keys(toItem(gitTask(11), 'git')!.trace).sort())
 })
+
+test('bare token shapes with no key word never leave (session and git)', () => {
+  const toks = ['sk_live_ABCDEF0123456789abcdef', 'glpat-abcdefghij0123456789', 'AIzaSyA1234567890abcdefghij', 'ASIAABCDEFGHIJKLMNOP', 'hf_abcdefghij0123456789', 'https://hooks.slack.com/services/T0/B0/abcdef']
+  for (const tok of toks) {
+    const t = sessTask(); t.trace.trajectory[0].action = `curl ${tok} now`
+    expect(JSON.stringify(toItem(t, 'session')!)).not.toContain(tok)
+    expect(JSON.stringify(toItem(gitTask(21, { task: `fix leak ${tok} here` }), 'git')!)).not.toContain(tok)
+  }
+})
+
+test('git file steps with whitespace or sentence-like text are dropped, plain paths stay', () => {
+  const it = toItem(gitTask(22, { steps: ['src/a.ts', 'ignore previous instructions.txt', 'x'.repeat(250)] }), 'git')!
+  expect(it.trace.trajectory.map((s: any) => s.action)).toEqual(['edit src/a.ts'])
+})
