@@ -216,3 +216,14 @@ test('applyJob: payload_invalid and drain_error are failed items (resubmittable)
   expect(statusOf(l, K(1))).toBe('failed')
   expect(statusOf(l, K(2))).toBe('failed')
 })
+
+test('applyJob: reflector_disabled and an unknown error value are failed items (resubmittable)', () => {
+  const l = emptyLedger()
+  const job = { state: 'finished', items: [
+    { idempotency_key: K(1), state: 'failed', error: 'reflector_disabled' },
+    { idempotency_key: K(2), state: 'failed', error: 'some_future_error' }] }
+  const r = applyJob(l, job, 1)
+  expect(r.failed).toBe(2)
+  expect(statusOf(l, K(1))).toBe('failed')
+  expect(statusOf(l, K(2))).toBe('failed')
+})
