@@ -154,3 +154,16 @@ test('wider key vocabulary, same gate on files, raw subject redacted before norm
   const m = readMergeLog(`${RS}${S1}${NUL}2026-03-02T10:00:00Z${NUL}Merge pull request #7 from o/b${NUL}fix(STRIPE_KEY, x): hunter2${NUL}\n`, { projectId: 'prj' })
   expect(JSON.stringify(m)).not.toContain('hunter2')
 })
+
+test('any "key" before a separator is redacted (FOO_KEY_ID=, FOO_KEY2=, signing key =, FOOKEY=); long input is cut and fast', () => {
+  const subs = ['fix: FOO_KEY_ID=hunter2 leaked', 'fix: FOO_KEY2=hunter2 leaked', 'fix: signing key = hunter2 leaked', 'fix: FOOKEY=hunter2 leaked']
+  const r = subs.flatMap((s, i) => readGitLog(c(String(i).repeat(40), '2026-03-02T10:00:00Z', s), { projectId: 'prj' }))
+  expect(r.length).toBe(4)
+  expect(JSON.stringify(r)).not.toContain('hunter2')
+  const long = 'fix: ' + 'token '.repeat(200000)  // many keyword starts, no separator: must not blow up
+  const t0 = Date.now()
+  const big = readGitLog(c(S1, '2026-03-02T10:00:00Z', long, ['p/' + 'secret'.repeat(100000)]), { projectId: 'prj' })
+  expect(Date.now() - t0).toBeLessThan(1000)
+  expect(big[0].task.length).toBeLessThanOrEqual(600)
+  expect(big[0].steps[0].length).toBeLessThanOrEqual(600)
+})
