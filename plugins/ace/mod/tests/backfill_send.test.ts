@@ -193,3 +193,26 @@ test('ledger cap fits the 4 MiB file limit: a full ledger serializes under 3 MiB
   for (let i = 0; i < MAX_KEYS; i++) l.entries.set(K(i), { status: 'skipped-failed', atMs: 1_800_000_000_000, attempts: 3 })
   expect(new TextEncoder().encode(serialize(l, 'per-install-secret')).length).toBeLessThan(3 * 1024 * 1024)
 })
+
+test('classify 202 with accepted 0 (only duplicates): already submitted, never poll (the job id answers 404)', () => {
+  const c: any = classify(202, { job_id: 'j1', accepted: 0, duplicates: 3, status_url: '/traces/backfill/j1' }, NOW)
+  expect(c.kind).toBe('accepted')
+  expect(c.poll).toBe(false)
+  const m: any = classify(202, { job_id: 'j2', accepted: 2, duplicates: 1, status_url: '/traces/backfill/j2' }, NOW)
+  expect(m.poll).toBe(true)
+})
+
+test('classify 503 backfill_unavailable is temporary (retry), not capability off', () => {
+  expect(classify(503, '{"error":"backfill_unavailable"}', NOW)).toEqual({ kind: 'retry', status: 503 })
+})
+
+test('applyJob: payload_invalid and drain_error are failed items (resubmittable), not skipped-failed', () => {
+  const l = emptyLedger()
+  const job = { state: 'finished', items: [
+    { idempotency_key: K(1), state: 'failed', error: 'payload_invalid' },
+    { idempotency_key: K(2), state: 'failed', error: 'drain_error' }] }
+  const r = applyJob(l, job, 1)
+  expect(r.failed).toBe(2)
+  expect(statusOf(l, K(1))).toBe('failed')
+  expect(statusOf(l, K(2))).toBe('failed')
+})
