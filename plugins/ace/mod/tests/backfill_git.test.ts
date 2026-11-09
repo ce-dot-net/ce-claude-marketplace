@@ -130,3 +130,17 @@ test('redaction normalizes every parenthesized scope anywhere in the subject (re
   expect(r.length).toBe(subs.length)
   expect(JSON.stringify(r)).not.toContain('hunter2')
 })
+
+test('fail closed: a secret-key word before : or = redacts to the end of the line, however the subject is shaped', () => {
+  const subs = ['fix(core, DB_PASSWORD, x): hunter2 leaked', 'fix((API_KEY)): hunter2 leaked', 'fix(core): API_KEY=hunter2 leaked',
+    'fix: password reset - token = hunter2 leaked', 'fix(x): see https://u:hunter2@host/p for the bug']
+  const r = subs.flatMap((s, i) => readGitLog(c(String(i).repeat(40), '2026-03-02T10:00:00Z', s), { projectId: 'prj' }))
+  expect(r.length).toBe(subs.length)
+  expect(JSON.stringify(r)).not.toContain('hunter2')
+  expect(readMergeLog(`${RS}${S1}${NUL}2026-03-02T10:00:00Z${NUL}Merge pull request #7 from o/b${NUL}fix API_KEY: hunter2${NUL}\n`, { projectId: 'prj' }).map(t => t.task).join()).not.toContain('hunter2')
+})
+
+test('benign subjects keep their text', () => {
+  const r = readGitLog(c(S1, '2026-03-02T10:00:00Z', 'fix(auth): refresh expiry off by one'), { projectId: 'prj' })
+  expect(r[0].task).toBe('auth: refresh expiry off by one')
+})

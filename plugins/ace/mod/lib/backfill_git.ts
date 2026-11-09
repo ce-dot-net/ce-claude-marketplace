@@ -41,6 +41,14 @@ function parse(text: string): Raw[] {
   return out
 }
 
+// Nothing leaves as plain text: the raw text is redacted, then a fail-closed rule redacts from any secret-key word through a ':' or '='
+// (scope lists, brackets and punctuation in between) to the end of the line, then redact runs again (normalizing can create a new match).
+const KEY_RE = /(?:pass(?:word|wd)?|pwd|secret|token|api[-_ ]?key|access[-_ ]?key|private[-_ ]?key|credential|bearer)[^:=\n]{0,40}[:=][^\n]*/gi
+function safeText(s: string): string {
+  const once = (x: string) => redact(x).replace(KEY_RE, '[redacted]')
+  return once(once(s))
+}
+
 // "fix(auth)!: msg (#42)" -> "auth: msg"; other subjects only lose a trailing "(#N)".
 function clean(subject: string): string {
   const s = subject.replace(/\s*\(#\d+\)\s*$/, '')
@@ -54,7 +62,7 @@ const isTrivial = (s: string) => s.length < 12 || TRIVIAL_RE.test(s)
 export function readGitLog(text: string, o: Opts): GitTask[] {
   const raws = parse(text).filter(r => FIX_RE.test(r.subject) && !isTrivial(r.subject))
   const tasks: (GitTask & { _s: string })[] = raws.map(r => ({
-    key: gitTaskKey(o.projectId, r.sha), sha: r.sha, task: redact(clean(redact(r.subject.replace(/^\w+\(([^)]*)\)\s*!?\s*:/, '$1:').replace(/\(([^)]*)\)\s*!?\s*:/g, ' $1:')))), steps: r.files.map(f => redact(f)),
+    key: gitTaskKey(o.projectId, r.sha), sha: r.sha, task: safeText(clean(safeText(r.subject.replace(/^\w+\(([^)]*)\)\s*!?\s*:/, '$1:').replace(/\(([^)]*)\)\s*!?\s*:/g, ' $1:')))), steps: r.files.map(f => redact(f)),
     success: !REVERT_RE.test(r.subject), failedThenFixed: false, decisive: 0, endMs: r.ms, _s: r.subject }))
   // revert pairing: the sha in "This reverts commit <sha>" wins, else the quoted subject; only commits in the window pair
   raws.forEach(r => {
@@ -76,7 +84,7 @@ export function readMergeLog(text: string, o: Opts): GitTask[] {
     if (!/^Merge pull request #\d+/i.test(r.subject)) continue
     const title = (r.body.split('\n').find(l => l.trim()) ?? '').trim()
     if (isTrivial(title)) continue
-    tasks.push({ key: gitTaskKey(o.projectId, r.sha), sha: r.sha, task: redact(title), steps: [], success: true, failedThenFixed: false, decisive: 0, endMs: r.ms })
+    tasks.push({ key: gitTaskKey(o.projectId, r.sha), sha: r.sha, task: safeText(title), steps: [], success: true, failedThenFixed: false, decisive: 0, endMs: r.ms })
   }
   tasks.sort((a, b) => b.endMs - a.endMs)
   return tasks.slice(0, o.limit === undefined ? tasks.length : Math.max(0, Math.floor(o.limit)))
