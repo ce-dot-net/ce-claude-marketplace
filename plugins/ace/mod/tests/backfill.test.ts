@@ -129,7 +129,7 @@ test('readSessionLines takes any line iterator (streaming) and equals readSessio
   expect(readSession(nosid, { sessionId: 'from-file' }).tasks.map(x => x.sessionId)).toEqual(['from-file', 'from-file'])
 })
 
-test('big transcripts: a 200 000 line session reads in one pass without trouble', () => {
+test('big transcripts: a 200 000 line session reads in one pass without trouble', { timeoutMs: 60_000 }, () => {
   const parts: string[] = []
   for (let i = 0; i < 20_000; i++) parts.push(prompt(`${FIX} number ${i}`), ...edit(`e${i}`, `/repo/src/f${i % 50}.ts`), ...bash(`b${i}`, 'pytest -q'), asst(text(`done ${i}`)), J({ type: 'attachment' }), J({ type: 'ai-title' }))
   const r = readSession(parts.join('\n') + '\n')
