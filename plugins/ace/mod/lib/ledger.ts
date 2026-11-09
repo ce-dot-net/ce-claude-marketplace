@@ -8,7 +8,7 @@ export type Status = 'sent' | 'failed' | 'skipped' | 'skipped-failed'
 export type Entry = { status: Status, atMs: number, attempts: number }
 export type Ledger = { entries: Map<string, Entry>, dropped: number }
 
-export const MAX_KEYS = 50000
+export const MAX_KEYS = 20000   // $.fs read/write cap 4 MiB per file: 20000 lines (~140 B each) ~ 2.8 MB
 export const MAX_ATTEMPTS = 3
 const MAX_LINES = MAX_KEYS * 2   // bound on lines examined per parse, duplicates included
 const MAX_LINE = 300

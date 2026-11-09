@@ -1,0 +1,195 @@
+// 8.2.0 backfill send helpers (pure, unwired): task -> server item, batching, response classification, job status -> ledger.
+import { expect, test } from 'claude-code/testing'
+import { applyJob, batches, classify, reportLine, toItem } from '../lib/backfill_send.ts'
+import { add, emptyLedger, MAX_ATTEMPTS, MAX_KEYS, serialize, statusOf } from '../lib/ledger.ts'
+import { readSession } from '../lib/backfill.ts'
+
+const K = (n: number) => 'bootstrap:' + n.toString(16).padStart(32, '0')
+const gitTask = (n: number, over: any = {}) => ({ key: K(n), sha: 'a'.repeat(40), task: 'Fix crash on empty file', steps: ['src/p.ts', 'tests/p.test.ts'],
+  success: true, failedThenFixed: false, decisive: 0, endMs: Date.parse('2026-10-01T12:00:00Z'), ...over })
+
+test('git task -> item with a live-shaped trace and no session fields', () => {
+  const it = toItem(gitTask(1), 'git')!
+  expect(it.idempotency_key).toBe(K(1))
+  expect(it.occurred_at).toBe('2026-10-01T12:00:00.000Z')
+  const t = it.trace
+  expect(t.task).toBe('User request: Fix crash on empty file')
+  expect(t.trajectory.map((s: any) => s.action)).toEqual(['edit src/p.ts', 'edit tests/p.test.ts'])
+  expect(t.trajectory[0].step).toBe(1)
+  expect(t.result.success).toBe(true)
+  for (const f of ['session_id', 'retrieval_id', 'conversation_id', 'agent_id']) expect(f in t).toBe(false)
+  expect(t.playbook_used).toEqual([])
+  expect(t.applied_log_ids).toEqual([])
+})
+
+test('a reverted git task is a failure', () => {
+  expect(toItem(gitTask(2, { success: false }), 'git')!.trace.result.success).toBe(false)
+})
+
+test('git task with a secret in the task text stays redacted', () => {
+  const it = toItem(gitTask(3, { task: 'rotate password=hunter2secret now' }), 'git')!
+  expect(JSON.stringify(it)).not.toContain('hunter2secret')
+})
+
+test('session task keeps its own trace, key from the task, no session_id', () => {
+  const lines = [
+    { type: 'user', sessionId: 's1', timestamp: '2026-10-01T10:00:00Z', message: { content: 'Add a retry to the uploader please' } },
+    { type: 'assistant', timestamp: '2026-10-01T10:00:05Z', message: { content: [{ type: 'tool_use', id: 't1', name: 'Edit', input: { file_path: '/p/up.ts', old_string: 'a', new_string: 'b' } }] } },
+    { type: 'user', timestamp: '2026-10-01T10:00:06Z', message: { content: [{ type: 'tool_result', tool_use_id: 't1', content: 'ok' }] } },
+    { type: 'assistant', timestamp: '2026-10-01T10:00:09Z', message: { content: [{ type: 'text', text: 'Done.' }] } },
+  ].map(l => JSON.stringify(l)).join('\n')
+  const r = readSession(lines)
+  expect(r.tasks.length).toBe(1)
+  const task: any = { ...r.tasks[0], key: K(9) }
+  const it = toItem(task, 'session')!
+  expect(it.idempotency_key).toBe(K(9))
+  expect(it.occurred_at).toBe(new Date(task.endMs).toISOString())
+  expect('session_id' in it.trace).toBe(false)
+  expect(it.trace.playbook_used).toEqual([])
+})
+
+test('toItem refuses bad key, bad time, bad kind (never emits NaN)', () => {
+  expect(toItem(gitTask(1, { key: 'nope' }), 'git')).toBe(null)
+  expect(toItem(gitTask(1, { key: undefined }), 'git')).toBe(null)
+  expect(toItem(gitTask(1, { endMs: NaN }), 'git')).toBe(null)
+  expect(toItem(gitTask(1, { endMs: 9e18 }), 'git')).toBe(null)
+  expect(toItem(gitTask(1, { endMs: 0 }), 'git')).toBe(null)
+  expect(toItem(gitTask(1), 'other' as any)).toBe(null)
+  expect(toItem(null as any, 'git')).toBe(null)
+})
+
+const item = (n: number, pad = 0) => ({ idempotency_key: K(n), occurred_at: '2026-10-01T12:00:00.000Z', trace: { task: 'x'.repeat(pad) } })
+
+test('batches: at most 20 per batch, order kept', () => {
+  const r = batches(Array.from({ length: 45 }, (_, i) => item(i)))
+  expect(r.batches.map(b => b.length)).toEqual([20, 20, 5])
+  expect(r.skipped).toBe(0)
+  expect(r.batches[1][0].idempotency_key).toBe(K(20))
+})
+
+test('batches: body stays under 5242880 bytes; an oversize item is skipped and counted', () => {
+  const big = 2_000_000
+  const r = batches([item(1, big), item(2, big), item(3, big), item(4, 6_000_000), item(5)])
+  expect(r.skipped).toBe(1)
+  expect(r.batches.flat().some(i => i.idempotency_key === K(4))).toBe(false)
+  for (const b of r.batches) expect(new TextEncoder().encode(JSON.stringify({ source: 'bootstrap', items: b })).length <= 5242880).toBe(true)
+  expect(r.batches.flat().length).toBe(4)
+})
+
+test('batches: multibyte text is measured in bytes', () => {
+  const it = { idempotency_key: K(1), occurred_at: '2026-10-01T12:00:00.000Z', trace: { task: '€'.repeat(1_800_000) } }  // 5.4 MB in UTF-8, 1.8M chars
+  const r = batches([it])
+  expect(r.skipped).toBe(1)
+  expect(r.batches.length).toBe(0)
+})
+
+test('batches: a duplicate key inside the input is skipped (server would 422 the batch)', () => {
+  const r = batches([item(1), item(1), item(2)])
+  expect(r.batches.flat().length).toBe(2)
+  expect(r.skipped).toBe(1)
+})
+
+test('batches: empty and garbage input', () => {
+  expect(batches([]).batches).toEqual([])
+  expect(batches(null as any)).toEqual({ batches: [], skipped: 0 })
+})
+
+const NOW = Date.parse('2026-10-01T15:30:00Z')
+test('classify 202', () => {
+  const c: any = classify(202, '{"job_id":"j1","accepted":3,"duplicates":1,"status_url":"/traces/backfill/j1"}', NOW)
+  expect(c).toMatchObject({ kind: 'accepted', job_id: 'j1', accepted: 3, duplicates: 1 })
+})
+test('classify 202 without job_id is a retry, not an accept', () => {
+  expect(classify(202, '{}', NOW).kind).toBe('retry')
+})
+test('classify 404 = capability off', () => { expect(classify(404, '{}', NOW).kind).toBe('capability_off') })
+test('classify 413 keeps code and limit', () => {
+  expect(classify(413, '{"error":"payload_too_large","code":"backfill_batch_too_large","limit":20}', NOW))
+    .toMatchObject({ kind: 'too_large', code: 'backfill_batch_too_large', limit: 20 })
+})
+test('classify 422 = invalid', () => { expect(classify(422, '{"detail":"bad"}', NOW).kind).toBe('invalid') })
+test('classify 429 resumes at the next UTC midnight', () => {
+  const c: any = classify(429, '{"error":"quota_exceeded","code":"BACKFILL_DAY_LIMIT_REACHED","resource":"backfill_day","current":1000,"limit":1000,"upgrade_url":"u"}', NOW)
+  expect(c).toMatchObject({ kind: 'quota', limit: 1000, current: 1000 })
+  expect(c.resumeAfter).toBe(Date.parse('2026-10-02T00:00:00Z'))
+})
+test('classify 429 at exactly midnight resumes a full day later', () => {
+  const c: any = classify(429, '{}', Date.parse('2026-10-02T00:00:00Z'))
+  expect(c.resumeAfter).toBe(Date.parse('2026-10-03T00:00:00Z'))
+})
+test('classify 5xx and network failure = retry', () => {
+  for (const s of [500, 502, 503, 0, NaN, undefined as any, null as any]) expect(classify(s, '', NOW).kind).toBe('retry')
+})
+test('classify never throws on garbage', () => {
+  for (const b of [undefined, null, 'not json', '[]', '"str"', 7, {}, '{"limit":"x"}', 'null'] as any[])
+    for (const s of [202, 404, 413, 422, 429, 500, 401, 418]) expect(() => classify(s, b, NOW)).not.toThrow()
+  expect(classify(413, 'garbage', NOW).kind).toBe('too_large')
+  expect(classify(429, 'garbage', NOW).kind).toBe('quota')
+})
+test('classify accepts a parsed object body too', () => {
+  expect(classify(202, { job_id: 'j2' } as any, NOW)).toMatchObject({ kind: 'accepted', job_id: 'j2' })
+})
+test('classify other 4xx (401/403) is invalid with the status kept', () => {
+  expect(classify(401, '{}', NOW)).toMatchObject({ kind: 'invalid', status: 401 })
+})
+
+const job = (items: any[], extra: any = {}) => ({ job_id: 'j', state: 'finished', patterns_created: 5, failed_chunks: 1, items, ...extra })
+test('applyJob maps item states to the ledger', () => {
+  const l = emptyLedger()
+  const r = applyJob(l, job([
+    { idempotency_key: K(1), state: 'done', patterns_created: 3, failed_chunks: 0 },
+    { idempotency_key: K(2), state: 'done', patterns_created: 2, failed_chunks: 1 },
+    { idempotency_key: K(3), state: 'skipped', error: 'terminal_prune' },
+    { idempotency_key: K(4), state: 'failed', error: 'pipeline_failed' },
+    { idempotency_key: K(5), state: 'failed', error: 'expired' },
+    { idempotency_key: K(6), state: 'failed', error: 'project_gone' },
+    { idempotency_key: K(7), state: 'pending' },
+    { idempotency_key: K(8), state: 'processing' },
+  ]), 1000)
+  expect(statusOf(l, K(1))).toBe('sent')
+  expect(statusOf(l, K(2))).toBe('sent')
+  expect(statusOf(l, K(3))).toBe('skipped')
+  expect(statusOf(l, K(4))).toBe('failed')
+  expect(statusOf(l, K(5))).toBe('skipped-failed')
+  expect(statusOf(l, K(6))).toBe('skipped-failed')
+  expect(statusOf(l, K(7))).toBe(undefined)
+  expect(statusOf(l, K(8))).toBe(undefined)
+  expect(r).toEqual({ sent: 2, partial: 1, failed: 3, skipped: 1, patternsCreated: 5, failedChunks: 1, finished: true })
+})
+test('applyJob: repeated failed hits the ledger retry cap', () => {
+  const l = emptyLedger()
+  for (let i = 0; i < MAX_ATTEMPTS; i++) applyJob(l, job([{ idempotency_key: K(1), state: 'failed', error: 'chunks_failed' }]), 1)
+  expect(statusOf(l, K(1))).toBe('skipped-failed')
+})
+test('applyJob never downgrades sent', () => {
+  const l = emptyLedger()
+  add(l, K(1), 'sent', 1)
+  applyJob(l, job([{ idempotency_key: K(1), state: 'failed', error: 'expired' }]), 2)
+  expect(statusOf(l, K(1))).toBe('sent')
+})
+test('applyJob tolerates garbage, unknown states, bad keys, missing fields', () => {
+  const l = emptyLedger()
+  for (const j of [null, undefined, 'x', 5, [], {}, { items: 'no' }, { items: [null, 3, {}, { idempotency_key: 'bad', state: 'done' }, { idempotency_key: K(1), state: 'weird' }] }] as any[])
+    expect(() => applyJob(l, j, 1)).not.toThrow()
+  expect(l.entries.size).toBe(0)
+  expect(applyJob(l, {} as any, 1)).toEqual({ sent: 0, partial: 0, failed: 0, skipped: 0, patternsCreated: 0, failedChunks: 0, finished: false })
+})
+test('applyJob: unfinished job reports finished false; totals fall back to the item sums', () => {
+  const r = applyJob(emptyLedger(), { state: 'running', items: [{ idempotency_key: K(1), state: 'done', patterns_created: 4, failed_chunks: 2 }] }, 1)
+  expect(r).toMatchObject({ finished: false, sent: 1, partial: 1, patternsCreated: 4, failedChunks: 2 })
+})
+
+test('reportLine is one German line', () => {
+  const l = reportLine({ sent: 12, partial: 2, failed: 1, skipped: 3, patternsCreated: 34, failedChunks: 2, finished: true })
+  expect(l).toBe('Backfill fertig: 12 gesendet (2 teilweise), 1 fehlgeschlagen, 3 übersprungen, 34 Patterns erstellt')
+  expect(l.includes('\n')).toBe(false)
+  expect(reportLine({ sent: 0, partial: 0, failed: 0, skipped: 0, patternsCreated: 0, failedChunks: 0, finished: false })).toBe('Backfill läuft noch: 0 gesendet')
+  expect(() => reportLine(null as any)).not.toThrow()
+})
+
+test('ledger cap fits the 4 MiB file limit: a full ledger serializes under 3 MiB', () => {
+  expect(MAX_KEYS).toBe(20000)
+  const l = emptyLedger()
+  for (let i = 0; i < MAX_KEYS; i++) l.entries.set(K(i), { status: 'skipped-failed', atMs: 1_800_000_000_000, attempts: 3 })
+  expect(new TextEncoder().encode(serialize(l, 'per-install-secret')).length).toBeLessThan(3 * 1024 * 1024)
+})
