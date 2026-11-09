@@ -1,6 +1,6 @@
 // 8.2.0 backfill orchestration with every I/O faked (post, get, sleep, now, ledger store): flow, stops, polling, ledger writes.
 import { expect, test } from 'claude-code/testing'
-import { buildItems, DEFAULT_LIMIT, MAX_LIMIT, previewLines, runBackfill, parseLimit, stepBackfill, newRun, runActive, startLine, RUN_TTL_MS, type Deps } from '../lib/backfill_run.ts'
+import { buildItems, DEFAULT_LIMIT, MAX_LIMIT, previewLines, runBackfill, parseLimit, parseBackfillFlags, stepBackfill, newRun, runActive, startLine, RUN_TTL_MS, type Deps } from '../lib/backfill_run.ts'
 import { emptyLedger, add, parse, serialize, statusOf, type Ledger } from '../lib/ledger.ts'
 
 const K = (n: number) => 'bootstrap:' + n.toString(16).padStart(32, '0')
@@ -214,4 +214,21 @@ test('run marker: active within 3 h of the last beat, stale after; start line ha
   expect(runActive(null, 5)).toBe(false)
   expect(runActive({ beat: 'x' }, 5)).toBe(false)
   expect(startLine(100)).toBe('Backfill gestartet: 100 Aufgaben, läuft im Hintergrund (ca. 117 Min). Ergebnis folgt als Meldung.')
+})
+
+test('parseBackfillFlags: --backfill-only, --target-project, --target-org are stripped into fields', () => {
+  expect(parseBackfillFlags('')).toEqual({ ok: true, only: false, rest: '' })
+  expect(parseBackfillFlags('docs-only --backfill-only')).toEqual({ ok: true, only: true, rest: 'docs-only' })
+  expect(parseBackfillFlags('--target-project prj_abc')).toEqual({ ok: true, only: false, project: 'prj_abc', rest: '' })
+  expect(parseBackfillFlags('--limit 3 --target-project=prj_abc --target-org org_x_1 --backfill-only'))
+    .toEqual({ ok: true, only: true, project: 'prj_abc', org: 'org_x_1', rest: '--limit 3' })
+})
+test('parseBackfillFlags: bad shapes, duplicates, org without project, a value on the switch are refused with a German line', () => {
+  for (const bad of ['--target-project', '--target-project x', '--target-project prj_a', '--target-project prj_ab/c', '--target-project prj_abc --target-org', '--target-project prj_abc --target-org prj_abc',
+    '--target-project prj_abc --target-org org_a', '--target-org org_abc', '--target-project prj_abc --target-project prj_abd', '--target-project=', '--target-project prj_abc;x', '--backfill-only=1',
+    '--target-project --backfill-only', `--target-project prj_${'a'.repeat(65)}`]) {
+    const r = parseBackfillFlags(bad)
+    expect(r.ok).toBe(false)
+    if (!r.ok) expect(r.line).toContain('--target-project')
+  }
 })
