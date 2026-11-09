@@ -25,6 +25,29 @@ export function parseLimit(args: string): { ok: true, limit: number, rest: strin
   return { ok: true, limit: limit ?? DEFAULT_LIMIT, rest: rest.join(' ') }
 }
 
+// 8.2.0 `--backfill-only` (no legacy CLI bootstrap), `--target-project prj_x` [`--target-org org_x`] (another destination than the bound
+// project; sessions and git still come from the cwd). Stripped out of the arguments like --limit; `rest` goes on to the parsers.
+export const TARGET_USAGE = 'Usage: --backfill-only | --target-project prj_xxx [--target-org org_xxx] (prj_/org_ + 3 bis 64 Zeichen A-Z a-z 0-9 _)'
+const PRJ_RE = /^prj_[A-Za-z0-9_]{3,64}$/, ORG_RE = /^org_[A-Za-z0-9_]{3,64}$/
+export type BackfillFlags = { ok: true, only: boolean, project?: string, org?: string, rest: string } | { ok: false, line: string }
+export function parseBackfillFlags(args: string): BackfillFlags {
+  const bad: BackfillFlags = { ok: false, line: TARGET_USAGE }
+  const toks = args.trim().split(/\s+/).filter(Boolean), rest: string[] = []
+  let only = false, project: string | undefined, org: string | undefined
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i]
+    if (t === '--backfill-only') { only = true; continue }
+    const k = t.split('=')[0]
+    if (k === '--backfill-only') return bad
+    if (k !== '--target-project' && k !== '--target-org') { rest.push(t); continue }
+    const v = t.includes('=') ? t.slice(k.length + 1) : toks[++i]
+    if (k === '--target-project') { if (project !== undefined || v === undefined || !PRJ_RE.test(v)) return bad; project = v }
+    else { if (org !== undefined || v === undefined || !ORG_RE.test(v)) return bad; org = v }
+  }
+  if (org !== undefined && project === undefined) return bad
+  return { ok: true, only, ...(project ? { project } : {}), ...(org ? { org } : {}), rest: rest.join(' ') }
+}
+
 export type Built = { items: Item[], sessionTasks: number, gitTasks: number, skipped: number }
 // Session transcripts + git logs -> at most `limit` items (best ranked), tasks the ledger already finished are skipped first.
 export function buildItems(o: { projectId: string, sessions: { text: string, sessionId?: string }[], gitLog: string, mergeLog: string, limit: number, ledger: Ledger }): Built {
