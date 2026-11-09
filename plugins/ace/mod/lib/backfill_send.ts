@@ -1,6 +1,7 @@
 // 8.2.0 backfill send helpers (pure, unwired, no I/O): task -> server item, batching, response classification, job status -> ledger.
 // Server contract: POST /traces/backfill {source:'bootstrap', items:[{idempotency_key, occurred_at, trace}]}, 1..20 items, body <= 5 MiB.
 import { buildTrace } from './trace.ts'
+import { safeText } from './backfill_git.ts'
 import type { ToolRec } from './evidence.ts'
 import { add, MAX_ATTEMPTS, type Ledger } from './ledger.ts'
 
@@ -24,10 +25,15 @@ export function toItem(task: any, kind: 'session' | 'git'): Item | null {
   if (kind === 'session') {
     if (!task.trace || typeof task.trace !== 'object') return null
     trace = { ...task.trace }
+    // everything that leaves the machine goes through the strict git-side filter (unicode fold, key-word cut), not just redact
+    if (typeof trace.task === 'string') trace.task = safeText(trace.task)
+    if (Array.isArray(trace.trajectory)) trace.trajectory = trace.trajectory.map((s: any) => s && typeof s === 'object'
+      ? { ...s, ...(typeof s.action === 'string' ? { action: safeText(s.action) } : {}), ...(typeof s.result === 'string' ? { result: safeText(s.result) } : {}) } : s)
+    if (trace.result && typeof trace.result === 'object' && typeof trace.result.summary === 'string') trace.result = { ...trace.result, summary: safeText(trace.result.summary) }
   } else if (kind === 'git') {
-    const files: string[] = Array.isArray(task.steps) ? task.steps.filter((s: unknown) => typeof s === 'string') : []
+    const files: string[] = Array.isArray(task.steps) ? task.steps.filter((s: unknown) => typeof s === 'string').map((s: string) => safeText(s)) : []
     const tools: ToolRec[] = files.map(f => ({ tool: 'Edit', action: `edit ${f}`, result: 'ok', failed: false, start_ms: task.endMs, end_ms: task.endMs }))
-    const b = buildTrace({ userPrompt: String(task.task ?? ''), tools, answer: '', playbookUsed: [], agentType: 'main', appliedLogIds: [], nowIso: at, effort: 'normal' })
+    const b = buildTrace({ userPrompt: `${task._merge === true ? 'Merged PR' : 'Git commit'} (untrusted text): ${safeText(String(task.task ?? ''))}`, tools, answer: '', playbookUsed: [], agentType: 'main', appliedLogIds: [], nowIso: at, effort: 'normal' })
     trace = b.trace
     trace.result.success = task.success === true  // a Revert is a failure, whatever the (all-ok) file steps say
   } else return null
