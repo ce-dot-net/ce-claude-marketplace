@@ -232,3 +232,56 @@ test('parseBackfillFlags: bad shapes, duplicates, org without project, a value o
     if (!r.ok) expect(r.line).toContain('--target-project')
   }
 })
+
+// ---- 8.2.0 diagnosis: attempts per verdict, response/item rows, top cause in the final line
+const failedJob = (n: number, state: string, error = 'pipeline_failed') => ({ state, items: Array.from({ length: n }, (_, i) => ({ idempotency_key: K(i + 1), state: 'failed', error })) })
+test('polls of one unfinished job burn ONE attempt per item, not one per poll (the 5/5/10 ledger bug)', async () => {
+  const f = fake({ posts: [acc('j', 3)], gets: [ok(200, failedJob(1, 'processing')), ok(200, failedJob(2, 'processing')), ok(200, failedJob(3, 'processing')), ok(200, failedJob(3, 'processing')), ok(200, failedJob(3, 'finished'))] })
+  const r = await runBackfill(items(3), f.d)
+  for (const n of [1, 2, 3]) expect(f.ledger().entries.get(K(n))).toMatchObject({ status: 'failed', attempts: 1 })
+  expect(r.report.failed).toBe(3)
+})
+function logged(o: any) {
+  const rows: any[] = [], f = fake(o)
+  f.d.log = async (r: any) => { rows.push(r) }
+  return { ...f, rows }
+}
+test('a rejected batch logs a backfill_response row (status, code, field names) and the final line names the top cause', async () => {
+  const f = logged({ posts: [ok(422, { code: 'payload_invalid', detail: [{ loc: ['body', 'items', 0, 'trace'], msg: 'm', type: 't', input: 'SECRET' }] })] })
+  const r = await runBackfill(items(2), f.d)
+  const row = f.rows.find(x => x.event === 'backfill_response')
+  expect(row).toMatchObject({ event: 'backfill_response', kind: 'invalid', status: 422, code: 'payload_invalid', items: 2, fields: ['body.items.0.trace'] })
+  expect(JSON.stringify(f.rows)).not.toContain('SECRET')
+  expect(r.lines[0]).toContain('2 fehlgeschlagen (422 payload_invalid ×2)')
+})
+test('failed job items log one backfill_item row each (once, not per poll) and the top cause is the item error', async () => {
+  const f = logged({ posts: [acc('j', 3)], gets: [ok(200, failedJob(3, 'processing', 'pipeline_failed')), ok(200, failedJob(3, 'finished', 'pipeline_failed'))] })
+  const r = await runBackfill(items(3), f.d)
+  const rows = f.rows.filter(x => x.event === 'backfill_item')
+  expect(rows.length).toBe(3)
+  expect(rows[0]).toMatchObject({ error: 'pipeline_failed', key: K(1) })
+  expect(r.lines[0]).toContain('(item pipeline_failed ×3)')
+})
+test('engine exit and stderr are logged, truncated', async () => {
+  const f = logged({ posts: [{ exit: 7, stderr: 'E'.repeat(500) }] })
+  await runBackfill(items(1), f.d)
+  const row = f.rows.find(x => x.event === 'backfill_response')
+  expect(row).toMatchObject({ exit: 7 })
+  expect(row.stderr.length).toBe(200)
+})
+test('every non-accepted answer logs a row (429, 503, 401); an accepted 202 logs kind accepted', async () => {
+  for (const [st, kind] of [[429, 'quota'], [503, 'retry'], [401, 'auth']] as const) {
+    const f = logged({ posts: [ok(st, { limit: 1, current: 1 })] })
+    await runBackfill(items(1), f.d)
+    expect(f.rows.find(x => x.event === 'backfill_response')).toMatchObject({ kind, status: st })
+  }
+  const g = logged({ posts: [acc('j', 1)], gets: [ok(200, jobBody([K(1)]))] })
+  await runBackfill(items(1), g.d)
+  expect(g.rows.find(x => x.event === 'backfill_response')).toMatchObject({ kind: 'accepted', status: 202 })
+})
+test('a failing logger never breaks the run', async () => {
+  const f = fake({ posts: [ok(422, { detail: 'bad' })] })
+  f.d.log = async () => { throw new Error('disk') }
+  const r = await runBackfill(items(1), f.d)
+  expect(r.report.failed).toBe(1)
+})

@@ -354,3 +354,16 @@ test('default run (no target flags) is unchanged: bound project in the engine ar
   expect(bf(h)[0].argv).toEqual(expect.arrayContaining(['org_t', 'prj_t']))
   expect(h.files.has(`${ROOT}/projects/prj_t/backfill-ledger.tsv`)).toBe(true)
 })
+
+test('a rejected batch: a backfill_response row goes to backfill-log.jsonl (no request content) and the toast names the top cause', async ($, on) => {
+  const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }), backfill: () => ({ status: 422, body: { code: 'payload_invalid', detail: [{ loc: ['body', 'items', 0, 'trace'], msg: 'm', type: 't', input: 'SECRET-PROMPT' }] } }) })
+  await start($)
+  await run($, '--approved')
+  await idle($, h)
+  const row = h.runs.find((r: any) => String(r.stdin ?? '').includes('backfill_response'))
+  expect(row?.argv.join(' ')).toContain('backfill-log.jsonl')
+  const j = JSON.parse(row!.stdin!)
+  expect(j).toMatchObject({ event: 'backfill_response', kind: 'invalid', status: 422, code: 'payload_invalid' })
+  expect(row!.stdin).not.toContain('SECRET')
+  expect(h.toasts.some((x: string) => x.includes('(422 payload_invalid ×3)'))).toBe(true)
+})

@@ -2,7 +2,7 @@
 // Pure of `$`: io/backfill_io.ts supplies the real post/get (engine/backfill.js), ledger file and clock; tests supply fakes.
 import { readSession, selectTasks, taskKey } from './backfill.ts'
 import { readGitLog, readMergeLog } from './backfill_git.ts'
-import { applyJob, batches, classify, reportLine, toItem, type Item, type Report } from './backfill_send.ts'
+import { applyJob, batches, classify, describeAnswer, failedItems, reportLine, toItem, type Item, type Report } from './backfill_send.ts'
 import { add, pending, type Ledger } from './ledger.ts'
 
 export const DEFAULT_LIMIT = 100, MAX_LIMIT = 100
@@ -79,7 +79,7 @@ export function previewLines(b: Built, o: { flag: boolean, limit: number }): str
   return out
 }
 
-export type EngineAnswer = { exit: number, status?: number, body?: any }
+export type EngineAnswer = { exit: number, status?: number, body?: any, stderr?: string }
 export type Deps = {
   post: (body: { source: string, items: Item[] }) => Promise<EngineAnswer>
   get: (job: string) => Promise<EngineAnswer>
@@ -88,6 +88,7 @@ export type Deps = {
   loadLedger: () => Promise<Ledger>
   saveLedger: (l: Ledger) => Promise<void>
   setResume: (ms: number) => Promise<void>
+  log?: (row: any) => Promise<void>   // diagnosis rows (backfill_response / backfill_item); a failing logger never breaks the run
 }
 const NO_AUTH = 'Backfill gestoppt: nicht angemeldet (401), bitte /ace:ace-login ausführen. Nichts vermerkt.'
 const NO_PLAN = 'Backfill gestoppt: Abo/Zahlung nötig (402), bitte Abo prüfen. Nichts vermerkt.'
@@ -95,17 +96,23 @@ const LATER = 'Backfill gestoppt: Server gerade nicht erreichbar, später erneut
 
 // Run marker: the JSON state of one backfill run (kept in $.state), enough to continue after a module reload. Single flight + TTL.
 export const RUN_TTL_MS = 3 * 3_600_000   // a marker whose last beat is older than this is stale (crashed run): ignored
-export type RunState = { startedAt: number, beat: number, total: number, posted: string[], job?: string, polls: number, report: Report, lines: string[], stopped?: string,
+export type RunState = { startedAt: number, beat: number, total: number, posted: string[], job?: string, judged?: string[], causes?: Record<string, number>, polls: number, report: Report, lines: string[], stopped?: string,
   args?: { root: string, orgId?: string, projectId: string, days: number, limit: number } }
 export const newRun = (total: number, now: number): RunState => ({ startedAt: now, beat: now, total, posted: [], polls: 0, lines: [],
   report: { sent: 0, partial: 0, failed: 0, skipped: 0, patternsCreated: 0, failedChunks: 0, finished: false } })
 export const runActive = (v: any, now: number): v is RunState => !!v && typeof v.beat === 'number' && now - v.beat >= 0 && now - v.beat < RUN_TTL_MS
 export const startLine = (n: number) => `Backfill gestartet: ${n} Aufgaben, läuft im Hintergrund (ca. ${Math.ceil(n * SECONDS_PER_TRACE / 60)} Min). Ergebnis folgt als Meldung.`
-export const finalLines = (st: RunState): string[] => [reportLine(st.report), ...st.lines, ...(st.stopped ? ['Ledger gespeichert; ein erneuter Lauf macht dort weiter.'] : [])]
+export const topCause = (st: RunState): string => {
+  const e = Object.entries(st.causes ?? {}).sort((a, b) => b[1] - a[1])[0]
+  return e ? ` (${e[0]} ×${e[1]})` : ''
+}
+export const finalLines = (st: RunState): string[] => [reportLine(st.report) + (st.report.failed ? topCause(st) : ''), ...st.lines, ...(st.stopped ? ['Ledger gespeichert; ein erneuter Lauf macht dort weiter.'] : [])]
 
 // ONE step of a run (state `st` is mutated, plain JSON between steps): at most one job GET per call, plus any posts that can go
 // without waiting. done=false means "call again after POLL_MS" (the server does at most 5 items a minute: never poll faster).
 export async function stepBackfill(all: Item[], st: RunState, d: Deps): Promise<{ done: boolean }> {
+  const lg = async (row: any) => { try { await d.log?.({ ...row, projectId: st.args?.projectId }) } catch { /* diagnosis only */ } }
+  const why = (label: string, n = 1) => { st.causes = st.causes ?? {}; st.causes[label] = (st.causes[label] ?? 0) + n }
   const stop = (m: string) => { st.stopped = m; st.lines.push(m) }
   const finish = () => { st.report.finished = !st.stopped; return { done: true } }
   const ledger = await d.loadLedger()
@@ -118,12 +125,16 @@ export async function stepBackfill(all: Item[], st: RunState, d: Deps): Promise<
   async function pollOne(job: string): Promise<boolean | 'stop'> {
     if (st.polls++ >= MAX_POLLS) { stop('Backfill: der Server ist nach langem Warten noch nicht fertig, später erneut ausführen (Duplikate werden erkannt).'); return 'stop' }
     const g = await d.get(job)
+    await lg({ event: 'backfill_response', op: 'get', ...(g.exit !== 0 ? { exit: g.exit, stderr: (g.stderr ?? '').slice(0, 200) } : describeAnswer(g.status ?? 0, g.body)), kind: g.exit !== 0 ? 'engine' : 'job' })
     if (g.exit !== 0) { stop(g.exit === 1 ? 'Backfill gestoppt: keine Antwort beim Abfragen des Jobs, später erneut ausführen.' : `Backfill gestoppt: Job-Abfrage fehlgeschlagen (Engine exit ${g.exit}).`); return 'stop' }
     if (g.status === 404) return true            // unknown job: treated as submitted
     if (g.status === 401) { stop(NO_AUTH); return 'stop' }
     if (g.status === 402) { stop(NO_PLAN); return 'stop' }
     if (g.status !== 200) { stop(LATER); return 'stop' }
-    const r = applyJob(ledger, g.body, d.now())
+    const judged = new Set(st.judged ?? [])
+    for (const f of failedItems(g.body, judged)) { why(`item ${f.error}`); await lg({ event: 'backfill_item', key: f.key, error: f.error }) }
+    const r = applyJob(ledger, g.body, d.now(), judged)
+    st.judged = [...judged]
     await d.saveLedger(ledger)
     if (!r.finished) return false
     for (const k of ['sent', 'partial', 'failed', 'skipped', 'patternsCreated', 'failedChunks'] as const) st.report[k] += r[k]
@@ -135,7 +146,7 @@ export async function stepBackfill(all: Item[], st: RunState, d: Deps): Promise<
       const p = await pollOne(st.job)
       if (p === 'stop') return finish()
       if (!p) return { done: false }
-      st.job = undefined; st.polls = 0
+      st.job = undefined; st.polls = 0; st.judged = undefined
     }
     const batch = batches(todo).batches[0]
     if (!batch) break
@@ -143,6 +154,11 @@ export async function stepBackfill(all: Item[], st: RunState, d: Deps): Promise<
     todo = todo.filter(i => !gone.has(i.idempotency_key))
     st.posted.push(...keys)
     const a = await d.post({ source: 'bootstrap', items: batch })
+    const kindOf = a.status === 401 || a.status === 402 ? 'auth' : classify(a.status ?? 0, a.body, d.now()).kind
+    await lg({ event: 'backfill_response', op: 'post', kind: a.exit !== 0 ? 'engine' : kindOf, items: batch.length,
+      ...(a.exit !== 0 ? { exit: a.exit, stderr: (a.stderr ?? '').slice(0, 200) } : describeAnswer(a.status ?? 0, a.body)) })
+    if (a.exit !== 0) why(`engine exit ${a.exit}`)
+    else if (kindOf !== 'accepted') { const x = describeAnswer(a.status ?? 0, a.body); why(`${x.status} ${x.code ?? x.error ?? kindOf}`.trim(), batch.length) }
     if (a.exit === 3) { stop('Backfill nicht gesendet: Gate fehlgeschlagen (Core/Client nicht nutzbar).'); break }
     if (a.exit === 1) { stop('Backfill gestoppt: keine Antwort vom Server, der Batch kam evtl. an. Ledger unverändert, Wiederholung ist sicher (Duplikate werden erkannt).'); break }
     if (a.exit !== 0) { stop(`Backfill nicht gesendet: Engine exit ${a.exit}.`); break }
