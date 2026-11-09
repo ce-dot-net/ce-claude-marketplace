@@ -51,6 +51,7 @@ export type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; 
   selfEval?: boolean; model?: (req: any) => any; compact?: (files: Map<string, string>) => any
   cli?: (args: string[], stdin?: string) => SearchAnswer | undefined; noSettings?: boolean; ignored?: boolean; root?: string; cwd?: string; noPython?: boolean
   installer?: (args: string[]) => { state: string, detail?: string }  // ace_cli_installer.py answers (8.1.1)
+  git?: (argv: string[]) => string | undefined  // 8.2.0: git answers (full argv); undefined = the default stub
   realpaths?: Record<string, string>  // REALPATH_SH answers (a symlinked path); default: the path as given
   claimed?: boolean }  // 8.1.4: the detached learn child already claimed the trace (the parent's `mv` finds nothing)
 export type Run = { argv: string[]; stdin?: string; env?: Record<string, string>; timeoutMs?: number; files: Set<string> }
@@ -117,6 +118,7 @@ export function host(on: any, o: Opts = {}) {
     if (argv[0] === '/bin/sh' && argv[2] === REPO_WRITE_SH) { const t = `${argv[4]}/${argv[5]}`; if ((o.links ?? []).some(l => t === l || t.startsWith(l + '/'))) return res(3, ''); put(t, init.stdin ?? ''); if (argv[5] === '.gitignore') put(`${argv[4]}/.gitignore-fixed`, ''); return res(0, '') }
     if (argv[0] === '/bin/sh' && argv[2] === REMOVE_SHADOW_SH) { if ((o.links ?? []).some(l => argv[4] === l || argv[4].startsWith(l + '/'))) return res(3, ''); if (!files.has(argv[4])) return res(5, ''); files.delete(argv[4]); return res(0, '') }  // real sh: tests/test_mod_repo_write_sh.py
     if (argv[0] === '/bin/sh' && argv[2] === PRIVATE_WRITE_SH) { if (o.beforeWrite) return Promise.resolve(o.beforeWrite(argv[4])).then(() => { put(argv[4], init.stdin ?? ''); return res(0, '') }); put(argv[4], init.stdin ?? ''); return res(0, '') }  // umask 077 + rename
+    if (o.git && (argv[0] === 'git' || argv[0].endsWith('/git'))) { const a = o.git(argv); if (a !== undefined) return res(0, a) }  // 8.2.0: answers for the bootstrap facts (throws = a spawn failure)
     if ((argv[0] === 'git' || argv[0].endsWith('/git')) && argv.includes('check-ignore')) return res(o.ignored && !files.has(`${argv[2]}/.gitignore-fixed`) ? 0 : 1, '')
     if ((argv[0] === 'git' || argv[0].endsWith('/git')) && argv.includes('--error-unmatch')) return res(1, '')
     if (argv[0] === 'git' || argv[0].endsWith('/git')) return res(0, git(argv))
