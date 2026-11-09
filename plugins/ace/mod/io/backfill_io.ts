@@ -90,7 +90,7 @@ async function stepDeps($: any, c: C, script: string): Promise<{ d: Deps, call: 
   return { d, call }
 }
 // The items of the running run, kept for the ticks of this module load (lost on a reload: rebuilt from the same sources + ledger).
-const memo = new Map<string, Item[]>()
+const memo = new Map<string, Pick<Built, 'items' | 'sources'>>()
 const alive = new Set<string>()   // a tick chain exists in THIS module load (a reload empties it with the timers)
 
 // ONE step of the run, then the next tick is planned (a chain of $.clock.after: no background loop; the marker holds the state).
@@ -103,9 +103,11 @@ async function tick($: any, key: string): Promise<void> {
     const a = st.args, c: C = { root: a.root, orgId: a.orgId, projectId: a.projectId }
     const script = await engineScript($, 'backfill.js')
     if (!script) { st.stopped = 'Backfill: Engine nicht verfügbar, abgebrochen.'; st.lines.push(st.stopped); return await end($, st, key) }
-    let items = memo.get(key)
-    if (!items) { items = (await collect($, c, a.days, a.limit)).items; memo.set(key, items) }
+    let m = memo.get(key)
+    if (!m) { m = await collect($, c, a.days, a.limit); memo.set(key, m) }
+    const items = m.items
     const { d } = await stepDeps($, c, script)
+    d.sources = m.sources
     st.beat = await $.clock.now()
     const r = await stepBackfill(items, st, d)
     if (r.done) return await end($, st, key)
@@ -159,7 +161,7 @@ export async function backfillPhase($: any, bound: C, o: { days: number, limit: 
   st.args = { root: c.root, orgId: c.orgId, projectId: c.projectId, days: o.days, limit: o.limit }
   await $.state.set(RUN, st)
   const key = keyOf(st)
-  memo.set(key, built.items); alive.add(key)
+  memo.set(key, built); alive.add(key)
   $.clock.after(1, () => { void tick($, key).catch(() => undefined) })
   return [startLine(built.items.length)]
 }

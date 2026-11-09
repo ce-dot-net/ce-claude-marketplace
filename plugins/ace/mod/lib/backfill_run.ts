@@ -48,7 +48,8 @@ export function parseBackfillFlags(args: string): BackfillFlags {
   return { ok: true, only, ...(project ? { project } : {}), ...(org ? { org } : {}), rest: rest.join(' ') }
 }
 
-export type Built = { items: Item[], sessionTasks: number, gitTasks: number, skipped: number }
+export type Source = 'session' | 'git' | 'merge'
+export type Built = { items: Item[], sources: Record<string, Source>, sessionTasks: number, gitTasks: number, skipped: number }
 // Session transcripts + git logs -> at most `limit` items (best ranked), tasks the ledger already finished are skipped first.
 export function buildItems(o: { projectId: string, sessions: { text: string, sessionId?: string }[], gitLog: string, mergeLog: string, limit: number, ledger: Ledger }): Built {
   const cands: any[] = []
@@ -60,9 +61,9 @@ export function buildItems(o: { projectId: string, sessions: { text: string, ses
   for (const g of git) cands.push({ ...g, _kind: 'git' })
   const open = new Set(pending(o.ledger, cands.map(c => c.key)))
   const fresh = cands.filter(c => open.has(c.key))
-  const items: Item[] = []
-  for (const c of selectTasks(fresh, o.limit)) { const it = toItem(c, c._kind); if (it) items.push(it) }
-  return { items, sessionTasks, gitTasks: git.length, skipped: cands.length - fresh.length }
+  const items: Item[] = [], sources: Record<string, Source> = {}
+  for (const c of selectTasks(fresh, o.limit)) { const it = toItem(c, c._kind); if (it) { items.push(it); sources[it.idempotency_key] = c._merge ? 'merge' : c._kind } }
+  return { items, sources, sessionTasks, gitTasks: git.length, skipped: cands.length - fresh.length }
 }
 
 export function duration(n: number): string {
@@ -88,6 +89,7 @@ export type Deps = {
   loadLedger: () => Promise<Ledger>
   saveLedger: (l: Ledger) => Promise<void>
   setResume: (ms: number) => Promise<void>
+  sources?: Record<string, Source>   // source per idempotency key: logged as backfill_item_sent / backfill_batch (keys and counts only)
   log?: (row: any) => Promise<void>   // diagnosis rows (backfill_response / backfill_item); a failing logger never breaks the run
 }
 const NO_AUTH = 'Backfill gestoppt: nicht angemeldet (401), bitte /ace:ace-login ausführen. Nichts vermerkt.'
@@ -96,7 +98,7 @@ const LATER = 'Backfill gestoppt: Server gerade nicht erreichbar, später erneut
 
 // Run marker: the JSON state of one backfill run (kept in $.state), enough to continue after a module reload. Single flight + TTL.
 export const RUN_TTL_MS = 3 * 3_600_000   // a marker whose last beat is older than this is stale (crashed run): ignored
-export type RunState = { startedAt: number, beat: number, total: number, posted: string[], job?: string, judged?: string[], causes?: Record<string, number>, polls: number, report: Report, lines: string[], stopped?: string,
+export type RunState = { startedAt: number, beat: number, total: number, posted: string[], split?: Record<Source, number>, job?: string, judged?: string[], causes?: Record<string, number>, polls: number, report: Report, lines: string[], stopped?: string,
   args?: { root: string, orgId?: string, projectId: string, days: number, limit: number } }
 export const newRun = (total: number, now: number): RunState => ({ startedAt: now, beat: now, total, posted: [], polls: 0, lines: [],
   report: { sent: 0, partial: 0, failed: 0, skipped: 0, patternsCreated: 0, failedChunks: 0, finished: false } })
@@ -106,7 +108,8 @@ export const topCause = (st: RunState): string => {
   const e = Object.entries(st.causes ?? {}).sort((a, b) => b[1] - a[1])[0]
   return e ? ` (${e[0]} ×${e[1]})` : ''
 }
-export const finalLines = (st: RunState): string[] => [reportLine(st.report) + (st.report.failed ? topCause(st) : ''), ...st.lines, ...(st.stopped ? ['Ledger gespeichert; ein erneuter Lauf macht dort weiter.'] : [])]
+const splitText = (st: RunState) => st.split ? ` (Session ${st.split.session}, Git ${st.split.git}, Merge ${st.split.merge})` : ''
+export const finalLines = (st: RunState): string[] => [reportLine(st.report) + (st.report.failed ? topCause(st) : '') + splitText(st), ...st.lines, ...(st.stopped ? ['Ledger gespeichert; ein erneuter Lauf macht dort weiter.'] : [])]
 
 // ONE step of a run (state `st` is mutated, plain JSON between steps): at most one job GET per call, plus any posts that can go
 // without waiting. done=false means "call again after POLL_MS" (the server does at most 5 items a minute: never poll faster).
@@ -153,6 +156,13 @@ export async function stepBackfill(all: Item[], st: RunState, d: Deps): Promise<
     const keys = batch.map(i => i.idempotency_key), gone = new Set(keys)
     todo = todo.filter(i => !gone.has(i.idempotency_key))
     st.posted.push(...keys)
+    if (d.sources) {
+      const n: Record<Source, number> = { session: 0, git: 0, merge: 0 }
+      for (const k of keys) { const source = d.sources[k]; if (!source) continue; n[source]++; await lg({ event: 'backfill_item_sent', key: k, source }) }
+      await lg({ event: 'backfill_batch', total: keys.length, ...n })
+      const t = st.split ?? (st.split = { session: 0, git: 0, merge: 0 })
+      for (const k of ['session', 'git', 'merge'] as const) t[k] += n[k]
+    }
     const a = await d.post({ source: 'bootstrap', items: batch })
     const kindOf = a.status === 401 || a.status === 402 ? 'auth' : classify(a.status ?? 0, a.body, d.now()).kind
     await lg({ event: 'backfill_response', op: 'post', kind: a.exit !== 0 ? 'engine' : kindOf, items: batch.length,

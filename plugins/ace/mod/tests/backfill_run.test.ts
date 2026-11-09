@@ -285,3 +285,36 @@ test('a failing logger never breaks the run', async () => {
   const r = await runBackfill(items(1), f.d)
   expect(r.report.failed).toBe(1)
 })
+
+// Source per idempotency key (session / git / merge) for a later evaluation: keys and counts only, never task text.
+const srcMap = (): Record<string, 'session' | 'git' | 'merge'> => ({ [K(1)]: 'session', [K(2)]: 'session', [K(3)]: 'git', [K(4)]: 'merge' })
+test('one backfill_item_sent row per item with its source, then one backfill_batch summary; no task text', async () => {
+  const all = items(4), keys = all.map(i => i.idempotency_key)
+  const f = logged({ posts: [acc('j', 4)], gets: [ok(200, jobBody(keys))] })
+  f.d.sources = srcMap()
+  const r = await runBackfill(all, f.d)
+  const sent = f.rows.filter(x => x.event === 'backfill_item_sent')
+  expect(sent.map(x => [x.key, x.source])).toEqual([[K(1), 'session'], [K(2), 'session'], [K(3), 'git'], [K(4), 'merge']])
+  expect(Object.keys(JSON.parse(JSON.stringify(sent[0]))).sort()).toEqual(['event', 'key', 'source'])
+  expect(f.rows.filter(x => x.event === 'backfill_batch')).toMatchObject([{ event: 'backfill_batch', total: 4, session: 2, git: 1, merge: 1 }])
+  expect(JSON.stringify(f.rows)).not.toContain('"t1"')
+  expect(r.lines[0]).toContain('(Session 2, Git 1, Merge 1)')
+})
+test('without a source map nothing new is logged and the final line is unchanged', async () => {
+  const f = logged({ posts: [acc('j', 1)], gets: [ok(200, jobBody([K(1)]))] })
+  const r = await runBackfill(items(1), f.d)
+  expect(f.rows.some(x => x.event === 'backfill_item_sent' || x.event === 'backfill_batch')).toBe(false)
+  expect(r.lines[0]).not.toContain('Session')
+})
+test('a failing logger never breaks a run that has sources', async () => {
+  const f = fake({ posts: [acc('j', 1)], gets: [ok(200, jobBody([K(1)]))] })
+  f.d.sources = srcMap(); f.d.log = async () => { throw new Error('disk') }
+  const r = await runBackfill(items(1), f.d)
+  expect(r.report.sent).toBe(1)
+})
+test('buildItems returns the source of every selected key', () => {
+  const sess = [{ text: sessionJsonl('please fix the crash in the parser module when the input is empty') }]
+  const b = buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: emptyLedger() })
+  expect(Object.keys(b.sources).sort()).toEqual(b.items.map(i => i.idempotency_key).sort())
+  expect(new Set(Object.values(b.sources))).toEqual(new Set(['session', 'git', 'merge']))
+})
