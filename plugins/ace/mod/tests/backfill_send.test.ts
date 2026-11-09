@@ -252,7 +252,7 @@ test('session items: a fullwidth/folded secret in a step is cut too', () => {
 
 test('git items: fixed untrusted-text prefix, the rest stays redacted and bounded; merges get their own prefix', () => {
   const c = toItem(gitTask(8, { task: 'rotate password=hunter2secret now' }), 'git')!
-  expect(c.trace.task).toBe('User request: Git commit (untrusted text): rotate password=[redacted]')
+  expect(c.trace.task).toBe('User request: Git commit (untrusted text): rotate [redacted]')
   expect(JSON.stringify(c)).not.toContain('hunter2secret')
   const m = toItem(gitTask(9, { task: 'Add retry queue', _merge: true }), 'git')!
   expect(m.trace.task).toBe('User request: Merged PR (untrusted text): Add retry queue')
