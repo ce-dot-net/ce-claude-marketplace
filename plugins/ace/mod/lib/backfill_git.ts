@@ -53,6 +53,8 @@ const SEP = /[:=|>\u0080-\uffff]|%3[ad]/i  // also a pipe, '->' / '=>' and a URL
 const BEARER = /\bbearer/i  // to the end even with no space after it (a dropped zero-width char joins it to the value)
 // any userinfo, even with quotes in it (redact stops a userinfo at a quote)
 const USERINFO = /(\b[a-z][a-z0-9+.-]*:\/\/)[^\s\/]*@/gi
+// bare token shapes (no key word needed) that lib/trace.ts redact does not know; linear, no nested quantifiers
+const SHAPES = /\b(?:[sr]k_(?:live|test)_|glpat-|hf_|shpat_|shpca_|shpss_|dop_v1_|pypi-|hvs\.|SG\.|AIza|A[SKI]IA|ASIA)[A-Za-z0-9_.-]{8,}|hooks\.slack\.com\/services\/[A-Za-z0-9\/]+|\bdckr_pat_[A-Za-z0-9_-]{10,}/g
 const ECHO = /\b(?:echo|printf)\b/i  // any case: ECHO works on a case-insensitive filesystem
 const KEY_OR_ECHO = new RegExp(`${KEY_WORD.source}|${ECHO.source}`, 'i')
 const STDIN_FLAG = /--(?:password-stdin|with-token)\b/i
@@ -62,7 +64,7 @@ function dropLastWord(s: string): string { let i = s.length; while (i > 0 && !/\
 const cutAt = (s: string, k: number) => k >= 0 ? s.slice(0, k) + '[redacted]' : s
 const fold = (s: string) => s.normalize('NFKD').replace(/[\p{M}\p{Cf}\u115f\u1160\u3164\uffa0\u2800]/gu, '').replace(/[\r\n\v\f\x85\u2028\u2029]+/g, ' ')
 function rules(s: string): string {
-  s = redact(s).replace(USERINFO, '$1[redacted]@')
+  s = redact(s).replace(USERINFO, '$1[redacted]@').replace(SHAPES, '[redacted]')
   const k = s.search(KEY_WORD)
   if (k >= 0 && SEP.test(s.slice(k))) s = cutAt(s, k)
   s = cutAt(s, s.search(PEM))
