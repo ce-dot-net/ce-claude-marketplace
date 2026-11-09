@@ -277,4 +277,4 @@ The ACE server's Reflector analyzes this and the Curator updates the playbook wi
 - `/ace:status` - View playbook statistics
 - `/ace:patterns` - Browse learned patterns
 - `/ace:search <query>` - Find relevant patterns
-- `/ace:bootstrap` - Initialize from codebase
+- `/ace:ace-bootstrap` - Initialize from codebase

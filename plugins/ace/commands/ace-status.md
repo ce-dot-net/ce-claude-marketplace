@@ -191,7 +191,7 @@ ACE v3.0 stores playbooks in:
 **After checking status:**
 
 - **If playbook is empty (0 bullets):**
-  - Run `/ace:bootstrap` to populate initial patterns from git/docs/code
+  - Run `/ace:ace-bootstrap` to populate initial patterns from git/docs/code
   - Or start coding - ACE will learn automatically!
 
 - **If not configured yet:**
@@ -200,6 +200,6 @@ ACE v3.0 stores playbooks in:
 ## See Also
 
 - `/ace:configure` - Configure ACE server connection
-- `/ace:bootstrap` - Bootstrap playbook from git/docs/code
+- `/ace:ace-bootstrap` - Bootstrap playbook from git/docs/code
 - `/ace:patterns` - View learned patterns
 - `/ace:clear` - Clear playbook and start fresh
