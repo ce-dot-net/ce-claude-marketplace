@@ -4,6 +4,7 @@ import { rm } from '../io/fs.ts'
 import { type HookArgs, type Load, ensure, resolveSession, touchMarker } from '../io/state.ts'
 import { startContext } from './context.ts'
 import { registerCommands } from '../commands/index.ts'
+import { resumeBackfill } from '../io/backfill_io.ts'
 
 export const LEARN_LOCK_MS = 600_000              // ace_session_end.py: learn timeout 300 s + margin
 
@@ -15,6 +16,7 @@ export async function sessionStart($: HookArgs<'session.start'>[0], L: Load, e: 
     if (L.sess) await touchMarker($, L, L.sess, await $.clock.now())
   } catch { /* the Python chain takes over without a marker */ }
   await registerCommands($).catch(() => undefined)
+  await resumeBackfill($).catch(() => undefined)  // 8.2.0: a fresh backfill run marker continues (its timers died with the reload)
   await startContext($, L, e.cwd)  // the status call itself runs in the background
   return r
 }

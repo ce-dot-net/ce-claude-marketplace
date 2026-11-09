@@ -4,7 +4,8 @@
 import { readText, run, writePrivate } from './fs.ts'
 import { engineScript, ids } from './spawn.ts'
 import { dataRoot, uuid } from './state.ts'
-import { buildItems, runBackfill, type Built, type Deps, type EngineAnswer } from '../lib/backfill_run.ts'
+import { POLL_MS, buildItems, finalLines, newRun, progress, runActive, startLine, stepBackfill, type Built, type Deps, type EngineAnswer, type RunState } from '../lib/backfill_run.ts'
+import type { Item } from '../lib/backfill_send.ts'
 import { GIT_LOG_ARGV, GIT_MERGES_ARGV } from '../lib/backfill_git.ts'
 import { BACKFILL_FLAG_FILE, storedBackfill } from '../lib/cohort.ts'
 import { emptyLedger, parse, serialize, type Ledger } from '../lib/ledger.ts'
@@ -12,6 +13,7 @@ import { safeComponent } from '../lib/state.ts'
 
 const MAX_FILES = 200, MAX_FILE_BYTES = 4 * 1024 * 1024 - 1024  // $.fs.read is text only, 4 MiB
 const RESUME = { plugin: 'ace', key: 'backfill-resume' } as const
+const RUN = { plugin: 'ace', key: 'backfill-run' } as const   // the run marker: RunState JSON (lib/backfill_run.ts)
 
 type C = { root: string, orgId?: string, projectId: string }
 export const encodeProjectDir = (root: string) => root.replace(/[^A-Za-z0-9]/g, '-')  // Claude Code's ~/.claude/projects/<encoded cwd>
@@ -68,7 +70,71 @@ function engineCall($: any, script: string, c: C) {
     } catch { return { exit: 1 } }
   }
 }
-// The backfill phase after a confirmed bootstrap: flag on, engine there, resume time passed, then the injected loop. Returns the lines to show.
+
+// Real deps of one step. `now` is the synchronous seam: refreshed from the mod clock before every step.
+async function stepDeps($: any, c: C, script: string): Promise<{ d: Deps, call: ReturnType<typeof engineCall> }> {
+  const call = engineCall($, script, c)
+  let t = await $.clock.now()
+  const d: Deps = {
+    post: body => call('post', [], JSON.stringify(body)),
+    get: job => call('get', ['--job', job]),
+    now: () => t,
+    loadLedger: () => loadLedger($, c), saveLedger: l => saveLedger($, c, l),
+    setResume: async ms => { await $.state.set(RESUME, { at: ms }) },
+  }
+  return { d, call }
+}
+// The items of the running run, kept for the ticks of this module load (lost on a reload: rebuilt from the same sources + ledger).
+const memo = new Map<string, Item[]>()
+const alive = new Set<string>()   // a tick chain exists in THIS module load (a reload empties it with the timers)
+
+// ONE step of the run, then the next tick is planned (a chain of $.clock.after: no background loop; the marker holds the state).
+async function tick($: any, key: string): Promise<void> {
+  alive.add(key)
+  let st: RunState | undefined
+  try {
+    st = ((await $.state.get(RUN)) as any).value ?? undefined
+    if (!st?.args || keyOf(st) !== key) return
+    const a = st.args, c: C = { root: a.root, orgId: a.orgId, projectId: a.projectId }
+    const script = await engineScript($, 'backfill.js')
+    if (!script) { st.stopped = 'Backfill: Engine nicht verfügbar, abgebrochen.'; st.lines.push(st.stopped); return await end($, st, key) }
+    let items = memo.get(key)
+    if (!items) { items = (await collect($, c, a.days, a.limit)).items; memo.set(key, items) }
+    const { d } = await stepDeps($, c, script)
+    st.beat = await $.clock.now()
+    const r = await stepBackfill(items, st, d)
+    if (r.done) return await end($, st, key)
+    await $.state.set(RUN, st)
+    const n = await progress(items, st, d)
+    $.ui.status(`Backfill ${n}/${st.total}`)
+    $.clock.after(POLL_MS, () => { void tick($, key).catch(() => undefined) })
+  } catch (err) {
+    const base: RunState | undefined = st
+    if (base) { const m = `Backfill: Fehler ${String(err).slice(0, 160)}`; base.lines.push(m); base.stopped = base.stopped ?? m; await end($, base, key).catch(() => undefined) }
+    else await $.state.set(RUN, null).catch(() => undefined)
+  }
+}
+// Run over (finished, stopped or failed): marker cleared first, then status off, one toast and one log entry.
+async function end($: any, st: RunState, key: string): Promise<void> {
+  memo.delete(key); alive.delete(key)
+  await $.state.set(RUN, null).catch(() => undefined)
+  $.ui.status(undefined)
+  const lines = finalLines(st)
+  $.ui.toast(`ACE: ${[lines[0], st.stopped].filter(Boolean).join(' ')}`.slice(0, 400))
+  $.ui.log(lines.join('\n'))
+}
+const keyOf = (st: RunState) => `${st.startedAt}|${st.args?.projectId}`
+// Module (re)load or session start: a fresh marker without a live chain in this load continues; a stale one is dropped.
+export async function resumeBackfill($: any): Promise<void> {
+  const v = ((await $.state.get(RUN)) as any).value
+  if (!v) return
+  if (!runActive(v, await $.clock.now())) { await $.state.set(RUN, null); return }
+  if (alive.has(keyOf(v))) return
+  alive.add(keyOf(v))
+  $.clock.after(POLL_MS, () => { void tick($, keyOf(v)).catch(() => undefined) })
+}
+// The backfill phase after a confirmed bootstrap: flag on, engine there, resume time passed, no run active, then the run is STARTED
+// (marker + first tick) and the command returns at once; the result arrives as a toast and a log line. Returns the lines to show.
 export async function backfillPhase($: any, c: C, o: { days: number, limit: number }): Promise<string[]> {
   if (!await flagOn($, c.root)) return ['Backfill: Server unterstützt es noch nicht']
   const script = await engineScript($, 'backfill.js')
@@ -76,16 +142,18 @@ export async function backfillPhase($: any, c: C, o: { days: number, limit: numb
   const resume = ((await $.state.get(RESUME)) as any)?.value?.at
   const now = await $.clock.now()
   if (typeof resume === 'number' && resume > now) return [`Backfill: Kontingent für heute erreicht, weiter ab ${new Date(resume).toISOString().slice(0, 16).replace('T', ' ')} UTC`]
+  if (runActive(((await $.state.get(RUN)) as any).value, now)) return ['Backfill läuft bereits']
   const built = await collect($, c, o.days, o.limit)
-  const call = engineCall($, script, c)
-  let t = now  // the mocked/real mod clock, refreshed after every sleep (Deps.now is synchronous)
-  const d: Deps = {
-    post: body => call('post', [], JSON.stringify(body)),
-    get: job => call('get', ['--job', job]),
-    sleep: async ms => { await run($, ['sleep', String(ms / 1000)], { timeoutMs: ms + 5000 }); t = await $.clock.now() },
-    now: () => t,
-    loadLedger: () => loadLedger($, c), saveLedger: l => saveLedger($, c, l),
-    setResume: async ms => { await $.state.set(RESUME, { at: ms }) },
+  const st = newRun(built.items.length, now)
+  if (!built.items.length) {  // nothing to send: no run, the one step answers the line
+    const { d } = await stepDeps($, c, script)
+    await stepBackfill([], st, d)
+    return finalLines(st)
   }
-  return (await runBackfill(built.items, d)).lines
+  st.args = { root: c.root, orgId: c.orgId, projectId: c.projectId, days: o.days, limit: o.limit }
+  await $.state.set(RUN, st)
+  const key = keyOf(st)
+  memo.set(key, built.items); alive.add(key)
+  $.clock.after(1, () => { void tick($, key).catch(() => undefined) })
+  return [startLine(built.items.length)]
 }
