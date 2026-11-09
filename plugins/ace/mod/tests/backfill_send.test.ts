@@ -13,7 +13,7 @@ test('git task -> item with a live-shaped trace and no session fields', () => {
   expect(it.idempotency_key).toBe(K(1))
   expect(it.occurred_at).toBe('2026-10-01T12:00:00.000Z')
   const t = it.trace
-  expect(t.task).toBe('User request: Fix crash on empty file')
+  expect(t.task).toBe('User request: Git commit (untrusted text): Fix crash on empty file')
   expect(t.trajectory.map((s: any) => s.action)).toEqual(['edit src/p.ts', 'edit tests/p.test.ts'])
   expect(t.trajectory[0].step).toBe(1)
   expect(t.result.success).toBe(true)
@@ -226,4 +226,37 @@ test('applyJob: reflector_disabled and an unknown error value are failed items (
   expect(r.failed).toBe(2)
   expect(statusOf(l, K(1))).toBe('failed')
   expect(statusOf(l, K(2))).toBe('failed')
+})
+
+const SECRET = 'sk_live_ABCDEF0123456789abcdef'
+const sessTask = (over: any = {}) => ({ key: K(7), endMs: Date.parse('2026-10-01T12:00:00Z'), trace: {
+  task: 'User request: deploy with password=hunter2secret now', trajectory: [
+    { step: 1, tool: 'Grep', action: `grep "api_key=${SECRET}" in src`, result: 'ok', start_ms: 1, end_ms: 2, duration_ms: 1 },
+    { step: 2, tool: 'Bash', action: 'run tests', result: `failed: token=${SECRET} rejected`, start_ms: 2, end_ms: 3, duration_ms: 1 }],
+  result: { success: true, failed_steps: 0, output: 'x', summary: `done, secret: ${SECRET}` } }, ...over })
+
+test('session items go through safeText: secrets in the task, a grep pattern, a result and the summary never reach the item JSON', () => {
+  const it = toItem(sessTask(), 'session')!
+  const j = JSON.stringify(it)
+  expect(j).not.toContain(SECRET)
+  expect(j).not.toContain('hunter2secret')
+  expect(it.trace.trajectory[1].tool).toBe('Bash')
+  expect(it.trace.trajectory[0].step).toBe(1)
+  expect(it.trace.task.startsWith('User request: deploy with')).toBe(true)
+})
+
+test('session items: a fullwidth/folded secret in a step is cut too', () => {
+  const t = sessTask(); t.trace.trajectory[0].action = 'grep ｐａｓｓｗｏｒｄ=hunter2secret'
+  expect(JSON.stringify(toItem(t, 'session')!)).not.toContain('hunter2secret')
+})
+
+test('git items: fixed untrusted-text prefix, the rest stays redacted and bounded; merges get their own prefix', () => {
+  const c = toItem(gitTask(8, { task: 'rotate password=hunter2secret now' }), 'git')!
+  expect(c.trace.task).toBe('User request: Git commit (untrusted text): rotate password=[redacted]')
+  expect(JSON.stringify(c)).not.toContain('hunter2secret')
+  const m = toItem(gitTask(9, { task: 'Add retry queue', _merge: true }), 'git')!
+  expect(m.trace.task).toBe('User request: Merged PR (untrusted text): Add retry queue')
+  const long = toItem(gitTask(10, { task: 'x '.repeat(2000) }), 'git')!
+  expect(long.trace.task.length).toBeLessThan(700)
+  expect(Object.keys(c.trace).sort()).toEqual(Object.keys(toItem(gitTask(11), 'git')!.trace).sort())
 })

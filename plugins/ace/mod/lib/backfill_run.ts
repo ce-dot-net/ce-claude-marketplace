@@ -33,7 +33,7 @@ export function buildItems(o: { projectId: string, sessions: { text: string, ses
   for (const s of o.sessions) {
     for (const t of readSession(s.text, { sessionId: s.sessionId }).tasks) { sessionTasks++; cands.push({ ...t, key: taskKey(o.projectId, t.sessionId, t.index), _kind: 'session' }) }
   }
-  const git = [...(o.gitLog ? readGitLog(o.gitLog, { projectId: o.projectId }) : []), ...(o.mergeLog ? readMergeLog(o.mergeLog, { projectId: o.projectId }) : [])]
+  const git = [...(o.gitLog ? readGitLog(o.gitLog, { projectId: o.projectId }) : []), ...(o.mergeLog ? readMergeLog(o.mergeLog, { projectId: o.projectId }).map(t => ({ ...t, _merge: true })) : [])]
   for (const g of git) cands.push({ ...g, _kind: 'git' })
   const open = new Set(pending(o.ledger, cands.map(c => c.key)))
   const fresh = cands.filter(c => open.has(c.key))

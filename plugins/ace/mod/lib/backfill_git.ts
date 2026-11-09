@@ -71,7 +71,7 @@ function rules(s: string): string {
   if (f >= 0) { const e = s.slice(0, f).search(ECHO); s = cutAt(s, e >= 0 ? e : f) }  // echo x | docker login --password-stdin, or <<< x
   return s
 }
-function safeText(s: string): string {
+export function safeText(s: string): string {
   // bounded work: only a WINDOW is folded and redacted, so context right after the 500-char cut (echo x | docker login
   // --password-stdin) still counts; then the cut. A cut may leave a secret as a prefix no pattern matches, so the broken last
   // word is dropped and, after a cut, a key word with no separator and an echo/printf redact to the end.
