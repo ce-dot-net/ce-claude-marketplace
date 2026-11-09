@@ -44,11 +44,17 @@ function parse(text: string): Raw[] {
 // Nothing leaves as plain text: the raw text is redacted, then a fail-closed rule redacts from any secret-key word through a ':' or '='
 // (scope lists, brackets and punctuation in between) to the end of the line, then redact runs again (normalizing can create a new match).
 const MAX_TEXT = 500
-const KEY_RE = /(?:pass(?:word|wd)?|pwd|secret|token|api[-_ ]?key|access[-_ ]?key|private[-_ ]?key|credential|bearer|authorization|cookie|session|key)[^:=\n]*[:=][^\n]*/gi
+const KEY_WORDS = 'pass(?:word|wd)?|pwd|secret|token|api[-_ ]?key|access[-_ ]?key|private[-_ ]?key|credential|bearer|authorization|cookie|session|key'
+const KEY_RE = new RegExp(`(?:${KEY_WORDS})[^:=\\n]*[:=][^\\n]*`, 'gi')
+const KEY_TAIL = new RegExp(`(?:${KEY_WORDS})[^\\n]*$`, 'i')
 function safeText(s: string): string {
-  s = s.slice(0, MAX_TEXT)  // a fixed cut before any regex runs: bounded work, and the tail never leaves
+  const cut = s.length > MAX_TEXT
+  // a fixed cut before any regex runs (bounded work); a cut may leave a secret as a prefix no pattern matches, so the
+  // broken last word is dropped and, after a cut, a key word with no separator redacts to the end.
+  if (cut) s = s.slice(0, MAX_TEXT).replace(/\S*$/, '')
   const once = (x: string) => redact(x).replace(KEY_RE, '[redacted]')
-  return once(once(s))
+  s = once(once(s))
+  return cut ? s.replace(KEY_TAIL, '[redacted]') : s
 }
 
 function normalize(s: string): string {
