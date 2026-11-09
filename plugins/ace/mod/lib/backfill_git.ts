@@ -33,7 +33,8 @@ function parse(text: string): Raw[] {
   const out: Raw[] = []
   for (const chunk of text.split('\x1e')) {
     const f = chunk.split('\x00')
-    if (f.length < 5 || !f[0].trim()) continue  // sha, date, subject, body, trailer
+    // sha, date, subject, body, trailer; the sha is emitted as is, so only a hex sha counts (an RS inside a message cannot forge one)
+    if (f.length < 5 || !/^[0-9a-f]{7,64}$/i.test(f[0].trim())) continue
     const ms = Date.parse(f[1].trim())
     out.push({ sha: f[0].trim(), ms: Number.isFinite(ms) ? ms : 0, subject: f[2].trim(), body: f[3],
       files: f[4].split('\n').map(s => s.trim()).filter(Boolean) })
@@ -41,20 +42,45 @@ function parse(text: string): Raw[] {
   return out
 }
 
-// Nothing leaves as plain text: the raw text is redacted, then a fail-closed rule redacts from any secret-key word through a ':' or '='
-// (scope lists, brackets and punctuation in between) to the end of the line, then redact runs again (normalizing can create a new match).
-const MAX_TEXT = 500
-const KEY_WORDS = 'pass(?:word|wd)?|pwd|secret|token|api[-_ ]?key|access[-_ ]?key|private[-_ ]?key|credential|bearer|authorization|cookie|session|key'
-const KEY_RE = new RegExp(`(?:${KEY_WORDS})[^:=\\n]*[:=][^\\n]*`, 'gi')
-const KEY_TAIL = new RegExp(`(?:${KEY_WORDS})[^\\n]*$`, 'i')
+// Nothing leaves as plain text. The text is folded to ONE line (NFKD: fullwidth and compat forms; marks, format and filler
+// characters such as zero-width ones dropped; every line break a space), redacted, then fail-closed rules cut it at the first
+// secret-key word that has a separator anywhere after it, at a PEM header, and at a value piped into or given to a stdin login;
+// then redact runs again (normalizing can create a new match). A separator is ':' or '=' or ANY non-ASCII character left after
+// folding (lookalike colons and equals signs), a pipe, '>' or a URL-encoded ':' / '='. Each rule is one forward search, so the work stays linear.
+const MAX_TEXT = 500, WINDOW = MAX_TEXT * 4
+const KEY_WORD = /pass(?:word|wd)?|pwd|secret|token|api[-_ ]?key|access[-_ ]?key|private[-_ ]?key|credential|bearer|authorization|cookie|session|key/i
+const SEP = /[:=|>\u0080-\uffff]|%3[ad]/i  // also a pipe, '->' / '=>' and a URL-encoded ':' or '='
+const BEARER = /\bbearer/i  // to the end even with no space after it (a dropped zero-width char joins it to the value)
+// any userinfo, even with quotes in it (redact stops a userinfo at a quote)
+const USERINFO = /(\b[a-z][a-z0-9+.-]*:\/\/)[^\s\/]*@/gi
+const ECHO = /\b(?:echo|printf)\b/i  // any case: ECHO works on a case-insensitive filesystem
+const KEY_OR_ECHO = new RegExp(`${KEY_WORD.source}|${ECHO.source}`, 'i')
+const STDIN_FLAG = /--(?:password-stdin|with-token)\b/i
+const PEM = /-{2,}\s*BEGIN\b/i
+// the word a cut broke (/\S*$/ would be quadratic on a long run of non-space)
+function dropLastWord(s: string): string { let i = s.length; while (i > 0 && !/\s/.test(s[i - 1])) i--; return s.slice(0, i) }
+const cutAt = (s: string, k: number) => k >= 0 ? s.slice(0, k) + '[redacted]' : s
+const fold = (s: string) => s.normalize('NFKD').replace(/[\p{M}\p{Cf}\u115f\u1160\u3164\uffa0\u2800]/gu, '').replace(/[\r\n\v\f\x85\u2028\u2029]+/g, ' ')
+function rules(s: string): string {
+  s = redact(s).replace(USERINFO, '$1[redacted]@')
+  const k = s.search(KEY_WORD)
+  if (k >= 0 && SEP.test(s.slice(k))) s = cutAt(s, k)
+  s = cutAt(s, s.search(PEM))
+  s = cutAt(s, s.search(BEARER))
+  const f = s.search(STDIN_FLAG)
+  if (f >= 0) { const e = s.slice(0, f).search(ECHO); s = cutAt(s, e >= 0 ? e : f) }  // echo x | docker login --password-stdin, or <<< x
+  return s
+}
 function safeText(s: string): string {
-  const cut = s.length > MAX_TEXT
-  // a fixed cut before any regex runs (bounded work); a cut may leave a secret as a prefix no pattern matches, so the
-  // broken last word is dropped and, after a cut, a key word with no separator redacts to the end.
-  if (cut) s = s.slice(0, MAX_TEXT).replace(/\S*$/, '')
-  const once = (x: string) => redact(x).replace(KEY_RE, '[redacted]')
-  s = once(once(s))
-  return cut ? s.replace(KEY_TAIL, '[redacted]') : s
+  // bounded work: only a WINDOW is folded and redacted, so context right after the 500-char cut (echo x | docker login
+  // --password-stdin) still counts; then the cut. A cut may leave a secret as a prefix no pattern matches, so the broken last
+  // word is dropped and, after a cut, a key word with no separator and an echo/printf redact to the end.
+  let cut = s.length > WINDOW
+  s = s.slice(0, WINDOW)
+  if (cut) s = dropLastWord(s)
+  s = rules(rules(fold(s)))
+  if (s.length > MAX_TEXT) { cut = true; s = dropLastWord(s.slice(0, MAX_TEXT)) }
+  return cut ? cutAt(s, s.search(KEY_OR_ECHO)) : s
 }
 
 function normalize(s: string): string {
