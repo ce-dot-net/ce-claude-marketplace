@@ -1,7 +1,7 @@
 ---
 disable-model-invocation: true
 description: Bootstrap ACE playbook from docs, git history, and/or current code
-argument-hint: "[--mode hybrid|both|local-files|git-history|docs-only] [--thoroughness light|medium|deep] [--commits N] [--days N]"
+argument-hint: "[mode] [level] | --mode hybrid|both|local-files|git-history|docs-only --thoroughness light|medium|deep [--commit-limit N] [--days-back N] [--max-files N]"
 context: fork
 effort: high
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(find:*), Bash(wc:*), Read
@@ -41,7 +41,20 @@ Command: calls ace-cli status for final counts
 Command: generates dynamic report for user
 ```
 
-**To invoke**: Simply use the bootstrap-orchestrator skill with the user's parameters.
+Where mods run, the ACE mod answers the command itself (no model): it shows a short preview (files by type, commits in the
+window, docs found, current playbook size, what leaves the machine) and a confirm button; after the run it prints ONE result line
+(patterns extracted, after dedup, time; "keine Patterns gefunden" for zero).
+
+**Arguments** (both forms work, mixed too):
+- positional: `/ace:ace-bootstrap [mode] [level]`, e.g. `docs-only light`
+- flags: `/ace:ace-bootstrap --mode docs-only --thoroughness light --commit-limit 200 --days-back 60 --max-files 100`
+  (`--commit-limit`, `--days-back`, `--max-files` are positive integers and go to the CLI as given)
+- nothing given: `--mode`/`--thoroughness` are NOT passed, the CLI uses the server's defaults ("Standard des Servers" in the preview)
+
+**`--approved`** (terminals without a button, e.g. Moshi/herdr): the preview prints the exact line to copy, the same line plus
+` --approved` runs the action at once, like the button. A standalone `--approved` token at the end, at the start or next to another
+`--flag` counts; inside a text it is just text. `clear` and `cleanup` (destructive) run with `--approved` only when the identical
+preview is already waiting.
 
 ## Usage
 
@@ -69,17 +82,18 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --org "$ACE_ORG_ID" --project "$
 ```
 
 **Parameters**:
-- `--mode <mode>` - Analysis mode (default: "hybrid")
+- `--mode <mode>` - Analysis mode (default: the server's, usually "hybrid")
   - `hybrid`: RECOMMENDED - Intelligently scan docs → git history → local files
   - `both`: Analyze current files + git history (no docs)
   - `local-files`: Current codebase files only
   - `git-history`: Git commit history only
   - `docs-only`: Documentation files only (*.md, *.txt)
 
-- `--thoroughness <level>` - Analysis depth (default: "medium")
-  - `light`: max_files=1000, commit_limit=100, days_back=30
-  - `medium`: max_files=5000, commit_limit=500, days_back=90
-  - `deep`: max_files=unlimited, commit_limit=1000, days_back=180
+- `--thoroughness <level>` - Analysis depth (default: the server's, usually "medium")
+  - `light`: commit_limit=100, days_back=30
+  - `medium`: commit_limit=500, days_back=90
+  - `deep`: commit_limit=1000, days_back=180
+  - The code sample is capped at the first 50 source files in every level, so the three levels differ only in the git history window.
 
 - `--repo-path <path>` - Path to repository (default: current directory)
 - `--max-files <number>` - Maximum files to analyze (overrides thoroughness)
@@ -90,16 +104,16 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli bootstrap --org "$ACE_ORG_ID" --project "$
 **Examples**:
 ```bash
 # RECOMMENDED: Most comprehensive analysis
-/ace:bootstrap --mode hybrid --thoroughness deep
+/ace:ace-bootstrap --mode hybrid --thoroughness deep
 
 # Good balance of speed and coverage
-/ace:bootstrap --mode hybrid --thoroughness medium
+/ace:ace-bootstrap --mode hybrid --thoroughness medium
 
 # Quick local files scan
-/ace:bootstrap --mode local-files --thoroughness light
+/ace:ace-bootstrap --mode local-files --thoroughness light
 
 # Deep git history analysis
-/ace:bootstrap --mode git-history --thoroughness deep
+/ace:ace-bootstrap --mode git-history --thoroughness deep
 ```
 
 ## What Gets Analyzed
@@ -407,15 +421,13 @@ Once bootstrapped, ACE continues learning through **online learning**:
 
 ## Privacy & Security
 
-**What gets analyzed:**
-- Commit messages
-- File paths
-- Commit statistics (additions/deletions)
+**What leaves your machine** (the CLI sends text blocks to the ACE server; verified in the CLI source, no redaction is applied):
+- `hybrid`, `both`, `local-files`: the **function bodies** of the first 50 source files, up to 20 docs (CLAUDE.md, README.md, docs/*.md) and the commit messages and **diffs** of the git window
+- `docs-only`: up to 20 docs, no source code
+- `git-history`: commit messages and diffs, no source files
 
-**NOT analyzed:**
-- Actual file contents (unless you implement custom analysis)
-- Credentials or secrets
-- Private comments
+The preview says this before anything is sent. Do not run a code mode on a repository whose code or history must not leave the machine;
+`docs-only` is the narrow choice (it still sends the docs, so keep secrets out of them).
 
 **Storage:**
 - Playbook stored on ACE server (configured in plugin.json)

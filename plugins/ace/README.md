@@ -141,7 +141,7 @@ confirm button. Elsewhere the markdown fallback runs.
 | `/ace:ace-clear` | Clear the playbook (preview + confirm) |
 | `/ace:ace-delta <op> <json>` | Add/update/remove patterns (preview + confirm) |
 | `/ace:ace-learn <lesson>` | Send one lesson (preview + confirm) |
-| `/ace:ace-bootstrap [mode] [level]` | Build the playbook from the codebase (preview + confirm) |
+| `/ace:ace-bootstrap [mode] [level]` or `--mode X --thoroughness Y` | Build the playbook from the codebase: facts preview, what leaves the machine, one result line (preview + confirm) |
 | `/ace:ace-tune [show \| key=value ...]` | Show or change server settings (writes: preview + confirm) |
 | `/ace:ace-configure [org_ prj_]` | Bind the repo: name-matched suggestion, `.gitignore` diff, confirm |
 | `/ace:ace-login` | Login state; the device login starts on the button press |
