@@ -122,3 +122,11 @@ test('scope punctuation never hides a key from redaction, for any type (hotfix, 
   expect(r.length).toBe(4)
   expect(JSON.stringify(r)).not.toContain('hunter2')
 })
+
+test('redaction normalizes every parenthesized scope anywhere in the subject (revert-wrapped, stacked, comma-separated, hyphenated)', () => {
+  const subs = ['Revert "fix(DB_PASSWORD): hunter2 leaked"', 'fix(core)(API_KEY): hunter2 leaked', 'fix(core,DB_PASSWORD): hunter2 leaked',
+    'fix(db-password)!: hunter2 leaked', 'fix: handle (SECRET): hunter2 in logs', 'bug(a)(b)!(TOKEN): hunter2 leaked']
+  const r = subs.flatMap((s, i) => readGitLog(c(String(i).repeat(40), '2026-03-02T10:00:00Z', s), { projectId: 'prj' }))
+  expect(r.length).toBe(subs.length)
+  expect(JSON.stringify(r)).not.toContain('hunter2')
+})
