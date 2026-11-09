@@ -144,3 +144,13 @@ test('benign subjects keep their text', () => {
   const r = readGitLog(c(S1, '2026-03-02T10:00:00Z', 'fix(auth): refresh expiry off by one'), { projectId: 'prj' })
   expect(r[0].task).toBe('auth: refresh expiry off by one')
 })
+
+test('wider key vocabulary, same gate on files, raw subject redacted before normalizing', () => {
+  const subs = ['fix(SESSION_COOKIE, x): hunter2 leaked', 'fix(STRIPE_KEY, x): hunter2 leaked', 'fix: Authorization: hunter2 leaked',
+    'fix: signing-key = hunter2 leaked', 'fix(x): see https://u(a):hunter2@host/p for the bug']
+  const r = subs.flatMap((s, i) => readGitLog(c(String(i).repeat(40), '2026-03-02T10:00:00Z', s, ['config/DB_PASSWORD=hunter2.json', 'a/API_KEY (x)=hunter2.env']), { projectId: 'prj' }))
+  expect(r.length).toBe(subs.length)
+  expect(JSON.stringify(r)).not.toContain('hunter2')
+  const m = readMergeLog(`${RS}${S1}${NUL}2026-03-02T10:00:00Z${NUL}Merge pull request #7 from o/b${NUL}fix(STRIPE_KEY, x): hunter2${NUL}\n`, { projectId: 'prj' })
+  expect(JSON.stringify(m)).not.toContain('hunter2')
+})
