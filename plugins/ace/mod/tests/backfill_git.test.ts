@@ -108,3 +108,10 @@ test('merge/PR subjects: task is the PR title from the body, branch and author d
   expect(r[0].steps).toEqual([])
   expect(JSON.stringify(r)).not.toContain('someone')
 })
+
+test('a key-prefixed subject is redacted before the prefix is cleaned (plain and scoped)', () => {
+  const plain = readGitLog(c(S1, '2026-03-02T10:00:00Z', 'fix DB_PASSWORD: hunter2 leaked in the logger'), { projectId: 'prj' })
+  const keyed = readGitLog(c(S2, '2026-03-02T10:00:00Z', 'DB_PASSWORD: hunter2 fix for the logger'), { projectId: 'prj' })
+  const scoped = readGitLog(c(S3, '2026-03-02T10:00:00Z', 'fix(DB_PASSWORD): hunter2 leaked in the logger'), { projectId: 'prj' })
+  expect(JSON.stringify([plain, keyed, scoped])).not.toContain('hunter2')
+})

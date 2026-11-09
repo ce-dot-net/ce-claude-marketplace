@@ -44,7 +44,7 @@ function parse(text: string): Raw[] {
 // "fix(auth)!: msg (#42)" -> "auth: msg"; other subjects only lose a trailing "(#N)".
 function clean(subject: string): string {
   const s = subject.replace(/\s*\(#\d+\)\s*$/, '')
-  const m = /^\w+(?:\(([^)]*)\))?!?:\s*(.+)$/.exec(s)
+  const m = /^(?:fix|feat|chore|refactor|docs|test|perf|build|ci|style|revert)(?:\(([^)]*)\))?!?:\s*(.+)$/i.exec(s)
   return m ? (m[1] ? `${m[1]}: ${m[2]}` : m[2]) : s
 }
 
@@ -54,7 +54,7 @@ const isTrivial = (s: string) => s.length < 12 || TRIVIAL_RE.test(s)
 export function readGitLog(text: string, o: Opts): GitTask[] {
   const raws = parse(text).filter(r => FIX_RE.test(r.subject) && !isTrivial(r.subject))
   const tasks: (GitTask & { _s: string })[] = raws.map(r => ({
-    key: gitTaskKey(o.projectId, r.sha), sha: r.sha, task: redact(clean(r.subject)), steps: r.files.map(f => redact(f)),
+    key: gitTaskKey(o.projectId, r.sha), sha: r.sha, task: redact(clean(redact(r.subject))), steps: r.files.map(f => redact(f)),
     success: !REVERT_RE.test(r.subject), failedThenFixed: false, decisive: 0, endMs: r.ms, _s: r.subject }))
   // revert pairing: the sha in "This reverts commit <sha>" wins, else the quoted subject; only commits in the window pair
   raws.forEach(r => {
