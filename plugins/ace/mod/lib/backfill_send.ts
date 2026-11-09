@@ -78,6 +78,20 @@ const num = (v: unknown, d = 0) => typeof v === 'number' && Number.isFinite(v) ?
 const str = (v: unknown, max = 200) => typeof v === 'string' ? v.slice(0, max) : ''
 const DAY = 86_400_000
 
+// What the log may keep of a server answer: status, code, error, a plain-string detail, and the FIELD NAMES (loc) of a 422 detail list.
+// Never `msg`/`input`/`ctx` (they can echo request content).
+export type Described = { status: number, code?: string, error?: string, detail?: string, fields?: string[] }
+export function describeAnswer(status: number, body: unknown): Described {
+  const j = obj(body), d: Described = { status: num(status) }
+  if (typeof j.code === 'string') d.code = str(j.code, 80)
+  if (typeof j.error === 'string') d.error = str(j.error, 120)
+  if (typeof j.detail === 'string') d.detail = str(j.detail, 200)
+  else if (Array.isArray(j.detail)) {
+    d.fields = j.detail.slice(0, 10).map((e: any) => Array.isArray(e?.loc) ? e.loc.map((x: unknown) => String(x).slice(0, 40)).join('.').slice(0, 120) : '').filter(Boolean)
+  }
+  return d
+}
+
 // Never throws. status 0 / NaN / missing = network failure. nowMs only feeds the 429 resume time (next UTC midnight, strictly later).
 export function classify(status: number, body: unknown, nowMs: number = Date.now()): Class {
   const j = obj(body)
@@ -88,7 +102,7 @@ export function classify(status: number, body: unknown, nowMs: number = Date.now
   }
   if (status === 404) return { kind: 'capability_off' }
   if (status === 413) return { kind: 'too_large', code: str(j.code, 60), limit: num(j.limit) }
-  if (status === 422) return { kind: 'invalid', status, detail: str(typeof j.detail === 'string' ? j.detail : JSON.stringify(j.detail ?? j.error ?? ''), 300) }
+  if (status === 422) { const d = describeAnswer(status, j); return { kind: 'invalid', status, detail: str(d.fields ? d.fields.join(', ') : d.detail ?? d.error ?? '', 300) } }
   if (status === 429) {
     const now = Number.isFinite(nowMs) ? nowMs : Date.now()
     return { kind: 'quota', limit: num(j.limit), current: num(j.current), resumeAfter: (Math.floor(now / DAY) + 1) * DAY }
@@ -100,7 +114,9 @@ export function classify(status: number, body: unknown, nowMs: number = Date.now
 export type Report = { sent: number, partial: number, failed: number, skipped: number, patternsCreated: number, failedChunks: number, finished: boolean }
 
 // GET /traces/backfill/<id> body -> ledger updates + a readable report. pending/processing/unknown items change nothing.
-export function applyJob(l: Ledger, job: unknown, nowMs: number): Report {
+// `judged` (optional, mutated): keys whose verdict of THIS job already counted. A job is polled many times and its failed items stay
+// failed in every answer: without it each poll would burn one more ledger attempt per item (3 polls = skipped-failed, no new verdict).
+export function applyJob(l: Ledger, job: unknown, nowMs: number, judged?: Set<string>): Report {
   const j = obj(job)
   const r: Report = { sent: 0, partial: 0, failed: 0, skipped: 0, patternsCreated: 0, failedChunks: 0, finished: j.state === 'finished' }
   const items: any[] = Array.isArray(j.items) ? j.items : []
@@ -115,17 +131,31 @@ export function applyJob(l: Ledger, job: unknown, nowMs: number): Report {
       pc += num(it.patterns_created); fc += num(it.failed_chunks)
       if (num(it.failed_chunks) > 0) r.partial++
     } else if (gone) {
-      for (let i = 0; i < MAX_ATTEMPTS; i++) add(l, key, 'failed', nowMs)  // the ledger's retry cap turns it into skipped-failed
+      if (!judged?.has(key)) for (let i = 0; i < MAX_ATTEMPTS; i++) add(l, key, 'failed', nowMs)  // the ledger's retry cap turns it into skipped-failed
+      judged?.add(key)
       r.failed++
     } else if (it.state === 'skipped') {
       if (add(l, key, 'skipped', nowMs)) r.skipped++
     } else if (it.state === 'failed') {
-      if (add(l, key, 'failed', nowMs)) r.failed++
+      if (judged?.has(key)) r.failed++
+      else if (add(l, key, 'failed', nowMs)) { r.failed++; judged?.add(key) }
     }
   }
   r.patternsCreated = typeof j.patterns_created === 'number' ? num(j.patterns_created) : pc
   r.failedChunks = typeof j.failed_chunks === 'number' ? num(j.failed_chunks) : fc
   return r
+}
+
+// Failed items of a job answer not judged yet (for the log): key + the server's error value (<= 80 chars).
+export function failedItems(job: unknown, judged: Set<string>): { key: string, error: string }[] {
+  const items: any[] = Array.isArray(obj(job).items) ? obj(job).items : []
+  const out: { key: string, error: string }[] = []
+  for (const raw of items) {
+    const it = obj(raw)
+    if (it.state === 'failed' && typeof it.idempotency_key === 'string' && KEY_RE.test(it.idempotency_key) && !judged.has(it.idempotency_key))
+      out.push({ key: it.idempotency_key, error: str(it.error, 80) || 'failed' })
+  }
+  return out
 }
 
 export function reportLine(r: Report): string {

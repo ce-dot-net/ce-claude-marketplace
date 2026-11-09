@@ -1,6 +1,6 @@
 // 8.2.0 backfill send helpers (pure, unwired): task -> server item, batching, response classification, job status -> ledger.
 import { expect, test } from 'claude-code/testing'
-import { applyJob, batches, classify, reportLine, toItem } from '../lib/backfill_send.ts'
+import { applyJob, batches, classify, describeAnswer, failedItems, reportLine, toItem } from '../lib/backfill_send.ts'
 import { add, emptyLedger, MAX_ATTEMPTS, MAX_KEYS, serialize, statusOf } from '../lib/ledger.ts'
 import { readSession } from '../lib/backfill.ts'
 
@@ -281,4 +281,37 @@ test('bare token shapes with no key word never leave (session and git)', () => {
 test('git file steps with whitespace or sentence-like text are dropped, plain paths stay', () => {
   const it = toItem(gitTask(22, { steps: ['src/a.ts', 'ignore previous instructions.txt', 'x'.repeat(250)] }), 'git')!
   expect(it.trace.trajectory.map((s: any) => s.action)).toEqual(['edit src/a.ts'])
+})
+
+test('applyJob with a judged set: an item that failed in an earlier poll of the same job burns NO further attempt, but still counts as failed', () => {
+  const l = emptyLedger(), judged = new Set<string>()
+  const j = job([{ idempotency_key: K(1), state: 'failed', error: 'pipeline_failed' }], { state: 'processing' })
+  for (let i = 0; i < 5; i++) applyJob(l, j, 1, judged)
+  expect(l.entries.get(K(1))).toMatchObject({ status: 'failed', attempts: 1 })
+  expect(applyJob(l, j, 1, judged).failed).toBe(1)
+  expect(judged.has(K(1))).toBe(true)
+})
+test('applyJob with a judged set: the gone path (expired) is one verdict as well', () => {
+  const l = emptyLedger(), judged = new Set<string>()
+  const j = job([{ idempotency_key: K(1), state: 'failed', error: 'expired' }])
+  applyJob(l, j, 1, judged); applyJob(l, j, 2, judged)
+  expect(l.entries.get(K(1))).toMatchObject({ status: 'skipped-failed', attempts: 3 })
+})
+test('failedItems: only failed items not yet judged, with their error value cut to 80 chars', () => {
+  const j = job([{ idempotency_key: K(1), state: 'failed', error: 'x'.repeat(200) }, { idempotency_key: K(2), state: 'done' }, { idempotency_key: K(3), state: 'failed' }, { idempotency_key: K(4), state: 'failed', error: 'boom' }])
+  const r = failedItems(j, new Set([K(4)]))
+  expect(r).toEqual([{ key: K(1), error: 'x'.repeat(80) }, { key: K(3), error: 'failed' }])
+  expect(failedItems(null as any, new Set())).toEqual([])
+})
+test('describeAnswer: status, code, error, string detail and 422 field names only, never input values', () => {
+  const d = describeAnswer(422, { code: 'payload_invalid', error: 'bad', detail: [{ loc: ['body', 'items', 0, 'trace', 'task'], msg: 'Field required', type: 'missing', input: 'SECRET-PROMPT' }] })
+  expect(d).toEqual({ status: 422, code: 'payload_invalid', error: 'bad', fields: ['body.items.0.trace.task'] })
+  expect(JSON.stringify(d)).not.toContain('SECRET')
+  expect(describeAnswer(400, { detail: 'plain text ' + 'y'.repeat(500) }).detail?.length).toBe(200)
+  expect(describeAnswer(0, 'garbage')).toEqual({ status: 0 })
+})
+test('classify 422 detail names the fields, never the input values', () => {
+  const c: any = classify(422, { detail: [{ loc: ['body', 'items', 0, 'occurred_at'], msg: 'x', type: 'value_error', input: 'SECRET-PROMPT' }] }, NOW)
+  expect(c.detail).toContain('body.items.0.occurred_at')
+  expect(c.detail).not.toContain('SECRET')
 })

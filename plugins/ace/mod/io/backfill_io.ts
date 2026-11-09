@@ -2,6 +2,8 @@
 // the engine/backfill.js calls, the resume time. The orchestration itself is lib/backfill_run.ts (all I/O injected).
 // The plugin never holds a token: only engine/backfill.js talks to the server (through the core client).
 import { readText, run, writePrivate } from './fs.ts'
+import { APPEND_SH } from '../lib/sh.ts'
+import { pyDumps } from '../lib/pyjson.ts'
 import { engineScript, ids } from './spawn.ts'
 import { dataRoot, uuid } from './state.ts'
 import { POLL_MS, buildItems, finalLines, newRun, progress, runActive, startLine, stepBackfill, type Built, type Deps, type EngineAnswer, type RunState } from '../lib/backfill_run.ts'
@@ -56,6 +58,8 @@ export async function collect($: any, c: C, days: number, limit: number): Promis
     mergeLog: await gitText($, c, GIT_MERGES_ARGV, days), limit, ledger })
 }
 
+const lastLine = (t: unknown) => String(t ?? '').trim().split('\n').pop()?.slice(0, 200) ?? ''
+
 function engineCall($: any, script: string, c: C) {
   const base = ['node', script]
   const tail = ids({ org: c.orgId, project: c.projectId } as any)
@@ -63,7 +67,7 @@ function engineCall($: any, script: string, c: C) {
   return async (cmd: 'post' | 'get', extra: string[], stdin?: string): Promise<EngineAnswer> => {
     let r: any
     try { r = await $.process.run([...base, cmd, ...tail, ...extra], { stdin, env, timeoutMs: 120_000 }) } catch { return { exit: 1 } }
-    if (r.exitCode !== 0) return { exit: r.exitCode ?? 1 }
+    if (r.exitCode !== 0) return { exit: r.exitCode ?? 1, stderr: lastLine(r.stderr) }
     try {
       const j = JSON.parse(String(r.stdout ?? '').trim().split('\n').pop() ?? '')
       return typeof j?.status === 'number' ? { exit: 0, status: j.status, body: j.body ?? null } : { exit: 1 }
@@ -80,6 +84,7 @@ async function stepDeps($: any, c: C, script: string): Promise<{ d: Deps, call: 
     get: job => call('get', ['--job', job]),
     now: () => t,
     loadLedger: () => loadLedger($, c), saveLedger: l => saveLedger($, c, l),
+    log: async row => { const root = await dataRoot($); await run($, ['/bin/sh', '-c', APPEND_SH, 'sh', `${root}/backfill-log.jsonl`, root], { stdin: pyDumps({ timestamp: new Date(t).toISOString(), ...row }) + '\n' }) },
     setResume: async ms => { await $.state.set(RESUME, { at: ms }) },
   }
   return { d, call }
