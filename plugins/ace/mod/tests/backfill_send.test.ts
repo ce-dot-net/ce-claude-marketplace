@@ -245,6 +245,14 @@ test('session items go through safeText: secrets in the task, a grep pattern, a 
   expect(it.trace.task.startsWith('User request: deploy with')).toBe(true)
 })
 
+test('session items: redact by default, a secret in result.output or in an unknown nested field never leaves', () => {
+  const t = sessTask(); t.trace.result.output = `deploy token=${SECRET} done`
+  ;(t.trace as any).extra = { notes: [`password=hunter2secret`], deep: { v: `api_key=${SECRET}` } }
+  const j = JSON.stringify(toItem(t, 'session')!)
+  expect(j).not.toContain(SECRET)
+  expect(j).not.toContain('hunter2secret')
+})
+
 test('session items: a fullwidth/folded secret in a step is cut too', () => {
   const t = sessTask(); t.trace.trajectory[0].action = 'grep ｐａｓｓｗｏｒｄ=hunter2secret'
   expect(JSON.stringify(toItem(t, 'session')!)).not.toContain('hunter2secret')
