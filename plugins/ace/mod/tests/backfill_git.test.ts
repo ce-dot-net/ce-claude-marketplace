@@ -167,3 +167,17 @@ test('any "key" before a separator is redacted (FOO_KEY_ID=, FOO_KEY2=, signing 
   expect(big[0].task.length).toBeLessThanOrEqual(600)
   expect(big[0].steps[0].length).toBeLessThanOrEqual(600)
 })
+
+test('a secret straddling the 500-char cut never leaves as a prefix (url credential, npm token, key word without separator)', () => {
+  const pad = (n: number) => 'x'.repeat(n)
+  const cases = [
+    'fix: ' + pad(480) + ' https://user:hunter2pass@host/p',
+    'fix: ' + pad(480) + ' npm_' + 'A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8',
+    'fix: ' + pad(485) + ' api_key hunter2pass',
+    'fix: ' + pad(490) + ' ghp_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8',
+  ]
+  const r = cases.flatMap((s, i) => readGitLog(c(String(i).repeat(40), '2026-03-02T10:00:00Z', s, ['d/' + pad(496) + 'hunter2pass']), { projectId: 'prj' }))
+  expect(r.length).toBe(4)
+  const out = JSON.stringify(r)
+  for (const frag of ['hunter2', 'npm_', 'ghp_', 'user:', 'api_key']) expect(out).not.toContain(frag)
+})
