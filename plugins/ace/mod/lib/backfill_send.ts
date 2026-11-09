@@ -24,12 +24,10 @@ export function toItem(task: any, kind: 'session' | 'git'): Item | null {
   let trace: any
   if (kind === 'session') {
     if (!task.trace || typeof task.trace !== 'object') return null
-    trace = { ...task.trace }
-    // everything that leaves the machine goes through the strict git-side filter (unicode fold, key-word cut), not just redact
-    if (typeof trace.task === 'string') trace.task = safeText(trace.task)
-    if (Array.isArray(trace.trajectory)) trace.trajectory = trace.trajectory.map((s: any) => s && typeof s === 'object'
-      ? { ...s, ...(typeof s.action === 'string' ? { action: safeText(s.action) } : {}), ...(typeof s.result === 'string' ? { result: safeText(s.result) } : {}) } : s)
-    if (trace.result && typeof trace.result === 'object' && typeof trace.result.summary === 'string') trace.result = { ...trace.result, summary: safeText(trace.result.summary) }
+    // redact by default: EVERY string anywhere in the trace goes through the strict git-side filter (unicode fold, key-word cut), not just redact
+    const deep = (v: any): any => typeof v === 'string' ? safeText(v) : Array.isArray(v) ? v.map(deep)
+      : v && typeof v === 'object' ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, deep(x)])) : v
+    trace = deep(task.trace)
   } else if (kind === 'git') {
     const files: string[] = Array.isArray(task.steps) ? task.steps.filter((s: unknown) => typeof s === 'string').map((s: string) => safeText(s)) : []
     const tools: ToolRec[] = files.map(f => ({ tool: 'Edit', action: `edit ${f}`, result: 'ok', failed: false, start_ms: task.endMs, end_ms: task.endMs }))
