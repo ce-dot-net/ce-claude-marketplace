@@ -140,3 +140,11 @@ export function clientPolicyLine(text: string | undefined, version: string, nowM
   if (st === 'min') return `update   ACE ${version} ist zu alt (min ${pol.min_plugin_version}), bitte /plugin update ausführen`
   return `update   ACE ${version} · empfohlen ${pol.recommended_plugin_version}${pol.message ? `: ${pol.message}` : ''}${pol.url ? ` · ${pol.url}` : ''}`
 }
+
+// 8.2.0 bootstrap backfill capability (DORMANT until the server sends it): a search response with top-level boolean
+// `bootstrap_backfill: true` switches the backfill on for the project; stored {on, at (epoch s)}, < 7 days, else off.
+export const BACKFILL_FLAG_FILE = 'bootstrap-backfill.json'
+export const serverBackfill = (resp: any): boolean | undefined => typeof resp?.bootstrap_backfill === 'boolean' ? resp.bootstrap_backfill : undefined
+export function storedBackfill(text: string | undefined, nowMs: number): boolean {
+  try { const d = JSON.parse(text as string); return d?.on === true && typeof d.at === 'number' && nowMs / 1000 - d.at < RENDER_FULL_PCT_MAX_AGE_S } catch { return false }
+}
