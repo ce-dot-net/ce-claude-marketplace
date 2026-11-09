@@ -18,6 +18,7 @@ export type AcePending = {
   argv?: string[]
   stdin?: string
   report?: string  // 8.2.0 kind 'cli': the NAME of a result formatter (lib/reports.ts reportLine); absent = the raw stdout
+  backfill?: { days: number, limit: number }  // 8.2.0 kind 'cli': after the CLI run, the backfill phase (io/backfill_io.ts)
   orgId?: string
   projectId?: string
 } | null

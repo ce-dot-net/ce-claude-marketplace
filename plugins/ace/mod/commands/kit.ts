@@ -25,7 +25,7 @@ export function json(r: CliResult): any {
 export const CONFIRM_MARK = 'Noch nichts geändert.'
 export async function confirm($: any, p: NonNullable<AcePending>): Promise<string> {
   await $.state.set(PENDING, p)
-  $.ui.log(`ace pending ${JSON.stringify({ label: p.label, kind: p.kind, argv: p.argv, report: p.report })}`, { to: 'debug' })
+  $.ui.log(`ace pending ${JSON.stringify({ label: p.label, kind: p.kind, argv: p.argv, report: p.report, backfill: p.backfill })}`, { to: 'debug' })
   return `${p.preview}\n\n${CONFIRM_MARK} Bestätigen mit [${p.label}] über der Eingabe.`
 }
 // 8.2.0 `--approved`, the second half of confirm (runCommand calls it after every command, `before` = the pending that

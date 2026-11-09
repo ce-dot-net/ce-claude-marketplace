@@ -1,6 +1,8 @@
 import { type Cmd, type Kit, confirm, json } from './kit.ts'
 import { cliIds } from '../context/index.ts'
 import { run } from '../io/fs.ts'
+import { collect, flagOn } from '../io/backfill_io.ts'
+import { parseLimit, previewLines } from '../lib/backfill_run.ts'
 import { parseBootstrapArgs } from '../lib/bootstrap_args.ts'
 export const bootstrap: Cmd = { name: 'bootstrap', md: 'ace-bootstrap', description: 'Build the playbook from the codebase (preview + confirm)', argumentHint: '[mode] [thoroughness] | --mode X --thoroughness Y', bound: true }
 const DAYS: Record<string, number> = { light: 30, medium: 90, deep: 180 }  // the CLI's git window per level (--days-back overrides)
@@ -41,7 +43,9 @@ function leaveLine(mode: string | undefined): string {
 }
 
 export async function bootstrapCmd($: any, { c, args, cli }: Kit): Promise<string> {
-    const a = parseBootstrapArgs(args)
+    const lim = parseLimit(args)
+    if (!lim.ok) return 'Usage: --limit N (1 bis 100)\n' + parseBootstrapArgs('--invalid').usage
+    const a = parseBootstrapArgs(lim.rest)
     if (!a.ok) return a.usage
     const days = Number(a.flags[a.flags.indexOf('--days-back') + 1]) || (a.level ? DAYS[a.level] : 90)
     const f = await facts($, c.root, days, cli)
@@ -49,7 +53,9 @@ export async function bootstrapCmd($: any, { c, args, cli }: Kit): Promise<strin
     if (f.patterns !== null && f.patterns >= 100) warn.push(`Playbook hat schon ${f.patterns} Patterns: Online-Lernen ist meist besser.`)
     if (f.commits !== null && f.commits < 20) warn.push(`Nur ${f.commits} Commits im Fenster: Online-Lernen ist meist besser.`)
     const argv = ['bootstrap', '--json', ...(a.mode ? ['--mode', a.mode] : []), ...(a.level ? ['--thoroughness', a.level] : []), ...a.flags, '--repo-path', c.root, ...cliIds(c)]
-    return confirm($, { label: 'Bootstrap starten', kind: 'cli', argv, report: 'bootstrap',
+    const on = await flagOn($, c.root)
+    const bf = previewLines(on ? await collect($, c as any, days, lim.limit) : { items: [], sessionTasks: 0, gitTasks: 0, skipped: 0 }, { flag: on, limit: lim.limit })
+    return confirm($, { label: 'Bootstrap starten', kind: 'cli', argv, report: 'bootstrap', ...(on ? { backfill: { days, limit: lim.limit } } : {}),
       preview: [`Bootstrap von ${c.root} in ${(c as any).projectId}: Modus ${a.mode ?? 'Standard des Servers'}, Tiefe ${a.level ?? 'Standard des Servers'} (merged mit dem Playbook)`,
-        ...f.lines, ...warn].join('\n') })
+        ...f.lines, ...warn, ...bf].join('\n') })
 }

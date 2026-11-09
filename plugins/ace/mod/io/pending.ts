@@ -3,6 +3,7 @@
 import { run } from './fs.ts'
 import { cap, cliRun } from './cli.ts'
 import { cliIds, repoWrite } from '../context/index.ts'
+import { backfillPhase } from './backfill_io.ts'
 import { reportLine } from '../lib/reports.ts'
 
 export type Done = { ok: boolean, toast: string, out: string }
@@ -12,7 +13,12 @@ export async function execPending($: any, c: any, p: any): Promise<Done> {
   const ok = !!r && r.exitCode === 0
   const raw = String((ok ? r?.stdout : r?.stderr) ?? '').trim()
   const rep = ok && p.report ? reportLine(String(p.report), raw) : undefined
-  return { ok, toast: `ACE: ${p.label} ${ok ? 'erledigt' : `fehlgeschlagen (exit ${r?.exitCode})`}`, out: rep ?? (raw ? cap(raw, 2000) : '') }
+  let out = rep ?? (raw ? cap(raw, 2000) : '')
+  if (p.backfill && p.kind === 'cli') {  // 8.2.0: dormant until the server flag; never lets a backfill problem fail the bootstrap result
+    const bf = await backfillPhase($, c, p.backfill).catch(err => [`Backfill: Fehler ${String(err).slice(0, 160)}`])
+    out = [out, ...bf].filter(Boolean).join('\n')
+  }
+  return { ok, toast: `ACE: ${p.label} ${ok ? 'erledigt' : `fehlgeschlagen (exit ${r?.exitCode})`}`, out }
 }
 // export: stdout of `ace-cli export`, written inside the repo root through REPO_WRITE_SH (no symlink, never outside).
 export async function execExport($: any, c: any, rel: string): Promise<Done> {
