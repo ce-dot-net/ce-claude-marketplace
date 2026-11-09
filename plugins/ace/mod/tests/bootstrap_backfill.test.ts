@@ -1,6 +1,6 @@
 // 8.2.0 /ace:ace-bootstrap backfill phase, wired through the host: dormant without the flag, honest preview, send after confirm.
 import { expect, test } from 'claude-code/testing'
-import { CWD, HOME, PROOT, ROOT, host } from './helpers.ts'
+import { CWD, HOME, PROOT, ROOT, cliOf, host } from './helpers.ts'
 
 const start = ($: any) => $.session.start({ cwd: CWD, surface: null, isInteractive: false } as any)
 const run = async ($: any, args = '') => (await $.command.run({ command: 'ace:ace-bootstrap', args })).text as string
@@ -238,4 +238,119 @@ test('session.start with a fresh marker and no chain in this load (a reload) pla
   expect(bf(h).length).toBe(0)         // planned, not run yet
   await idle($, h)
   expect(h.logs.join('\n')).toContain('Backfill fertig: 3 gesendet')
+})
+
+// --- --backfill-only: no legacy CLI bootstrap at all ---
+const cliCalls = (h: any) => h.runs.filter((r: any) => cliOf(r.argv)).map((r: any) => cliOf(r.argv)![0])
+// what the commands themselves spawn: the host's own binding lookups (context) and session start are not the command's
+const noLegacy = (h: any, before: number) => expect(cliCalls(h).slice(before)).toEqual([])
+const warm = async ($: any, h: any) => { await run($, '--limit 0'); return cliCalls(h).length }  // a refused command still resolves the binding once (context/status probes)
+const jobFor = (store: { last?: any }) => (cmd: string, _a: string[], stdin?: string) => {
+  if (cmd === 'post') { store.last = JSON.parse(stdin!); return { status: 202, body: { job_id: 'j1', accepted: store.last.items.length, duplicates: 0, status_url: '/u' } } }
+  return { status: 200, body: jobOf(store.last) }
+}
+const richCli = (a: string[]) => a[0] === 'status' ? { stdout: '{"playbook":{"total_patterns":150}}' } : cli(a)
+const fewCommits = (argv: string[]) => argv.includes('rev-list') ? '5\n' : git(argv)
+
+test('--backfill-only preview: no legacy source warning, no playbook/commit warnings, one line that only redacted task data leaves; no ace-cli call at all', async ($, on) => {
+  const h = host(on, { mockClock: true, cli: richCli, git: fewCommits, files: base({ [FLAG]: flagOn() }) })
+  await start($)
+  const n0 = await warm($, h)
+  const t = await run($, '--backfill-only --limit 2')
+  expect(t).not.toContain('Achtung')
+  expect(t).not.toContain('Quellcode-Funktionskörper')
+  expect(t).not.toContain('Playbook hat schon')
+  expect(t).not.toContain('Commits im Fenster')
+  expect(t.split('\n').filter(l => l.includes('Titel, Dateinamen, redigierte Texte')).length).toBe(1)
+  expect(t).toContain('nur redigierte Aufgabendaten')
+  expect(t).toContain('2 Aufgaben werden gesendet (Limit 2')
+  expect(t).toContain('Oder tippen: /ace:ace-bootstrap --backfill-only --limit 2 --approved')
+  expect(h.pending().backfill).toEqual({ days: 90, limit: 2, only: true })
+  noLegacy(h, n0)
+})
+
+test('--backfill-only --approved: only the backfill starts, ace-cli is never spawned, the result is the start line', async ($, on) => {
+  const st: { last?: any } = {}
+  const h = host(on, { mockClock: true, cli: richCli, git, files: base({ [FLAG]: flagOn() }), backfill: jobFor(st) })
+  await start($)
+  const n0 = await warm($, h)
+  const t = await run($, '--backfill-only --approved')
+  expect(t).toContain('Backfill gestartet: 3 Aufgaben')
+  expect(t).not.toContain('Bootstrap fertig')
+  await idle($, h)
+  expect(h.logs.join('\n')).toContain('Backfill fertig: 3 gesendet')
+  noLegacy(h, n0)
+})
+
+test('--backfill-only with the flag off: one line, nothing to confirm, no pending, --approved sends nothing', async ($, on) => {
+  const h = host(on, { mockClock: true, cli: richCli, git, files: base() })
+  await start($)
+  const n0 = await warm($, h)
+  const t = await run($, '--backfill-only')
+  expect(t).toBe('Backfill: Server unterstützt es noch nicht')
+  expect(h.pending()).toBe(null)
+  expect(await run($, '--backfill-only --approved')).toBe('Backfill: Server unterstützt es noch nicht')
+  expect(bf(h).length).toBe(0)
+  noLegacy(h, n0)
+})
+
+test('bad flag values are refused with a German line and store nothing', async ($, on) => {
+  const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }) })
+  await start($)
+  for (const a of ['--target-project nope', '--target-org org_abc', '--target-project prj_abc --target-org bad', '--backfill-only=1'])
+    expect(await run($, a)).toContain('--target-project')
+  expect(h.pending()).toBe(null)
+})
+
+// --- --target-project: another destination, same sessions and git ---
+test('target preview: the Ziel line (bound org stays), flags stay out of the CLI argv', async ($, on) => {
+  const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }) })
+  await start($)
+  const t = await run($, '--target-project prj_newtest')
+  expect(t.split('\n')).toContain('Ziel: org_t/prj_newtest (gebunden ist: prj_t)')
+  expect(t).toContain('Bootstrap selbst läuft im gebundenen Projekt')
+  expect(h.pending().argv.join(' ')).not.toMatch(/target|backfill-only/)
+  expect(h.pending().backfill).toEqual({ days: 90, limit: 100, project: 'prj_newtest' })
+  const t2 = await run($, '--backfill-only --target-project prj_newtest --target-org org_other')
+  expect(t2).toContain('Ziel: org_other/prj_newtest (gebunden ist: prj_t)')
+  expect(t2).toContain('Oder tippen: /ace:ace-bootstrap --backfill-only --target-project prj_newtest --target-org org_other --approved')
+  expect(t2).not.toContain('Bootstrap selbst')
+  expect(await run($, '')).not.toContain('Ziel:')
+  expect(await run($, '--target-project prj_t')).not.toContain('Ziel:')   // the bound project itself is no change
+})
+
+test('target run: engine gets the target org/project, own ledger (second target and the bound project each send), marker carries the target', async ($, on) => {
+  const st: { last?: any } = {}
+  const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }), backfill: jobFor(st) })
+  await start($)
+  await run($, '--backfill-only --target-project prj_newtest --approved')
+  expect(h.marker().args.projectId).toBe('prj_newtest')
+  expect(h.marker().args.orgId).toBe('org_t')
+  await idle($, h)
+  const post = bf(h)[0]
+  expect(post.argv.slice(2)).toEqual(expect.arrayContaining(['post', '--org', 'org_t', '--project', 'prj_newtest']))
+  expect(post.argv).not.toContain('prj_t')
+  expect(post.env?.ACE_PROJECT_ID).toBe('prj_newtest')
+  const keysA = st.last.items.map((i: any) => i.idempotency_key)
+  expect(h.files.has(`${ROOT}/projects/prj_newtest/backfill-ledger.tsv`)).toBe(true)
+  expect(h.files.has(`${ROOT}/projects/prj_t/backfill-ledger.tsv`)).toBe(false)
+  // same target again: all in its ledger. Another target and the bound project: their own ledgers, their own keys.
+  expect(await run($, '--backfill-only --target-project prj_newtest --approved')).toContain('0 Aufgaben')
+  await run($, '--backfill-only --target-project prj_second --target-org org_o2x --approved'); await idle($, h)
+  const keysB = st.last.items.map((i: any) => i.idempotency_key)
+  expect(bf(h).at(-2)!.argv).toEqual(expect.arrayContaining(['org_o2x', 'prj_second']))
+  expect(keysB.some((k: string) => keysA.includes(k))).toBe(false)
+  await run($, '--backfill-only --approved'); await idle($, h)
+  expect(st.last.items.length).toBe(3)
+  expect(bf(h).at(-1)!.argv).toEqual(expect.arrayContaining(['org_t', 'prj_t']))
+  expect(h.files.has(`${ROOT}/projects/prj_t/backfill-ledger.tsv`)).toBe(true)
+})
+
+test('default run (no target flags) is unchanged: bound project in the engine args and the ledger', async ($, on) => {
+  const st: { last?: any } = {}
+  const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }), backfill: jobFor(st) })
+  await start($)
+  await run($, '--approved'); await idle($, h)
+  expect(bf(h)[0].argv).toEqual(expect.arrayContaining(['org_t', 'prj_t']))
+  expect(h.files.has(`${ROOT}/projects/prj_t/backfill-ledger.tsv`)).toBe(true)
 })

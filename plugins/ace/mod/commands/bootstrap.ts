@@ -2,7 +2,7 @@ import { type Cmd, type Kit, confirm, json } from './kit.ts'
 import { cliIds } from '../context/index.ts'
 import { run } from '../io/fs.ts'
 import { collect, flagOn } from '../io/backfill_io.ts'
-import { parseLimit, previewLines } from '../lib/backfill_run.ts'
+import { parseBackfillFlags, parseLimit, previewLines } from '../lib/backfill_run.ts'
 import { parseBootstrapArgs } from '../lib/bootstrap_args.ts'
 export const bootstrap: Cmd = { name: 'bootstrap', md: 'ace-bootstrap', description: 'Build the playbook from the codebase (preview + confirm)', argumentHint: '[mode] [thoroughness] | --mode X --thoroughness Y', bound: true }
 const DAYS: Record<string, number> = { light: 30, medium: 90, deep: 180 }  // the CLI's git window per level (--days-back overrides)
@@ -45,17 +45,32 @@ function leaveLine(mode: string | undefined): string {
 export async function bootstrapCmd($: any, { c, args, cli }: Kit): Promise<string> {
     const lim = parseLimit(args)
     if (!lim.ok) return 'Usage: --limit N (1 bis 100)\n' + parseBootstrapArgs('--invalid').usage
-    const a = parseBootstrapArgs(lim.rest)
+    const bfl = parseBackfillFlags(lim.rest)
+    if (!bfl.ok) return bfl.line
+    const a = parseBootstrapArgs(bfl.rest)
     if (!a.ok) return a.usage
     const days = Number(a.flags[a.flags.indexOf('--days-back') + 1]) || (a.level ? DAYS[a.level] : 90)
+    // --target-project: only the destination changes (sessions and git stay the cwd's); a target equal to the bound one is no change
+    const bound = c as any, tProject = bfl.project ?? bound.projectId, tOrg = bfl.org ?? bound.orgId
+    const moved = tProject !== bound.projectId || tOrg !== bound.orgId
+    const target = moved ? { project: tProject, ...(bfl.org ? { org: bfl.org } : {}) } : {}
+    const zielLine = `Ziel: ${tOrg ?? '?'}/${tProject} (gebunden ist: ${bound.projectId})`
+    if (bfl.only) {  // 8.2.0: no legacy CLI bootstrap (no source bodies, docs, diffs): only the redacted backfill
+      if (!await flagOn($, c.root)) return 'Backfill: Server unterstützt es noch nicht'
+      const b = previewLines(await collect($, { ...c, projectId: tProject, orgId: tOrg } as any, days, lim.limit), { flag: true, limit: lim.limit })
+        .filter(l => !l.startsWith('Aufgaben (Titel'))
+      return confirm($, { label: 'Backfill starten', kind: 'cli', argv: [], backfill: { days, limit: lim.limit, only: true, ...target },
+        preview: [`Backfill (ohne Bootstrap) aus ${c.root}: Fenster ${days} Tage`, ...(moved ? [zielLine] : []), ...b,
+          'Es gehen nur redigierte Aufgabendaten (Titel, Dateinamen, redigierte Texte) vom Rechner weg: kein Quellcode, keine Diffs, keine Docs.'].join('\n') })
+    }
     const f = await facts($, c.root, days, cli)
     const warn = [leaveLine(a.mode)]
     if (f.patterns !== null && f.patterns >= 100) warn.push(`Playbook hat schon ${f.patterns} Patterns: Online-Lernen ist meist besser.`)
     if (f.commits !== null && f.commits < 20) warn.push(`Nur ${f.commits} Commits im Fenster: Online-Lernen ist meist besser.`)
     const argv = ['bootstrap', '--json', ...(a.mode ? ['--mode', a.mode] : []), ...(a.level ? ['--thoroughness', a.level] : []), ...a.flags, '--repo-path', c.root, ...cliIds(c)]
     const on = await flagOn($, c.root)
-    const bf = previewLines(on ? await collect($, c as any, days, lim.limit) : { items: [], sessionTasks: 0, gitTasks: 0, skipped: 0 }, { flag: on, limit: lim.limit })
-    return confirm($, { label: 'Bootstrap starten', kind: 'cli', argv, report: 'bootstrap', ...(on ? { backfill: { days, limit: lim.limit } } : {}),
+    const bf = previewLines(on ? await collect($, { ...c, projectId: tProject, orgId: tOrg } as any, days, lim.limit) : { items: [], sessionTasks: 0, gitTasks: 0, skipped: 0 }, { flag: on, limit: lim.limit })
+    return confirm($, { label: 'Bootstrap starten', kind: 'cli', argv, report: 'bootstrap', ...(on ? { backfill: { days, limit: lim.limit, ...target } } : {}),
       preview: [`Bootstrap von ${c.root} in ${(c as any).projectId}: Modus ${a.mode ?? 'Standard des Servers'}, Tiefe ${a.level ?? 'Standard des Servers'} (merged mit dem Playbook)`,
-        ...f.lines, ...warn, ...bf].join('\n') })
+        ...(moved ? [zielLine, 'Hinweis: der Bootstrap selbst läuft im gebundenen Projekt, nur der Backfill geht an das Ziel.'] : []), ...f.lines, ...warn, ...bf].join('\n') })
 }
