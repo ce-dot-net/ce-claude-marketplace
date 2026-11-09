@@ -110,7 +110,7 @@ export async function runBackfill(all: Item[], d: Deps): Promise<{ report: Repor
     if (c.kind === 'capability_off') { stop('Backfill: Server unterstützt es noch nicht, nichts gesendet.'); break }
     if (c.kind === 'quota') {
       await d.setResume(c.resumeAfter)
-      stop(`Backfill gestoppt: Tageskontingent erreicht (${c.current}/${c.limit}), weiter ab ${new Date(c.resumeAfter).toISOString().slice(0, 10)} (UTC).`)
+      stop(`Backfill gestoppt: Kontingent für heute erreicht (${c.current}/${c.limit}), weiter ab ${new Date(c.resumeAfter).toISOString().slice(0, 10)} (UTC).`)
       break
     }
     if (c.kind === 'retry') { stop(LATER); break }

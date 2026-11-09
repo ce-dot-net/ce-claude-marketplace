@@ -53,6 +53,7 @@ export type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; 
   installer?: (args: string[]) => { state: string, detail?: string }  // ace_cli_installer.py answers (8.1.1)
   git?: (argv: string[]) => string | undefined  // 8.2.0: git answers (full argv); undefined = the default stub
   realpaths?: Record<string, string>  // REALPATH_SH answers (a symlinked path); default: the path as given
+  backfill?: (cmd: string, argv: string[], stdin?: string) => { exit?: number, status?: number, body?: any } | undefined  // 8.2.0: engine/backfill.js answers
   claimed?: boolean }  // 8.1.4: the detached learn child already claimed the trace (the parent's `mv` finds nothing)
 export type Run = { argv: string[]; stdin?: string; env?: Record<string, string>; timeoutMs?: number; files: Set<string> }
 
@@ -111,6 +112,12 @@ export function host(on: any, o: Opts = {}) {
       if (a.killed) throw new Error('ace: $.process.run(ace-cli) aborted: still running after timeoutMs')
       return res(a.exitCode ?? 0, a.stdout ?? '', a.stderr ?? '')
     }
+    if (o.backfill && argv[0] === 'node' && argv[1]?.endsWith('/engine/backfill.js')) {
+      const a = o.backfill(argv[2], argv, init.stdin) ?? { status: 200, body: null }
+      if (a.exit) return res(a.exit, '', 'x')
+      return res(0, JSON.stringify({ status: a.status, body: a.body }) + '\n')
+    }
+    if (argv[0] === 'sleep') { now += Number(argv[1]) * 1000; return res(0, '') }
     if (o.cli && cliOf(argv)) { const a = o.cli(cliOf(argv)!, init.stdin); if (a) { now += a.advanceMs ?? 0; if (a.killed) throw new Error('ace: $.process.run aborted: still running after timeoutMs'); return res(a.exitCode ?? 0, a.stdout ?? '', a.stderr ?? '') } }
     if (o.installer && argv.some(a => a.endsWith('/ace_cli_installer.py'))) return res(0, JSON.stringify(o.installer(argv.slice(argv.findIndex(a => a.endsWith('/ace_cli_installer.py')) + 1))) + '\n')
     if (argv[0].endsWith('/scripts/ace-python')) return o.noPython ? res(1, '') : res(0, '/usr/bin/python3.13\n')
