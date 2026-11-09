@@ -43,8 +43,10 @@ function parse(text: string): Raw[] {
 
 // Nothing leaves as plain text: the raw text is redacted, then a fail-closed rule redacts from any secret-key word through a ':' or '='
 // (scope lists, brackets and punctuation in between) to the end of the line, then redact runs again (normalizing can create a new match).
-const KEY_RE = /(?:pass(?:word|wd)?|pwd|secret|token|api[-_ ]?key|access[-_ ]?key|private[-_ ]?key|credential|bearer|authorization|cookie|session|\w[_-]key\b)[^:=\n]*[:=][^\n]*/gi
+const MAX_TEXT = 500
+const KEY_RE = /(?:pass(?:word|wd)?|pwd|secret|token|api[-_ ]?key|access[-_ ]?key|private[-_ ]?key|credential|bearer|authorization|cookie|session|key)[^:=\n]*[:=][^\n]*/gi
 function safeText(s: string): string {
+  s = s.slice(0, MAX_TEXT)  // a fixed cut before any regex runs: bounded work, and the tail never leaves
   const once = (x: string) => redact(x).replace(KEY_RE, '[redacted]')
   return once(once(s))
 }
