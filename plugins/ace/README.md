@@ -108,7 +108,11 @@ Commit `.ace/config.json`: every clone, worktree and subfolder is then bound. De
 /ace-bootstrap
 ```
 
-Analyzes your codebase to create initial patterns.
+Analyzes your codebase to create initial patterns. The legacy modes send raw function bodies (up to 50 source files), docs and
+commit diffs unredacted; the preview says so. For a narrow, redacted path (8.2.0) use
+`/ace:ace-bootstrap --backfill-only`: fix/revert commits and merged PRs become redacted learning traces (only titles, file
+names and redacted texts leave the machine), sent when the server announces `bootstrap_backfill`. Details:
+`commands/ace-bootstrap.md`.
 
 ### 5. Start Coding!
 
@@ -141,7 +145,7 @@ confirm button. Elsewhere the markdown fallback runs.
 | `/ace:ace-clear` | Clear the playbook (preview + confirm) |
 | `/ace:ace-delta <op> <json>` | Add/update/remove patterns (preview + confirm) |
 | `/ace:ace-learn <lesson>` | Send one lesson (preview + confirm) |
-| `/ace:ace-bootstrap [mode] [level]` or `--mode X --thoroughness Y` | Build the playbook from the codebase: facts preview, what leaves the machine, one result line (preview + confirm) |
+| `/ace:ace-bootstrap [mode] [level]` or `--mode X --thoroughness Y` or `--backfill-only [--sources git,merge\|session] [--limit N] [--days-back N] [--target-project prj_x --target-org org_x] [--approved]` | Build the playbook from the codebase (legacy, sends raw code) or backfill redacted traces from fix/revert commits and merged PRs: preview + confirm (or `--approved`) |
 | `/ace:ace-tune [show \| key=value ...]` | Show or change server settings (writes: preview + confirm) |
 | `/ace:ace-configure [org_ prj_]` | Bind the repo: name-matched suggestion, `.gitignore` diff, confirm |
 | `/ace:ace-login` | Login state; the device login starts on the button press |
