@@ -332,7 +332,7 @@ def test_stdin_redaction_is_linear_on_hostile_input():
     for t in _hostile_stdin_texts():
         t0 = time.perf_counter()
         redact(t)
-        assert time.perf_counter() - t0 < 0.2, t[:30]
+        assert time.perf_counter() - t0 < 2.0, t[:30]  # linear is ~15 ms; a quadratic regression takes tens of seconds, a shared CI runner needs headroom
 
 
 if __name__ == '__main__' and '--regen' in sys.argv:
