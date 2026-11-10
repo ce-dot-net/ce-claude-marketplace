@@ -3,7 +3,7 @@
 // the CLI then uses the server's defaults. Pure. Anything else (unknown flag, third word, a conflict) is refused with the usage.
 export const MODES = ['hybrid', 'both', 'local-files', 'git-history', 'docs-only'], LEVELS = ['light', 'medium', 'deep']
 const NUMS = ['--commit-limit', '--days-back', '--max-files']
-export const USAGE = `Usage: /ace:ace-bootstrap [${MODES.join('|')}] [${LEVELS.join('|')}] | --mode <mode> --thoroughness <level> [--commit-limit N] [--days-back N] [--max-files N]`
+export const USAGE = `Usage: /ace:ace-bootstrap [${MODES.join('|')}] [${LEVELS.join('|')}] | --mode <mode> --thoroughness <level> [--commit-limit N] [--days-back N] [--max-files N] | --backfill-only [--sources git,merge,session] [--limit N] [--days-back N] [--target-project prj_x [--target-org org_x]]`
 export type BootstrapArgs = { ok: true, mode?: string, level?: string, flags: string[] } | { ok: false, usage: string }
 
 export function parseBootstrapArgs(args: string): BootstrapArgs {
