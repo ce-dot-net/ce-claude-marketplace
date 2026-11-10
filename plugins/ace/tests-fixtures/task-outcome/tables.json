@@ -768,6 +768,62 @@
    "printf [redacted] | gh auth login --with-token"
   ],
   [
+   "ECHO hunter2 | podman login --password-stdin r.io",
+   "ECHO [redacted] | podman login --password-stdin [redacted]"
+  ],
+  [
+   "Printf hunter2 | gh auth login --WITH-TOKEN",
+   "Printf [redacted] | gh auth login --WITH-TOKEN"
+  ],
+  [
+   "docker login --password-stdin <<< hunter2",
+   "docker login --password-stdin [redacted]"
+  ],
+  [
+   "gh auth login --with-token <<< ghp_x",
+   "gh auth login --with-token [redacted]"
+  ],
+  [
+   "gh auth login --with-token <<< \"$TOKEN-literal\" && echo ok",
+   "gh auth login --with-token [redacted]"
+  ],
+  [
+   "docker login --password-stdin <<< 'a b c'",
+   "docker login --password-stdin [redacted]"
+  ],
+  [
+   "docker login <<< hunter2 --password-stdin",
+   "docker login <<< [redacted] --password-stdin"
+  ],
+  [
+   "docker login --password-stdin <<EOF\nhunter2\nEOF\nls",
+   "docker login --password-stdin [redacted]\n[redacted]\nEOF\nls"
+  ],
+  [
+   "gh auth login --with-token <<-'END'\nghp_x\nEND",
+   "gh auth login --with-token [redacted]\n[redacted]\nEND"
+  ],
+  [
+   "echo hello | grep x",
+   "echo hello | grep x"
+  ],
+  [
+   "echo \"login docs\" | wc",
+   "echo \"login docs\" | wc"
+  ],
+  [
+   "docker login",
+   "docker login"
+  ],
+  [
+   "docker login <<< hunter2",
+   "docker login <<< hunter2"
+  ],
+  [
+   "cat <<EOF\nhi\nEOF",
+   "cat <<EOF\nhi\nEOF"
+  ],
+  [
    "openssl genrsa -out key.pem 2048 && ssh-keygen -l -f k",
    "openssl genrsa -out key.pem 2048 && ssh-keygen -l -f k"
   ]

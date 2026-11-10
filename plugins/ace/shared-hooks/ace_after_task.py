@@ -478,9 +478,14 @@ _SPAN_RES = (
 _BLANK_LINE = regex_module.compile(r'\n[ \t\r]*\n')
 _URL_VALUE_END = regex_module.compile(r'''[&# \t\n\r\x0b\x0c"']''')
 _TOKEN_SEP = ' \t\n\r\x0b\x0c"\''
+# Run BEFORE the span rules (which cut the line at the flag): a here-string before the flag, and a here-doc body after it.
+_STDIN_RES = (
+    (regex_module.compile(r'''(<<<[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|[^ \t\n\r"';&|)]+)(?=[^\n|]*--(?:password-stdin|with-token))''', regex_module.A | regex_module.I), r'\1[redacted]'),
+    (regex_module.compile(r'''(--(?:password-stdin|with-token)\b[^\n]*(?<!<)<<-?[ \t]*['"]?(\w+)['"]?[^\n]*\n)[\s\S]+?(?=\n[ \t]*\2[ \t]*(?:\n|(?![\s\S])))''', regex_module.A | regex_module.I), r'\1[redacted]'),
+)
 _SECRET_RES = (
     # the echo/printf stage that pipes a secret into --password-stdin / --with-token
-    (regex_module.compile(r'''\b(echo|printf)\b[^\n]*\|(?=[^|\n]*--(?:password-stdin|with-token))''', regex_module.A), r'\1 [redacted] |'),
+    (regex_module.compile(r'''\b(echo|printf)\b[^\n]*\|(?=[^|\n]*--(?:password-stdin|with-token))''', regex_module.A | regex_module.I), r'\1 [redacted] |'),
     (regex_module.compile(r'''(\b[A-Za-z][A-Za-z0-9+.-]*://)[^ \t\n\r\x0b\x0c"']*@''', regex_module.A), r'\1[redacted]@'),
     (regex_module.compile(r'''\b(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abprs]-|ace_user_|sk-)[A-Za-z0-9_-]{8,}|\bnpm_[A-Za-z0-9]{20,}|\bAKIA[0-9A-Z]{12,}|\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+)?''', regex_module.A), '[redacted]'),
 )
@@ -520,6 +525,8 @@ def redact(text):
     token prefixes / JWTs. Parity: mod/lib/trace.ts redact."""
     if not isinstance(text, str) or not text:
         return text
+    for rx, rep in _STDIN_RES:
+        text = rx.sub(rep, text)
     text = _redact_spans(text)
     for rx, rep in _SECRET_RES:
         text = rx.sub(rep, text)

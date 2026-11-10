@@ -315,9 +315,15 @@ const URL_VALUE_END = /[&# \t\n\r\x0b\x0c"']/g
 const TOKEN_SEP = ' \t\n\r\x0b\x0c"\''
 const SECRET_RES: [RegExp, string][] = [
   // the echo/printf stage that pipes a secret into --password-stdin / --with-token
-  [/\b(echo|printf)\b[^\n]*\|(?=[^|\n]*--(?:password-stdin|with-token))/g, '$1 [redacted] |'],
+  [/\b(echo|printf)\b[^\n]*\|(?=[^|\n]*--(?:password-stdin|with-token))/gi, '$1 [redacted] |'],
   [/(\b[A-Za-z][A-Za-z0-9+.-]*:\/\/)[^ \t\n\r\x0b\x0c"']*@/g, '$1[redacted]@'],
   [/\b(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abprs]-|ace_user_|sk-)[A-Za-z0-9_-]{8,}|\bnpm_[A-Za-z0-9]{20,}|\bAKIA[0-9A-Z]{12,}|\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+)?/g, '[redacted]'],
+]
+// Run BEFORE the span rules (which cut the line at the flag): the stdin body of --password-stdin / --with-token that the
+// span rules cannot see, a here-string BEFORE the flag, and a here-doc body on the lines after it.
+const STDIN_RES: [RegExp, string][] = [
+  [/(<<<[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|[^ \t\n\r"';&|)]+)(?=[^\n|]*--(?:password-stdin|with-token))/gi, '$1[redacted]'],
+  [/(--(?:password-stdin|with-token)\b[^\n]*(?<!<)<<-?[ \t]*['"]?(\w+)['"]?[^\n]*\n)[\s\S]+?(?=\n[ \t]*\2[ \t]*(?:\n|(?![\s\S])))/gi, '$1[redacted]'],
 ]
 const searchFrom = (rx: RegExp, s: string, pos: number) => { rx.lastIndex = pos; return rx.exec(s) }
 // The index REDACT_BLOCK code points after start (Python counts code points).
@@ -349,7 +355,9 @@ function redactSpans(text: string): string {
 }
 export function redact<T>(text: T): T {
   if (typeof text !== 'string' || !text) return text
-  let s: string = redactSpans(text)
+  let s: string = text
+  for (const [rx, rep] of STDIN_RES) s = s.replace(rx, rep)
+  s = redactSpans(s)
   for (const [rx, rep] of SECRET_RES) s = s.replace(rx, rep)
   return s as any
 }
