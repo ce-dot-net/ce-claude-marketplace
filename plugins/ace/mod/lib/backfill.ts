@@ -2,10 +2,11 @@
 // built through the SAME toolRec / taskOutcome / buildTrace / redact the live learn path uses (lib/trace.ts). No `$`, no I/O: the caller
 // hands over the text (or any line iterator, to stream a big file). The trace carries no session_id, an empty playbook_used and no
 // field the live trace body does not have; `source: "bootstrap"` and the original date are the caller's to add (a later slice).
-import { buildTrace, hasSubstantialWork, isTrivialTask, toolRec } from './trace.ts'
+import { buildTrace, hasSubstantialWork, isTrivialTask, taskOutcome, toolRec } from './trace.ts'
 import { LEADING_REMINDER, isMachinePrompt, skipReason } from './text.ts'
 import type { ToolRec } from './evidence.ts'
 import { sha256Hex } from './cohort.ts'
+import { denoise } from './backfill_noise.ts'
 
 export type BackfillTask = {
   sessionId: string      // the transcript's session uuid ('' when it names none and the caller gave none)
@@ -18,7 +19,10 @@ export type BackfillTask = {
   startMs: number
   endMs: number
 }
-export type ReadStats = { prompts: number, tasks: number, trivial: number, noWork: number, machine: number, sidechain: number, malformed: number }
+// noise = tasks excluded by the tool-noise filter; noiseDropped = steps dropped (all tasks, kept or excluded); noiseBy = those steps per pattern name
+export type ReadStats = { prompts: number, tasks: number, trivial: number, noWork: number, machine: number, sidechain: number, malformed: number,
+  noise: number, noiseDropped: number, noiseBy: Record<string, number> }
+const STATE_STEP = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit'])
 export type ReadResult = { tasks: BackfillTask[], stats: ReadStats, sessionId: string }
 
 type Open = { index: number, prompt: string, tools: ToolRec[], answer: string, startMs: number, endMs: number
@@ -38,10 +42,11 @@ function* linesOf(text: string): Generator<string> {
     from = i + 1
   }
 }
-export const readSession = (text: string, o: { sessionId?: string } = {}): ReadResult => readSessionLines(linesOf(text), o)
+export const readSession = (text: string, o: { sessionId?: string, denoise?: boolean } = {}): ReadResult => readSessionLines(linesOf(text), o)
 
-export function readSessionLines(lines: Iterable<string>, o: { sessionId?: string } = {}): ReadResult {
-  const stats: ReadStats = { prompts: 0, tasks: 0, trivial: 0, noWork: 0, machine: 0, sidechain: 0, malformed: 0 }
+// o.denoise (the send path sets it): drop tool-noise steps and exclude tasks that are not real work after that (lib/backfill_noise.ts).
+export function readSessionLines(lines: Iterable<string>, o: { sessionId?: string, denoise?: boolean } = {}): ReadResult {
+  const stats: ReadStats = { prompts: 0, tasks: 0, trivial: 0, noWork: 0, machine: 0, sidechain: 0, malformed: 0, noise: 0, noiseDropped: 0, noiseBy: {} }
   const tasks: BackfillTask[] = []
   let sid = o.sessionId ?? '', cur: Open | null = null, index = 0, last = 0
 
@@ -53,9 +58,15 @@ export function readSessionLines(lines: Iterable<string>, o: { sessionId?: strin
     for (const c of t.calls.values()) t.tools.push(toolRec(c.name, c.input, { interrupted: true }, false, undefined, c.t0, t.endMs))
     if (isTrivialTask(t.prompt) || skipReason(t.prompt) !== null) { stats.trivial++; return }
     if (!hasSubstantialWork(t.tools)) { stats.noWork++; return }
-    const { trace, success } = buildTrace({ userPrompt: t.prompt, tools: t.tools, answer: t.answer, playbookUsed: [], agentType: 'main', appliedLogIds: [],
+    // tool noise out (failed lookups, empty greps); the rest must still be a real task: >= 2 steps, one state-changing step, no failure left
+    const dn = o.denoise ? denoise(t.tools) : { tools: t.tools, dropped: {}, droppedSteps: 0 }
+    stats.noiseDropped += dn.droppedSteps
+    for (const [k, v] of Object.entries(dn.dropped)) stats.noiseBy[k] = (stats.noiseBy[k] ?? 0) + v
+    const kept = dn.tools
+    if (o.denoise && (kept.length < 2 || !kept.some(r => STATE_STEP.has(r.tool) || (r.tool === 'Bash' && !r.failed)) || !taskOutcome(kept).success)) { stats.noise++; return }
+    const { trace, success } = buildTrace({ userPrompt: t.prompt, tools: kept, answer: t.answer, playbookUsed: [], agentType: 'main', appliedLogIds: [],
       nowIso: new Date(t.endMs || 0).toISOString(), effort: 'normal' })
-    tasks.push({ sessionId: '', index: t.index, prompt: t.prompt, trace, success, steps: t.tools.length, decisive: t.tools.filter(r => r.dec).length, startMs: t.startMs, endMs: t.endMs })
+    tasks.push({ sessionId: '', index: t.index, prompt: t.prompt, trace, success, steps: kept.length, decisive: kept.filter(r => r.dec).length, startMs: t.startMs, endMs: t.endMs })
     stats.tasks++
   }
 

@@ -155,3 +155,44 @@ test('selectTasks: never more than n; successful first, then more decisive steps
   expect(selectTasks([], 5)).toEqual([])
   expect(ts.map(t => t.index)).toEqual([0, 1, 2, 3, 4, 5])  // the input is not reordered
 })
+
+// ---- 8.2.0 tool-noise filter ----
+const rsn = (t: string) => readSession(t, { denoise: true })
+const readMissing = (id: string, file = '/repo/nope.ts') => [asst(use(id, 'Read', { file_path: file })),
+  J({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'File does not exist.', is_error: true }] }, toolUseResult: 'Error: File does not exist.' })]
+const grepEmpty = (id: string) => [asst(use(id, 'Grep', { pattern: 'zzz' })), ok(id, 'No matches found', { filenames: [] })]
+
+test('noise steps are dropped from the trace, steps renumbered 1..n, failed_steps and success recomputed from what is left', () => {
+  const r = rsn(doc(prompt(FIX), readMissing('n1'), edit('t1'), grepEmpty('n2'), bash('t2', 'pytest -q'), asst(text('done'))))
+  expect(r.tasks.length).toBe(1)
+  const t = r.tasks[0]
+  expect(t.trace.trajectory.map((s: any) => [s.step, s.tool])).toEqual([[1, 'Edit'], [2, 'Bash']])
+  expect(t.trace.result).toMatchObject({ success: true, failed_steps: 0, output: 'Executed 2 tool calls' })
+  expect(t).toMatchObject({ steps: 2, decisive: 2, success: true })
+  expect(r.stats).toMatchObject({ tasks: 1, noise: 0, noiseDropped: 2 })
+})
+
+test('a task left with fewer than 2 steps, or without a state-changing step, is excluded as noise (counted, not a candidate)', () => {
+  const onlyLookups = doc(prompt(FIX), readMissing('a1'), grepEmpty('a2'), readMissing('a3'), asst(text('nothing found')))
+  const oneEdit = doc(prompt(NEXT), readMissing('b1'), edit('b2'), asst(text('ok')))
+  const r = rsn(onlyLookups + oneEdit)
+  expect(r.tasks.length).toBe(0)
+  expect(r.stats).toMatchObject({ prompts: 2, tasks: 0, noise: 2, noWork: 0 })
+})
+
+test('a task whose remaining steps still fail (success false) is excluded as noise', () => {
+  const bad = [asst(use('c1', 'Bash', { command: 'npm run build' })), fail('c1', 2, 'error TS2304')]
+  const r = rsn(doc(prompt(FIX), edit('c0'), bad, asst(text('could not build'))))
+  expect(r.tasks.length).toBe(0)
+  expect(r.stats.noise).toBe(1)
+})
+
+test('a clean task (no noise) is untouched; a trivial or no-work task keeps its old counter (no double count)', () => {
+  const r = rsn(doc(prompt('hi'), asst(text('hello')), prompt(FIX), edit('d1'), bash('d2', 'pytest -q'), asst(text('ok'))))
+  expect(r.stats).toMatchObject({ trivial: 1, tasks: 1, noise: 0, noiseDropped: 0 })
+})
+
+test('redaction still applies to what is kept (the filter runs before buildTrace)', () => {
+  const r = rsn(doc(prompt(FIX), readMissing('e1'), edit('e2'), bash('e3', 'echo password=hunter2abc'), asst(text('ok'))))
+  expect(JSON.stringify(r.tasks[0].trace)).not.toContain('hunter2abc')
+})
