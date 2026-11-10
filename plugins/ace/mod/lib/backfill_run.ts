@@ -29,37 +29,47 @@ export function parseLimit(args: string): { ok: true, limit: number, rest: strin
 // project; sessions and git still come from the cwd). Stripped out of the arguments like --limit; `rest` goes on to the parsers.
 export const TARGET_USAGE = 'Usage: --backfill-only | --target-project prj_xxx [--target-org org_xxx] (prj_/org_ + 3 bis 64 Zeichen A-Z a-z 0-9 _)'
 const PRJ_RE = /^prj_[A-Za-z0-9_]{3,64}$/, ORG_RE = /^org_[A-Za-z0-9_]{3,64}$/
-export type BackfillFlags = { ok: true, only: boolean, project?: string, org?: string, rest: string } | { ok: false, line: string }
+export const SOURCES = ['session', 'git', 'merge'] as const
+export const SOURCES_USAGE = `Usage: --sources ${SOURCES.join(',')} (Liste aus: ${SOURCES.join(', ')}; keine Duplikate, nicht leer; ohne --sources werden alle drei gelesen)`
+export type BackfillFlags = { ok: true, only: boolean, project?: string, org?: string, sources?: Source[], rest: string } | { ok: false, line: string }
 export function parseBackfillFlags(args: string): BackfillFlags {
   const bad: BackfillFlags = { ok: false, line: TARGET_USAGE }
   const toks = args.trim().split(/\s+/).filter(Boolean), rest: string[] = []
-  let only = false, project: string | undefined, org: string | undefined
+  let only = false, project: string | undefined, org: string | undefined, sources: Source[] | undefined
   for (let i = 0; i < toks.length; i++) {
     const t = toks[i]
     if (t === '--backfill-only') { only = true; continue }
     const k = t.split('=')[0]
     if (k === '--backfill-only') return bad
+    if (k === '--sources') {  // comma list, strict: known tokens only, no empty entry, no duplicate, one flag; stored in canonical order
+      const v = t.includes('=') ? t.slice(k.length + 1) : toks[++i]
+      const parts = v === undefined ? [] : v.split(',')
+      if (sources !== undefined || !parts.length || parts.some(x => !(SOURCES as readonly string[]).includes(x)) || new Set(parts).size !== parts.length) return { ok: false, line: SOURCES_USAGE }
+      sources = SOURCES.filter(x => parts.includes(x))
+      continue
+    }
     if (k !== '--target-project' && k !== '--target-org') { rest.push(t); continue }
     const v = t.includes('=') ? t.slice(k.length + 1) : toks[++i]
     if (k === '--target-project') { if (project !== undefined || v === undefined || !PRJ_RE.test(v)) return bad; project = v }
     else { if (org !== undefined || v === undefined || !ORG_RE.test(v)) return bad; org = v }
   }
   if (org !== undefined && project === undefined) return bad
-  return { ok: true, only, ...(project ? { project } : {}), ...(org ? { org } : {}), rest: rest.join(' ') }
+  return { ok: true, only, ...(project ? { project } : {}), ...(org ? { org } : {}), ...(sources ? { sources } : {}), rest: rest.join(' ') }
 }
 
 export type Source = 'session' | 'git' | 'merge'
 export type Built = { items: Item[], sources: Record<string, Source>, sessionTasks: number, noiseExcluded?: number, gitTasks: number, skipped: number }  // sessionTasks = candidates; noiseExcluded = set aside by the tool-noise filter
 // Session transcripts + git logs -> at most `limit` items (best ranked), tasks the ledger already finished are skipped first.
-export function buildItems(o: { projectId: string, sessions: { text: string, sessionId?: string }[], gitLog: string, mergeLog: string, limit: number, ledger: Ledger }): Built {
+export function buildItems(o: { projectId: string, sessions: { text: string, sessionId?: string }[], gitLog: string, mergeLog: string, limit: number, ledger: Ledger, sources?: readonly Source[] }): Built {
   const cands: any[] = []
   let sessionTasks = 0, noiseExcluded = 0
-  for (const s of o.sessions) {
+  const has = (x: Source) => !o.sources || o.sources.includes(x)   // a source not listed is not read, counted or sent
+  for (const s of has('session') ? o.sessions : []) {
     const r = readSession(s.text, { sessionId: s.sessionId, denoise: true })
     noiseExcluded += r.stats.noise
     for (const t of r.tasks) { sessionTasks++; cands.push({ ...t, key: taskKey(o.projectId, t.sessionId, t.index), _kind: 'session' }) }
   }
-  const git = [...(o.gitLog ? readGitLog(o.gitLog, { projectId: o.projectId }) : []), ...(o.mergeLog ? readMergeLog(o.mergeLog, { projectId: o.projectId }).map(t => ({ ...t, _merge: true })) : [])]
+  const git = [...(o.gitLog && has('git') ? readGitLog(o.gitLog, { projectId: o.projectId }) : []), ...(o.mergeLog && has('merge') ? readMergeLog(o.mergeLog, { projectId: o.projectId }).map(t => ({ ...t, _merge: true })) : [])]
   for (const g of git) cands.push({ ...g, _kind: 'git' })
   const open = new Set(pending(o.ledger, cands.map(c => c.key)))
   const fresh = cands.filter(c => open.has(c.key))
@@ -72,10 +82,14 @@ export function duration(n: number): string {
   const min = Math.ceil(n * SECONDS_PER_TRACE / 60)
   return min < 60 ? `etwa ${min} Minuten` : `etwa ${(min / 60).toFixed(1).replace('.', ',')} Stunden`
 }
-export function previewLines(b: Built, o: { flag: boolean, limit: number }): string[] {
+export function previewLines(b: Built, o: { flag: boolean, limit: number, sources?: readonly Source[] }): string[] {
   if (!o.flag) return ['Backfill: Server unterstützt es noch nicht']
   const n = b.items.length, noise = b.noiseExcluded ?? 0
-  const out = [`Backfill: ${b.sessionTasks + noise} Session-Aufgaben${noise ? ` (davon ${noise} wegen Tool-Rauschen aussortiert)` : ''}, ${b.gitTasks} Git-Aufgaben (Fix/Revert + Merges) im Fenster, ${b.skipped} schon gesendet (übersprungen)`,
+  const has = (x: Source) => !o.sources || o.sources.includes(x)
+  const gitWhat = has('git') && has('merge') ? 'Fix/Revert + Merges' : has('git') ? 'Fix/Revert' : 'Merges'
+  const counts = [...(has('session') ? [`${b.sessionTasks + noise} Session-Aufgaben${noise ? ` (davon ${noise} wegen Tool-Rauschen aussortiert)` : ''}`] : []),
+    ...(has('git') || has('merge') ? [`${b.gitTasks} Git-Aufgaben (${gitWhat}) im Fenster`] : []), `${b.skipped} schon gesendet (übersprungen)`]
+  const out = [...(o.sources ? [`Quellen: ${o.sources.join(', ')}`] : []), `Backfill: ${counts.join(', ')}`,
     `${n} Aufgaben werden gesendet (Limit ${o.limit}, die am besten bewerteten)`]
   if (n) out.push(`Dauer: ${duration(n)} (Richtwert ${SECONDS_PER_TRACE} s pro Trace, der Server verarbeitet im Hintergrund)`,
     'Aufgaben (Titel, Dateinamen, redigierte Texte) verlassen den Rechner.')
@@ -102,7 +116,7 @@ const LATER = 'Backfill gestoppt: Server gerade nicht erreichbar, später erneut
 // Run marker: the JSON state of one backfill run (kept in $.state), enough to continue after a module reload. Single flight + TTL.
 export const RUN_TTL_MS = 3 * 3_600_000   // a marker whose last beat is older than this is stale (crashed run): ignored
 export type RunState = { startedAt: number, beat: number, total: number, posted: string[], split?: Record<Source, number>, job?: string, judged?: string[], causes?: Record<string, number>, polls: number, report: Report, lines: string[], stopped?: string,
-  args?: { root: string, orgId?: string, projectId: string, days: number, limit: number } }
+  args?: { root: string, orgId?: string, projectId: string, days: number, limit: number, sources?: Source[] } }
 export const newRun = (total: number, now: number): RunState => ({ startedAt: now, beat: now, total, posted: [], polls: 0, lines: [],
   report: { sent: 0, partial: 0, failed: 0, skipped: 0, patternsCreated: 0, failedChunks: 0, finished: false } })
 export const runActive = (v: any, now: number): v is RunState => !!v && typeof v.beat === 'number' && now - v.beat >= 0 && now - v.beat < RUN_TTL_MS

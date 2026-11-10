@@ -67,6 +67,7 @@ export function host(on: any, o: Opts = {}) {
   if (!o.noSettings) put(`${CWD}/.claude/settings.json`, JSON.stringify({ env: { ACE_PROJECT_ID: PRJ, ACE_ORG_ID: 'org_t' } }))
   for (const [k, v] of Object.entries(o.files ?? {})) put(k, v)
   if (!o.noClassic) put(`${SDIR}/mod-classic`, String(now))  // classic.* hooks fire (no managed-settings guard)
+  const reads: string[] = []   // every fs.read / fs.list path (tests assert what was never touched)
   const debug: string[] = [], registered: string[] = [], runs: Run[] = [], logs: string[] = [], statuses: (string | undefined)[] = [], toasts: string[] = [], envAsked: string[] = [], envSet: [string, string | undefined][] = []
   // §31 default is ACE_RENDER_FULL_PCT=50 (50/50 split); this suite pins the full arm unless defaultArm (its own tests below)
   // item D: the Haiku self-eval is off in this suite unless selfEval (its own tests below): learns stay synchronous
@@ -94,9 +95,9 @@ export function host(on: any, o: Opts = {}) {
     on('state.set', { plugin: 'ace', key: 'backfill-run' } as any, (_$: any, e: any) => { marker = e.value; markerV++; return { value: { isSet: true, version: markerV } } as any })
   }
   on('fs.exists', (_$: any, e: any) => ({ value: files.has(e.path) || [...files.keys()].some(k => k.startsWith(e.path + '/')) }))
-  on('fs.read', (_$: any, e: any) => { if (!files.has(e.path)) throw new Error('ENOENT: ' + e.path); return { value: files.get(e.path) } })
+  on('fs.read', (_$: any, e: any) => { reads.push(e.path); if (!files.has(e.path)) throw new Error('ENOENT: ' + e.path); return { value: files.get(e.path) } })
   on('fs.write', (_$: any, e: any) => { put(e.path, e.text); return { value: undefined } })
-  on('fs.list', (_$: any, e: any) => ({ value: [...files.keys()].filter(k => k.startsWith(e.path + '/') && !k.slice(e.path.length + 1).includes('/'))
+  on('fs.list', (_$: any, e: any) => (reads.push(e.path), { value: [...files.keys()].filter(k => k.startsWith(e.path + '/') && !k.slice(e.path.length + 1).includes('/'))
     .map(k => ({ name: k.slice(e.path.length + 1), kind: 'file', size: files.get(k)!.length, mtimeMs: mtime.get(k), isLink: false }))
     .concat((o.links ?? []).filter(l => l.slice(0, l.lastIndexOf('/')) === e.path).map(l => ({ name: l.slice(l.lastIndexOf('/') + 1), kind: 'file', size: 0, mtimeMs: now, isLink: true }))) }))
   on('fs.stat', (_$: any, e: any) => {
@@ -185,7 +186,7 @@ export function host(on: any, o: Opts = {}) {
   const learnArgv = (r: Run) => r.argv.slice(r.argv.indexOf('ace-cli'))
   const flag = (argv: string[], f: string) => { const i = argv.indexOf(f); return i < 0 ? undefined : argv[i + 1] }
   const trace = (r: Run) => JSON.parse(files.get(flag(learnArgv(r), '--transcript')!)!)
-  return { files, mtime, runs, logs, statuses, toasts, clock: clk!, marker: () => marker, setMarker: (v: any) => { marker = v; markerV++ }, envAsked, envSet, env, registered, debug,
+  return { files, mtime, reads, runs, logs, statuses, toasts, clock: clk!, marker: () => marker, setMarker: (v: any) => { marker = v; markerV++ }, envAsked, envSet, env, registered, debug,
     band: () => { const l = [...debug].reverse().find(x => x.startsWith('ace band ')); return l ? JSON.parse(l.slice(9)) : null },
     pending: () => { const l = [...debug].reverse().find(x => x.startsWith('ace pending ')); return l ? JSON.parse(l.slice(12)) : null }, searches, learns, rows, state, pin, learnArgv, flag, trace, modelCalls,
     advance: (ms: number) => { now += ms }, now: () => now, put }
