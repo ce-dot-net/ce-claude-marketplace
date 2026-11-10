@@ -305,20 +305,18 @@ test('bad flag values are refused with a German line and store nothing', async (
 })
 
 // --- --target-project: another destination, same sessions and git ---
-test('target preview: the Ziel line (bound org stays), flags stay out of the CLI argv', async ($, on) => {
+test('target preview: the Ziel line (bound org stays); without --backfill-only the target is refused', async ($, on) => {
   const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }) })
   await start($)
   const t = await run($, '--target-project prj_newtest')
-  expect(t.split('\n')).toContain('Ziel: org_t/prj_newtest (gebunden ist: prj_t)')
-  expect(t).toContain('Bootstrap selbst läuft im gebundenen Projekt')
-  expect(h.pending().argv.join(' ')).not.toMatch(/target|backfill-only/)
-  expect(h.pending().backfill).toEqual({ days: 90, limit: 100, project: 'prj_newtest' })
+  expect(t).toContain('nur mit --backfill-only')
+  expect(h.pending()).toBe(null)
   const t2 = await run($, '--backfill-only --target-project prj_newtest --target-org org_other')
   expect(t2).toContain('Ziel: org_other/prj_newtest (gebunden ist: prj_t)')
   expect(t2).toContain('Oder tippen: /ace:ace-bootstrap --backfill-only --target-project prj_newtest --target-org org_other --approved')
   expect(t2).not.toContain('Bootstrap selbst')
   expect(await run($, '')).not.toContain('Ziel:')
-  expect(await run($, '--target-project prj_t')).not.toContain('Ziel:')   // the bound project itself is no change
+  expect(await run($, '--backfill-only --target-project prj_t')).not.toContain('Ziel:')   // the bound project itself is no change
 })
 
 test('target run: engine gets the target org/project, own ledger (second target and the bound project each send), marker carries the target', async ($, on) => {
@@ -368,4 +366,81 @@ test('a rejected batch: a backfill_response row goes to backfill-log.jsonl (no r
   expect(j).toMatchObject({ event: 'backfill_response', kind: 'invalid', status: 422, code: 'payload_invalid' })
   expect(row!.stdin).not.toContain('SECRET')
   expect(h.toasts.some((x: string) => x.includes('(422 payload_invalid ×3)'))).toBe(true)
+})
+
+// --- --sources: which task sources are read, previewed and sent (needs --backfill-only) ---
+const sessionsDir = `${HOME}/.claude/projects/-proj`
+test('--sources git,merge: no session read at all, no session count, Quellen line, copy-line has the flag, pending carries the sources', async ($, on) => {
+  const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }) })
+  await start($)
+  h.reads.length = 0
+  const t = await run($, '--backfill-only --sources git,merge')
+  expect(h.reads.filter((p: string) => p.startsWith(sessionsDir))).toEqual([])
+  expect(t.split('\n')).toContain('Quellen: git, merge')
+  expect(t).not.toContain('Session-Aufgaben')
+  expect(t).toContain('2 Git-Aufgaben')
+  expect(t).toContain('2 Aufgaben werden gesendet')
+  expect(t).toContain('Oder tippen: /ace:ace-bootstrap --backfill-only --sources git,merge --approved')
+  expect(h.pending().backfill).toEqual({ days: 90, limit: 100, only: true, sources: ['git', 'merge'] })
+})
+test('--sources session: no git log call for the commit history, only session counts', async ($, on) => {
+  const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }) })
+  await start($)
+  const n = h.runs.length
+  const t = await run($, '--backfill-only --sources session')
+  expect(h.runs.slice(n).some((r: any) => r.argv.includes('--no-merges') || r.argv.includes('--merges'))).toBe(false)
+  expect(t).toContain('1 Session-Aufgaben')
+  expect(t).not.toContain('Git-Aufgaben')
+  expect(t).toContain('Quellen: session')
+})
+test('--sources merge: the fix/revert log is never called, the merge log is', async ($, on) => {
+  const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }) })
+  await start($)
+  const n = h.runs.length
+  const t = await run($, '--backfill-only --sources merge')
+  const calls = h.runs.slice(n)
+  expect(calls.some((r: any) => r.argv.includes('--no-merges'))).toBe(false)
+  expect(calls.some((r: any) => r.argv.includes('--merges'))).toBe(true)
+  expect(t).toContain('1 Git-Aufgaben (Merges)')
+})
+test('--sources git,merge --approved: marker carries the sources, run sends only git+merge, resume (reload, rebuilt) keeps them', async ($, on) => {
+  const st: { last?: any } = {}
+  const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }), backfill: jobFor(st) })
+  await start($)
+  h.reads.length = 0
+  await run($, '--backfill-only --sources git,merge --approved')
+  expect(h.marker().args.sources).toEqual(['git', 'merge'])
+  await idle($, h)
+  expect(st.last.items.length).toBe(2)
+  expect(h.reads.filter((p: string) => p.startsWith(sessionsDir))).toEqual([])
+  expect(h.logs.join('\n')).toContain('Backfill fertig: 2 gesendet')
+})
+test('default (no --sources): session, git and merge all read and sent; no Quellen line, no sources in pending', async ($, on) => {
+  const st: { last?: any } = {}
+  const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }), backfill: jobFor(st) })
+  await start($)
+  const t = await run($, '--backfill-only')
+  expect(t).not.toContain('Quellen:')
+  expect(t).toContain('1 Session-Aufgaben, 2 Git-Aufgaben')
+  expect(h.pending().backfill).toEqual({ days: 90, limit: 100, only: true })
+  await run($, '--backfill-only --approved')
+  expect('sources' in h.marker().args).toBe(false)
+  await idle($, h)
+  expect(st.last.items.length).toBe(3)
+})
+test('bad --sources values: German usage line, nothing stored', async ($, on) => {
+  const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }) })
+  await start($)
+  for (const a of ['--backfill-only --sources', '--backfill-only --sources x', '--backfill-only --sources git,git', '--backfill-only --sources ""', '--backfill-only --sources git,,merge'])
+    expect(await run($, a)).toContain('--sources')
+  expect(h.pending()).toBe(null)
+})
+test('--sources without --backfill-only is refused (the legacy bootstrap never runs), as is --target-project; nothing stored, no ace-cli bootstrap', async ($, on) => {
+  const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }) })
+  await start($)
+  const n0 = await warm($, h)
+  for (const a of ['--sources git', '--sources git,merge --approved', '--target-project prj_abc', '--target-project prj_abc --target-org org_xyz --approved', '--limit 5 --sources session'])
+    expect(await run($, a)).toContain('nur mit --backfill-only')
+  expect(h.pending()).toBe(null)
+  noLegacy(h, n0)
 })
