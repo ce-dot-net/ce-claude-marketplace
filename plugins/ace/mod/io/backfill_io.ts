@@ -6,7 +6,7 @@ import { APPEND_SH } from '../lib/sh.ts'
 import { pyDumps } from '../lib/pyjson.ts'
 import { engineScript, ids } from './spawn.ts'
 import { dataRoot, uuid } from './state.ts'
-import { POLL_MS, buildItems, finalLines, newRun, progress, runActive, startLine, stepBackfill, type Built, type Deps, type EngineAnswer, type RunState } from '../lib/backfill_run.ts'
+import { POLL_MS, buildItems, finalLines, newRun, progress, runActive, startLine, stepBackfill, type Built, type Deps, type EngineAnswer, type RunState, type Source } from '../lib/backfill_run.ts'
 import type { Item } from '../lib/backfill_send.ts'
 import { GIT_LOG_ARGV, GIT_MERGES_ARGV } from '../lib/backfill_git.ts'
 import { BACKFILL_FLAG_FILE, storedBackfill } from '../lib/cohort.ts'
@@ -52,10 +52,11 @@ async function gitText($: any, c: C, argv: string[], days: number): Promise<stri
   const r = await run($, [...argv, `--since=${days} days ago`], { cwd: c.root, timeoutMs: 60_000 })
   return r && r.exitCode === 0 ? String(r.stdout ?? '') : ''
 }
-export async function collect($: any, c: C, days: number, limit: number): Promise<Built> {
+export async function collect($: any, c: C, days: number, limit: number, sources?: readonly Source[]): Promise<Built> {
   const ledger = await loadLedger($, c)
-  return buildItems({ projectId: c.projectId, sessions: await readSessions($, c), gitLog: await gitText($, c, GIT_LOG_ARGV, days),
-    mergeLog: await gitText($, c, GIT_MERGES_ARGV, days), limit, ledger })
+  const has = (x: Source) => !sources || sources.includes(x)   // a source not listed is never read (no session files, no git call)
+  return buildItems({ projectId: c.projectId, sessions: has('session') ? await readSessions($, c) : [], gitLog: has('git') ? await gitText($, c, GIT_LOG_ARGV, days) : '',
+    mergeLog: has('merge') ? await gitText($, c, GIT_MERGES_ARGV, days) : '', limit, ledger, sources })
 }
 
 const lastLine = (t: unknown) => String(t ?? '').trim().split('\n').pop()?.slice(0, 200) ?? ''
@@ -104,7 +105,7 @@ async function tick($: any, key: string): Promise<void> {
     const script = await engineScript($, 'backfill.js')
     if (!script) { st.stopped = 'Backfill: Engine nicht verfügbar, abgebrochen.'; st.lines.push(st.stopped); return await end($, st, key) }
     let m = memo.get(key)
-    if (!m) { m = await collect($, c, a.days, a.limit); memo.set(key, m) }
+    if (!m) { m = await collect($, c, a.days, a.limit, a.sources); memo.set(key, m) }
     const items = m.items
     const { d } = await stepDeps($, c, script)
     d.sources = m.sources
@@ -143,7 +144,7 @@ export async function resumeBackfill($: any): Promise<void> {
 }
 // The backfill phase after a confirmed bootstrap: flag on, engine there, resume time passed, no run active, then the run is STARTED
 // (marker + first tick) and the command returns at once; the result arrives as a toast and a log line. Returns the lines to show.
-export async function backfillPhase($: any, bound: C, o: { days: number, limit: number, project?: string, org?: string }): Promise<string[]> {
+export async function backfillPhase($: any, bound: C, o: { days: number, limit: number, project?: string, org?: string, sources?: Source[] }): Promise<string[]> {
   const c: C = { ...bound, projectId: o.project ?? bound.projectId, orgId: o.org ?? bound.orgId }  // --target-project: only the destination changes (ledger, keys, engine args, marker)
   if (!await flagOn($, c.root)) return ['Backfill: Server unterstützt es noch nicht']
   const script = await engineScript($, 'backfill.js')
@@ -152,14 +153,14 @@ export async function backfillPhase($: any, bound: C, o: { days: number, limit: 
   const now = await $.clock.now()
   if (typeof resume === 'number' && resume > now) return [`Backfill: Kontingent für heute erreicht, weiter ab ${new Date(resume).toISOString().slice(0, 16).replace('T', ' ')} UTC`]
   if (runActive(((await $.state.get(RUN)) as any).value, now)) return ['Backfill läuft bereits']
-  const built = await collect($, c, o.days, o.limit)
+  const built = await collect($, c, o.days, o.limit, o.sources)
   const st = newRun(built.items.length, now)
   if (!built.items.length) {  // nothing to send: no run, the one step answers the line
     const { d } = await stepDeps($, c, script)
     await stepBackfill([], st, d)
     return finalLines(st)
   }
-  st.args = { root: c.root, orgId: c.orgId, projectId: c.projectId, days: o.days, limit: o.limit }
+  st.args = { root: c.root, orgId: c.orgId, projectId: c.projectId, days: o.days, limit: o.limit, ...(o.sources ? { sources: o.sources } : {}) }
   await $.state.set(RUN, st)
   const key = keyOf(st)
   memo.set(key, built); alive.add(key)
