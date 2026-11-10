@@ -49,13 +49,15 @@ export function parseBackfillFlags(args: string): BackfillFlags {
 }
 
 export type Source = 'session' | 'git' | 'merge'
-export type Built = { items: Item[], sources: Record<string, Source>, sessionTasks: number, gitTasks: number, skipped: number }
+export type Built = { items: Item[], sources: Record<string, Source>, sessionTasks: number, noiseExcluded?: number, gitTasks: number, skipped: number }  // sessionTasks = candidates; noiseExcluded = set aside by the tool-noise filter
 // Session transcripts + git logs -> at most `limit` items (best ranked), tasks the ledger already finished are skipped first.
 export function buildItems(o: { projectId: string, sessions: { text: string, sessionId?: string }[], gitLog: string, mergeLog: string, limit: number, ledger: Ledger }): Built {
   const cands: any[] = []
-  let sessionTasks = 0
+  let sessionTasks = 0, noiseExcluded = 0
   for (const s of o.sessions) {
-    for (const t of readSession(s.text, { sessionId: s.sessionId, denoise: true }).tasks) { sessionTasks++; cands.push({ ...t, key: taskKey(o.projectId, t.sessionId, t.index), _kind: 'session' }) }
+    const r = readSession(s.text, { sessionId: s.sessionId, denoise: true })
+    noiseExcluded += r.stats.noise
+    for (const t of r.tasks) { sessionTasks++; cands.push({ ...t, key: taskKey(o.projectId, t.sessionId, t.index), _kind: 'session' }) }
   }
   const git = [...(o.gitLog ? readGitLog(o.gitLog, { projectId: o.projectId }) : []), ...(o.mergeLog ? readMergeLog(o.mergeLog, { projectId: o.projectId }).map(t => ({ ...t, _merge: true })) : [])]
   for (const g of git) cands.push({ ...g, _kind: 'git' })
@@ -63,7 +65,7 @@ export function buildItems(o: { projectId: string, sessions: { text: string, ses
   const fresh = cands.filter(c => open.has(c.key))
   const items: Item[] = [], sources: Record<string, Source> = {}
   for (const c of selectTasks(fresh, o.limit)) { const it = toItem(c, c._kind); if (it) { items.push(it); sources[it.idempotency_key] = c._merge ? 'merge' : c._kind } }
-  return { items, sources, sessionTasks, gitTasks: git.length, skipped: cands.length - fresh.length }
+  return { items, sources, sessionTasks, noiseExcluded, gitTasks: git.length, skipped: cands.length - fresh.length }
 }
 
 export function duration(n: number): string {
@@ -72,8 +74,8 @@ export function duration(n: number): string {
 }
 export function previewLines(b: Built, o: { flag: boolean, limit: number }): string[] {
   if (!o.flag) return ['Backfill: Server unterstützt es noch nicht']
-  const n = b.items.length
-  const out = [`Backfill: ${b.sessionTasks} Session-Aufgaben, ${b.gitTasks} Git-Aufgaben (Fix/Revert + Merges) im Fenster, ${b.skipped} schon gesendet (übersprungen)`,
+  const n = b.items.length, noise = b.noiseExcluded ?? 0
+  const out = [`Backfill: ${b.sessionTasks + noise} Session-Aufgaben${noise ? ` (davon ${noise} wegen Tool-Rauschen aussortiert)` : ''}, ${b.gitTasks} Git-Aufgaben (Fix/Revert + Merges) im Fenster, ${b.skipped} schon gesendet (übersprungen)`,
     `${n} Aufgaben werden gesendet (Limit ${o.limit}, die am besten bewerteten)`]
   if (n) out.push(`Dauer: ${duration(n)} (Richtwert ${SECONDS_PER_TRACE} s pro Trace, der Server verarbeitet im Hintergrund)`,
     'Aufgaben (Titel, Dateinamen, redigierte Texte) verlassen den Rechner.')
@@ -89,6 +91,7 @@ export type Deps = {
   loadLedger: () => Promise<Ledger>
   saveLedger: (l: Ledger) => Promise<void>
   setResume: (ms: number) => Promise<void>
+  noiseExcluded?: number   // session tasks the tool-noise filter set aside (logged in backfill_batch)
   sources?: Record<string, Source>   // source per idempotency key: logged as backfill_item_sent / backfill_batch (keys and counts only)
   log?: (row: any) => Promise<void>   // diagnosis rows (backfill_response / backfill_item); a failing logger never breaks the run
 }
@@ -159,7 +162,7 @@ export async function stepBackfill(all: Item[], st: RunState, d: Deps): Promise<
     if (d.sources) {
       const n: Record<Source, number> = { session: 0, git: 0, merge: 0 }
       for (const k of keys) { const source = d.sources[k]; if (!source) continue; n[source]++; await lg({ event: 'backfill_item_sent', key: k, source }) }
-      await lg({ event: 'backfill_batch', total: keys.length, ...n })
+      await lg({ event: 'backfill_batch', total: keys.length, ...n, noise_excluded: d.noiseExcluded ?? 0 })
       const t = st.split ?? (st.split = { session: 0, git: 0, merge: 0 })
       for (const k of ['session', 'git', 'merge'] as const) t[k] += n[k]
     }
