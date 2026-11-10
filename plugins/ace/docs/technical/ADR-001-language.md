@@ -79,6 +79,7 @@ Round 2 of 8.0.0 already ships `prompt_id` as the task anchor (PreToolUse `Agent
 - CLI delivery is DESIGN section 23: `package.json` pins one exact `@ace-sdk/cli`, `package-lock.json` is committed, Claude Code installs it on plugin install/update; plugin and CLI are updated hand in hand (a CLI minor can add a flag or change a format, so no range is safe).
 
 ## What the server stores (checked against the CLI 4.2.2 payload)
-- `render_variant` reaches the server: ace-cli forwards the trace verbatim, so the A/B attribution can use it.
+- `render_variant` reaches the server: ace-cli forwards the trace verbatim, so the A/B attribution can use it. Since 8.2.1
+  `render_path` (`mod` | `python`, the chain that rendered) travels next to it, under the same condition.
 - `parent_agent_id` is the server-declared name for the parent prompt id (the local state keeps `parent_task_id`).
 - `effort_level` / `effort_weight` are dropped server-side (not stored or persisted); they stay in the local relevance log only.

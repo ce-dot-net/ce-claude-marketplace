@@ -125,3 +125,12 @@ export function selectTasks<T extends Pick<BackfillTask, 'success' | 'decisive' 
   if (!(n > 0)) return []
   return [...tasks].sort((a, b) => Number(b.success) - Number(a.success) || b.decisive - a.decisive || b.endMs - a.endMs).slice(0, Math.floor(n))
 }
+
+// 8.2.1 hybrid: at most n tasks, round-robin over the groups (one per source) that have candidates, each ranked by selectTasks.
+// A group that runs out hands its share to the others; a single non-empty group gives exactly selectTasks(group, n).
+export function selectBalanced<T extends Pick<BackfillTask, 'success' | 'decisive' | 'endMs'>>(groups: T[][], n: number): T[] {
+  const ranked = groups.map(g => selectTasks(g, n)).filter(g => g.length), out: T[] = []
+  for (let i = 0; out.length < Math.floor(n) && ranked.some(g => i < g.length); i++)
+    for (const g of ranked) if (i < g.length && out.length < Math.floor(n)) out.push(g[i])
+  return out
+}

@@ -1,7 +1,7 @@
 // 8.2.0 session reader (pure library, not wired to any send path): a Claude Code transcript JSONL -> one task per real user
 // prompt -> the SAME ToolRec / buildTrace / taskOutcome the live learn path uses. Hermetic synthetic transcripts only.
 import { expect, test } from 'claude-code/testing'
-import { readSession, readSessionLines, selectTasks, taskKey } from '../lib/backfill.ts'
+import { readSession, readSessionLines, selectBalanced, selectTasks, taskKey } from '../lib/backfill.ts'
 
 let n = 0
 const ts = () => new Date(Date.UTC(2026, 0, 1) + (n += 1000)).toISOString()
@@ -154,6 +154,29 @@ test('selectTasks: never more than n; successful first, then more decisive steps
   expect(selectTasks(ts, Number.NaN)).toEqual([])
   expect(selectTasks([], 5)).toEqual([])
   expect(ts.map(t => t.index)).toEqual([0, 1, 2, 3, 4, 5])  // the input is not reordered
+})
+
+// 8.2.1 hybrid: round-robin over the sources that have candidates, each ranked by selectTasks' rule
+test('selectBalanced: a strong source never starves a weak one; round-robin, each source ranked internally', () => {
+  const sess = [mk(10, true, 9, 100), mk(11, true, 8, 200), mk(12, true, 7, 300), mk(13, true, 6, 400)]
+  const git = [mk(20, true, 0, 900), mk(21, true, 0, 800)]
+  const merge = [mk(30, true, 0, 50)]
+  expect(selectBalanced([sess, git, merge], 3).map(t => t.index)).toEqual([10, 20, 30])
+  expect(selectBalanced([sess, git, merge], 4).map(t => t.index)).toEqual([10, 20, 30, 11])
+  // a source with fewer candidates than its share hands the rest to the others
+  expect(selectBalanced([sess, git, merge], 6).map(t => t.index)).toEqual([10, 20, 30, 11, 21, 12])
+  expect(selectBalanced([sess, git, merge], 100).length).toBe(7)
+  // within a source the existing rule decides (success > decisive > newest)
+  expect(selectBalanced([[mk(1, false, 9, 9), mk(2, true, 0, 1)], [mk(3, true, 0, 5)]], 2).map(t => t.index)).toEqual([2, 3])
+})
+test('selectBalanced: one source (or empty others) behaves exactly like selectTasks; bad n gives []', () => {
+  const ts = [mk(0, true, 1, 100), mk(1, false, 9, 900), mk(2, true, 5, 200), mk(3, true, 5, 300)]
+  for (const n of [1, 3, 100]) {
+    expect(selectBalanced([ts], n)).toEqual(selectTasks(ts, n))
+    expect(selectBalanced([[], ts, []], n)).toEqual(selectTasks(ts, n))
+  }
+  for (const n of [0, -1, Number.NaN]) expect(selectBalanced([ts, ts], n)).toEqual([])
+  expect(selectBalanced([], 5)).toEqual([])
 })
 
 // ---- 8.2.0 tool-noise filter ----
