@@ -264,6 +264,7 @@ test('trace parity with ace_after_task.py: fields, effort from classic.Stop, git
   expect(t.agent_type).toBe('main')
   expect(t.session_id).toBe(tsid)
   expect(t.render_variant).toBe('full')
+  expect(t.render_path).toBe('mod')  // 8.2.1: which chain rendered
   expect(t.conversation_id).toBe(SID)  // §31: the stable CC session id
   expect(t.retrieval_id).toBe(JSON.parse(S8).retrieval_id)
   expect(t.applied_log_ids).toEqual([])  // §31: 'all done' uses no pattern; the server wants [] not omitted

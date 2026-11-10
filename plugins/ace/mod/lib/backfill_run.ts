@@ -1,13 +1,13 @@
 // 8.2.0 backfill orchestration, ALL I/O injected (post/get/sleep/now/ledger/resume): item building, preview text, the sequential send loop.
 // Pure of `$`: io/backfill_io.ts supplies the real post/get (engine/backfill.js), ledger file and clock; tests supply fakes.
-import { readSession, selectTasks, taskKey } from './backfill.ts'
+import { readSession, selectBalanced, taskKey } from './backfill.ts'
 import { readGitLog, readMergeLog } from './backfill_git.ts'
 import { applyJob, batches, classify, describeAnswer, failedItems, reportLine, toItem, type Item, type Report } from './backfill_send.ts'
 import { add, pending, type Ledger } from './ledger.ts'
 
 export const DEFAULT_LIMIT = 100, MAX_LIMIT = 100
 export const POLL_MS = 60_000, MAX_POLLS = 400   // ~6.7 h of 60 s polls per job: a bound, never an endless loop
-export const SECONDS_PER_TRACE = 70              // the server team's rule of thumb
+export const ITEMS_PER_MINUTE = 5                // measured server rate (3..5 items a minute)
 
 // `--limit N` (1..100, `--limit=N` too) out of the bootstrap arguments; `rest` is what is left for parseBootstrapArgs.
 export function parseLimit(args: string): { ok: true, limit: number, rest: string } | { ok: false } {
@@ -30,8 +30,10 @@ export function parseLimit(args: string): { ok: true, limit: number, rest: strin
 export const TARGET_USAGE = 'Usage: --backfill-only | --target-project prj_xxx [--target-org org_xxx] (prj_/org_ + 3 bis 64 Zeichen A-Z a-z 0-9 _)'
 const PRJ_RE = /^prj_[A-Za-z0-9_]{3,64}$/, ORG_RE = /^org_[A-Za-z0-9_]{3,64}$/
 export const SOURCES = ['session', 'git', 'merge'] as const
-export const DEFAULT_SOURCES: readonly ('session' | 'git' | 'merge')[] = ['git', 'merge']   // pilots: session items are far noisier (16 of 30 vs 1 of 19), so they are opt-in
-export const SOURCES_USAGE = `Usage: --sources ${SOURCES.join(',')} (Liste aus: ${SOURCES.join(', ')}; keine Duplikate, nicht leer; ohne --sources gilt: git, merge; session nur ausdrücklich)`
+// 8.2.1 hybrid: all three, balanced by selectBalanced (sessions when present, git/merge always). Pilots: session items were
+// noisier (16 of 30 vs 1 of 19), hence the tool-noise filter and the preview hint; --sources still narrows.
+export const DEFAULT_SOURCES: readonly ('session' | 'git' | 'merge')[] = ['session', 'git', 'merge']
+export const SOURCES_USAGE = `Usage: --sources ${SOURCES.join(',')} (Liste aus: ${SOURCES.join(', ')}; keine Duplikate, nicht leer; ohne --sources gilt: ${SOURCES.join(', ')}, abwechselnd verteilt)`
 export type BackfillFlags = { ok: true, only: boolean, project?: string, org?: string, sources?: Source[], rest: string } | { ok: false, line: string }
 export function parseBackfillFlags(args: string): BackfillFlags {
   const bad: BackfillFlags = { ok: false, line: TARGET_USAGE }
@@ -75,12 +77,13 @@ export function buildItems(o: { projectId: string, sessions: { text: string, ses
   const open = new Set(pending(o.ledger, cands.map(c => c.key)))
   const fresh = cands.filter(c => open.has(c.key))
   const items: Item[] = [], sources: Record<string, Source> = {}
-  for (const c of selectTasks(fresh, o.limit)) { const it = toItem(c, c._kind); if (it) { items.push(it); sources[it.idempotency_key] = c._merge ? 'merge' : c._kind } }
+  const srcOf = (c: any): Source => c._merge ? 'merge' : c._kind
+  for (const c of selectBalanced(SOURCES.map(s => fresh.filter(c => srcOf(c) === s)), o.limit)) { const it = toItem(c, c._kind); if (it) { items.push(it); sources[it.idempotency_key] = srcOf(c) } }
   return { items, sources, sessionTasks, noiseExcluded, gitTasks: git.length, skipped: cands.length - fresh.length }
 }
 
 export function duration(n: number): string {
-  const min = Math.ceil(n * SECONDS_PER_TRACE / 60)
+  const min = Math.ceil(n / ITEMS_PER_MINUTE)
   return min < 60 ? `etwa ${min} Minuten` : `etwa ${(min / 60).toFixed(1).replace('.', ',')} Stunden`
 }
 export function previewLines(b: Built, o: { flag: boolean, limit: number, sources?: readonly Source[] }): string[] {
@@ -91,9 +94,9 @@ export function previewLines(b: Built, o: { flag: boolean, limit: number, source
   const gitWhat = has('git') && has('merge') ? 'Fix/Revert + Merges' : has('git') ? 'Fix/Revert' : 'Merges'
   const counts = [...(has('session') ? [`${b.sessionTasks + noise} Session-Aufgaben${noise ? ` (davon ${noise} wegen Tool-Rauschen aussortiert)` : ''}`] : []),
     ...(has('git') || has('merge') ? [`${b.gitTasks} Git-Aufgaben (${gitWhat}) im Fenster`] : []), `${b.skipped} schon gesendet (übersprungen)`]
-  const out = [`Quellen: ${src.join(', ')}${o.sources ? '' : ' (Standard)'}`, ...(has('session') ? ['Hinweis: Sitzungs-Quelle ist experimentell (Pilot: viel Tool-Rauschen)'] : []), `Backfill: ${counts.join(', ')}`,
-    `${n} Aufgaben werden gesendet (Limit ${o.limit}, die am besten bewerteten)`]
-  if (n) out.push(`Dauer: ${duration(n)} (Richtwert ${SECONDS_PER_TRACE} s pro Trace, der Server verarbeitet im Hintergrund)`,
+  const out = [`Quellen: ${src.join(', ')}${o.sources ? '' : ' (Standard)'}`, ...(has('session') ? ['Hinweis: Session-Aufgaben waren im Pilot verrauschter als Git (Tool-Rauschen wird gefiltert)'] : []), `Backfill: ${counts.join(', ')}`,
+    `${n} Aufgaben werden gesendet (Limit ${o.limit}, ${src.length > 1 ? 'abwechselnd aus den Quellen, je Quelle ' : ''}die am besten bewerteten)`]
+  if (n) out.push(`Dauer: ${duration(n)} (Richtwert ${ITEMS_PER_MINUTE} Aufgaben pro Minute, der Server verarbeitet im Hintergrund)`,
     'Aufgaben (Titel, Dateinamen, redigierte Texte) verlassen den Rechner.')
   return out
 }
@@ -117,18 +120,19 @@ const LATER = 'Backfill gestoppt: Server gerade nicht erreichbar, später erneut
 
 // Run marker: the JSON state of one backfill run (kept in $.state), enough to continue after a module reload. Single flight + TTL.
 export const RUN_TTL_MS = 3 * 3_600_000   // a marker whose last beat is older than this is stale (crashed run): ignored
-export type RunState = { startedAt: number, beat: number, total: number, posted: string[], split?: Record<Source, number>, job?: string, judged?: string[], causes?: Record<string, number>, polls: number, report: Report, lines: string[], stopped?: string,
+export type RunState = { startedAt: number, beat: number, total: number, posted: string[], split?: Record<Source, number>, job?: string, jobKeys?: string[], judged?: string[], causes?: Record<string, number>, polls: number, report: Report, lines: string[], stopped?: string,
   args?: { root: string, orgId?: string, projectId: string, days: number, limit: number, sources?: Source[] } }
 export const newRun = (total: number, now: number): RunState => ({ startedAt: now, beat: now, total, posted: [], polls: 0, lines: [],
-  report: { sent: 0, partial: 0, failed: 0, skipped: 0, patternsCreated: 0, failedChunks: 0, finished: false } })
+  report: { sent: 0, partial: 0, failed: 0, skipped: 0, duplicates: 0, patternsCreated: 0, failedChunks: 0, finished: false } })
 export const runActive = (v: any, now: number): v is RunState => !!v && typeof v.beat === 'number' && now - v.beat >= 0 && now - v.beat < RUN_TTL_MS
-export const startLine = (n: number) => `Backfill gestartet: ${n} Aufgaben, läuft im Hintergrund (ca. ${Math.ceil(n * SECONDS_PER_TRACE / 60)} Min). Ergebnis folgt als Meldung.`
+export const startLine = (n: number) => `Backfill gestartet: ${n} Aufgaben, läuft im Hintergrund (ca. ${Math.ceil(n / ITEMS_PER_MINUTE)} Min). Ergebnis folgt als Meldung.`
 export const topCause = (st: RunState): string => {
   const e = Object.entries(st.causes ?? {}).sort((a, b) => b[1] - a[1])[0]
   return e ? ` (${e[0]} ×${e[1]})` : ''
 }
 const splitText = (st: RunState) => st.split ? ` (Session ${st.split.session}, Git ${st.split.git}, Merge ${st.split.merge})` : ''
-export const finalLines = (st: RunState): string[] => [reportLine(st.report) + (st.report.failed ? topCause(st) : '') + splitText(st), ...st.lines, ...(st.stopped ? ['Ledger gespeichert; ein erneuter Lauf macht dort weiter.'] : [])]
+const dupLine = (st: RunState) => st.report.duplicates ? [`${st.report.duplicates} Aufgaben waren dem Server bereits bekannt.`] : []
+export const finalLines = (st: RunState): string[] => [reportLine(st.report) + (st.report.failed ? topCause(st) : '') + splitText(st), ...dupLine(st), ...st.lines, ...(st.stopped ? ['Ledger gespeichert; ein erneuter Lauf macht dort weiter.'] : [])]
 
 // ONE step of a run (state `st` is mutated, plain JSON between steps): at most one job GET per call, plus any posts that can go
 // without waiting. done=false means "call again after POLL_MS" (the server does at most 5 items a minute: never poll faster).
@@ -155,11 +159,11 @@ export async function stepBackfill(all: Item[], st: RunState, d: Deps): Promise<
     if (g.status !== 200) { stop(LATER); return 'stop' }
     const judged = new Set(st.judged ?? [])
     for (const f of failedItems(g.body, judged)) { why(`item ${f.error}`); await lg({ event: 'backfill_item', key: f.key, error: f.error }) }
-    const r = applyJob(ledger, g.body, d.now(), judged)
+    const r = applyJob(ledger, g.body, d.now(), judged, st.jobKeys)
     st.judged = [...judged]
     await d.saveLedger(ledger)
     if (!r.finished) return false
-    for (const k of ['sent', 'partial', 'failed', 'skipped', 'patternsCreated', 'failedChunks'] as const) st.report[k] += r[k]
+    for (const k of ['sent', 'partial', 'failed', 'skipped', 'duplicates', 'patternsCreated', 'failedChunks'] as const) st.report[k] = (st.report[k] ?? 0) + r[k]  // ?? 0: a pre-8.2.1 marker has no duplicates
     return true
   }
 
@@ -168,7 +172,7 @@ export async function stepBackfill(all: Item[], st: RunState, d: Deps): Promise<
       const p = await pollOne(st.job)
       if (p === 'stop') return finish()
       if (!p) return { done: false }
-      st.job = undefined; st.polls = 0; st.judged = undefined
+      st.job = undefined; st.jobKeys = undefined; st.polls = 0; st.judged = undefined
     }
     const batch = batches(todo).batches[0]
     if (!batch) break
@@ -208,8 +212,13 @@ export async function stepBackfill(all: Item[], st: RunState, d: Deps): Promise<
       st.lines.push(`Backfill: Batch abgelehnt (${c.kind === 'invalid' ? `HTTP ${c.status} ${c.detail}`.trim() : `zu groß ${c.code}`}), ${batch.length} Aufgaben als Fehlversuch vermerkt.`)
       continue
     }
-    if (!c.poll) { st.lines.push(`Backfill: ${c.duplicates || batch.length} Aufgaben waren dem Server bereits bekannt.`); continue }
-    st.job = c.job_id; st.polls = 0
+    if (!c.poll) {  // accepted 0: every key of the batch was already known to the server; ledgered sent, so it never takes a slot again
+      for (const k of keys) add(ledger, k, 'sent', d.now())
+      await d.saveLedger(ledger)
+      st.report.duplicates = (st.report.duplicates ?? 0) + keys.length
+      continue
+    }
+    st.job = c.job_id; st.jobKeys = keys; st.polls = 0
   }
   return finish()
 }

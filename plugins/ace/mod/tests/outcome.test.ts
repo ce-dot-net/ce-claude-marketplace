@@ -109,6 +109,14 @@ test('8.1.3: the trace carries result.success (end outcome) and result.failed_st
   expect([red.trace.result.success, red.trace.result.failed_steps]).toEqual([false, 1])
 })
 
+test('8.2.1: render_path "mod" travels with render_variant, omitted with it', () => {
+  const a = { userPrompt: 'fix it', answer: 'done', playbookUsed: [], agentType: 'main', appliedLogIds: [], nowIso: 'x', effort: 'normal', tools: [] }
+  const known = buildTrace({ ...a, renderVariant: 'full' }).trace
+  expect([known.render_variant, known.render_path]).toEqual(['full', 'mod'])
+  const unknown = buildTrace(a).trace
+  expect(['render_variant' in unknown, 'render_path' in unknown]).toEqual([false, false])
+})
+
 test('8.1.3: stderr alone never marks a step failed; grep exit 1 is not a failed step', () => {
   expect(toolRec('Bash', { command: 'git push' }, { stdout: '', stderr: 'To github.com:o/r.git', interrupted: false, exitCode: 0 }, false, undefined, 0, 1).failed).toBe(false)
   expect(toolRec('Bash', { command: 'npm i' }, { stdout: '', stderr: 'npm warn x' }, false, undefined, 0, 1).failed).toBe(false)

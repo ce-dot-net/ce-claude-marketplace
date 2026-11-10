@@ -3,7 +3,7 @@
 import { buildTrace } from './trace.ts'
 import { safeText } from './backfill_git.ts'
 import type { ToolRec } from './evidence.ts'
-import { add, MAX_ATTEMPTS, type Ledger } from './ledger.ts'
+import { add, MAX_ATTEMPTS, statusOf, type Ledger } from './ledger.ts'
 
 export type Item = { idempotency_key: string, occurred_at: string, trace: any }
 export const MAX_ITEMS = 20
@@ -111,15 +111,20 @@ export function classify(status: number, body: unknown, nowMs: number = Date.now
   return { kind: 'retry', status: num(status) }
 }
 
-export type Report = { sent: number, partial: number, failed: number, skipped: number, patternsCreated: number, failedChunks: number, finished: boolean }
+// duplicates = posted keys the server already knew (8.2.1): ledgered sent, reported apart from `sent`
+export type Report = { sent: number, partial: number, failed: number, skipped: number, duplicates: number, patternsCreated: number, failedChunks: number, finished: boolean }
 
 // GET /traces/backfill/<id> body -> ledger updates + a readable report. pending/processing/unknown items change nothing.
 // `judged` (optional, mutated): keys whose verdict of THIS job already counted. A job is polled many times and its failed items stay
 // failed in every answer: without it each poll would burn one more ledger attempt per item (3 polls = skipped-failed, no new verdict).
-export function applyJob(l: Ledger, job: unknown, nowMs: number, judged?: Set<string>): Report {
+// `posted` (optional): the keys sent in this job's batch. Once the job is finished, a posted key missing from its items was a
+// server-side duplicate (the job lists only accepted items): ledgered sent and counted, so it never takes a slot again.
+export function applyJob(l: Ledger, job: unknown, nowMs: number, judged?: Set<string>, posted?: readonly string[]): Report {
   const j = obj(job)
-  const r: Report = { sent: 0, partial: 0, failed: 0, skipped: 0, patternsCreated: 0, failedChunks: 0, finished: j.state === 'finished' }
+  const r: Report = { sent: 0, partial: 0, failed: 0, skipped: 0, duplicates: 0, patternsCreated: 0, failedChunks: 0, finished: j.state === 'finished' }
   const items: any[] = Array.isArray(j.items) ? j.items : []
+  const listed = new Set(items.map(x => obj(x).idempotency_key))
+  if (r.finished) for (const k of posted ?? []) if (!listed.has(k) && statusOf(l, k) !== 'sent' && add(l, k, 'sent', nowMs)) r.duplicates++
   let pc = 0, fc = 0
   for (const raw of items) {
     const it = obj(raw), key = it.idempotency_key

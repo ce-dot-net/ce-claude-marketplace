@@ -154,7 +154,23 @@ test('applyJob maps item states to the ledger', () => {
   expect(statusOf(l, K(6))).toBe('skipped-failed')
   expect(statusOf(l, K(7))).toBe(undefined)
   expect(statusOf(l, K(8))).toBe(undefined)
-  expect(r).toEqual({ sent: 2, partial: 1, failed: 3, skipped: 1, patternsCreated: 5, failedChunks: 1, finished: true })
+  expect(r).toEqual({ sent: 2, partial: 1, failed: 3, skipped: 1, duplicates: 0, patternsCreated: 5, failedChunks: 1, finished: true })
+})
+test('applyJob: a posted key missing from a FINISHED job is a server-side duplicate: ledgered sent and counted (mixed batch)', () => {
+  const l = emptyLedger()
+  const posted = [K(1), K(2), K(3), K(4)]
+  const r = applyJob(l, job([{ idempotency_key: K(1), state: 'done' }, { idempotency_key: K(2), state: 'failed', error: 'pipeline_failed' }]), 1000, undefined, posted)
+  expect(statusOf(l, K(3))).toBe('sent')
+  expect(statusOf(l, K(4))).toBe('sent')
+  expect(statusOf(l, K(2))).toBe('failed')
+  expect(r).toMatchObject({ sent: 1, failed: 1, duplicates: 2 })
+  // an unfinished job says nothing about missing keys yet
+  const u = emptyLedger()
+  expect(applyJob(u, { state: 'processing', items: [] }, 1, undefined, posted).duplicates).toBe(0)
+  expect(u.entries.size).toBe(0)
+  // a key the ledger already holds as sent is not counted twice; bad keys are ignored
+  const s = emptyLedger(); add(s, K(3), 'sent', 1)
+  expect(applyJob(s, job([]), 2, undefined, [K(3), 'bad', K(9)]).duplicates).toBe(1)
 })
 test('applyJob: repeated failed hits the ledger retry cap', () => {
   const l = emptyLedger()
@@ -172,7 +188,7 @@ test('applyJob tolerates garbage, unknown states, bad keys, missing fields', () 
   for (const j of [null, undefined, 'x', 5, [], {}, { items: 'no' }, { items: [null, 3, {}, { idempotency_key: 'bad', state: 'done' }, { idempotency_key: K(1), state: 'weird' }] }] as any[])
     expect(() => applyJob(l, j, 1)).not.toThrow()
   expect(l.entries.size).toBe(0)
-  expect(applyJob(l, {} as any, 1)).toEqual({ sent: 0, partial: 0, failed: 0, skipped: 0, patternsCreated: 0, failedChunks: 0, finished: false })
+  expect(applyJob(l, {} as any, 1)).toEqual({ sent: 0, partial: 0, failed: 0, skipped: 0, duplicates: 0, patternsCreated: 0, failedChunks: 0, finished: false })
 })
 test('applyJob: unfinished job reports finished false; totals fall back to the item sums', () => {
   const r = applyJob(emptyLedger(), { state: 'running', items: [{ idempotency_key: K(1), state: 'done', patterns_created: 4, failed_chunks: 2 }] }, 1)
