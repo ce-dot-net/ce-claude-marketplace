@@ -52,8 +52,8 @@ test('flag on: preview counts, default cap 100, duration, data-leaves sentence; 
   const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }), backfill: () => ({ status: 200, body: null }) })
   await start($)
   const t = await run($)
-  expect(t).toContain('1 Session-Aufgaben, 2 Git-Aufgaben')
-  expect(t).toContain('3 Aufgaben werden gesendet (Limit 100')
+  expect(t).toContain('2 Git-Aufgaben')
+  expect(t).toContain('2 Aufgaben werden gesendet (Limit 100')
   expect(t).toContain('verlassen den Rechner')
   expect(h.pending().backfill).toEqual({ days: 90, limit: 100 })
   expect(bf(h).length).toBe(0)
@@ -78,18 +78,18 @@ test('approved: the CLI bootstrap runs, then the backfill posts the batch and re
   await start($)
   const t = await run($, '--approved')
   expect(t).toContain('Bootstrap fertig')
-  expect(t).toContain('Backfill gestartet: 3 Aufgaben')
+  expect(t).toContain('Backfill gestartet: 2 Aufgaben')
   expect(t).not.toContain('Backfill fertig')   // returned before the loop finished
   expect(t).not.toContain('{')
   await idle($, h)
-  expect(h.logs.join('\n')).toContain('Backfill fertig: 3 gesendet')
-  expect(h.toasts.some((x: string) => x.includes('Backfill fertig: 3 gesendet'))).toBe(true)
+  expect(h.logs.join('\n')).toContain('Backfill fertig: 2 gesendet')
+  expect(h.toasts.some((x: string) => x.includes('Backfill fertig: 2 gesendet'))).toBe(true)
   const post = bf(h)[0]
   expect(post.argv.slice(2, 4)).toEqual(['post', '--org'])
   expect(post.argv).toContain('prj_t')
   expect(post.argv.join(' ')).not.toMatch(/token|Authorization/i)
   expect(last.source).toBe('bootstrap')
-  expect(last.items.length).toBe(3)
+  expect(last.items.length).toBe(2)
   const n = bf(h).length
   const t2 = await run($, '--approved')
   await idle($, h)
@@ -160,7 +160,7 @@ test('approved returns at once: the start line, the engine call happened only fo
   await start($)
   const t = await run($, '--approved')
   expect(bf(h).length).toBe(0)   // nothing ran inside the command: the first step waits for the timer
-  expect(t).toMatch(/Backfill gestartet: 3 Aufgaben, läuft im Hintergrund \(ca\. \d+ Min\)\. Ergebnis folgt als Meldung\./)
+  expect(t).toMatch(/Backfill gestartet: 2 Aufgaben, läuft im Hintergrund \(ca\. \d+ Min\)\. Ergebnis folgt als Meldung\./)
   expect(h.marker().startedAt).toBeGreaterThan(0)   // running: the marker is set when the command returns
   await idle($, h)
   expect(times.length).toBe(4)
@@ -195,7 +195,7 @@ test('progress: the status line shows done/total while running, and is cleared a
   await start($)
   await run($, '--approved')
   await idle($, h)
-  expect(h.statuses.some(x => /^Backfill \d+\/3$/.test(String(x)))).toBe(true)
+  expect(h.statuses.some(x => /^Backfill \d+\/2$/.test(String(x)))).toBe(true)
   expect(h.statuses[h.statuses.length - 1]).toBe(undefined)
 })
 
@@ -227,7 +227,7 @@ test('session.start with a fresh marker (module reloaded mid-run) plans the next
   await start($)
   await idle($, h)
   expect(h.marker()).toBe(null)
-  expect(h.logs.join('\n')).toContain('Backfill fertig: 3 gesendet')
+  expect(h.logs.join('\n')).toContain('Backfill fertig: 2 gesendet')
   expect(bf(h).filter((r: any) => r.argv[2] === 'post').length).toBe(1)
 })
 
@@ -239,7 +239,7 @@ test('session.start with a fresh marker and no chain in this load (a reload) pla
   await start($)
   expect(bf(h).length).toBe(0)         // planned, not run yet
   await idle($, h)
-  expect(h.logs.join('\n')).toContain('Backfill fertig: 3 gesendet')
+  expect(h.logs.join('\n')).toContain('Backfill fertig: 2 gesendet')
 })
 
 // --- --backfill-only: no legacy CLI bootstrap at all ---
@@ -277,10 +277,10 @@ test('--backfill-only --approved: only the backfill starts, ace-cli is never spa
   await start($)
   const n0 = await warm($, h)
   const t = await run($, '--backfill-only --approved')
-  expect(t).toContain('Backfill gestartet: 3 Aufgaben')
+  expect(t).toContain('Backfill gestartet: 2 Aufgaben')
   expect(t).not.toContain('Bootstrap fertig')
   await idle($, h)
-  expect(h.logs.join('\n')).toContain('Backfill fertig: 3 gesendet')
+  expect(h.logs.join('\n')).toContain('Backfill fertig: 2 gesendet')
   noLegacy(h, n0)
 })
 
@@ -341,7 +341,7 @@ test('target run: engine gets the target org/project, own ledger (second target 
   expect(bf(h).at(-2)!.argv).toEqual(expect.arrayContaining(['org_o2x', 'prj_second']))
   expect(keysB.some((k: string) => keysA.includes(k))).toBe(false)
   await run($, '--backfill-only --approved'); await idle($, h)
-  expect(st.last.items.length).toBe(3)
+  expect(st.last.items.length).toBe(2)
   expect(bf(h).at(-1)!.argv).toEqual(expect.arrayContaining(['org_t', 'prj_t']))
   expect(h.files.has(`${ROOT}/projects/prj_t/backfill-ledger.tsv`)).toBe(true)
 })
@@ -365,7 +365,7 @@ test('a rejected batch: a backfill_response row goes to backfill-log.jsonl (no r
   const j = JSON.parse(row!.stdin!)
   expect(j).toMatchObject({ event: 'backfill_response', kind: 'invalid', status: 422, code: 'payload_invalid' })
   expect(row!.stdin).not.toContain('SECRET')
-  expect(h.toasts.some((x: string) => x.includes('(422 payload_invalid ×3)'))).toBe(true)
+  expect(h.toasts.some((x: string) => x.includes('(422 payload_invalid ×2)'))).toBe(true)
 })
 
 // --- --sources: which task sources are read, previewed and sent (needs --backfill-only) ---
@@ -392,6 +392,7 @@ test('--sources session: no git log call for the commit history, only session co
   expect(t).toContain('1 Session-Aufgaben')
   expect(t).not.toContain('Git-Aufgaben')
   expect(t).toContain('Quellen: session')
+  expect(t).toContain('Hinweis: Sitzungs-Quelle ist experimentell (Pilot: viel Tool-Rauschen)')
 })
 test('--sources merge: the fix/revert log is never called, the merge log is', async ($, on) => {
   const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }) })
@@ -415,16 +416,34 @@ test('--sources git,merge --approved: marker carries the sources, run sends only
   expect(h.reads.filter((p: string) => p.startsWith(sessionsDir))).toEqual([])
   expect(h.logs.join('\n')).toContain('Backfill fertig: 2 gesendet')
 })
-test('default (no --sources): session, git and merge all read and sent; no Quellen line, no sources in pending', async ($, on) => {
+test('default (no --sources): git+merge only, no session file read, Quellen (Standard) line, no Hinweis, marker carries the effective sources', async ($, on) => {
   const st: { last?: any } = {}
   const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }), backfill: jobFor(st) })
   await start($)
+  h.reads.length = 0
   const t = await run($, '--backfill-only')
-  expect(t).not.toContain('Quellen:')
-  expect(t).toContain('1 Session-Aufgaben, 2 Git-Aufgaben')
+  expect(h.reads.filter((p: string) => p.startsWith(sessionsDir))).toEqual([])
+  expect(t.split('\n')).toContain('Quellen: git, merge (Standard)')
+  expect(t).not.toContain('Hinweis: Sitzungs-Quelle')
+  expect(t).not.toContain('Session-Aufgaben')
+  expect(t).toContain('2 Git-Aufgaben')
   expect(h.pending().backfill).toEqual({ days: 90, limit: 100, only: true })
   await run($, '--backfill-only --approved')
-  expect('sources' in h.marker().args).toBe(false)
+  expect(h.marker().args.sources).toEqual(['git', 'merge'])
+  await idle($, h)
+  expect(st.last.items.length).toBe(2)
+  expect(h.reads.filter((p: string) => p.startsWith(sessionsDir))).toEqual([])
+})
+test('--sources session,git,merge: all three read and sent, Quellen without (Standard), experimental Hinweis, marker keeps all three', async ($, on) => {
+  const st: { last?: any } = {}
+  const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }), backfill: jobFor(st) })
+  await start($)
+  const t = await run($, '--backfill-only --sources session,git,merge')
+  expect(t.split('\n')).toContain('Quellen: session, git, merge')
+  expect(t.split('\n')).toContain('Hinweis: Sitzungs-Quelle ist experimentell (Pilot: viel Tool-Rauschen)')
+  expect(t).toContain('1 Session-Aufgaben, 2 Git-Aufgaben')
+  await run($, '--backfill-only --sources session,git,merge --approved')
+  expect(h.marker().args.sources).toEqual(['session', 'git', 'merge'])
   await idle($, h)
   expect(st.last.items.length).toBe(3)
 })
