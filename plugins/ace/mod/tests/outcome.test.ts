@@ -115,3 +115,14 @@ test('8.1.3: stderr alone never marks a step failed; grep exit 1 is not a failed
   expect(toolRec('Bash', { command: 'grep x f' }, 'Exit code 1', true, undefined, 0, 1).failed).toBe(false)
   expect(toolRec('Bash', { command: 'make' }, { stdout: '', stderr: '', exitCode: 1, returnCodeInterpretation: 'x' }, false, undefined, 0, 1).failed).toBe(false)
 })
+
+test('redaction of --password-stdin / --with-token stdin bodies stays linear on hostile 200 KB inputs (< 200 ms each)', () => {
+  const n = 200_000
+  const texts = ['<<< a '.repeat(n / 6) + '\n--password-stdin', '<<< a '.repeat(n / 6), '<'.repeat(n) + '\n--with-token', 'x --with-token <<'.repeat(n / 17),
+    '--password-stdin <<E\n' + 'a\n'.repeat(n / 2), '--with-token ' + '<<< "'.repeat(n / 5)]
+  for (const t of texts) {
+    const t0 = performance.now()
+    redact(t)
+    expect(performance.now() - t0).toBeLessThan(200)
+  }
+})

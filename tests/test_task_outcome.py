@@ -318,6 +318,22 @@ if __name__ == '__main__' and '--fuzz' in sys.argv:
         trip.append([pw, pwu, ''.join(c for c in pwu if c not in '&#') or 'x'])
     print(n, 'passwords x', len(TABLES['fuzz_templates']), 'forms, leaks:', fuzz_fields(trip, TABLES['fuzz_templates']))
 
+
+def _hostile_stdin_texts():
+    n = 200_000
+    return [('<<< a ' * (n // 6)) + '\n--password-stdin', '<<< a ' * (n // 6), '<' * n + '\n--with-token', 'x --with-token <<' * (n // 17),
+            ('--password-stdin <<E\n' + 'a\n' * (n // 2)), '--with-token ' + '<<< "' * (n // 5)]
+
+
+def test_stdin_redaction_is_linear_on_hostile_input():
+    import time
+    from ace_after_task import redact
+    for t in _hostile_stdin_texts():
+        t0 = time.perf_counter()
+        redact(t)
+        assert time.perf_counter() - t0 < 0.2, t[:30]
+
+
 if __name__ == '__main__' and '--regen' in sys.argv:
     RANDOM = random_cases()
     RANDOM_FILE.write_text(json.dumps(RANDOM, separators=(',', ':')) + '\n')

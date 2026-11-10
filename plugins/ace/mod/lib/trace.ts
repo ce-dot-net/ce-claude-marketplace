@@ -319,12 +319,78 @@ const SECRET_RES: [RegExp, string][] = [
   [/(\b[A-Za-z][A-Za-z0-9+.-]*:\/\/)[^ \t\n\r\x0b\x0c"']*@/g, '$1[redacted]@'],
   [/\b(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abprs]-|ace_user_|sk-)[A-Za-z0-9_-]{8,}|\bnpm_[A-Za-z0-9]{20,}|\bAKIA[0-9A-Z]{12,}|\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+)?/g, '[redacted]'],
 ]
-// Run BEFORE the span rules (which cut the line at the flag): the stdin body of --password-stdin / --with-token that the
-// span rules cannot see, a here-string BEFORE the flag, and a here-doc body on the lines after it.
-const STDIN_RES: [RegExp, string][] = [
-  [/(<<<[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|[^ \t\n\r"';&|)]+)(?=[^\n|]*--(?:password-stdin|with-token))/gi, '$1[redacted]'],
-  [/(--(?:password-stdin|with-token)\b[^\n]*(?<!<)<<-?[ \t]*['"]?(\w+)['"]?[^\n]*\n)[\s\S]+?(?=\n[ \t]*\2[ \t]*(?:\n|(?![\s\S])))/gi, '$1[redacted]'],
-]
+// Run BEFORE the span rules (which cut the line at the flag): the stdin value of --password-stdin / --with-token that they
+// cannot see. On a line holding the flag (any case, left or right of the value, behind a pipe): every shell word after a '<<<'
+// (quotes, $'..', backslashes; an open quote runs to the line end) and the body of every here-doc ('<<[-]DELIM', quoted or
+// \DELIM; case-sensitive; '<<-' allows leading tabs) on the lines below, up to the terminator line, or to the TEXT END when
+// there is none or the delimiter cannot be parsed. Fail closed. Linear: one cheap flag test first, no backtracking regex.
+// Parity: ace_after_task._redact_stdin.
+const STDIN_FLAG = /--(?:password-stdin|with-token)/i
+const WORD_END = ' \t;&|)'
+const DELIM_END = ' \t;&|)<>\'"\\('
+const DELIM_MAX = 256
+function stdinWordEnd(l: string, i: number): number {
+  const n = l.length
+  while (i < n && !WORD_END.includes(l[i])) {
+    const c = l[i]
+    if (c === '\\') i += 2
+    else if (c === "'" || c === '"' || (c === '$' && l[i + 1] === "'")) {
+      const q = c === '$' ? "'" : c, esc = q === '"' || c === '$'
+      let j = c === '$' ? i + 2 : i + 1
+      while (j < n && l[j] !== q) j += esc && l[j] === '\\' ? 2 : 1
+      if (j >= n) return n  // open quote: the rest of the line
+      i = j + 1
+    } else i++
+  }
+  return Math.min(i, n)
+}
+// The delimiters of the here-docs on one line: [delimiter, dash][], or null when one cannot be parsed.
+function hereDocs(l: string): [string, boolean][] | null {
+  const out: [string, boolean][] = []
+  let k = 0
+  while ((k = l.indexOf('<<', k)) >= 0) {
+    if (l[k + 2] === '<') { k += 1; continue }
+    if (k > 0 && l[k - 1] === '<') { k += 2; continue }
+    let i = k + 2
+    const dash = l[i] === '-'
+    if (dash) i++
+    while (l[i] === ' ' || l[i] === '\t') i++
+    let d: string
+    if (l[i] === "'" || l[i] === '"') { const e = l.indexOf(l[i], i + 1); if (e < 0) return null; d = l.slice(i + 1, e); i = e + 1 }
+    else { if (l[i] === '\\') i++; let e = i; while (e < l.length && !DELIM_END.includes(l[e])) e++; d = l.slice(i, e); i = e }
+    if (!d || d.length > DELIM_MAX) return null
+    out.push([d, dash])
+    k = i
+  }
+  return out
+}
+function redactStdin(text: string): string {
+  if (!STDIN_FLAG.test(text)) return text
+  const L = text.split('\n'), out: string[] = []
+  for (let i = 0; i < L.length; i++) {
+    const l = L[i]
+    if (!STDIN_FLAG.test(l)) { out.push(l); continue }
+    let line = '', pos = 0, k = 0
+    while ((k = l.indexOf('<<<', pos)) >= 0) {
+      let s = k + 3
+      while (l[s] === ' ' || l[s] === '\t') s++
+      const e = stdinWordEnd(l, s)
+      line += l.slice(pos, s) + (e > s ? '[redacted]' : '')
+      pos = e
+    }
+    out.push(line + l.slice(pos))
+    const docs = hereDocs(l)
+    for (const [d, dash] of docs ?? []) {
+      let t = i + 1
+      while (t < L.length && (dash ? L[t].replace(/^\t+/, '') : L[t]) !== d) t++
+      if (t > i + 1) out.push('[redacted]')
+      if (t >= L.length) { i = L.length; break }
+      out.push(L[t]); i = t
+    }
+    if (!docs && i + 1 < L.length) { out.push('[redacted]'); i = L.length }
+  }
+  return out.join('\n')
+}
 const searchFrom = (rx: RegExp, s: string, pos: number) => { rx.lastIndex = pos; return rx.exec(s) }
 // The index REDACT_BLOCK code points after start (Python counts code points).
 function cpAdvance(s: string, start: number, n: number): number {
@@ -355,9 +421,7 @@ function redactSpans(text: string): string {
 }
 export function redact<T>(text: T): T {
   if (typeof text !== 'string' || !text) return text
-  let s: string = text
-  for (const [rx, rep] of STDIN_RES) s = s.replace(rx, rep)
-  s = redactSpans(s)
+  let s: string = redactSpans(redactStdin(text))
   for (const [rx, rep] of SECRET_RES) s = s.replace(rx, rep)
   return s as any
 }
