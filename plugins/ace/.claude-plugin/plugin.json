@@ -1,7 +1,7 @@
 {
   "name": "ace",
-  "version": "8.2.0",
-  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search for Claude Code. Learns from your coding sessions and automatically surfaces relevant strategies, code snippets, APIs, and pitfalls as you work. v8.2.0. Requires: Claude Code >= 2.1.311, ace-cli >= 4.4.2 (pinned in package.json; @ace-sdk/core >= 3.8.2), Python >= 3.10 for the fallback hooks. Windows not supported (WSL2 works). Full changelog: https://github.com/ce-dot-net/ce-ai-ace/releases",
+  "version": "8.2.1",
+  "description": "Code Engine ACE - Intelligent pattern learning with continuous auto-search for Claude Code. Learns from your coding sessions and automatically surfaces relevant strategies, code snippets, APIs, and pitfalls as you work. v8.2.1. Requires: Claude Code >= 2.1.311, ace-cli >= 4.4.2 (pinned in package.json; @ace-sdk/core >= 3.8.2), Python >= 3.10 for the fallback hooks. Windows not supported (WSL2 works). Full changelog: https://github.com/ce-dot-net/ce-ai-ace/releases",
   "author": {
     "name": "ACE Team",
     "email": "ace@ce-dot-net.com"
