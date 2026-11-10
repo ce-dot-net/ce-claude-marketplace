@@ -4,7 +4,7 @@ import { run } from '../io/fs.ts'
 import { collect, flagOn } from '../io/backfill_io.ts'
 import { parseBackfillFlags, parseLimit, previewLines } from '../lib/backfill_run.ts'
 import { parseBootstrapArgs } from '../lib/bootstrap_args.ts'
-export const bootstrap: Cmd = { name: 'bootstrap', md: 'ace-bootstrap', description: 'Build the playbook from the codebase (preview + confirm)', argumentHint: '[mode] [thoroughness] | --mode X --thoroughness Y', bound: true }
+export const bootstrap: Cmd = { name: 'bootstrap', md: 'ace-bootstrap', description: 'Build the playbook from the codebase (preview + confirm)', argumentHint: '[mode] [thoroughness] | --mode X --thoroughness Y | --backfill-only [--sources git,merge,session] [--limit N]', bound: true }
 const ONLY_LINE = '--sources und --target-project gelten nur mit --backfill-only (sonst liefe der Bootstrap im gebundenen Projekt). Nichts gespeichert.'
 const DAYS: Record<string, number> = { light: 30, medium: 90, deep: 180 }  // the CLI's git window per level (--days-back overrides)
 
