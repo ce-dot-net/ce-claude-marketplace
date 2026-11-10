@@ -1,4 +1,6 @@
 // The mod's $.state contract (8.1.0): the context band and a writing command's pending confirmation.
+// RunState of lib/backfill_run.ts, plain JSON between ticks; typed loosely here (the lib owns the shape)
+export type AceBackfillRun = Record<string, unknown> | null
 export type AceProject = { orgId: string; projectId: string; name: string }
 export type AceBand = {
   state: string | null
@@ -26,6 +28,10 @@ export type AceShadow = { path: string; root: string } | null  // band [Entferne
 export type AcePolicy = string | null  // 8.1.4: the dismissed client_policy band line
 declare module 'claude-code' {
   interface PluginState {
-    ace: { band: AceBand; pending: AcePending; shadow: AceShadow; policy: AcePolicy }
+    ace: {
+      band: AceBand; pending: AcePending; shadow: AceShadow; policy: AcePolicy
+      'backfill-run': AceBackfillRun   // 8.2.0: the running backfill's JSON state (lib/backfill_run.ts RunState)
+      'backfill-resume': { at: number } | null  // 8.2.0: the earliest next backfill start after a quota stop (epoch ms)
+    }
   }
 }
