@@ -320,3 +320,35 @@ test('buildItems returns the source of every selected key', () => {
   expect(Object.keys(b.sources).sort()).toEqual(b.items.map(i => i.idempotency_key).sort())
   expect(new Set(Object.values(b.sources))).toEqual(new Set(['session', 'git', 'merge']))
 })
+
+// ---- 8.2.0 tool-noise filter: counted, shown in the preview, logged ----
+const NOISY = (prompt: string) => [
+  { type: 'user', sessionId: 'sess-n', timestamp: '2026-10-01T10:00:00Z', message: { role: 'user', content: prompt } },
+  ...['r1', 'r2', 'r3'].flatMap((id, i) => [
+    { type: 'assistant', sessionId: 'sess-n', timestamp: `2026-10-01T10:00:0${i * 2 + 1}Z`, message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Read', input: { file_path: `/p/nope${i}.ts` } }] } },
+    { type: 'user', sessionId: 'sess-n', timestamp: `2026-10-01T10:00:0${i * 2 + 2}Z`, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: 'File does not exist.', is_error: true }] } }]),
+  { type: 'assistant', sessionId: 'sess-n', timestamp: '2026-10-01T10:00:09Z', message: { role: 'assistant', content: [{ type: 'text', text: 'not found' }] } },
+].map(x => JSON.stringify(x)).join('\n')
+
+test('buildItems: a session task that is only tool noise is not a candidate and is counted in noiseExcluded; git is untouched', () => {
+  const sess = [{ text: sessionJsonl('please fix the crash in the parser module when the input is empty') + '\n' + NOISY('please look at the nope module and report what it does') }]
+  const b = buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: emptyLedger() })
+  expect(b.sessionTasks).toBe(1)
+  expect(b.noiseExcluded).toBe(1)
+  expect(b.gitTasks).toBe(2)
+  expect(b.items.length).toBe(3)
+})
+
+test('previewLines: names how many session tasks were set aside as tool noise (total includes them); no noise = the old text', () => {
+  const b = { items: items(5), sessionTasks: 121, noiseExcluded: 61, gitTasks: 570, skipped: 0 }
+  expect(previewLines(b, { flag: true, limit: 100 })[0]).toBe('Backfill: 182 Session-Aufgaben (davon 61 wegen Tool-Rauschen aussortiert), 570 Git-Aufgaben (Fix/Revert + Merges) im Fenster, 0 schon gesendet (übersprungen)')
+  expect(previewLines({ ...b, noiseExcluded: 0 }, { flag: true, limit: 100 })[0]).toContain('121 Session-Aufgaben, 570 Git-Aufgaben')
+})
+
+test('backfill_batch carries noise_excluded', async () => {
+  const all = items(1)
+  const f = logged({ posts: [acc('j', 1)], gets: [ok(200, jobBody([K(1)]))] })
+  f.d.sources = { [K(1)]: 'session' }; f.d.noiseExcluded = 7
+  await runBackfill(all, f.d)
+  expect(f.rows.filter(x => x.event === 'backfill_batch')).toMatchObject([{ event: 'backfill_batch', total: 1, noise_excluded: 7 }])
+})

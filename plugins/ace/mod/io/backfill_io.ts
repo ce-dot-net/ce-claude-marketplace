@@ -90,7 +90,7 @@ async function stepDeps($: any, c: C, script: string): Promise<{ d: Deps, call: 
   return { d, call }
 }
 // The items of the running run, kept for the ticks of this module load (lost on a reload: rebuilt from the same sources + ledger).
-const memo = new Map<string, Pick<Built, 'items' | 'sources'>>()
+const memo = new Map<string, Pick<Built, 'items' | 'sources' | 'noiseExcluded'>>()
 const alive = new Set<string>()   // a tick chain exists in THIS module load (a reload empties it with the timers)
 
 // ONE step of the run, then the next tick is planned (a chain of $.clock.after: no background loop; the marker holds the state).
@@ -108,6 +108,7 @@ async function tick($: any, key: string): Promise<void> {
     const items = m.items
     const { d } = await stepDeps($, c, script)
     d.sources = m.sources
+    d.noiseExcluded = m.noiseExcluded
     st.beat = await $.clock.now()
     const r = await stepBackfill(items, st, d)
     if (r.done) return await end($, st, key)
