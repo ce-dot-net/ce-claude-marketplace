@@ -225,6 +225,41 @@ test('parseBackfillFlags: --backfill-only, --target-project, --target-org are st
   expect(parseBackfillFlags('--limit 3 --target-project=prj_abc --target-org org_x_1 --backfill-only'))
     .toEqual({ ok: true, only: true, project: 'prj_abc', org: 'org_x_1', rest: '--limit 3' })
 })
+test('parseBackfillFlags --sources: comma list of session|git|merge, canonical order, stripped; absent = no field', () => {
+  expect(parseBackfillFlags('--backfill-only --sources git,merge --limit 3')).toEqual({ ok: true, only: true, sources: ['git', 'merge'], rest: '--limit 3' })
+  expect(parseBackfillFlags('--sources=merge,session')).toEqual({ ok: true, only: false, sources: ['session', 'merge'], rest: '' })
+  expect(parseBackfillFlags('--sources git')).toMatchObject({ ok: true, sources: ['git'] })
+  expect('sources' in (parseBackfillFlags('--backfill-only') as any)).toBe(false)
+})
+test('parseBackfillFlags --sources: unknown token, empty list, duplicates, missing value, repeated flag are refused with a German usage line', () => {
+  for (const bad of ['--sources', '--sources=', '--sources ""', '--sources x', '--sources git,x', '--sources git,,merge', '--sources git,', '--sources ,git', '--sources git,git', '--sources GIT',
+    '--sources git --sources merge', '--sources --backfill-only', '--sources git,merge,session,git']) {
+    const r = parseBackfillFlags(bad)
+    expect(r.ok).toBe(false)
+    if (!r.ok) { expect(r.line).toContain('--sources'); expect(r.line).toContain('session, git, merge') }
+  }
+})
+test('buildItems with sources: a source not listed contributes nothing; previewLines names only chosen sources and the Quellen line', () => {
+  const sess = [{ text: sessionJsonl('please fix the crash in the parser module when the input is empty') }]
+  const gm = buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: emptyLedger(), sources: ['git', 'merge'] })
+  expect(gm.sessionTasks).toBe(0)
+  expect(gm.items.length).toBe(2)
+  const g = buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: emptyLedger(), sources: ['git'] })
+  expect(Object.values(g.sources)).toEqual(['git'])
+  const m = buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: emptyLedger(), sources: ['merge'] })
+  expect(Object.values(m.sources)).toEqual(['merge'])
+  const s1 = buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: emptyLedger(), sources: ['session'] })
+  expect(s1.gitTasks).toBe(0)
+  expect(s1.items.length).toBe(1)
+  const t = previewLines(gm, { flag: true, limit: 100, sources: ['git', 'merge'] })
+  expect(t[0]).toBe('Quellen: git, merge')
+  expect(t.join('\n')).not.toContain('Session-Aufgaben')
+  expect(t.join('\n')).toContain('2 Git-Aufgaben (Fix/Revert + Merges)')
+  expect(previewLines(s1, { flag: true, limit: 100, sources: ['session'] }).join('\n')).not.toContain('Git-Aufgaben')
+  expect(previewLines(m, { flag: true, limit: 100, sources: ['merge'] }).join('\n')).toContain('1 Git-Aufgaben (Merges)')
+  expect(previewLines(g, { flag: true, limit: 100, sources: ['git'] }).join('\n')).toContain('1 Git-Aufgaben (Fix/Revert)')
+  expect(previewLines(gm, { flag: true, limit: 100 }).join('\n')).not.toContain('Quellen:')   // flag absent: unchanged
+})
 test('parseBackfillFlags: bad shapes, duplicates, org without project, a value on the switch are refused with a German line', () => {
   for (const bad of ['--target-project', '--target-project x', '--target-project prj_a', '--target-project prj_ab/c', '--target-project prj_abc --target-org', '--target-project prj_abc --target-org prj_abc',
     '--target-project prj_abc --target-org org_a', '--target-org org_abc', '--target-project prj_abc --target-project prj_abd', '--target-project=', '--target-project prj_abc;x', '--backfill-only=1',
