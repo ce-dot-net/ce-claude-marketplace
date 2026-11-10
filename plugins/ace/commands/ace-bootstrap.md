@@ -1,7 +1,7 @@
 ---
 disable-model-invocation: true
 description: Bootstrap ACE playbook from docs, git history, and/or current code
-argument-hint: "[mode] [level] | --mode hybrid|both|local-files|git-history|docs-only --thoroughness light|medium|deep [--commit-limit N] [--days-back N] [--max-files N]"
+argument-hint: "[mode] [level] | --mode hybrid|both|local-files|git-history|docs-only --thoroughness light|medium|deep [--commit-limit N] [--days-back N] [--max-files N] | --backfill-only [--sources git,merge|session] [--limit N] [--days-back N] [--target-project prj_x --target-org org_x] [--approved]"
 context: fork
 effort: high
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(find:*), Bash(wc:*), Read
@@ -21,9 +21,10 @@ set -euo pipefail
 
 CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1  # 8.1.0: the one binding lookup
 eval "$CTX"
-MODE="${1:-hybrid}"; THOROUGHNESS="${2:-medium}"
-echo "Bootstrapping ACE playbook (mode=$MODE, thoroughness=$THOROUGHNESS)..."
-"${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli" bootstrap --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" --mode "$MODE" --thoroughness "$THOROUGHNESS"
+# Only what the user gave is passed; without --mode/--thoroughness the CLI uses the server's defaults.
+ARGS=(); [ -n "${1:-}" ] && ARGS+=(--mode "$1"); [ -n "${2:-}" ] && ARGS+=(--thoroughness "$2")
+echo "Bootstrapping ACE playbook (${ARGS[*]:-server defaults})..."
+"${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli" bootstrap --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" "${ARGS[@]}"
 ```
 
 **Data Flow**:
@@ -54,7 +55,34 @@ window, docs found, current playbook size, what leaves the machine) and a confir
 **`--approved`** (terminals without a button, e.g. Moshi/herdr): the preview prints the exact line to copy, the same line plus
 ` --approved` runs the action at once, like the button. A standalone `--approved` token at the end, at the start or next to another
 `--flag` counts; inside a text it is just text. `clear` and `cleanup` (destructive) run with `--approved` only when the identical
-preview is already waiting.
+preview is already waiting. `--approved` is not allowed for bind, clean, login and install.
+
+## Backfill (8.2.0, `--backfill-only`)
+
+```
+/ace:ace-bootstrap --backfill-only [--sources git,merge|session|...] [--limit N] [--days-back N]
+                   [--target-project prj_x --target-org org_x] [--approved]
+```
+
+Turns fix/revert commits and merged PRs (default sources `git,merge`) into redacted learning traces and sends them to the
+server's backfill endpoint in batches of up to 20. `--sources session` adds Claude Code session transcripts (experimental: a
+pilot showed much tool noise; a noise filter drops failed lookups and tasks without real work). `--limit` is 1..100 (default
+100); `--days-back` sets the window; `--target-project`/`--target-org` send into another project than the bound one.
+`--sources` and `--target-project` are refused without `--backfill-only`.
+
+- **Server support:** only if the server announces `bootstrap_backfill: true` in the search response (the flag is cached for
+  7 days). Otherwise the preview says the server does not support it yet and nothing is sent.
+- **Preview is mandatory** (button, or `--approved`).
+- **Processing:** the server works through about 5 items per minute in the background. The plugin polls every 60 s with a timer
+  chain that lives as long as the Claude Code session: a closed session stops polling, a rerun resumes through the ledger,
+  duplicates are skipped.
+- **Limits:** 500 items per org per UTC day (a 429 stops the run and remembers the resume time); items stuck for 7 days expire.
+- **Token:** the plugin never holds one; `engine/backfill.js` sends through the core client.
+- **State:** HMAC-signed ledger per target project under the plugin data dir; local log `backfill-log.jsonl` (responses, source
+  per key, no content).
+
+Privacy of the backfill: only redacted titles, file names and redacted texts leave the machine. No source code, no diffs,
+no docs; author and committer are never read; git texts are labelled "(untrusted text)".
 
 ## Usage
 
@@ -421,8 +449,10 @@ Once bootstrapped, ACE continues learning through **online learning**:
 
 ## Privacy & Security
 
-**What leaves your machine** (the CLI sends text blocks to the ACE server; verified in the CLI source, no redaction is applied):
-- `hybrid`, `both`, `local-files`: the **function bodies** of the first 50 source files, up to 20 docs (CLAUDE.md, README.md, docs/*.md) and the commit messages and **diffs** of the git window
+**Backfill mode (`--backfill-only`)** is the narrow path: see "Backfill" above, only redacted titles, file names and texts leave.
+
+**Legacy bootstrap (without `--backfill-only`)**, what leaves your machine (the CLI sends text blocks to the ACE server; verified in the CLI source, no redaction is applied; modes hybrid/both/local-files/git-history/docs-only):
+- `hybrid`, `both`, `local-files`: the **function bodies** of the first 50 source files, up to 20 docs (CLAUDE.md, README.md, docs/*.md) and the commit messages and **diffs** of the git window, **unredacted**
 - `docs-only`: up to 20 docs, no source code
 - `git-history`: commit messages and diffs, no source files
 
