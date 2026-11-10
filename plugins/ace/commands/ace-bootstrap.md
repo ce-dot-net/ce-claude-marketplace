@@ -1,7 +1,7 @@
 ---
 disable-model-invocation: true
 description: Bootstrap ACE playbook from docs, git history, and/or current code
-argument-hint: "[mode] [level] | --mode hybrid|both|local-files|git-history|docs-only --thoroughness light|medium|deep [--commit-limit N] [--days-back N] [--max-files N] | --backfill-only [--sources git,merge|session] [--limit N] [--days-back N] [--target-project prj_x --target-org org_x] [--approved]"
+argument-hint: "[mode] [level] | --mode hybrid|both|local-files|git-history|docs-only --thoroughness light|medium|deep [--commit-limit N] [--days-back N] [--max-files N] | --backfill-only [--sources session,git,merge] [--limit N] [--days-back N] [--target-project prj_x --target-org org_x] [--approved]"
 context: fork
 effort: high
 allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli:*), Bash(npm:*), Bash(find:*), Bash(wc:*), Read
@@ -60,22 +60,25 @@ preview is already waiting. `--approved` is not allowed for bind, clean, login a
 ## Backfill (8.2.0, `--backfill-only`)
 
 ```
-/ace:ace-bootstrap --backfill-only [--sources git,merge|session|...] [--limit N] [--days-back N]
+/ace:ace-bootstrap --backfill-only [--sources session,git,merge] [--limit N] [--days-back N]
                    [--target-project prj_x --target-org org_x] [--approved]
 ```
 
-Turns fix/revert commits and merged PRs (default sources `git,merge`) into redacted learning traces and sends them to the
-server's backfill endpoint in batches of up to 20. `--sources session` adds Claude Code session transcripts (experimental: a
-pilot showed much tool noise; a noise filter drops failed lookups and tasks without real work). `--limit` is 1..100 (default
-100); `--days-back` sets the window; `--target-project`/`--target-org` send into another project than the bound one.
-`--sources` and `--target-project` are refused without `--backfill-only`.
+Turns Claude Code session transcripts, fix/revert commits and merged PRs into redacted learning traces and sends them to the
+server's backfill endpoint in batches of up to 20. Since 8.2.1 the default is hybrid (`session,git,merge`): the limit is shared
+round-robin across the sources that have new tasks (each ranked internally: success, then decisive steps, then newest), so one
+source never crowds out another; a source with fewer tasks hands its share to the others. Session items were noisier in the
+pilots, so a noise filter drops failed lookups and tasks without real work. `--sources` narrows the set (e.g.
+`--sources git,merge`). `--limit` is 1..100 (default 100); `--days-back` sets the window; `--target-project`/`--target-org`
+send into another project than the bound one. `--sources` and `--target-project` are refused without `--backfill-only`.
 
 - **Server support:** only if the server announces `bootstrap_backfill: true` in the search response (the flag is cached for
   7 days). Otherwise the preview says the server does not support it yet and nothing is sent.
 - **Preview is mandatory** (button, or `--approved`).
 - **Processing:** the server works through about 5 items per minute in the background. The plugin polls every 60 s with a timer
-  chain that lives as long as the Claude Code session: a closed session stops polling, a rerun resumes through the ledger,
-  duplicates are skipped.
+  chain that lives as long as the Claude Code session: a closed session stops polling, a rerun resumes through the ledger.
+  Items the server already knew (duplicates, also inside a mixed batch) are ledgered as sent and reported as "N Aufgaben
+  waren dem Server bereits bekannt", so they never take a slot again.
 - **Limits:** 500 items per org per UTC day (a 429 stops the run and remembers the resume time); items stuck for 7 days expire.
 - **Token:** the plugin never holds one; `engine/backfill.js` sends through the core client.
 - **State:** HMAC-signed ledger per target project under the plugin data dir; local log `backfill-log.jsonl` (responses, source

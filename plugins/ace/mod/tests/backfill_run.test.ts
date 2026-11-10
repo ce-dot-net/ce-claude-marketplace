@@ -1,6 +1,6 @@
 // 8.2.0 backfill orchestration with every I/O faked (post, get, sleep, now, ledger store): flow, stops, polling, ledger writes.
 import { expect, test } from 'claude-code/testing'
-import { buildItems, DEFAULT_LIMIT, MAX_LIMIT, previewLines, runBackfill, parseLimit, parseBackfillFlags, stepBackfill, newRun, runActive, startLine, RUN_TTL_MS, type Deps } from '../lib/backfill_run.ts'
+import { buildItems, DEFAULT_LIMIT, DEFAULT_SOURCES, MAX_LIMIT, previewLines, runBackfill, parseLimit, parseBackfillFlags, stepBackfill, newRun, runActive, startLine, RUN_TTL_MS, type Deps } from '../lib/backfill_run.ts'
 import { emptyLedger, add, parse, serialize, statusOf, type Ledger } from '../lib/ledger.ts'
 
 const K = (n: number) => 'bootstrap:' + n.toString(16).padStart(32, '0')
@@ -23,7 +23,7 @@ function fake(o: { posts?: any[], gets?: any[], ledger?: Ledger } = {}) {
 }
 const acc = (job: string, accepted: number, dup = 0) => ok(202, { job_id: job, accepted, duplicates: dup, status_url: '/x' })
 
-const ALL = ['session', 'git', 'merge'] as const   // the explicit all-sources set (the default is git,merge)
+const ALL = ['session', 'git', 'merge'] as const   // the explicit all-sources set (8.2.1: also the default)
 test('zero items: nothing is posted', async () => {
   const f = fake({ posts: [] })
   const r = await runBackfill([], f.d)
@@ -52,11 +52,35 @@ test('polling: pending first, sleeps 60 s between polls, stops at finished', asy
   expect(f.log.filter(x => x === 'sleep:60000').length).toBe(2)
 })
 
-test('duplicates-only 202 (accepted 0): no poll, nothing marked, no error', async () => {
+test('duplicates-only 202 (accepted 0): no poll, the keys are ledgered sent (no slot next run), counted in one line', async () => {
   const f = fake({ posts: [acc('j', 0, 3)], gets: [] })
   const r = await runBackfill(items(3), f.d)
   expect(f.log.some(x => x.startsWith('get:'))).toBe(false)
-  expect(r.lines.join('\n')).toContain('bereits')
+  for (const n of [1, 2, 3]) expect(statusOf(f.ledger(), K(n))).toBe('sent')
+  expect(r.lines).toContain('3 Aufgaben waren dem Server bereits bekannt.')
+})
+test('mixed batch (202 accepted 2, duplicates 1): the key missing from the finished job is ledgered sent and counted', async () => {
+  const f = fake({ posts: [acc('j', 2, 1)], gets: [ok(200, jobBody([K(1), K(2)]))] })
+  const r = await runBackfill(items(3), f.d)
+  expect(statusOf(f.ledger(), K(3))).toBe('sent')
+  expect(r.report.sent).toBe(2)
+  expect(r.lines[0]).toContain('Backfill fertig: 2 gesendet')
+  expect(r.lines).toContain('1 Aufgaben waren dem Server bereits bekannt.')
+})
+test('duplicates over several batches (mixed + duplicates-only) add up to ONE line with the real number; a rerun posts nothing', async () => {
+  const all = items(25)
+  const f = fake({ posts: [acc('j1', 14, 6), acc('j2', 0, 5)], gets: [ok(200, jobBody(all.slice(0, 14).map(i => i.idempotency_key)))] })
+  const r = await runBackfill(all, f.d)
+  expect(r.report.sent).toBe(14)
+  expect(r.lines.filter(x => x.includes('bereits bekannt'))).toEqual(['11 Aufgaben waren dem Server bereits bekannt.'])
+  const g = fake({ posts: [], ledger: f.ledger() })
+  await runBackfill(all, g.d)
+  expect(g.posted.length).toBe(0)
+})
+test('a job polled several times before finishing counts its duplicates once', async () => {
+  const f = fake({ posts: [acc('j', 1, 1)], gets: [ok(200, { state: 'processing', items: [] }), ok(200, jobBody([K(1)]))] })
+  const r = await runBackfill(items(2), f.d)
+  expect(r.lines).toContain('1 Aufgaben waren dem Server bereits bekannt.')
 })
 
 test('404 on the job get: polling stops, treated as submitted, the run goes on', async () => {
@@ -187,10 +211,34 @@ test('buildItems: sessions + git + merges counted, ledger-held skipped, capped b
   expect(buildItems({ projectId: 'prj_t', sessions: [], gitLog: '', mergeLog: '', limit: 100, ledger: emptyLedger() }).items.length).toBe(0)
 })
 
-test('previewLines: counts, cap, duration (70 s per trace), data-leaves sentence; flag off says so in one line', () => {
+// 8.2.1 hybrid: sessions (decisive > 0) used to outrank every git task; now each source with candidates gets its share
+const SESS3 = [{ text: ['fix the crash in the parser module when the input is empty', 'add a retry to the upload queue in the client module', 'rename the config loader and update all its callers']
+  .map(p => sessionJsonl(p)).join('\n') }]
+test('buildItems hybrid: sessions cannot starve git/merge; limit 3 takes one of each source', () => {
+  const b = buildItems({ projectId: 'prj_t', sessions: SESS3, gitLog: GITLOG, mergeLog: MERGES, limit: 3, ledger: emptyLedger(), sources: ALL })
+  expect(b.sessionTasks).toBe(3)
+  expect(Object.values(b.sources).sort()).toEqual(['git', 'merge', 'session'])
+  const two = buildItems({ projectId: 'prj_t', sessions: SESS3, gitLog: GITLOG, mergeLog: MERGES, limit: 2, ledger: emptyLedger(), sources: ALL })
+  expect(Object.values(two.sources)).toContain('git')
+  expect(Object.values(two.sources)).toContain('session')
+  // git+merge have 2 candidates in all: the rest of the limit goes to the sessions
+  const five = buildItems({ projectId: 'prj_t', sessions: SESS3, gitLog: GITLOG, mergeLog: MERGES, limit: 5, ledger: emptyLedger(), sources: ALL })
+  expect(Object.values(five.sources).filter(x => x === 'session').length).toBe(3)
+  expect(five.items.length).toBe(5)
+})
+test('buildItems default sources (no --sources) = session, git, merge', () => {
+  const b = buildItems({ projectId: 'prj_t', sessions: SESS3, gitLog: GITLOG, mergeLog: MERGES, limit: 3, ledger: emptyLedger() })
+  expect(DEFAULT_SOURCES).toEqual(['session', 'git', 'merge'])
+  expect(b.sessionTasks).toBe(3)
+  expect(new Set(Object.values(b.sources))).toEqual(new Set(['session', 'git', 'merge']))
+})
+
+test('previewLines: counts, cap, duration (about 5 items a minute), data-leaves sentence; flag off says so in one line', () => {
   const b = { items: items(100), sessionTasks: 60, gitTasks: 70, skipped: 4 }
   const on = previewLines(b, { flag: true, limit: 100, sources: ALL }).join('\n')
-  for (const x of ['60', '70', '4', '100', 'Stunden', 'verlassen den Rechner']) expect(on).toContain(x)
+  for (const x of ['60', '70', '4', '100', 'Dauer: etwa 20 Minuten', '5 Aufgaben pro Minute', 'verlassen den Rechner']) expect(on).toContain(x)
+  expect(on).not.toContain('70 s')
+  expect(previewLines({ ...b, items: items(7) }, { flag: true, limit: 100, sources: ALL }).join('\n')).toContain('etwa 2 Minuten')
   expect(previewLines(b, { flag: false, limit: 100 }).join('\n')).toBe('Backfill: Server unterstützt es noch nicht')
   expect(previewLines({ items: [], sessionTasks: 0, gitTasks: 0, skipped: 0 }, { flag: true, limit: 100 }).join('\n')).toContain('0 Aufgaben')
 })
@@ -216,7 +264,7 @@ test('run marker: active within 3 h of the last beat, stale after; start line ha
   expect(runActive({ beat: 1000 }, 1000 + RUN_TTL_MS)).toBe(false)
   expect(runActive(null, 5)).toBe(false)
   expect(runActive({ beat: 'x' }, 5)).toBe(false)
-  expect(startLine(100)).toBe('Backfill gestartet: 100 Aufgaben, läuft im Hintergrund (ca. 117 Min). Ergebnis folgt als Meldung.')
+  expect(startLine(100)).toBe('Backfill gestartet: 100 Aufgaben, läuft im Hintergrund (ca. 20 Min). Ergebnis folgt als Meldung.')
 })
 
 test('parseBackfillFlags: --backfill-only, --target-project, --target-org are stripped into fields', () => {
@@ -240,6 +288,7 @@ test('parseBackfillFlags --sources: unknown token, empty list, duplicates, missi
     if (!r.ok) { expect(r.line).toContain('--sources'); expect(r.line).toContain('session, git, merge') }
   }
 })
+const HINT = 'Hinweis: Session-Aufgaben waren im Pilot verrauschter als Git (Tool-Rauschen wird gefiltert)'
 test('buildItems with sources: a source not listed contributes nothing; previewLines names only chosen sources and the Quellen line', () => {
   const sess = [{ text: sessionJsonl('please fix the crash in the parser module when the input is empty') }]
   const gm = buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: emptyLedger(), sources: ['git', 'merge'] })
@@ -259,13 +308,15 @@ test('buildItems with sources: a source not listed contributes nothing; previewL
   expect(previewLines(s1, { flag: true, limit: 100, sources: ['session'] }).join('\n')).not.toContain('Git-Aufgaben')
   expect(previewLines(m, { flag: true, limit: 100, sources: ['merge'] }).join('\n')).toContain('1 Git-Aufgaben (Merges)')
   expect(previewLines(g, { flag: true, limit: 100, sources: ['git'] }).join('\n')).toContain('1 Git-Aufgaben (Fix/Revert)')
-  const d = previewLines(gm, { flag: true, limit: 100 })   // flag absent: the default git,merge, labelled as such
-  expect(d[0]).toBe('Quellen: git, merge (Standard)')
-  expect(d.join('\n')).not.toContain('Hinweis:')
-  expect(buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: emptyLedger() }).sessionTasks).toBe(0)
+  const d = previewLines(gm, { flag: true, limit: 100 })   // flag absent: the default session,git,merge (8.2.1 hybrid), labelled as such
+  expect(d[0]).toBe('Quellen: session, git, merge (Standard)')
+  expect(d).toContain(HINT)
+  expect(d.join('\n')).not.toContain('experimentell')
+  expect(t.join('\n')).not.toContain('Hinweis:')
+  expect(buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: emptyLedger() }).sessionTasks).toBe(1)
   const sg = previewLines(s1, { flag: true, limit: 100, sources: ['session', 'git'] })
   expect(sg[0]).toBe('Quellen: session, git')
-  expect(sg).toContain('Hinweis: Sitzungs-Quelle ist experimentell (Pilot: viel Tool-Rauschen)')
+  expect(sg).toContain(HINT)
 })
 test('parseBackfillFlags: bad shapes, duplicates, org without project, a value on the switch are refused with a German line', () => {
   for (const bad of ['--target-project', '--target-project x', '--target-project prj_a', '--target-project prj_ab/c', '--target-project prj_abc --target-org', '--target-project prj_abc --target-org prj_abc',

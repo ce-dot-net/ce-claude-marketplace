@@ -5,6 +5,24 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.2.1] - Unreleased
+
+### Changed
+- Backfill is hybrid by default: sessions AND git/merge are sent in one run. Default sources are now `session,git,merge`
+  (was `git,merge`, sessions only on request). The limit is shared round-robin across the sources that have new tasks (each
+  source ranked internally as before: success, then decisive steps, then newest); a source with fewer tasks hands its share to
+  the others; with a single source the pick is unchanged. Before, all candidates were ranked together and sessions (which have
+  decisive steps) could starve git. The tool-noise filter on sessions stays; the preview keeps a short note that session items
+  were noisier in the pilots. `--sources` still narrows the set.
+- Duration estimate: about 5 items per minute (the measured server rate, 3..5), so 100 items read "ca. 20 Min" instead of
+  "ca. 117 Min" (70 s per trace).
+
+### Fixed
+- Server-side duplicates are ledgered and counted. In a finished job, a posted key missing from the job's items was already
+  known to the server: it is now ledgered as sent (also in mixed batches, not only duplicates-only batches), so it no longer
+  takes a slot on every rerun, and the result says "N Aufgaben waren dem Server bereits bekannt" with the real number
+  (one line per run).
+
 ## [8.2.0] - 2026-11-10
 
 ### Added

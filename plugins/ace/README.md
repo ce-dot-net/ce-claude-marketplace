@@ -145,7 +145,7 @@ confirm button. Elsewhere the markdown fallback runs.
 | `/ace:ace-clear` | Clear the playbook (preview + confirm) |
 | `/ace:ace-delta <op> <json>` | Add/update/remove patterns (preview + confirm) |
 | `/ace:ace-learn <lesson>` | Send one lesson (preview + confirm) |
-| `/ace:ace-bootstrap [mode] [level]` or `--mode X --thoroughness Y` or `--backfill-only [--sources git,merge\|session] [--limit N] [--days-back N] [--target-project prj_x --target-org org_x] [--approved]` | Build the playbook from the codebase (legacy, sends raw code) or backfill redacted traces from fix/revert commits and merged PRs: preview + confirm (or `--approved`) |
+| `/ace:ace-bootstrap [mode] [level]` or `--mode X --thoroughness Y` or `--backfill-only [--sources session,git,merge] [--limit N] [--days-back N] [--target-project prj_x --target-org org_x] [--approved]` | Build the playbook from the codebase (legacy, sends raw code) or backfill redacted traces from session transcripts, fix/revert commits and merged PRs (default: all three, the limit shared round-robin so no source starves another; `--sources` narrows): preview + confirm (or `--approved`) |
 | `/ace:ace-tune [show \| key=value ...]` | Show or change server settings (writes: preview + confirm) |
 | `/ace:ace-configure [org_ prj_]` | Bind the repo: name-matched suggestion, `.gitignore` diff, confirm |
 | `/ace:ace-login` | Login state; the device login starts on the button press |
