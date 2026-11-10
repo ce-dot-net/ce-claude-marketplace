@@ -320,31 +320,45 @@ const SECRET_RES: [RegExp, string][] = [
   [/\b(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abprs]-|ace_user_|sk-)[A-Za-z0-9_-]{8,}|\bnpm_[A-Za-z0-9]{20,}|\bAKIA[0-9A-Z]{12,}|\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+)?/g, '[redacted]'],
 ]
 // Run BEFORE the span rules (which cut the line at the flag): the stdin value of --password-stdin / --with-token that they
-// cannot see. On a line holding the flag (any case, left or right of the value, behind a pipe): every shell word after a '<<<'
-// (quotes, $'..', backslashes; an open quote runs to the line end) and the body of every here-doc ('<<[-]DELIM', quoted or
-// \DELIM; case-sensitive; '<<-' allows leading tabs) on the lines below, up to the terminator line, or to the TEXT END when
-// there is none or the delimiter cannot be parsed. Fail closed. Linear: one cheap flag test first, no backtracking regex.
-// Parity: ace_after_task._redact_stdin.
+// cannot see. A LOGICAL line is the physical lines joined over an unescaped trailing backslash (and, below, over a
+// multi-line quoted here-string word). On a logical line holding the flag (any case, left or right of the value, behind a
+// pipe): every shell word after a '<<<' (quotes, $'..', backslashes; a word starting $( ` ${ runs to the end of the logical
+// line; an open quote runs to the closing quote on a later line, else to the TEXT END) and the body of every here-doc
+// ('<<[-]DELIM', quoted or \DELIM; case-sensitive; '<<-' allows leading tabs) on the lines below, up to the terminator line, or
+// to the TEXT END when there is none or the delimiter cannot be parsed. Fail closed, a heuristic, not a shell parser. Linear:
+// one cheap flag test first, no backtracking regex. Parity: ace_after_task._redact_stdin.
 const STDIN_FLAG = /--(?:password-stdin|with-token)/i
-const WORD_END = ' \t;&|)'
-const DELIM_END = ' \t;&|)<>\'"\\('
+const WORD_END = ' \t\n;&|)'
+const DELIM_END = ' \t\n;&|)<>\'"\\('
 const DELIM_MAX = 256
-function stdinWordEnd(l: string, i: number): number {
-  const n = l.length
-  while (i < n && !WORD_END.includes(l[i])) {
-    const c = l[i]
+// The end of the shell word starting at i in text (an open quote runs to the closing quote on a later line, else to the end).
+function stdinWordEnd(t: string, i: number): number {
+  const n = t.length
+  while (i < n && !WORD_END.includes(t[i])) {
+    const c = t[i]
     if (c === '\\') i += 2
-    else if (c === "'" || c === '"' || (c === '$' && l[i + 1] === "'")) {
+    else if (c === "'" || c === '"' || (c === '$' && t[i + 1] === "'")) {
       const q = c === '$' ? "'" : c, esc = q === '"' || c === '$'
       let j = c === '$' ? i + 2 : i + 1
-      while (j < n && l[j] !== q) j += esc && l[j] === '\\' ? 2 : 1
-      if (j >= n) return n  // open quote: the rest of the line
+      while (j < n && t[j] !== q) j += esc && t[j] === '\\' ? 2 : 1
+      if (j >= n) return n
       i = j + 1
     } else i++
   }
   return Math.min(i, n)
 }
-// The delimiters of the here-docs on one line: [delimiter, dash][], or null when one cannot be parsed.
+// The end (index of the '\n' or text end) of the logical line that holds index p.
+function logicalEnd(t: string, p: number): number {
+  let e = t.indexOf('\n', p)
+  while (e >= 0) {
+    let b = 0
+    while (e - 1 - b >= p && t[e - 1 - b] === '\\') b++
+    if (b % 2 === 0) return e
+    e = t.indexOf('\n', e + 1)
+  }
+  return t.length
+}
+// The delimiters of the here-docs on one logical line: [delimiter, dash][], or null when one cannot be parsed.
 function hereDocs(l: string): [string, boolean][] | null {
   const out: [string, boolean][] = []
   let k = 0
@@ -364,30 +378,47 @@ function hereDocs(l: string): [string, boolean][] | null {
   }
   return out
 }
-function redactStdin(text: string): string {
-  if (!STDIN_FLAG.test(text)) return text
-  const L = text.split('\n'), out: string[] = []
-  for (let i = 0; i < L.length; i++) {
-    const l = L[i]
-    if (!STDIN_FLAG.test(l)) { out.push(l); continue }
-    let line = '', pos = 0, k = 0
-    while ((k = l.indexOf('<<<', pos)) >= 0) {
-      let s = k + 3
-      while (l[s] === ' ' || l[s] === '\t') s++
-      const e = stdinWordEnd(l, s)
-      line += l.slice(pos, s) + (e > s ? '[redacted]' : '')
-      pos = e
+function redactStdin(t: string): string {
+  if (!STDIN_FLAG.test(t)) return t
+  const n = t.length, out: string[] = []
+  let p = 0, nextK = -2
+  while (p <= n) {
+    let e = logicalEnd(t, p)
+    let flag = STDIN_FLAG.test(t.slice(p, e))
+    const words: [number, number][] = []
+    let pos = p
+    for (;;) {
+      if (nextK !== -1 && nextK < pos) nextK = t.indexOf('<<<', pos)
+      if (nextK < 0 || nextK >= e) break
+      let s = nextK + 3
+      while (t[s] === ' ' || t[s] === '\t' || (t[s] === '\\' && t[s + 1] === '\n')) s += t[s] === '\\' ? 2 : 1
+      const subst = t[s] === '`' || (t[s] === '$' && (t[s + 1] === '(' || t[s + 1] === '{'))
+      const w = subst ? e : stdinWordEnd(t, s)
+      words.push([s, w])
+      if (w > e) { const e2 = logicalEnd(t, w); flag = flag || STDIN_FLAG.test(t.slice(e, e2)); e = e2 }
+      pos = Math.max(w, nextK + 3)
     }
-    out.push(line + l.slice(pos))
-    const docs = hereDocs(l)
-    for (const [d, dash] of docs ?? []) {
-      let t = i + 1
-      while (t < L.length && (dash ? L[t].replace(/^\t+/, '') : L[t]) !== d) t++
-      if (t > i + 1) out.push('[redacted]')
-      if (t >= L.length) { i = L.length; break }
-      out.push(L[t]); i = t
+    if (!flag) { out.push(t.slice(p, e)); p = e + 1; continue }
+    let line = '', q = p
+    for (const [s, w] of words) { line += t.slice(q, s) + (w > s ? '[redacted]' : ''); q = w }
+    out.push(line + t.slice(q, e))
+    const docs = hereDocs(t.slice(p, e))
+    let ls = e + 1
+    if (!docs) { if (ls <= n) out.push('[redacted]'); break }
+    let done = false
+    for (const [d, dash] of docs) {
+      if (ls > n) break
+      let b = ls, found = false
+      while (b <= n) {
+        let le = t.indexOf('\n', b); if (le < 0) le = n
+        const ln = t.slice(b, le)
+        if ((dash ? ln.replace(/^\t+/, '') : ln) === d) { found = true; if (b > ls) out.push('[redacted]'); out.push(ln); ls = le + 1; break }
+        b = le + 1
+      }
+      if (!found) { out.push('[redacted]'); done = true; break }
     }
-    if (!docs && i + 1 < L.length) { out.push('[redacted]'); i = L.length }
+    if (done) break
+    p = ls
   }
   return out.join('\n')
 }

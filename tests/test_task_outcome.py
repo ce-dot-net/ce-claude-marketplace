@@ -322,7 +322,8 @@ if __name__ == '__main__' and '--fuzz' in sys.argv:
 def _hostile_stdin_texts():
     n = 200_000
     return [('<<< a ' * (n // 6)) + '\n--password-stdin', '<<< a ' * (n // 6), '<' * n + '\n--with-token', 'x --with-token <<' * (n // 17),
-            ('--password-stdin <<E\n' + 'a\n' * (n // 2)), '--with-token ' + '<<< "' * (n // 5)]
+            ('--password-stdin <<E\n' + 'a\n' * (n // 2)), '--with-token ' + '<<< "' * (n // 5),
+            'a \\\n' * (n // 4) + '--with-token', '<<< $(\n' * (n // 7) + '--with-token']
 
 
 def test_stdin_redaction_is_linear_on_hostile_input():
