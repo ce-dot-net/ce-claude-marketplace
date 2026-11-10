@@ -40,6 +40,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - Live redaction of secrets in stdin logins written as `ECHO` or here-strings (`<<<`).
 
+### Known limits
+
+- Redaction of stdin logins (`--password-stdin` / `--with-token`) is a heuristic, not a shell parser. Not covered: a flag spelled with quotes or backslashes inside the word (`--pass"word"-stdin`), and a here-string whose command substitution spans several lines (`<<< $(` newline `echo X` newline `)`). The backfill path additionally cuts at key words and token shapes and sends only redacted titles, file names and texts.
+- The span redaction (`redactSpans` / `_redact_spans`) is slow on hostile input made of many `--with-token <<< "` lines (about 40 s for 200 KB); it predates 8.2.0 and is tracked for a later release.
+
 ## [8.1.4] - 2026-11-08
 
 ### Fixed
