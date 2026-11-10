@@ -824,6 +824,78 @@
    "cat <<EOF\nhi\nEOF"
   ],
   [
+   "docker login <<< \"a b\" --password-stdin",
+   "docker login <<< [redacted] --password-stdin"
+  ],
+  [
+   "docker login <<<\"a\"'b' --with-token x",
+   "docker login <<<[redacted] --with-token [redacted]"
+  ],
+  [
+   "gh auth login <<<$'a\\'b c' --with-token",
+   "gh auth login <<<[redacted] --with-token"
+  ],
+  [
+   "docker login <<< a\\ b --password-stdin",
+   "docker login <<< [redacted] --password-stdin"
+  ],
+  [
+   "docker login <<< hunter2 | tee --password-stdin",
+   "docker login <<< [redacted] | tee --password-stdin"
+  ],
+  [
+   "docker login <<< \"abc --password-stdin",
+   "docker login <<< [redacted]"
+  ],
+  [
+   "docker login <<< hunter2; echo x --password-stdin",
+   "docker login <<< [redacted]; echo x --password-stdin"
+  ],
+  [
+   "docker login <<< \"a b\"",
+   "docker login <<< \"a b\""
+  ],
+  [
+   "cat <<< hello | grep x",
+   "cat <<< hello | grep x"
+  ],
+  [
+   "docker login <<EOF --password-stdin\nhunter2\nEOF\nls",
+   "docker login <<EOF --password-stdin\n[redacted]\nEOF\nls"
+  ],
+  [
+   "docker login --password-stdin <<-EOF\n\t\thunter2\n\tEOF\nls",
+   "docker login --password-stdin [redacted]\n[redacted]\n\tEOF\nls"
+  ],
+  [
+   "docker login --password-stdin <<'EOF'\nhunter2\nEOF",
+   "docker login --password-stdin [redacted]\n[redacted]\nEOF"
+  ],
+  [
+   "docker login --password-stdin <<\"EOF\"\nhunter2\nEOF",
+   "docker login --password-stdin [redacted]\n[redacted]\nEOF"
+  ],
+  [
+   "docker login --password-stdin <<\\EOF\nhunter2\nEOF",
+   "docker login --password-stdin [redacted]\n[redacted]\nEOF"
+  ],
+  [
+   "docker login --password-stdin <<EOF\nhunter2\neof\nmore\nEOF\nls",
+   "docker login --password-stdin [redacted]\n[redacted]\nEOF\nls"
+  ],
+  [
+   "docker login --password-stdin <<EOF\nhunter2\n\tEOF\nls",
+   "docker login --password-stdin [redacted]\n[redacted]"
+  ],
+  [
+   "gh auth login --with-token <<EOF\nghp_x\nnext cmd",
+   "gh auth login --with-token [redacted]\n[redacted]"
+  ],
+  [
+   "docker login --password-stdin <<\nhunter2\nls",
+   "docker login --password-stdin [redacted]\n[redacted]"
+  ],
+  [
    "openssl genrsa -out key.pem 2048 && ssh-keygen -l -f k",
    "openssl genrsa -out key.pem 2048 && ssh-keygen -l -f k"
   ]

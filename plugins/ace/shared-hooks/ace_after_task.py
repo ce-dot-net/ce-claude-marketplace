@@ -478,11 +478,116 @@ _SPAN_RES = (
 _BLANK_LINE = regex_module.compile(r'\n[ \t\r]*\n')
 _URL_VALUE_END = regex_module.compile(r'''[&# \t\n\r\x0b\x0c"']''')
 _TOKEN_SEP = ' \t\n\r\x0b\x0c"\''
-# Run BEFORE the span rules (which cut the line at the flag): a here-string before the flag, and a here-doc body after it.
-_STDIN_RES = (
-    (regex_module.compile(r'''(<<<[ \t]*)(?:"[^"\n]*"|'[^'\n]*'|[^ \t\n\r"';&|)]+)(?=[^\n|]*--(?:password-stdin|with-token))''', regex_module.A | regex_module.I), r'\1[redacted]'),
-    (regex_module.compile(r'''(--(?:password-stdin|with-token)\b[^\n]*(?<!<)<<-?[ \t]*['"]?(\w+)['"]?[^\n]*\n)[\s\S]+?(?=\n[ \t]*\2[ \t]*(?:\n|(?![\s\S])))''', regex_module.A | regex_module.I), r'\1[redacted]'),
-)
+# Run BEFORE the span rules (which cut the line at the flag): the stdin value of --password-stdin / --with-token that they
+# cannot see. On a line holding the flag (any case, left or right of the value, behind a pipe): every shell word after a '<<<'
+# (quotes, $'..', backslashes; an open quote runs to the line end) and the body of every here-doc ('<<[-]DELIM', quoted or
+# \DELIM; case-sensitive; '<<-' allows leading tabs) on the lines below, up to the terminator line, or to the TEXT END when
+# there is none or the delimiter cannot be parsed. Fail closed. Linear: one cheap flag test first, no backtracking regex.
+# Parity: mod/lib/trace.ts redactStdin.
+_STDIN_FLAG = regex_module.compile(r'--(?:password-stdin|with-token)', regex_module.A | regex_module.I)
+_WORD_END = ' \t;&|)'
+_DELIM_END = ' \t;&|)<>\'"\\('
+_DELIM_MAX = 256
+
+
+def _stdin_word_end(l, i):
+    n = len(l)
+    while i < n and l[i] not in _WORD_END:
+        c = l[i]
+        if c == '\\':
+            i += 2
+        elif c in '\'"' or (c == '$' and l[i + 1:i + 2] == "'"):
+            q = "'" if c == '$' else c
+            esc = q == '"' or c == '$'
+            j = i + 2 if c == '$' else i + 1
+            while j < n and l[j] != q:
+                j += 2 if esc and l[j] == '\\' else 1
+            if j >= n:
+                return n  # open quote: the rest of the line
+            i = j + 1
+        else:
+            i += 1
+    return min(i, n)
+
+
+def _here_docs(l):
+    """The delimiters of the here-docs on one line: [(delimiter, dash)], or None when one cannot be parsed."""
+    out, k = [], 0
+    while True:
+        k = l.find('<<', k)
+        if k < 0:
+            return out
+        if l[k + 2:k + 3] == '<':
+            k += 1
+            continue
+        if k > 0 and l[k - 1] == '<':
+            k += 2
+            continue
+        i = k + 2
+        dash = l[i:i + 1] == '-'
+        if dash:
+            i += 1
+        while l[i:i + 1] in (' ', '\t'):
+            i += 1
+        if l[i:i + 1] in ("'", '"'):
+            e = l.find(l[i], i + 1)
+            if e < 0:
+                return None
+            d, i = l[i + 1:e], e + 1
+        else:
+            if l[i:i + 1] == '\\':
+                i += 1
+            e = i
+            while e < len(l) and l[e] not in _DELIM_END:
+                e += 1
+            d, i = l[i:e], e
+        if not d or len(d) > _DELIM_MAX:
+            return None
+        out.append((d, dash))
+        k = i
+
+
+def _redact_stdin(text):
+    if not _STDIN_FLAG.search(text):
+        return text
+    L, out, i = text.split('\n'), [], 0
+    while i < len(L):
+        l = L[i]
+        if not _STDIN_FLAG.search(l):
+            out.append(l)
+            i += 1
+            continue
+        line, pos = [], 0
+        while True:
+            k = l.find('<<<', pos)
+            if k < 0:
+                break
+            s = k + 3
+            while l[s:s + 1] in (' ', '\t'):
+                s += 1
+            e = _stdin_word_end(l, s)
+            line.append(l[pos:s] + ('[redacted]' if e > s else ''))
+            pos = e
+        out.append(''.join(line) + l[pos:])
+        docs = _here_docs(l)
+        for d, dash in docs or ():
+            t = i + 1
+            while t < len(L) and (L[t].lstrip('\t') if dash else L[t]) != d:
+                t += 1
+            if t > i + 1:
+                out.append('[redacted]')
+            if t >= len(L):
+                i = len(L)
+                break
+            out.append(L[t])
+            i = t
+        if docs is None and i + 1 < len(L):
+            out.append('[redacted]')
+            i = len(L)
+        i += 1
+    return '\n'.join(out)
+
+
 _SECRET_RES = (
     # the echo/printf stage that pipes a secret into --password-stdin / --with-token
     (regex_module.compile(r'''\b(echo|printf)\b[^\n]*\|(?=[^|\n]*--(?:password-stdin|with-token))''', regex_module.A | regex_module.I), r'\1 [redacted] |'),
@@ -525,9 +630,7 @@ def redact(text):
     token prefixes / JWTs. Parity: mod/lib/trace.ts redact."""
     if not isinstance(text, str) or not text:
         return text
-    for rx, rep in _STDIN_RES:
-        text = rx.sub(rep, text)
-    text = _redact_spans(text)
+    text = _redact_spans(_redact_stdin(text))
     for rx, rep in _SECRET_RES:
         text = rx.sub(rep, text)
     return text
