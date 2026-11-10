@@ -479,39 +479,55 @@ _BLANK_LINE = regex_module.compile(r'\n[ \t\r]*\n')
 _URL_VALUE_END = regex_module.compile(r'''[&# \t\n\r\x0b\x0c"']''')
 _TOKEN_SEP = ' \t\n\r\x0b\x0c"\''
 # Run BEFORE the span rules (which cut the line at the flag): the stdin value of --password-stdin / --with-token that they
-# cannot see. On a line holding the flag (any case, left or right of the value, behind a pipe): every shell word after a '<<<'
-# (quotes, $'..', backslashes; an open quote runs to the line end) and the body of every here-doc ('<<[-]DELIM', quoted or
-# \DELIM; case-sensitive; '<<-' allows leading tabs) on the lines below, up to the terminator line, or to the TEXT END when
-# there is none or the delimiter cannot be parsed. Fail closed. Linear: one cheap flag test first, no backtracking regex.
-# Parity: mod/lib/trace.ts redactStdin.
+# cannot see. A LOGICAL line is the physical lines joined over an unescaped trailing backslash (and, below, over a
+# multi-line quoted here-string word). On a logical line holding the flag (any case, left or right of the value, behind a
+# pipe): every shell word after a '<<<' (quotes, $'..', backslashes; a word starting $( ` ${ runs to the end of the logical
+# line; an open quote runs to the closing quote on a later line, else to the TEXT END) and the body of every here-doc
+# ('<<[-]DELIM', quoted or \DELIM; case-sensitive; '<<-' allows leading tabs) on the lines below, up to the terminator line, or
+# to the TEXT END when there is none or the delimiter cannot be parsed. Fail closed, a heuristic, not a shell parser. Linear:
+# one cheap flag test first, no backtracking regex. Parity: mod/lib/trace.ts redactStdin.
 _STDIN_FLAG = regex_module.compile(r'--(?:password-stdin|with-token)', regex_module.A | regex_module.I)
-_WORD_END = ' \t;&|)'
-_DELIM_END = ' \t;&|)<>\'"\\('
+_WORD_END = ' \t\n;&|)'
+_DELIM_END = ' \t\n;&|)<>\'"\\('
 _DELIM_MAX = 256
 
 
-def _stdin_word_end(l, i):
-    n = len(l)
-    while i < n and l[i] not in _WORD_END:
-        c = l[i]
+def _stdin_word_end(t, i):
+    """The end of the shell word starting at i in t (an open quote runs to the closing quote on a later line, else to the end)."""
+    n = len(t)
+    while i < n and t[i] not in _WORD_END:
+        c = t[i]
         if c == '\\':
             i += 2
-        elif c in '\'"' or (c == '$' and l[i + 1:i + 2] == "'"):
+        elif c in '\'"' or (c == '$' and t[i + 1:i + 2] == "'"):
             q = "'" if c == '$' else c
             esc = q == '"' or c == '$'
             j = i + 2 if c == '$' else i + 1
-            while j < n and l[j] != q:
-                j += 2 if esc and l[j] == '\\' else 1
+            while j < n and t[j] != q:
+                j += 2 if esc and t[j] == '\\' else 1
             if j >= n:
-                return n  # open quote: the rest of the line
+                return n
             i = j + 1
         else:
             i += 1
     return min(i, n)
 
 
+def _logical_end(t, p):
+    """The end (index of the '\\n' or text end) of the logical line that holds index p."""
+    e = t.find('\n', p)
+    while e >= 0:
+        b = 0
+        while e - 1 - b >= p and t[e - 1 - b] == '\\':
+            b += 1
+        if b % 2 == 0:
+            return e
+        e = t.find('\n', e + 1)
+    return len(t)
+
+
 def _here_docs(l):
-    """The delimiters of the here-docs on one line: [(delimiter, dash)], or None when one cannot be parsed."""
+    """The delimiters of the here-docs on one logical line: [(delimiter, dash)], or None when one cannot be parsed."""
     out, k = [], 0
     while True:
         k = l.find('<<', k)
@@ -547,44 +563,70 @@ def _here_docs(l):
         k = i
 
 
-def _redact_stdin(text):
-    if not _STDIN_FLAG.search(text):
-        return text
-    L, out, i = text.split('\n'), [], 0
-    while i < len(L):
-        l = L[i]
-        if not _STDIN_FLAG.search(l):
-            out.append(l)
-            i += 1
-            continue
-        line, pos = [], 0
+def _redact_stdin(t):
+    if not _STDIN_FLAG.search(t):
+        return t
+    n, out, p, next_k = len(t), [], 0, -2
+    while p <= n:
+        e = _logical_end(t, p)
+        flag = bool(_STDIN_FLAG.search(t[p:e]))
+        words, pos = [], p
         while True:
-            k = l.find('<<<', pos)
-            if k < 0:
+            if next_k != -1 and next_k < pos:
+                next_k = t.find('<<<', pos)
+            if next_k < 0 or next_k >= e:
                 break
-            s = k + 3
-            while l[s:s + 1] in (' ', '\t'):
-                s += 1
-            e = _stdin_word_end(l, s)
-            line.append(l[pos:s] + ('[redacted]' if e > s else ''))
-            pos = e
-        out.append(''.join(line) + l[pos:])
-        docs = _here_docs(l)
-        for d, dash in docs or ():
-            t = i + 1
-            while t < len(L) and (L[t].lstrip('\t') if dash else L[t]) != d:
-                t += 1
-            if t > i + 1:
+            s = next_k + 3
+            while t[s:s + 1] in (' ', '\t') or (t[s:s + 1] == '\\' and t[s + 1:s + 2] == '\n'):
+                s += 2 if t[s] == '\\' else 1
+            subst = t[s:s + 1] == '`' or (t[s:s + 1] == '$' and t[s + 1:s + 2] in ('(', '{'))
+            w = e if subst else _stdin_word_end(t, s)
+            words.append((s, w))
+            if w > e:
+                e2 = _logical_end(t, w)
+                flag = flag or bool(_STDIN_FLAG.search(t[e:e2]))
+                e = e2
+            pos = max(w, next_k + 3)
+        if not flag:
+            out.append(t[p:e])
+            p = e + 1
+            continue
+        line, q = [], p
+        for s, w in words:
+            line.append(t[q:s] + ('[redacted]' if w > s else ''))
+            q = w
+        out.append(''.join(line) + t[q:e])
+        docs = _here_docs(t[p:e])
+        ls = e + 1
+        if docs is None:
+            if ls <= n:
                 out.append('[redacted]')
-            if t >= len(L):
-                i = len(L)
+            break
+        done = False
+        for d, dash in docs:
+            if ls > n:
                 break
-            out.append(L[t])
-            i = t
-        if docs is None and i + 1 < len(L):
-            out.append('[redacted]')
-            i = len(L)
-        i += 1
+            b, found = ls, False
+            while b <= n:
+                le = t.find('\n', b)
+                if le < 0:
+                    le = n
+                ln = t[b:le]
+                if (ln.lstrip('\t') if dash else ln) == d:
+                    found = True
+                    if b > ls:
+                        out.append('[redacted]')
+                    out.append(ln)
+                    ls = le + 1
+                    break
+                b = le + 1
+            if not found:
+                out.append('[redacted]')
+                done = True
+                break
+        if done:
+            break
+        p = ls
     return '\n'.join(out)
 
 

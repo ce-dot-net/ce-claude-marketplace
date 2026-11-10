@@ -896,6 +896,54 @@
    "docker login --password-stdin [redacted]\n[redacted]"
   ],
   [
+   "docker login \\\n  --password-stdin <<< hunter2",
+   "docker login \\\n  --password-stdin [redacted]"
+  ],
+  [
+   "docker login --password-stdin \\\n  <<EOF\nhunter2\nEOF\nls",
+   "docker login --password-stdin [redacted]\n  <<EOF\n[redacted]\nEOF\nls"
+  ],
+  [
+   "docker login <<< \\\nhunter2 \\\n  --password-stdin",
+   "docker login <<< \\\n[redacted] \\\n  --password-stdin"
+  ],
+  [
+   "docker login <<< $(cat f) --password-stdin",
+   "docker login <<< [redacted]"
+  ],
+  [
+   "docker login <<< `cat f` --password-stdin",
+   "docker login <<< [redacted]"
+  ],
+  [
+   "docker login <<< ${TOK:-x} --password-stdin",
+   "docker login <<< [redacted]"
+  ],
+  [
+   "docker login <<< \"abc\ndef\" --password-stdin\nls",
+   "docker login <<< [redacted] --password-stdin\nls"
+  ],
+  [
+   "docker login <<< 'abc\ndef\nghi' --with-token x\nls",
+   "docker login <<< [redacted] --with-token [redacted]\nls"
+  ],
+  [
+   "docker login <<< \"abc\ndef\nls --password-stdin",
+   "docker login <<< [redacted]"
+  ],
+  [
+   "docker login <<< \"abc\ndef\"\nls",
+   "docker login <<< \"abc\ndef\"\nls"
+  ],
+  [
+   "docker login <<< $(cat f)\nls",
+   "docker login <<< $(cat f)\nls"
+  ],
+  [
+   "docker login \\\n  -u me\nls",
+   "docker login \\\n  -u me\nls"
+  ],
+  [
    "openssl genrsa -out key.pem 2048 && ssh-keygen -l -f k",
    "openssl genrsa -out key.pem 2048 && ssh-keygen -l -f k"
   ]
