@@ -1702,9 +1702,12 @@ def main():
         )
 
         # §31: render_variant = what was rendered ('budget'|'full'), OMITTED when unknown (never defaulted).
+        # 8.2.1: render_path = the chain that rendered (a guarded seat: the mod rendered, this hook learns).
+        _render_path = 'python'
         try:
-            _render_variant = _trace_render_variant(_stored_variant, session_id,
-                                                    mod=plugin_data_dir.is_mod_active(context['project'], session_id))
+            if plugin_data_dir.is_mod_active(context['project'], session_id):
+                _render_path = 'mod'
+            _render_variant = _trace_render_variant(_stored_variant, session_id, mod=_render_path == 'mod')
         except Exception:
             _render_variant = None
         # §31 / item H2: applied_log_ids = only the injected patterns ACTUALLY USED, for every variant: its id in the
@@ -1804,6 +1807,7 @@ def main():
         # §31: render_variant only when known; conversation_id = the stable CC session id (subagents share it)
         if _render_variant:
             trace["render_variant"] = _render_variant
+            trace["render_path"] = _render_path
         if session_id:
             trace["conversation_id"] = str(session_id)[:512]
         if agent_id:

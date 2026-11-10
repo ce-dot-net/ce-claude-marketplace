@@ -589,7 +589,7 @@ export function buildTrace(a: {
     agent_type: a.agentType,
   }
   if (a.tsid) trace.session_id = a.tsid
-  if (a.renderVariant) trace.render_variant = a.renderVariant // §31: only when known
+  if (a.renderVariant) { trace.render_variant = a.renderVariant; trace.render_path = 'mod' } // §31: only when known; 8.2.1: which chain rendered
   if (a.conversationId) trace.conversation_id = a.conversationId.slice(0, 512) // §31: the stable CC session id
   if (a.agentId) trace.agent_id = a.agentId
   if (a.parentTaskId) trace.parent_agent_id = a.parentTaskId // §16 P3: server field name (local state keeps parent_task_id)

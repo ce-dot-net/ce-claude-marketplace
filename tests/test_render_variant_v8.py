@@ -165,3 +165,40 @@ def test_permission_denied_trace_carries_render_variant(clean_env, tmp_path):
     m = _stored(tmp_path, clean_env, "full")
     t = m._build_trace({"session_id": "pd-rv", "tool_name": "Bash", "tool_input": {"command": "ls"}})
     assert t["render_variant"] == "full"
+
+
+# ── 8.2.1: render_path = which chain rendered, only next to a render_variant ─────────────
+
+def test_render_path_python_when_the_python_chain_rendered(box):
+    t = _main_learn(box, pattern_ids=IDS, retrieval_log_ids={IDS[0]: 7}, render_variant="budget")["trace"]
+    assert (t["render_variant"], t["render_path"]) == ("budget", "python")
+
+
+def test_render_path_mod_when_the_mod_rendered_and_python_learns(box):
+    """Guarded seat: the mod rendered (mod-active, no mod-classic), the Python Stop learns."""
+    box.session_dir("s-rv").mkdir(parents=True, exist_ok=True)
+    (box.session_dir("s-rv") / "mod-active").write_text("")
+    t = _main_learn(box, pattern_ids=IDS, retrieval_log_ids={IDS[0]: 7}, render_variant="full")["trace"]
+    assert (t["render_variant"], t["render_path"]) == ("full", "mod")
+
+
+def test_render_path_omitted_with_render_variant(box):
+    sid = "s-rv-ctl"  # ACE_AB_CONTROL_PCT=100: control is no server label -> render_variant omitted
+    box.write_state(sid, "main", user_prompt="refactor the parser module", render_variant="control")
+    box.seed_tools(sid, WORK)
+    p = box.run_after_task(box.stop_event(sid), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID, ACE_AB_CONTROL_PCT="100")
+    assert p.returncode == 0, p.stderr
+    (learn,) = box.cli_calls("learn")
+    t = learn["trace"]
+    assert "render_variant" not in t and "render_path" not in t
+
+
+def test_permission_denied_render_path(clean_env, tmp_path):
+    from test_permission_denied_v8 import _stored
+    m = _stored(tmp_path, clean_env, "budget")
+    t = m._build_trace({"session_id": "pd-rv", "tool_name": "Bash", "tool_input": {"command": "ls"}})
+    assert (t["render_variant"], t["render_path"]) == ("budget", "python")
+    clean_env.setenv("ACE_AB_CONTROL_PCT", "100")
+    m = _stored(tmp_path / "b", clean_env, False)
+    t = m._build_trace({"session_id": "pd-rv", "tool_name": "Bash", "tool_input": {}})
+    assert "render_variant" not in t and "render_path" not in t

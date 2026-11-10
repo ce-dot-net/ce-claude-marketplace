@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [8.2.1] - 2026-11-10
 
+### Added
+- Learn traces carry `render_path` (`mod` or `python`): the chain that rendered the patterns, next to `render_variant` and
+  only when that is known (server request, A/B attribution). A guarded seat, where the mod renders and the Python Stop hook
+  learns, reports `mod`. Note: a Python-chain session always reports `render_variant: budget` by design: the Python chain has
+  no full renderer (Claude Code caps hook context at 10,000 characters), so it labels what it actually rendered.
+
 ### Changed
 - Backfill is hybrid by default: sessions AND git/merge are sent in one run. Default sources are now `session,git,merge`
   (was `git,merge`, sessions only on request). The limit is shared round-robin across the sources that have new tasks (each

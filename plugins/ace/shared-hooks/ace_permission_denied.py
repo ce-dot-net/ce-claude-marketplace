@@ -281,16 +281,21 @@ def _structural_fingerprint(tool_name: str, tool_input) -> str:
     return f"input_keys={keys}"
 
 
-def _render_variant(session_id):
-    """§31: the variant stored at render time ('budget'|'full'); without one, the conversation's arm (server request)."""
+def _render_variant(session_id, with_path=False):
+    """§31: the variant stored at render time ('budget'|'full'); without one, the conversation's arm (server request).
+    with_path: (variant, render_path), render_path = the chain that rendered ('mod' while the mod is active)."""
+    variant, path = None, 'python'
     try:
         from patterns_used_state import load_state
         from ace_pattern_render import trace_render_variant
         import plugin_data_dir
+        if plugin_data_dir.is_mod_active(_PROJECT_ID, session_id):
+            path = 'mod'
         stored = load_state(session_id, None, 'Stop', project_id=_PROJECT_ID).get('render_variant')
-        return trace_render_variant(stored, session_id, mod=plugin_data_dir.is_mod_active(_PROJECT_ID, session_id))
+        variant = trace_render_variant(stored, session_id, mod=path == 'mod')
     except Exception:
-        return None
+        pass
+    return (variant, path) if with_path else variant
 
 
 def _build_trace(event: dict) -> dict:
@@ -333,9 +338,10 @@ def _build_trace(event: dict) -> dict:
     stamp(trace, RULE_PERMISSION)  # 8.1.4: result.plugin_version + result.outcome_rule
     if session_id:  # §31: the stable CC session id; never send ''
         trace["conversation_id"] = str(session_id)[:512]
-    variant = _render_variant(session_id)
-    if variant:  # §31: omitted when unknown
+    variant, path = _render_variant(session_id, with_path=True)
+    if variant:  # §31: omitted when unknown; 8.2.1: render_path only next to it
         trace["render_variant"] = variant
+        trace["render_path"] = path
     return trace
 
 

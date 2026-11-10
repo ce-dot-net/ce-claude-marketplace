@@ -56,7 +56,8 @@ docs/technical/ARCHITECTURE.md "Task outcome (8.1.3)".
   half of all conversations; 0 turns full off). `full` costs about 2.1-2.3x input tokens and 2.5x USD per task against budget; within one conversation the
   mod re-injects only patterns not yet injected since the last compaction. 8.0.0 ships the 50/50 split (the ACE server
   has AOP-1333 and AOP-1334 on prod); set `ACE_RENDER_FULL_PCT=0` to stay on budget only.
-- **What each learn trace carries:** `render_variant` (`budget` or `full`, omitted when unknown),
+- **What each learn trace carries:** `render_variant` (`budget` or `full`, omitted when unknown; the Python chain
+  always renders budget), `render_path` (`mod` or `python`, the chain that rendered; only next to `render_variant`),
   `conversation_id` (the Claude Code session id; subagents share it), the per-task pin as `session_id`, and
   `applied_log_ids` only for patterns with evidence of use (at most 20): ids a Haiku review names (mod chain,
   interactive sessions), or patterns whose distinctive tokens or id appear in the task's tool inputs.
