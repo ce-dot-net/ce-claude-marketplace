@@ -23,6 +23,7 @@ function fake(o: { posts?: any[], gets?: any[], ledger?: Ledger } = {}) {
 }
 const acc = (job: string, accepted: number, dup = 0) => ok(202, { job_id: job, accepted, duplicates: dup, status_url: '/x' })
 
+const ALL = ['session', 'git', 'merge'] as const   // the explicit all-sources set (the default is git,merge)
 test('zero items: nothing is posted', async () => {
   const f = fake({ posts: [] })
   const r = await runBackfill([], f.d)
@@ -172,14 +173,14 @@ const MERGES = '\x1ebbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\x002026-10-03T10:00
 
 test('buildItems: sessions + git + merges counted, ledger-held skipped, capped by limit, mixed kinds shaped', () => {
   const sess = [{ text: sessionJsonl('please fix the crash in the parser module when the input is empty') }]
-  const b = buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: emptyLedger() })
+  const b = buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: emptyLedger(), sources: ALL })
   expect(b.sessionTasks).toBe(1)
   expect(b.gitTasks).toBe(2)
   expect(b.skipped).toBe(0)
   expect(b.items.length).toBe(3)
   expect(b.items.every(i => /^bootstrap:[0-9a-f]{32}$/.test(i.idempotency_key))).toBe(true)
   const l = emptyLedger(); add(l, b.items[0].idempotency_key, 'sent', 1)
-  const b2 = buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: l })
+  const b2 = buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: l, sources: ALL })
   expect(b2.skipped).toBe(1)
   expect(b2.items.length).toBe(2)
   expect(buildItems({ projectId: 'prj_t', sessions: [], gitLog: GITLOG, mergeLog: MERGES, limit: 1, ledger: emptyLedger() }).items.length).toBe(1)
@@ -188,7 +189,7 @@ test('buildItems: sessions + git + merges counted, ledger-held skipped, capped b
 
 test('previewLines: counts, cap, duration (70 s per trace), data-leaves sentence; flag off says so in one line', () => {
   const b = { items: items(100), sessionTasks: 60, gitTasks: 70, skipped: 4 }
-  const on = previewLines(b, { flag: true, limit: 100 }).join('\n')
+  const on = previewLines(b, { flag: true, limit: 100, sources: ALL }).join('\n')
   for (const x of ['60', '70', '4', '100', 'Stunden', 'verlassen den Rechner']) expect(on).toContain(x)
   expect(previewLines(b, { flag: false, limit: 100 }).join('\n')).toBe('Backfill: Server unterstützt es noch nicht')
   expect(previewLines({ items: [], sessionTasks: 0, gitTasks: 0, skipped: 0 }, { flag: true, limit: 100 }).join('\n')).toContain('0 Aufgaben')
@@ -258,7 +259,13 @@ test('buildItems with sources: a source not listed contributes nothing; previewL
   expect(previewLines(s1, { flag: true, limit: 100, sources: ['session'] }).join('\n')).not.toContain('Git-Aufgaben')
   expect(previewLines(m, { flag: true, limit: 100, sources: ['merge'] }).join('\n')).toContain('1 Git-Aufgaben (Merges)')
   expect(previewLines(g, { flag: true, limit: 100, sources: ['git'] }).join('\n')).toContain('1 Git-Aufgaben (Fix/Revert)')
-  expect(previewLines(gm, { flag: true, limit: 100 }).join('\n')).not.toContain('Quellen:')   // flag absent: unchanged
+  const d = previewLines(gm, { flag: true, limit: 100 })   // flag absent: the default git,merge, labelled as such
+  expect(d[0]).toBe('Quellen: git, merge (Standard)')
+  expect(d.join('\n')).not.toContain('Hinweis:')
+  expect(buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: emptyLedger() }).sessionTasks).toBe(0)
+  const sg = previewLines(s1, { flag: true, limit: 100, sources: ['session', 'git'] })
+  expect(sg[0]).toBe('Quellen: session, git')
+  expect(sg).toContain('Hinweis: Sitzungs-Quelle ist experimentell (Pilot: viel Tool-Rauschen)')
 })
 test('parseBackfillFlags: bad shapes, duplicates, org without project, a value on the switch are refused with a German line', () => {
   for (const bad of ['--target-project', '--target-project x', '--target-project prj_a', '--target-project prj_ab/c', '--target-project prj_abc --target-org', '--target-project prj_abc --target-org prj_abc',
@@ -351,7 +358,7 @@ test('a failing logger never breaks a run that has sources', async () => {
 })
 test('buildItems returns the source of every selected key', () => {
   const sess = [{ text: sessionJsonl('please fix the crash in the parser module when the input is empty') }]
-  const b = buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: emptyLedger() })
+  const b = buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: emptyLedger(), sources: ALL })
   expect(Object.keys(b.sources).sort()).toEqual(b.items.map(i => i.idempotency_key).sort())
   expect(new Set(Object.values(b.sources))).toEqual(new Set(['session', 'git', 'merge']))
 })
@@ -367,7 +374,7 @@ const NOISY = (prompt: string) => [
 
 test('buildItems: a session task that is only tool noise is not a candidate and is counted in noiseExcluded; git is untouched', () => {
   const sess = [{ text: sessionJsonl('please fix the crash in the parser module when the input is empty') + '\n' + NOISY('please look at the nope module and report what it does') }]
-  const b = buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: emptyLedger() })
+  const b = buildItems({ projectId: 'prj_t', sessions: sess, gitLog: GITLOG, mergeLog: MERGES, limit: 100, ledger: emptyLedger(), sources: ALL })
   expect(b.sessionTasks).toBe(1)
   expect(b.noiseExcluded).toBe(1)
   expect(b.gitTasks).toBe(2)
@@ -376,8 +383,8 @@ test('buildItems: a session task that is only tool noise is not a candidate and 
 
 test('previewLines: names how many session tasks were set aside as tool noise (total includes them); no noise = the old text', () => {
   const b = { items: items(5), sessionTasks: 121, noiseExcluded: 61, gitTasks: 570, skipped: 0 }
-  expect(previewLines(b, { flag: true, limit: 100 })[0]).toBe('Backfill: 182 Session-Aufgaben (davon 61 wegen Tool-Rauschen aussortiert), 570 Git-Aufgaben (Fix/Revert + Merges) im Fenster, 0 schon gesendet (übersprungen)')
-  expect(previewLines({ ...b, noiseExcluded: 0 }, { flag: true, limit: 100 })[0]).toContain('121 Session-Aufgaben, 570 Git-Aufgaben')
+  expect(previewLines(b, { flag: true, limit: 100, sources: ALL })[2]).toBe('Backfill: 182 Session-Aufgaben (davon 61 wegen Tool-Rauschen aussortiert), 570 Git-Aufgaben (Fix/Revert + Merges) im Fenster, 0 schon gesendet (übersprungen)')
+  expect(previewLines({ ...b, noiseExcluded: 0 }, { flag: true, limit: 100, sources: ALL })[2]).toContain('121 Session-Aufgaben, 570 Git-Aufgaben')
 })
 
 test('backfill_batch carries noise_excluded', async () => {

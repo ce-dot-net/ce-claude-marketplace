@@ -30,7 +30,8 @@ export function parseLimit(args: string): { ok: true, limit: number, rest: strin
 export const TARGET_USAGE = 'Usage: --backfill-only | --target-project prj_xxx [--target-org org_xxx] (prj_/org_ + 3 bis 64 Zeichen A-Z a-z 0-9 _)'
 const PRJ_RE = /^prj_[A-Za-z0-9_]{3,64}$/, ORG_RE = /^org_[A-Za-z0-9_]{3,64}$/
 export const SOURCES = ['session', 'git', 'merge'] as const
-export const SOURCES_USAGE = `Usage: --sources ${SOURCES.join(',')} (Liste aus: ${SOURCES.join(', ')}; keine Duplikate, nicht leer; ohne --sources werden alle drei gelesen)`
+export const DEFAULT_SOURCES: readonly ('session' | 'git' | 'merge')[] = ['git', 'merge']   // pilots: session items are far noisier (16 of 30 vs 1 of 19), so they are opt-in
+export const SOURCES_USAGE = `Usage: --sources ${SOURCES.join(',')} (Liste aus: ${SOURCES.join(', ')}; keine Duplikate, nicht leer; ohne --sources gilt: git, merge; session nur ausdrücklich)`
 export type BackfillFlags = { ok: true, only: boolean, project?: string, org?: string, sources?: Source[], rest: string } | { ok: false, line: string }
 export function parseBackfillFlags(args: string): BackfillFlags {
   const bad: BackfillFlags = { ok: false, line: TARGET_USAGE }
@@ -63,7 +64,7 @@ export type Built = { items: Item[], sources: Record<string, Source>, sessionTas
 export function buildItems(o: { projectId: string, sessions: { text: string, sessionId?: string }[], gitLog: string, mergeLog: string, limit: number, ledger: Ledger, sources?: readonly Source[] }): Built {
   const cands: any[] = []
   let sessionTasks = 0, noiseExcluded = 0
-  const has = (x: Source) => !o.sources || o.sources.includes(x)   // a source not listed is not read, counted or sent
+  const has = (x: Source) => (o.sources ?? DEFAULT_SOURCES).includes(x)   // a source not listed is not read, counted or sent
   for (const s of has('session') ? o.sessions : []) {
     const r = readSession(s.text, { sessionId: s.sessionId, denoise: true })
     noiseExcluded += r.stats.noise
@@ -85,11 +86,12 @@ export function duration(n: number): string {
 export function previewLines(b: Built, o: { flag: boolean, limit: number, sources?: readonly Source[] }): string[] {
   if (!o.flag) return ['Backfill: Server unterstützt es noch nicht']
   const n = b.items.length, noise = b.noiseExcluded ?? 0
-  const has = (x: Source) => !o.sources || o.sources.includes(x)
+  const src = o.sources ?? DEFAULT_SOURCES
+  const has = (x: Source) => src.includes(x)
   const gitWhat = has('git') && has('merge') ? 'Fix/Revert + Merges' : has('git') ? 'Fix/Revert' : 'Merges'
   const counts = [...(has('session') ? [`${b.sessionTasks + noise} Session-Aufgaben${noise ? ` (davon ${noise} wegen Tool-Rauschen aussortiert)` : ''}`] : []),
     ...(has('git') || has('merge') ? [`${b.gitTasks} Git-Aufgaben (${gitWhat}) im Fenster`] : []), `${b.skipped} schon gesendet (übersprungen)`]
-  const out = [...(o.sources ? [`Quellen: ${o.sources.join(', ')}`] : []), `Backfill: ${counts.join(', ')}`,
+  const out = [`Quellen: ${src.join(', ')}${o.sources ? '' : ' (Standard)'}`, ...(has('session') ? ['Hinweis: Sitzungs-Quelle ist experimentell (Pilot: viel Tool-Rauschen)'] : []), `Backfill: ${counts.join(', ')}`,
     `${n} Aufgaben werden gesendet (Limit ${o.limit}, die am besten bewerteten)`]
   if (n) out.push(`Dauer: ${duration(n)} (Richtwert ${SECONDS_PER_TRACE} s pro Trace, der Server verarbeitet im Hintergrund)`,
     'Aufgaben (Titel, Dateinamen, redigierte Texte) verlassen den Rechner.')

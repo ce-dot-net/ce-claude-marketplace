@@ -6,7 +6,7 @@ import { APPEND_SH } from '../lib/sh.ts'
 import { pyDumps } from '../lib/pyjson.ts'
 import { engineScript, ids } from './spawn.ts'
 import { dataRoot, uuid } from './state.ts'
-import { POLL_MS, buildItems, finalLines, newRun, progress, runActive, startLine, stepBackfill, type Built, type Deps, type EngineAnswer, type RunState, type Source } from '../lib/backfill_run.ts'
+import { DEFAULT_SOURCES, POLL_MS, buildItems, finalLines, newRun, progress, runActive, startLine, stepBackfill, type Built, type Deps, type EngineAnswer, type RunState, type Source } from '../lib/backfill_run.ts'
 import type { Item } from '../lib/backfill_send.ts'
 import { GIT_LOG_ARGV, GIT_MERGES_ARGV } from '../lib/backfill_git.ts'
 import { BACKFILL_FLAG_FILE, storedBackfill } from '../lib/cohort.ts'
@@ -54,7 +54,7 @@ async function gitText($: any, c: C, argv: string[], days: number): Promise<stri
 }
 export async function collect($: any, c: C, days: number, limit: number, sources?: readonly Source[]): Promise<Built> {
   const ledger = await loadLedger($, c)
-  const has = (x: Source) => !sources || sources.includes(x)   // a source not listed is never read (no session files, no git call)
+  const has = (x: Source) => (sources ?? DEFAULT_SOURCES).includes(x)   // a source not listed is never read (no session files, no git call)
   return buildItems({ projectId: c.projectId, sessions: has('session') ? await readSessions($, c) : [], gitLog: has('git') ? await gitText($, c, GIT_LOG_ARGV, days) : '',
     mergeLog: has('merge') ? await gitText($, c, GIT_MERGES_ARGV, days) : '', limit, ledger, sources })
 }
@@ -160,7 +160,7 @@ export async function backfillPhase($: any, bound: C, o: { days: number, limit: 
     await stepBackfill([], st, d)
     return finalLines(st)
   }
-  st.args = { root: c.root, orgId: c.orgId, projectId: c.projectId, days: o.days, limit: o.limit, ...(o.sources ? { sources: o.sources } : {}) }
+  st.args = { root: c.root, orgId: c.orgId, projectId: c.projectId, days: o.days, limit: o.limit, sources: o.sources ?? [...DEFAULT_SOURCES] }  // the marker carries the EFFECTIVE sources (resume rebuilds the same set)
   await $.state.set(RUN, st)
   const key = keyOf(st)
   memo.set(key, built); alive.add(key)
