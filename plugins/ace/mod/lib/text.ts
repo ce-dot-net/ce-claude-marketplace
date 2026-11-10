@@ -10,7 +10,7 @@ export const normWs = (t: unknown) => String(t ?? '').split(/\s+/).filter(Boolea
 export const MACHINE_PROMPT_PREFIXES = ['<task-notification', '<agent-message', '<cross-session-message',
   '[system notification', '<local-command', '<command-name>', '<bash-input>', '<bash-stdout>', '<bash-stderr>',
   '<system-reminder>']
-const LEADING_REMINDER = /^(?:\s*<system-reminder>[\s\S]*?<\/system-reminder>)+\s*/i
+export const LEADING_REMINDER = /^(?:\s*<system-reminder>[\s\S]*?<\/system-reminder>)+\s*/i
 export const isMachinePrompt = (t: string, extra: string[] = []) =>
   [...MACHINE_PROMPT_PREFIXES, ...extra].some(p => (t || '').toLowerCase().trimStart().startsWith(p))
 

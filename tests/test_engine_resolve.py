@@ -37,7 +37,7 @@ def _resolve(bin_dir, **env):
 def test_engine_dir_is_plain_node_no_build_no_deps():
     """§14/§23: plain Node files, no build step, no engine package.json/node_modules; the plugin package.json
     pins ONLY @ace-sdk/cli (the engine reads the core that CLI installs, never its own dependency)."""
-    for f in ("search.js", "learn.js", "resolve.js"):
+    for f in ("search.js", "learn.js", "backfill.js", "resolve.js"):
         assert (E.ENGINE / f).is_file(), "missing plugins/ace/engine/" + f
     assert not (E.ENGINE / "package.json").exists()
     assert not (E.ENGINE / "node_modules").exists()

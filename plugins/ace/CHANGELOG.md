@@ -5,6 +5,46 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.2.0] - 2026-11-10
+
+### Added
+- `/ace:ace-bootstrap --backfill-only [--sources git,merge|session|...] [--limit N] [--days-back N] [--target-project prj_x
+  --target-org org_x] [--approved]`: fix/revert commits and merged PRs (default sources `git,merge`) and, optionally, Claude
+  Code session transcripts (`--sources session`, experimental: a pilot showed much tool noise, so a noise filter drops failed
+  lookups and tasks without real work) become redacted learning traces, sent in batches of up to 20 to the server's backfill
+  endpoint. `--limit` is 1..100 (default 100). The server processes about 5 items per minute in the background; the plugin
+  polls every 60 s with a timer chain that lives as long as the Claude Code session (a closed session stops polling, a rerun
+  resumes through the ledger, duplicates are skipped). Limits: 500 items per org per UTC day (a 429 stops the run and
+  remembers the resume time); items stuck for 7 days expire.
+- It only runs if the server announces `bootstrap_backfill: true` in the search response (flag cached 7 days); otherwise
+  the preview says the server does not support it yet and nothing is sent. The preview is mandatory (button or `--approved`).
+  `--sources` and `--target-project` are refused without `--backfill-only`.
+- The plugin never holds a token: `engine/backfill.js` sends through the core client. State: HMAC-signed ledger per target
+  project under the plugin data dir; local log `backfill-log.jsonl` (responses, source per key, no content).
+- `--approved` (for terminals without a button, e.g. Moshi/herdr): runs the previewed action at once. Not allowed for
+  bind/clean/login/install; `clear`/`cleanup` need an identical waiting preview.
+- `/ace:ace-bootstrap` argument parser: `--mode`/`--thoroughness` work in both forms (positional and flags, also
+  `--flag=value`), plus `--commit-limit`, `--days-back`, `--max-files`; nothing given passes nothing (server defaults).
+- Pilot, measured by the server team on one project: git-only gave 19 patterns from 20 items with 1 of 19 noise; mixed
+  (with sessions) gave 30 patterns with 16 of 30 noise.
+
+### Changed
+- Privacy wording corrected. Backfill sends only redacted titles, file names and redacted texts (no source code, no diffs,
+  no docs); author and committer are never read; git texts are labelled "(untrusted text)". The legacy bootstrap (modes
+  hybrid/both/local-files/git-history/docs-only) still sends raw function bodies of up to 50 source files, up to 20 docs
+  and commit diffs unredacted; docs and preview now say so.
+- The markdown fallback of `ace-bootstrap.md` no longer hardcodes `hybrid`/`medium`: only given values are passed.
+- Trace queue: a `stored: null` answer (the server fix while a first send still runs) is never counted as stored; it waits
+  75 min and is not a failed attempt (behaviour of 8.1.4, unchanged, verified in `ace_trace_queue.py`).
+
+### Fixed
+- Live redaction of secrets in stdin logins written as `ECHO` or here-strings (`<<<`).
+
+### Known limits
+
+- Redaction of stdin logins (`--password-stdin` / `--with-token`) is a heuristic, not a shell parser. Not covered: a flag spelled with quotes or backslashes inside the word (`--pass"word"-stdin`), and a here-string whose command substitution spans several lines (`<<< $(` newline `echo X` newline `)`). The backfill path additionally cuts at key words and token shapes and sends only redacted titles, file names and texts.
+- The span redaction (`redactSpans` / `_redact_spans`) is slow on hostile input made of many `--with-token <<< "` lines (about 40 s for 200 KB); it predates 8.2.0 and is tracked for a later release.
+
 ## [8.1.4] - 2026-11-08
 
 ### Fixed

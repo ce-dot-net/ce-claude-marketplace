@@ -768,6 +768,182 @@
    "printf [redacted] | gh auth login --with-token"
   ],
   [
+   "ECHO hunter2 | podman login --password-stdin r.io",
+   "ECHO [redacted] | podman login --password-stdin [redacted]"
+  ],
+  [
+   "Printf hunter2 | gh auth login --WITH-TOKEN",
+   "Printf [redacted] | gh auth login --WITH-TOKEN"
+  ],
+  [
+   "docker login --password-stdin <<< hunter2",
+   "docker login --password-stdin [redacted]"
+  ],
+  [
+   "gh auth login --with-token <<< ghp_x",
+   "gh auth login --with-token [redacted]"
+  ],
+  [
+   "gh auth login --with-token <<< \"$TOKEN-literal\" && echo ok",
+   "gh auth login --with-token [redacted]"
+  ],
+  [
+   "docker login --password-stdin <<< 'a b c'",
+   "docker login --password-stdin [redacted]"
+  ],
+  [
+   "docker login <<< hunter2 --password-stdin",
+   "docker login <<< [redacted] --password-stdin"
+  ],
+  [
+   "docker login --password-stdin <<EOF\nhunter2\nEOF\nls",
+   "docker login --password-stdin [redacted]\n[redacted]\nEOF\nls"
+  ],
+  [
+   "gh auth login --with-token <<-'END'\nghp_x\nEND",
+   "gh auth login --with-token [redacted]\n[redacted]\nEND"
+  ],
+  [
+   "echo hello | grep x",
+   "echo hello | grep x"
+  ],
+  [
+   "echo \"login docs\" | wc",
+   "echo \"login docs\" | wc"
+  ],
+  [
+   "docker login",
+   "docker login"
+  ],
+  [
+   "docker login <<< hunter2",
+   "docker login <<< hunter2"
+  ],
+  [
+   "cat <<EOF\nhi\nEOF",
+   "cat <<EOF\nhi\nEOF"
+  ],
+  [
+   "docker login <<< \"a b\" --password-stdin",
+   "docker login <<< [redacted] --password-stdin"
+  ],
+  [
+   "docker login <<<\"a\"'b' --with-token x",
+   "docker login <<<[redacted] --with-token [redacted]"
+  ],
+  [
+   "gh auth login <<<$'a\\'b c' --with-token",
+   "gh auth login <<<[redacted] --with-token"
+  ],
+  [
+   "docker login <<< a\\ b --password-stdin",
+   "docker login <<< [redacted] --password-stdin"
+  ],
+  [
+   "docker login <<< hunter2 | tee --password-stdin",
+   "docker login <<< [redacted] | tee --password-stdin"
+  ],
+  [
+   "docker login <<< \"abc --password-stdin",
+   "docker login <<< [redacted]"
+  ],
+  [
+   "docker login <<< hunter2; echo x --password-stdin",
+   "docker login <<< [redacted]; echo x --password-stdin"
+  ],
+  [
+   "docker login <<< \"a b\"",
+   "docker login <<< \"a b\""
+  ],
+  [
+   "cat <<< hello | grep x",
+   "cat <<< hello | grep x"
+  ],
+  [
+   "docker login <<EOF --password-stdin\nhunter2\nEOF\nls",
+   "docker login <<EOF --password-stdin\n[redacted]\nEOF\nls"
+  ],
+  [
+   "docker login --password-stdin <<-EOF\n\t\thunter2\n\tEOF\nls",
+   "docker login --password-stdin [redacted]\n[redacted]\n\tEOF\nls"
+  ],
+  [
+   "docker login --password-stdin <<'EOF'\nhunter2\nEOF",
+   "docker login --password-stdin [redacted]\n[redacted]\nEOF"
+  ],
+  [
+   "docker login --password-stdin <<\"EOF\"\nhunter2\nEOF",
+   "docker login --password-stdin [redacted]\n[redacted]\nEOF"
+  ],
+  [
+   "docker login --password-stdin <<\\EOF\nhunter2\nEOF",
+   "docker login --password-stdin [redacted]\n[redacted]\nEOF"
+  ],
+  [
+   "docker login --password-stdin <<EOF\nhunter2\neof\nmore\nEOF\nls",
+   "docker login --password-stdin [redacted]\n[redacted]\nEOF\nls"
+  ],
+  [
+   "docker login --password-stdin <<EOF\nhunter2\n\tEOF\nls",
+   "docker login --password-stdin [redacted]\n[redacted]"
+  ],
+  [
+   "gh auth login --with-token <<EOF\nghp_x\nnext cmd",
+   "gh auth login --with-token [redacted]\n[redacted]"
+  ],
+  [
+   "docker login --password-stdin <<\nhunter2\nls",
+   "docker login --password-stdin [redacted]\n[redacted]"
+  ],
+  [
+   "docker login \\\n  --password-stdin <<< hunter2",
+   "docker login \\\n  --password-stdin [redacted]"
+  ],
+  [
+   "docker login --password-stdin \\\n  <<EOF\nhunter2\nEOF\nls",
+   "docker login --password-stdin [redacted]\n  <<EOF\n[redacted]\nEOF\nls"
+  ],
+  [
+   "docker login <<< \\\nhunter2 \\\n  --password-stdin",
+   "docker login <<< \\\n[redacted] \\\n  --password-stdin"
+  ],
+  [
+   "docker login <<< $(cat f) --password-stdin",
+   "docker login <<< [redacted]"
+  ],
+  [
+   "docker login <<< `cat f` --password-stdin",
+   "docker login <<< [redacted]"
+  ],
+  [
+   "docker login <<< ${TOK:-x} --password-stdin",
+   "docker login <<< [redacted]"
+  ],
+  [
+   "docker login <<< \"abc\ndef\" --password-stdin\nls",
+   "docker login <<< [redacted] --password-stdin\nls"
+  ],
+  [
+   "docker login <<< 'abc\ndef\nghi' --with-token x\nls",
+   "docker login <<< [redacted] --with-token [redacted]\nls"
+  ],
+  [
+   "docker login <<< \"abc\ndef\nls --password-stdin",
+   "docker login <<< [redacted]"
+  ],
+  [
+   "docker login <<< \"abc\ndef\"\nls",
+   "docker login <<< \"abc\ndef\"\nls"
+  ],
+  [
+   "docker login <<< $(cat f)\nls",
+   "docker login <<< $(cat f)\nls"
+  ],
+  [
+   "docker login \\\n  -u me\nls",
+   "docker login \\\n  -u me\nls"
+  ],
+  [
    "openssl genrsa -out key.pem 2048 && ssh-keygen -l -f k",
    "openssl genrsa -out key.pem 2048 && ssh-keygen -l -f k"
   ]

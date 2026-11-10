@@ -2,7 +2,7 @@
 
 **Agentic Context Engineering** - Self-improving Claude Code plugin using automatic pattern learning.
 
-## 8.1.4 (unreleased): no silent trace loss
+## 8.1.4: no silent trace loss
 
 A learned trace that could not be sent is no longer lost without a trace of its own. When the server did not store
 it (or, with the engine's stable `Idempotency-Key`, might not have), it is kept in a private, signed queue under the
@@ -108,7 +108,11 @@ Commit `.ace/config.json`: every clone, worktree and subfolder is then bound. De
 /ace-bootstrap
 ```
 
-Analyzes your codebase to create initial patterns.
+Analyzes your codebase to create initial patterns. The legacy modes send raw function bodies (up to 50 source files), docs and
+commit diffs unredacted; the preview says so. For a narrow, redacted path (8.2.0) use
+`/ace:ace-bootstrap --backfill-only`: fix/revert commits and merged PRs become redacted learning traces (only titles, file
+names and redacted texts leave the machine), sent when the server announces `bootstrap_backfill`. Details:
+`commands/ace-bootstrap.md`.
 
 ### 5. Start Coding!
 
@@ -141,7 +145,7 @@ confirm button. Elsewhere the markdown fallback runs.
 | `/ace:ace-clear` | Clear the playbook (preview + confirm) |
 | `/ace:ace-delta <op> <json>` | Add/update/remove patterns (preview + confirm) |
 | `/ace:ace-learn <lesson>` | Send one lesson (preview + confirm) |
-| `/ace:ace-bootstrap [mode] [level]` | Build the playbook from the codebase (preview + confirm) |
+| `/ace:ace-bootstrap [mode] [level]` or `--mode X --thoroughness Y` or `--backfill-only [--sources git,merge\|session] [--limit N] [--days-back N] [--target-project prj_x --target-org org_x] [--approved]` | Build the playbook from the codebase (legacy, sends raw code) or backfill redacted traces from fix/revert commits and merged PRs: preview + confirm (or `--approved`) |
 | `/ace:ace-tune [show \| key=value ...]` | Show or change server settings (writes: preview + confirm) |
 | `/ace:ace-configure [org_ prj_]` | Bind the repo: name-matched suggestion, `.gitignore` diff, confirm |
 | `/ace:ace-login` | Login state; the device login starts on the button press |
@@ -305,7 +309,7 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Version**: v8.1.4
+**Version**: v8.2.0
 **Maintainer**: CE.NET Team
 **Requires**: Claude Code >= 2.1.311, ace-cli 4.4.2 pinned in package.json (@ace-sdk/core >= 3.8.2; installed with the plugin; a global ace-cli >= the pin is an untested fallback), Python >= 3.10 for the fallback hooks (Ubuntu 22.04+, Debian 12+, Homebrew/pyenv; the macOS system 3.9 is not enough, the mod chain is unaffected). Windows not supported (WSL2 works).
 **Architecture**: mod + Python hooks + CLI/engine (no MCP)

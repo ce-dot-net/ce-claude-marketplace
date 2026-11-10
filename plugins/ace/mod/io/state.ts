@@ -2,7 +2,7 @@
 // patterns-used / mod-tools / pending / deferral files (queued read-merge-write), cohort env and server switches.
 import type { EventName, Hook } from 'claude-code'
 import { readJson, readText, rm, writePrivate } from './fs.ts'
-import { CLIENT_POLICY_FILE, FEEDBACK_DOWNVOTE_FILE, RENDER_FULL_PCT_FILE, serverDownvote, serverFullPct, storedDownvote, storedFullPct, validClientPolicy } from '../lib/cohort.ts'
+import { BACKFILL_FLAG_FILE, serverBackfill, CLIENT_POLICY_FILE, FEEDBACK_DOWNVOTE_FILE, RENDER_FULL_PCT_FILE, serverDownvote, serverFullPct, storedDownvote, storedFullPct, validClientPolicy } from '../lib/cohort.ts'
 import { relLog } from './log.ts'
 import { REJECTION_PREV_MAX_AGE_S, type ToolRec } from '../lib/evidence.ts'
 import { num, pyDumps } from '../lib/pyjson.ts'
@@ -171,6 +171,8 @@ export async function storeFullPct($: any, s: Sess, resp: any) {
   const pct = serverFullPct(resp), down = serverDownvote(resp), at = Math.floor(await $.clock.now() / 1000)
   try { if (pct !== undefined) await writePrivate($, `${s.root}/${RENDER_FULL_PCT_FILE}`, JSON.stringify({ pct, at })) } catch { /* keep the old value */ }
   try { if (down !== undefined) await writePrivate($, `${s.root}/${FEEDBACK_DOWNVOTE_FILE}`, JSON.stringify({ on: down, at })) } catch { /* keep the old value */ }
+  const bf = serverBackfill(resp)
+  try { if (bf !== undefined) await writePrivate($, `${s.root}/${BACKFILL_FLAG_FILE}`, JSON.stringify({ on: bf, at })) } catch { /* keep the old value */ }
   if (resp && typeof resp === 'object' && 'client_policy' in resp) {  // 8.1.4 (dormant): invalid -> dropped, reason logged
     const v = validClientPolicy(resp.client_policy)
     try {
