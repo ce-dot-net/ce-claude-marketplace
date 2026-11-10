@@ -1,6 +1,7 @@
 // The one command table (8.1.0). Every /ace:ace-<name> markdown command is answered here, model-free, wherever
 // mods run (the markdown stays the fallback where they do not); `/ace` is the mod's own overview.
-import { type Cmd, type Kit, kitCli, unboundLine, cap } from './kit.ts'
+import { type Cmd, type Kit, approveOrHint, kitCli, unboundLine, cap } from './kit.ts'
+import { stripApproved } from '../lib/approved.ts'
 import { localState, problemLine } from '../context/index.ts'
 import { type Load, resolveContextOnce } from '../io/state.ts'
 import { search, searchCmd } from './search.ts'
@@ -47,8 +48,10 @@ export async function runCommand($: any, L: Load, cmd: Cmd, args: string): Promi
   const c = await resolveContextOnce($, L, await $.session.root())
   if (cmd.bound && !c.bound) return unboundLine(c)
   if (cmd.bound && localState(c)) return unboundLine(c)
-  const k: Kit = { c, args: args ?? '', cli: kitCli($, c) }
-  try { return cap(await dispatch($, cmd.name, k)) } catch (err) { return `ACE ▼ ${cmd.name} failed: ${String(err).slice(0, 300)}` }
+  const a = stripApproved(args ?? '')  // 8.2.0: the standalone token never reaches a command
+  const k: Kit = { c, args: a.args, cli: kitCli($, c), approved: a.approved }
+  const before = ((await $.state.get({ plugin: 'ace', key: 'pending' })) as any).value
+  try { return cap(await approveOrHint($, k, cmd, before, await dispatch($, cmd.name, k))) } catch (err) { return `ACE ▼ ${cmd.name} failed: ${String(err).slice(0, 300)}` }
 }
 
 // A switch, not a table of functions: `$` reaches only function declarations (the mods loader's rule).

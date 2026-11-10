@@ -1,6 +1,6 @@
 // Shared harness of the mod's `claude plugin test` suite: the in-memory engine (host) and the helpers the
 // area files share. Not a *.test.ts file, so the kit runs no test from it.
-import { expect, test } from 'claude-code/testing'
+import { expect, test, mock } from 'claude-code/testing'
 import S100 from './fixtures/search_100.ts'
 import S8 from './fixtures/search_8.ts'
 import SEDGE from './fixtures/search_edge.ts'
@@ -51,7 +51,10 @@ export type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; 
   selfEval?: boolean; model?: (req: any) => any; compact?: (files: Map<string, string>) => any
   cli?: (args: string[], stdin?: string) => SearchAnswer | undefined; noSettings?: boolean; ignored?: boolean; root?: string; cwd?: string; noPython?: boolean
   installer?: (args: string[]) => { state: string, detail?: string }  // ace_cli_installer.py answers (8.1.1)
+  git?: (argv: string[]) => string | undefined  // 8.2.0: git answers (full argv); undefined = the default stub
   realpaths?: Record<string, string>  // REALPATH_SH answers (a symlinked path); default: the path as given
+  backfill?: (cmd: string, argv: string[], stdin?: string) => { exit?: number, status?: number, body?: any } | undefined  // 8.2.0: engine/backfill.js answers
+  mockClock?: boolean  // 8.2.0: $.clock timers held on mock.clock (h.clock.advance moves them); clock.now follows it
   claimed?: boolean }  // 8.1.4: the detached learn child already claimed the trace (the parent's `mv` finds nothing)
 export type Run = { argv: string[]; stdin?: string; env?: Record<string, string>; timeoutMs?: number; files: Set<string> }
 
@@ -64,7 +67,8 @@ export function host(on: any, o: Opts = {}) {
   if (!o.noSettings) put(`${CWD}/.claude/settings.json`, JSON.stringify({ env: { ACE_PROJECT_ID: PRJ, ACE_ORG_ID: 'org_t' } }))
   for (const [k, v] of Object.entries(o.files ?? {})) put(k, v)
   if (!o.noClassic) put(`${SDIR}/mod-classic`, String(now))  // classic.* hooks fire (no managed-settings guard)
-  const debug: string[] = [], registered: string[] = [], runs: Run[] = [], logs: string[] = [], statuses: (string | undefined)[] = [], envAsked: string[] = [], envSet: [string, string | undefined][] = []
+  const reads: string[] = []   // every fs.read / fs.list path (tests assert what was never touched)
+  const debug: string[] = [], registered: string[] = [], runs: Run[] = [], logs: string[] = [], statuses: (string | undefined)[] = [], toasts: string[] = [], envAsked: string[] = [], envSet: [string, string | undefined][] = []
   // §31 default is ACE_RENDER_FULL_PCT=50 (50/50 split); this suite pins the full arm unless defaultArm (its own tests below)
   // item D: the Haiku self-eval is off in this suite unless selfEval (its own tests below): learns stay synchronous
   const env: Record<string, string> = { HOME, ...(o.defaultArm ? {} : { ACE_RENDER_FULL_PCT: '100' }), ...(o.selfEval ? {} : { ACE_SELF_EVAL: '0' }), ...(o.env ?? {}) }
@@ -82,11 +86,18 @@ export function host(on: any, o: Opts = {}) {
   on('session.root', () => ({ value: o.root ?? CWD }))
   on('env.get', (_$: any, e: any) => { envAsked.push(e.name); return { value: env[e.name] } })
   on('env.set', (_$: any, e: any) => { if (e.value === undefined) delete env[e.name]; else env[e.name] = e.value; envSet.push([e.name, e.value]); return { value: {} } })
-  on('clock.now', () => ({ value: now }))
+  const clk = o.mockClock ? mock.clock(on, { now: T0 }) : undefined  // timers ($.clock.after) wait until the test advances it
+  if (!clk) on('clock.now', () => ({ value: now }))
+  // 8.2.0: with the mock clock the backfill run marker ($.state ace/backfill-run) is held HERE, so a test can seed and read it (the test's `$` has no state)
+  let marker: any = null, markerV = 0
+  if (clk) {
+    on('state.get', { plugin: 'ace', key: 'backfill-run' } as any, () => ({ value: { value: marker, version: markerV } }) as any)
+    on('state.set', { plugin: 'ace', key: 'backfill-run' } as any, (_$: any, e: any) => { marker = e.value; markerV++; return { value: { isSet: true, version: markerV } } as any })
+  }
   on('fs.exists', (_$: any, e: any) => ({ value: files.has(e.path) || [...files.keys()].some(k => k.startsWith(e.path + '/')) }))
-  on('fs.read', (_$: any, e: any) => { if (!files.has(e.path)) throw new Error('ENOENT: ' + e.path); return { value: files.get(e.path) } })
+  on('fs.read', (_$: any, e: any) => { reads.push(e.path); if (!files.has(e.path)) throw new Error('ENOENT: ' + e.path); return { value: files.get(e.path) } })
   on('fs.write', (_$: any, e: any) => { put(e.path, e.text); return { value: undefined } })
-  on('fs.list', (_$: any, e: any) => ({ value: [...files.keys()].filter(k => k.startsWith(e.path + '/') && !k.slice(e.path.length + 1).includes('/'))
+  on('fs.list', (_$: any, e: any) => (reads.push(e.path), { value: [...files.keys()].filter(k => k.startsWith(e.path + '/') && !k.slice(e.path.length + 1).includes('/'))
     .map(k => ({ name: k.slice(e.path.length + 1), kind: 'file', size: files.get(k)!.length, mtimeMs: mtime.get(k), isLink: false }))
     .concat((o.links ?? []).filter(l => l.slice(0, l.lastIndexOf('/')) === e.path).map(l => ({ name: l.slice(l.lastIndexOf('/') + 1), kind: 'file', size: 0, mtimeMs: now, isLink: true }))) }))
   on('fs.stat', (_$: any, e: any) => {
@@ -110,6 +121,12 @@ export function host(on: any, o: Opts = {}) {
       if (a.killed) throw new Error('ace: $.process.run(ace-cli) aborted: still running after timeoutMs')
       return res(a.exitCode ?? 0, a.stdout ?? '', a.stderr ?? '')
     }
+    if (o.backfill && argv[0] === 'node' && argv[1]?.endsWith('/engine/backfill.js')) {
+      const a = o.backfill(argv[2], argv, init.stdin) ?? { status: 200, body: null }
+      if (a.exit) return res(a.exit, '', 'x')
+      return res(0, JSON.stringify({ status: a.status, body: a.body }) + '\n')
+    }
+    if (argv[0] === 'sleep') { now += Number(argv[1]) * 1000; return res(0, '') }
     if (o.cli && cliOf(argv)) { const a = o.cli(cliOf(argv)!, init.stdin); if (a) { now += a.advanceMs ?? 0; if (a.killed) throw new Error('ace: $.process.run aborted: still running after timeoutMs'); return res(a.exitCode ?? 0, a.stdout ?? '', a.stderr ?? '') } }
     if (o.installer && argv.some(a => a.endsWith('/ace_cli_installer.py'))) return res(0, JSON.stringify(o.installer(argv.slice(argv.findIndex(a => a.endsWith('/ace_cli_installer.py')) + 1))) + '\n')
     if (argv[0].endsWith('/scripts/ace-python')) return o.noPython ? res(1, '') : res(0, '/usr/bin/python3.13\n')
@@ -117,6 +134,7 @@ export function host(on: any, o: Opts = {}) {
     if (argv[0] === '/bin/sh' && argv[2] === REPO_WRITE_SH) { const t = `${argv[4]}/${argv[5]}`; if ((o.links ?? []).some(l => t === l || t.startsWith(l + '/'))) return res(3, ''); put(t, init.stdin ?? ''); if (argv[5] === '.gitignore') put(`${argv[4]}/.gitignore-fixed`, ''); return res(0, '') }
     if (argv[0] === '/bin/sh' && argv[2] === REMOVE_SHADOW_SH) { if ((o.links ?? []).some(l => argv[4] === l || argv[4].startsWith(l + '/'))) return res(3, ''); if (!files.has(argv[4])) return res(5, ''); files.delete(argv[4]); return res(0, '') }  // real sh: tests/test_mod_repo_write_sh.py
     if (argv[0] === '/bin/sh' && argv[2] === PRIVATE_WRITE_SH) { if (o.beforeWrite) return Promise.resolve(o.beforeWrite(argv[4])).then(() => { put(argv[4], init.stdin ?? ''); return res(0, '') }); put(argv[4], init.stdin ?? ''); return res(0, '') }  // umask 077 + rename
+    if (o.git && (argv[0] === 'git' || argv[0].endsWith('/git'))) { const a = o.git(argv); if (a !== undefined) return res(0, a) }  // 8.2.0: answers for the bootstrap facts (throws = a spawn failure)
     if ((argv[0] === 'git' || argv[0].endsWith('/git')) && argv.includes('check-ignore')) return res(o.ignored && !files.has(`${argv[2]}/.gitignore-fixed`) ? 0 : 1, '')
     if ((argv[0] === 'git' || argv[0].endsWith('/git')) && argv.includes('--error-unmatch')) return res(1, '')
     if (argv[0] === 'git' || argv[0].endsWith('/git')) return res(0, git(argv))
@@ -132,7 +150,7 @@ export function host(on: any, o: Opts = {}) {
   })
   on('ui.log', (_$: any, e: any) => { if (e.to !== 'debug') logs.push(e.text); else debug.push(e.text); return { value: undefined } })
   on('ui.status', (_$: any, e: any) => { statuses.push(e.text); return { value: undefined } })
-  on('ui.toast', () => ({ value: undefined }))
+  on('ui.toast', (_$: any, e: any) => { toasts.push(e.text); return { value: undefined } })
   on('prompt.submit', (_$: any, e: any) => ({ text: e.text, context: e.context }))
   on('agent.spawn', async (_$: any, e: any) => {
     const agentId = e.resume?.agentId ?? `agent-${++spawnN}`
@@ -168,7 +186,7 @@ export function host(on: any, o: Opts = {}) {
   const learnArgv = (r: Run) => r.argv.slice(r.argv.indexOf('ace-cli'))
   const flag = (argv: string[], f: string) => { const i = argv.indexOf(f); return i < 0 ? undefined : argv[i + 1] }
   const trace = (r: Run) => JSON.parse(files.get(flag(learnArgv(r), '--transcript')!)!)
-  return { files, mtime, runs, logs, statuses, envAsked, envSet, env, registered, debug,
+  return { files, mtime, reads, runs, logs, statuses, toasts, clock: clk!, marker: () => marker, setMarker: (v: any) => { marker = v; markerV++ }, envAsked, envSet, env, registered, debug,
     band: () => { const l = [...debug].reverse().find(x => x.startsWith('ace band ')); return l ? JSON.parse(l.slice(9)) : null },
     pending: () => { const l = [...debug].reverse().find(x => x.startsWith('ace pending ')); return l ? JSON.parse(l.slice(12)) : null }, searches, learns, rows, state, pin, learnArgv, flag, trace, modelCalls,
     advance: (ms: number) => { now += ms }, now: () => now, put }

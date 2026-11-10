@@ -79,7 +79,7 @@ function loadPublic(coreDir) {
   }
 }
 
-function resolve() {
+function resolve(extra = []) {
   const out = { ok: false, reason: 'no_cli', cli_path: findCli(), core_dir: findPluginLocalCore(), core_version: null, min_core: MIN_CORE };
   if (!out.core_dir) {
     if (!out.cli_path) return out;
@@ -103,6 +103,8 @@ function resolve() {
     const usable = typeof createContext === 'function'
       && ['searchPatterns', 'storeExecutionTrace', 'getConfig'].every((m) => typeof proto[m] === 'function');
     if (!usable) { out.reason = 'export_missing'; return out; }
+    // 8.2.0: backfill.js also needs client.request (learn.js/search.js do not: their gate is unchanged)
+    if (!extra.every((m) => typeof proto[m] === 'function')) { out.reason = extra[0] + '_missing'; return out; }
     out.AceClient = AceClient;
     out.createContext = createContext;
   } catch (_) {
@@ -115,8 +117,8 @@ function resolve() {
 }
 
 // For search.js / learn.js: the core modules, or exit 3 before anything was sent.
-function loadCoreOrExit() {
-  const core = resolve();
+function loadCoreOrExit(extra = []) {
+  const core = resolve(extra);
   if (!core.ok) {
     process.stderr.write('gate: ' + core.reason + '\n');
     process.exit(3);

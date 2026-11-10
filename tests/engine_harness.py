@@ -96,7 +96,17 @@ class AceClient {
     }
     return RESP;
   }
-  async request(endpoint) { log({ op: 'raw', endpoint }); return { ...RESP, feedback_downvote: false, render_full_pct: 9, client_policy: { min_plugin_version: '8.1.0' } }; }
+  async request(endpoint, method, body) {
+    if (typeof endpoint === 'string' && endpoint.startsWith('/traces/backfill')) {  // like the core: plain fetchFn, throws on non-2xx
+      log({ op: 'backfill', endpoint, method, body });
+      const r = await this.opts.fetchFn('http://127.0.0.1:1' + endpoint, { method, body: body ? JSON.stringify(body) : undefined,
+        headers: { Authorization: 'Bearer ' + this.ctx.apiToken, 'Content-Type': 'application/json' } });
+      const text = await r.text();
+      let d; try { d = JSON.parse(text); } catch (_) { d = { message: text }; }
+      if (!r.ok) throw new Error('Server error (' + r.status + '): ' + (d.message || text));
+      return d;
+    }
+    log({ op: 'raw', endpoint }); return { ...RESP, feedback_downvote: false, render_full_pct: 9, client_policy: { min_plugin_version: '8.1.0' } }; }
   async storeExecutionTrace(t, o) {
     log({ op: 'learn', trace: t, opts: o || null });
     if (mode() === 'hang') await new Promise(() => setInterval(() => {}, 1000));
@@ -109,6 +119,7 @@ class AceClient {
   async storeExecutionTraceStream(t) { log({ op: 'learn_stream', trace: t }); return { analysis_performed: true }; }
   invalidateCache() {}
 }
+if (process.env.ACE_FAKE_CORE_NO_REQUEST) delete AceClient.prototype.request;
 module.exports = %(exports)s;
 """
 
