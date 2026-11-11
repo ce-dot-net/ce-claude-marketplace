@@ -66,6 +66,9 @@ docs/technical/ARCHITECTURE.md "Task outcome (8.1.3)".
   `applied_log_ids` only for patterns with evidence of use (at most 20): ids a Haiku review names (mod chain,
   interactive sessions), or patterns whose distinctive tokens or id appear in the task's tool inputs.
   `playbook_used` lists everything injected.
+- **What each search carries (8.2.3, mod chain, engine path only):** `interactive` and `human_prompt_count` in the
+  `POST /patterns/search` body, same source and rules as the trace fields above (each only when known, `false`/`0`
+  kept); the main search counts the current prompt. The ace-cli fallback and the Python chain send neither.
 - **CLI pin.** Claude Code installs the `@ace-sdk/cli` version pinned in `package.json` into the plugin directory. A
   global `ace-cli` at or above the pin is used only as a fallback and `/ace:ace-doctor` marks it untested. Requests
   through the in-process engine (`@ace-sdk/core`) and through the pinned `ace-cli` (4.4.2, via `ACE_CLIENT_ID`) both say
