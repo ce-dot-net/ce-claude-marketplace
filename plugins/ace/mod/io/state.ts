@@ -102,6 +102,16 @@ export async function readOrigin($: any, s: Sess): Promise<{ promptOrigin?: stri
   const o = await readJson($, originFile(s))
   return typeof o?.origin === 'string' ? { promptOrigin: o.origin, humanPromptCount: num(o.humanPrompts) ?? 0 } : {}
 }
+// 8.2.3: the same two signals for the POST /patterns/search body (server: headless = interactive===false AND count 0/null).
+// Each only when known, never defaulted: a failed origin read leaves the count out, it never turns into 0.
+export type SearchOrigin = { interactive?: boolean; human_prompt_count?: number }
+export async function searchOrigin($: any, L: Load, s: Sess): Promise<SearchOrigin> {
+  const o: SearchOrigin = {}
+  if (typeof L.interactive === 'boolean') o.interactive = L.interactive
+  const n = (await readOrigin($, s).catch(() => ({} as { humanPromptCount?: number }))).humanPromptCount
+  if (n !== undefined) o.human_prompt_count = n
+  return o
+}
 export const stateFile = (s: Sess, key: string) => `${s.sdir}/patterns-used-${safe(key)}.json`
 export async function disabled($: any, s: Sess) {
   return await $.fs.exists(`${s.sdir}/disabled.flag`) || await $.fs.exists(`${s.pdir}/disabled.flag`)
