@@ -79,7 +79,9 @@ export type Load = {
   handback: Map<string, string>                 // agentId -> last SubagentHandback message (§16 P1)
   claims: Set<string>                           // ponytail: in-process; the marker silences the Python hook, so no second process races this one
   queues: Map<string, Promise<unknown>>         // per state file: parallel hooks read-merge-write in turn
-  interactive: boolean                          // item 1a: session.start isInteractive (false: -p / SDK, no Haiku wait)
+  interactive: boolean | undefined              // item 1a: session.start isInteractive (false: -p / SDK, no Haiku wait); undefined = unknown
+  promptOrigin: string | undefined              // 8.2.2: the first prompt.submit's origin.kind this load ('unclassified' without one)
+  humanPrompts: number                          // 8.2.2: composer + bridge prompts this load (a reload restarts it: a lower bound)
   pendingLearns: Set<{ ctl: AbortController; flush: () => Promise<boolean> }>  // item 1b: self-evals session.end must not lose
 }
 export async function ensure($: any, L: Load): Promise<Sess | null> {
@@ -212,5 +214,5 @@ export function newLoad(): Load {
     turnAnchor: new Map(), tools: new Map(), spawnPrompts: new Map(), placeholders: new Set(), late: new Map(), agentTypes: new Map(),
     earlyStart: new Map(), agentEffort: new Map(), lastClaim: new Map(), markerAt: 0, claims: new Set(), queues: new Map(),
     stopDefer: null, deferred: undefined, handback: new Map(), reuseUsed: new Set(), compacted: false, mainSeen: 0,
-    interactive: true, pendingLearns: new Set() }
+    interactive: undefined, promptOrigin: undefined, humanPrompts: 0, pendingLearns: new Set() }
 }

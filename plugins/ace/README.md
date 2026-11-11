@@ -58,7 +58,10 @@ docs/technical/ARCHITECTURE.md "Task outcome (8.1.3)".
   has AOP-1333 and AOP-1334 on prod); set `ACE_RENDER_FULL_PCT=0` to stay on budget only.
 - **What each learn trace carries:** `render_variant` (`budget` or `full`, omitted when unknown; the Python chain
   always renders budget), `render_path` (`mod` or `python`, the chain that rendered; only next to `render_variant`),
-  `conversation_id` (the Claude Code session id; subagents share it), the per-task pin as `session_id`, and
+  `conversation_id` (the Claude Code session id; subagents share it), the per-task pin as `session_id`; mod chain only,
+  each omitted when unknown: `interactive` (session.start `isInteractive`), `prompt_origin` (the conversation's first
+  prompt's origin kind, max 64 chars, `unclassified` without one) and `human_prompt_count` (composer + bridge prompts
+  so far; it restarts at 0 after a mod reload or resume, so it is a lower bound); and
   `applied_log_ids` only for patterns with evidence of use (at most 20): ids a Haiku review names (mod chain,
   interactive sessions), or patterns whose distinctive tokens or id appear in the task's tool inputs.
   `playbook_used` lists everything injected.

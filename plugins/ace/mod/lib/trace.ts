@@ -576,6 +576,7 @@ export function buildTrace(a: {
   downvote?: number[]  // the previous main task's evidenced ids after a user rejection
   summaryCap?: number  // 2000 for the closing answer, 4000 for a SubagentHandback report (ace_after_task.handback_summary)
   pluginVersion?: string  // 8.1.4: the manifest x.y.z (the version in X-ACE-Client)
+  interactive?: boolean; promptOrigin?: string; humanPromptCount?: number  // 8.2.2: conversation origin, each only when known
 }) {
   const { success, failed_steps } = taskOutcome(a.tools)  // 8.1.3: end outcome + informational count
   const trace: any = {
@@ -591,6 +592,9 @@ export function buildTrace(a: {
   if (a.tsid) trace.session_id = a.tsid
   if (a.renderVariant) { trace.render_variant = a.renderVariant; trace.render_path = 'mod' } // §31: only when known; 8.2.1: which chain rendered
   if (a.conversationId) trace.conversation_id = a.conversationId.slice(0, 512) // §31: the stable CC session id
+  if (a.interactive !== undefined) trace.interactive = a.interactive  // 8.2.2: session.start isInteractive, never defaulted
+  if (a.promptOrigin !== undefined) trace.prompt_origin = a.promptOrigin.slice(0, 64)  // the first prompt's origin.kind
+  if (a.humanPromptCount !== undefined) trace.human_prompt_count = a.humanPromptCount  // composer + bridge; a lower bound
   if (a.agentId) trace.agent_id = a.agentId
   if (a.parentTaskId) trace.parent_agent_id = a.parentTaskId // §16 P3: server field name (local state keeps parent_task_id)
   if (a.retrievalId) trace.retrieval_id = a.retrievalId
