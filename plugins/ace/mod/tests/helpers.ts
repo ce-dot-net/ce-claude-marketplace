@@ -47,7 +47,7 @@ export const MIN = 60_000
 export type SearchAnswer = { exitCode?: number; stdout?: string; stderr?: string; advanceMs?: number; killed?: boolean }
 export type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; env?: Record<string, string>; files?: Record<string, string>
   engine?: (stdin?: string) => SearchAnswer; links?: string[]; noClassic?: boolean; defaultArm?: boolean
-  learnExit?: number; early?: (agentId: string) => Promise<unknown>; beforeWrite?: (path: string) => Promise<unknown>
+  learnExit?: number; early?: (agentId: string) => Promise<unknown>; beforeWrite?: (path: string) => Promise<unknown>; sid?: () => string
   selfEval?: boolean; model?: (req: any) => any; compact?: (files: Map<string, string>) => any
   cli?: (args: string[], stdin?: string) => SearchAnswer | undefined; noSettings?: boolean; ignored?: boolean; root?: string; cwd?: string; noPython?: boolean
   installer?: (args: string[]) => { state: string, detail?: string }  // ace_cli_installer.py answers (8.1.1)
@@ -81,7 +81,7 @@ export function host(on: any, o: Opts = {}) {
     : argv.includes('rev-parse') && argv.includes('HEAD') ? 'abc123\n'
     : argv.includes('--git-dir') ? '.git\n' : argv.includes('--is-inside-work-tree') ? 'true\n' : ''
 
-  on('session.id', () => ({ value: SID }))
+  on('session.id', () => ({ value: o.sid?.() ?? SID }))  // 8.2.2: sid lets a test switch conversations (/clear)
   on('session.cwd', () => ({ value: o.cwd ?? o.root ?? CWD }))
   on('session.root', () => ({ value: o.root ?? CWD }))
   on('env.get', (_$: any, e: any) => { envAsked.push(e.name); return { value: env[e.name] } })

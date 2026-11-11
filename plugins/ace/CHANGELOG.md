@@ -12,8 +12,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `interactive` (session.start `isInteractive`, never defaulted to false), `prompt_origin` (origin.kind of the
   conversation's first prompt, any kind including machine ones, max 64 chars, `unclassified` when it had none; kept for
   later traces) and `human_prompt_count` (prompts with origin `composer` or `bridge` so far; `0` is sent once any prompt
-  was seen). The count lives in the mod's in-memory state and restarts at 0 after a mod reload or resume, so it is a
-  LOWER BOUND. Subagent traces carry the conversation's values. The Python chain never sets these fields.
+  was seen). Origin and count are stored per conversation in `sessions/<cc-session-id>/prompt-origin.json` (keyed on the
+  Claude Code session id, never the task pin), so they survive a mod reload or resume and never cross a `/clear`; the
+  file goes with the session dir at session end. Known limit: a conversation that began before 8.2.2 was installed
+  reports the first prompt seen after the update as `prompt_origin`, and `human_prompt_count` is a LOWER BOUND (prompts
+  before that, or a failed write, are not counted). Subagent traces carry the conversation's values. The Python chain
+  never sets these fields.
 
 ## [8.2.1] - 2026-11-10
 

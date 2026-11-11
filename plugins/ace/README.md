@@ -61,7 +61,8 @@ docs/technical/ARCHITECTURE.md "Task outcome (8.1.3)".
   `conversation_id` (the Claude Code session id; subagents share it), the per-task pin as `session_id`; mod chain only,
   each omitted when unknown: `interactive` (session.start `isInteractive`), `prompt_origin` (the conversation's first
   prompt's origin kind, max 64 chars, `unclassified` without one) and `human_prompt_count` (composer + bridge prompts
-  so far; it restarts at 0 after a mod reload or resume, so it is a lower bound); and
+  so far, a lower bound); both stored per Claude Code session id, so they survive a reload/resume and never cross a
+  `/clear` (a conversation begun before 8.2.2 reports its first prompt after the update); and
   `applied_log_ids` only for patterns with evidence of use (at most 20): ids a Haiku review names (mod chain,
   interactive sessions), or patterns whose distinctive tokens or id appear in the task's tool inputs.
   `playbook_used` lists everything injected.
