@@ -36,6 +36,8 @@ docs/technical/ARCHITECTURE.md "Task outcome (8.1.3)".
 - **Status only on problems.** One background `ace-cli status` per session; nothing is shown when ok. On a problem:
   `ACE ▼ <state>` in the status area and one band above the prompt with exactly one action (Verbinden, Anmelden,
   Anderes wählen, Bereinigt neu schreiben, ace-cli installieren). A device login starts only on the button press.
+  `Server nicht erreichbar` heals itself (8.2.4): it is checked again in the background (15 s, 30 s, 60 s, then every
+  5 min, at most 30 times) and cleared by the first successful search; the other states stay until you act.
   The Python chain shows one line per session instead.
 - **Model-free commands.** Where mods run, every `/ace:ace-*` command is answered by the mod without the model;
   writing commands show a preview and run only after the band's confirm button. The markdown commands are the
@@ -119,7 +121,8 @@ Commit `.ace/config.json`: every clone, worktree and subfolder is then bound. De
 Analyzes your codebase to create initial patterns. The legacy modes send raw function bodies (up to 50 source files), docs and
 commit diffs unredacted; the preview says so. For a narrow, redacted path (8.2.0) use
 `/ace:ace-bootstrap --backfill-only`: fix/revert commits and merged PRs become redacted learning traces (only titles, file
-names and redacted texts leave the machine), sent when the server announces `bootstrap_backfill`. Details:
+names and redacted texts leave the machine), sent when the server announces `bootstrap_backfill`. A job poll that loses
+the network or gets 502/503/504 is retried (up to 5 times, 12.5 min in all) before the run stops (8.2.4). Details:
 `commands/ace-bootstrap.md`.
 
 ### 5. Start Coding!
@@ -317,7 +320,7 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Version**: v8.2.3
+**Version**: v8.2.4
 **Maintainer**: CE.NET Team
 **Requires**: Claude Code >= 2.1.311, ace-cli 4.4.2 pinned in package.json (@ace-sdk/core >= 3.8.2; installed with the plugin; a global ace-cli >= the pin is an untested fallback), Python >= 3.10 for the fallback hooks (Ubuntu 22.04+, Debian 12+, Homebrew/pyenv; the macOS system 3.9 is not enough, the mod chain is unaffected). Windows not supported (WSL2 works).
 **Architecture**: mod + Python hooks + CLI/engine (no MCP)

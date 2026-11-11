@@ -4,6 +4,7 @@ import { type Load, type SearchOrigin, type Sess, storeFullPct } from './state.t
 import { pyDumps, pyLoads, sanitize } from '../lib/pyjson.ts'
 import { REUSE_TTL_MS, reuseEnabled, reuseKey } from '../lib/state.ts'
 import { parseDiffStat } from '../lib/trace.ts'
+import { serverReachable } from '../handlers/context.ts'
 
 export const SEARCH_MS = 25000, DOMAIN_MS = 17000 // §11 A2: blocking budget per search, retry included
 export const PIN_SHARE = 0.6                      // of a search budget, for the pinned attempt
@@ -50,14 +51,15 @@ export async function engineSearch($: any, s: Sess, script: string, query: strin
 // (cli >= 4.3.1: request field, no sessions.db; capped at 512): `sid` defaults to the pin, domain shift passes it unpinned;
 // the engine stdin carries the same `sid` as session_id. 8.2.3: `origin` (interactive / human_prompt_count) reaches only
 // the engine's request body; the ace-cli path has no flag for it (deliberate: absent = unknown, the server learns normally).
-export async function search($: any, s: Sess, query: string, pin: string | undefined, topK: number | undefined, budgetMs: number, sid: string | undefined = pin, origin: SearchOrigin = {}) {
+// 8.2.4: `L` given, a server answer (engine or CLI, never a cache hit) clears a server_error band (handlers/context.ts).
+export async function search($: any, s: Sess, query: string, pin: string | undefined, topK: number | undefined, budgetMs: number, sid: string | undefined = pin, origin: SearchOrigin = {}, L?: Load) {
   const t0 = await $.clock.now()
   let engineWhy: string | undefined = 'no engine'
   const eng = await engineScript($, 'search.js')
   if (eng) {
     const e = await engineSearch($, s, eng, query, sid, topK, budgetMs, origin)  // engine never pins: session_id is the task stamp
     const ms = await $.clock.now() - t0
-    if ('resp' in e) await storeFullPct($, s, e.resp)
+    if ('resp' in e) { await storeFullPct($, s, e.resp); if (L) await serverReachable($, L).catch(() => undefined) }
     if ('resp' in e) return { resp: e.resp, error: undefined, ms, pinFailed: false, pinSkipped: undefined, pinMs: undefined, stderr: '', engine: 'lib', engineWhy: 'ok' }
     if ('timeout' in e) return { resp: null, error: 'timeout', ms, pinFailed: false, pinSkipped: undefined, pinMs: undefined, stderr: '', engine: 'lib', engineWhy: 'timeout' }
     engineWhy = 'lib failed: ' + e.why
@@ -97,7 +99,7 @@ export async function search($: any, s: Sess, query: string, pin: string | undef
   else if (r.exitCode !== 0) error = isAuthFailure(r.stderr + r.stdout) ? 'not_authenticated' : /timed? ?out/i.test(r.stderr) ? 'timeout' : 'nonzero_exit'
   else { try { resp = sanitize(pyLoads(r.stdout)) } catch { error = 'json_parse_failed' } }
   if (resp && resp.error) { error = String(resp.error); resp = null }
-  if (resp) await storeFullPct($, s, resp)
+  if (resp) { await storeFullPct($, s, resp); if (L) await serverReachable($, L).catch(() => undefined) }
   // A kill alone may be a slow server. Only a re-run that then answers in less time than the pin was given points
   // at the pin. ponytail: server latency varies, so a false 30-min backoff is possible; a lock probe would need the sqlite path.
   if (killedPin && !r.threw && r.exitCode === 0) await $.fs.write(backoffPath, '')

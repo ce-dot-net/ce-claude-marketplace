@@ -53,6 +53,7 @@ export async function publish($: any, L: Load, c: Ctx, state: State | null, retr
 }
 // The whole step. Never throws: the hooks still run on whatever binding resolved.
 export async function startContext($: any, L: Load, cwd: string) {
+  const gen = ++L.reprobeGen  // a (re)start stops an earlier re-probe chain
   try {
     const c = await resolveContextOnce($, L, cwd)
     const now = await $.clock.now()
@@ -86,9 +87,36 @@ export async function startContext($: any, L: Load, cwd: string) {
       }
       await publish($, L, c, st === 'ok' ? null : st, st === 'cli_missing' ? retry : undefined)
       await logOnce($, L, c, st)
+      if (st === 'server_error') reprobeLater($, L, c, gen, 0)  // 8.2.4: only this state is transient
       if (st === 'ok' && !installed) await installer($, ['--ensure'], 30_000)  // 8.1.2: AFTER the status/band: quiet background `npm rebuild better-sqlite3` when only the binding is missing; never a band
     })().catch(() => undefined)
   } catch { /* the hooks keep the binding they resolved */ }
+}
+// 8.2.4 self-heal of a `server_error` band (a 502/timeout at session start, e.g. a deploy restart). One $.clock.after at a
+// time (no loop, no interval): 15 s, 30 s, 60 s, then every 5 min, at most MAX_REPROBES tries (~2.3 h; a later successful
+// search still heals it). The chain stops when the band is no longer server_error, on a new startContext, at session end
+// (L.reprobeGen bumped) and with the module load (its timers go with it). A failing try is silent.
+export const REPROBE_MS = [15_000, 30_000, 60_000], REPROBE_EVERY_MS = 300_000, MAX_REPROBES = 30
+export const RECOVERED_LINE = 'ACE: Server wieder erreichbar'
+const live = (L: Load, gen: number) => gen === L.reprobeGen && L.ctxState === 'server_error'
+function reprobeLater($: any, L: Load, c: Ctx, gen: number, n: number) {
+  if (n >= MAX_REPROBES) return
+  $.clock.after(REPROBE_MS[n] ?? REPROBE_EVERY_MS, () => { void reprobe($, L, c, gen, n).catch(() => undefined) })
+}
+async function reprobe($: any, L: Load, c: Ctx, gen: number, n: number) {
+  if (!live(L, gen)) return
+  const st = await verify(c, argv => cliRun($, c as any, argv, { timeoutMs: 20_000 }))
+  if (!live(L, gen)) return  // something else decided meanwhile (a search healed it, a rebind)
+  if (st === 'server_error') return reprobeLater($, L, c, gen, n + 1)
+  await publish($, L, c, st === 'ok' ? null : st)  // another state now (e.g. expired): that one, one-shot
+  if (st === 'ok') $.ui.log(RECOVERED_LINE)
+}
+// A successful server search proves the server reachable: clear a server_error band (no extra request) and end the chain.
+export async function serverReachable($: any, L: Load) {
+  if (L.ctxState !== 'server_error' || !L.ctx) return
+  L.reprobeGen++
+  await publish($, L, L.ctx, null)
+  $.ui.log(RECOVERED_LINE)
 }
 export async function logOnce($: any, L: Load, c: Ctx, state: State) {
   if (L.ctxLogged) return
