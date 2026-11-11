@@ -73,7 +73,8 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
     const { trace, success, failed_steps } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
       tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied, usedIds: bySource, downvote,
       nowIso: await nowIso($), renderVariant: variant, conversationId: s.sessionId, effort, git, summaryCap,
-      pluginVersion: s.clientId.slice(s.clientId.lastIndexOf('/') + 1) })
+      pluginVersion: s.clientId.slice(s.clientId.lastIndexOf('/') + 1),
+      interactive: L.interactive, promptOrigin: L.promptOrigin, humanPromptCount: L.promptOrigin === undefined ? undefined : L.humanPrompts })
     const qid = uuid()  // 8.1.4: the trace queue id = the engine's Idempotency-Key = the temp file name
     const traceFile = `${s.root}/tmp/ace-trace-${qid}.json`
     await writePrivate($, traceFile, pyDumps(trace))
@@ -124,7 +125,7 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
   // Not awaited: the turn ends now; a failed or timed-out call falls back to the token evidence (H2). item 3: the
   // "learning sent" line goes out once the learn really did, with the review's parts (none at 0% or without one).
   // item 1a: non-interactive (-p, SDK): the process may exit right after this turn, so no wait; H2 only.
-  if (hook === 'Stop' && playbook.length && L.interactive && (await $.env.get('ACE_SELF_EVAL')) !== '0') {  // a rejecting call falls back too
+  if (hook === 'Stop' && playbook.length && L.interactive !== false && (await $.env.get('ACE_SELF_EVAL')) !== '0') {  // a rejecting call falls back too
     // item 1b: session.end flushes a still-pending chain with H2 ids; whichever comes first dispatches, once.
     let fired = false
     const p = { ctl: new AbortController(), flush: () => once(null) }

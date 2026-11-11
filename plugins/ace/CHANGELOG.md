@@ -5,6 +5,16 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.2.2] - Unreleased
+
+### Added
+- Mod-chain learn traces carry three optional conversation-origin fields (server contract), each omitted when unknown:
+  `interactive` (session.start `isInteractive`, never defaulted to false), `prompt_origin` (origin.kind of the
+  conversation's first prompt, any kind including machine ones, max 64 chars, `unclassified` when it had none; kept for
+  later traces) and `human_prompt_count` (prompts with origin `composer` or `bridge` so far; `0` is sent once any prompt
+  was seen). The count lives in the mod's in-memory state and restarts at 0 after a mod reload or resume, so it is a
+  LOWER BOUND. Subagent traces carry the conversation's values. The Python chain never sets these fields.
+
 ## [8.2.1] - 2026-11-10
 
 ### Added

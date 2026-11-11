@@ -322,3 +322,41 @@ test('8.1.0 audit: the execution row carries source, agent_id, task_session_id, 
   expect(typeof d.applied_log_ids_count).toBe('number')
   expect('applied_log_ids' in d).toBe(false)
 })
+
+// ---------- 8.2.2: origin fields on the learn trace (mod only) ----------
+
+test('8.2.2: prompt_origin = the FIRST prompt\'s origin.kind (machine ones too), kept; human_prompt_count counts composer/bridge only', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await submit($, '<task-notification>bg done</task-notification>', 'task-notification')  // the first prompt, a machine one
+  await submit($, HUMAN, 'sdk')
+  await submit($, HUMAN, 'bridge')
+  await mainTask($, h)  // composer
+  await done($, 'all done')
+  const t = h.trace(h.learns()[0]!)
+  expect([t.prompt_origin, t.human_prompt_count]).toEqual(['task-notification', 2])
+  expect('interactive' in t).toBe(false)  // no session.start seen: unknown, never defaulted
+})
+
+test('8.2.2: no origin -> unclassified; count 0 still sent once a prompt was seen; interactive from session.start', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await $.session.start({ cwd: CWD, surface: null, isInteractive: false } as any)
+  await $.prompt.submit({ text: HUMAN, wait: false } as any)
+  await $.turn.start({ text: HUMAN, turnId: 't1' } as any)
+  await $.tool.call({ tool: 'Edit', file_path: '/proj/x.py', old_string: 'a', new_string: 'b' } as any)
+  await $.tool.call({ tool: 'Bash', command: 'pytest -q' } as any)
+  await done($, 'all done')
+  await settle(h)
+  const t = h.trace(h.learns()[0]!)
+  expect([t.prompt_origin, t.human_prompt_count, t.interactive]).toEqual(['unclassified', 0, false])
+})
+
+test('8.2.2: a subagent trace carries the conversation\'s origin fields', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await $.session.start({ cwd: CWD, surface: null, isInteractive: true } as any)
+  await submit($)
+  await spawn($, 'review the domain shift python port for parity bugs')
+  await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+  await done($, 'reviewed', 'agent-1')
+  const t = h.trace(h.learns()[0]!)
+  expect([t.agent_id, t.interactive, t.prompt_origin, t.human_prompt_count]).toEqual(['agent-1', true, 'composer', 1])
+})

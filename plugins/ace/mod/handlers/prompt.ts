@@ -124,6 +124,10 @@ export async function onPrompt($: any, L: Load, e: any): Promise<any> {
 }
 
 export async function promptSubmit($: HookArgs<'prompt.submit'>[0], L: Load, e: HookArgs<'prompt.submit'>[1], next: HookArgs<'prompt.submit'>[2]) {
+  // 8.2.2 trace origin fields: every prompt counts (machine ones too), before any skip or error
+  const kind: string | undefined = e.origin?.kind
+  L.promptOrigin ??= kind || 'unclassified'
+  if (kind === 'composer' || kind === 'bridge') L.humanPrompts++
   if (L.compacted) {
     L.compacted = false
     try { if (L.sess && await $.fs.exists(`${L.sess.sdir}/mod-compact`)) await rm($, `${L.sess.sdir}/mod-compact`) } catch { /* stale marker ages out */ }

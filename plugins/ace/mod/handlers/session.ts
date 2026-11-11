@@ -10,7 +10,7 @@ export const LEARN_LOCK_MS = 600_000              // ace_session_end.py: learn t
 
 export async function sessionStart($: HookArgs<'session.start'>[0], L: Load, e: HookArgs<'session.start'>[1], next: HookArgs<'session.start'>[2]) {
   const r = await next(e)
-  L.interactive = e.isInteractive !== false
+  L.interactive = typeof e.isInteractive === 'boolean' ? e.isInteractive : undefined
   try {
     L.sess = await resolveSession($, e.cwd, L)
     if (L.sess) await touchMarker($, L, L.sess, await $.clock.now())
