@@ -5,7 +5,7 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [8.2.3] - Unreleased
+## [8.2.3] - 2026-11-11
 
 ### Added
 - The engine search sends two optional fields in the `POST /patterns/search` body (server contract; the server treats
