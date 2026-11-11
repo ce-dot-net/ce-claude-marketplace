@@ -30,11 +30,11 @@ const { AceClient, createContext } = loadCoreOrExit();
   if (typeof input.interactive === 'boolean') origin.interactive = input.interactive;
   if (Number.isSafeInteger(input.human_prompt_count) && input.human_prompt_count >= 0) origin.human_prompt_count = input.human_prompt_count;
   const rawRequest = typeof client.request === 'function' ? client.request.bind(client) : null;
-  if (rawRequest) client.request = async (endpoint, method, body) => {
+  if (rawRequest) client.request = async (endpoint, method, body, ...rest) => {  // rest: core's opts (signal), passed on untouched
     const isSearch = typeof endpoint === 'string' && endpoint.startsWith('/patterns/search');
     // a plain-object body only (core 3.3.x: searchPatterns builds one); any other shape is sent untouched
     if (isSearch && body && Object.getPrototypeOf(body) === Object.prototype) body = { ...body, ...origin };
-    const r = await rawRequest(endpoint, method, body);
+    const r = await rawRequest(endpoint, method, body, ...rest);
     if (isSearch && r && typeof r === 'object') {
       for (const k of ['render_full_pct', 'feedback_downvote', 'client_policy']) if (k in r) switches[k] = r[k];  // 8.1.4: client_policy (dormant)
     }
