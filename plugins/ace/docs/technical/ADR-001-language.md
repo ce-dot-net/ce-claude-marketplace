@@ -87,5 +87,9 @@ Round 2 of 8.0.0 already ships `prompt_id` as the task anchor (PreToolUse `Agent
   Both live in `sessions/<cc-session-id>/prompt-origin.json` (the conversation, never the task pin): they survive a
   reload/resume, never cross a `/clear`, and go with the session dir. Limit: a conversation begun before 8.2.2 reports
   the first prompt after the update; the count is a lower bound. Subagent traces carry the same values.
+- Since 8.2.3 the same `interactive` / `human_prompt_count` also reach the `POST /patterns/search` body (server rule:
+  headless = `interactive === false` AND count 0/null), engine path only: `engine/search.js` adds them (validated:
+  bool / non-negative integer) to the core's plain-object request body, so no SDK change. The ace-cli fallback has no
+  flag for them and sends neither (absent = unknown); the Python chain never sends them.
 - `parent_agent_id` is the server-declared name for the parent prompt id (the local state keeps `parent_task_id`).
 - `effort_level` / `effort_weight` are dropped server-side (not stored or persisted); they stay in the local relevance log only.
