@@ -3,7 +3,7 @@
 import { readJson, rm, writePrivate } from '../io/fs.ts'
 import { nowIso, relLog, searchRow } from '../io/log.ts'
 import { SEARCH_MS, search } from '../io/spawn.ts'
-import { type Load, type Sess, clearDeferred, clearTools, cohortEnv, deferredAnchor, disabled, downvoteEnabled, ensure, notePrompt, pendingFile, readState, touchMarker, updateState, uuid, type HookArgs, refreshMarker } from '../io/state.ts'
+import { type Load, type Sess, clearDeferred, clearTools, cohortEnv, deferredAnchor, disabled, downvoteEnabled, ensure, notePrompt, pendingFile, readState, searchOrigin, touchMarker, updateState, uuid, type HookArgs, refreshMarker } from '../io/state.ts'
 import { type Cohort, renderCohort } from '../lib/cohort.ts'
 import { REJECTION_PREV_MAX_AGE_S, evalStats, injectedContents, rejectionMatch } from '../lib/evidence.ts'
 import { num, pyDumps } from '../lib/pyjson.ts'
@@ -90,7 +90,7 @@ export async function onPrompt($: any, L: Load, e: any): Promise<any> {
   }
 
   const query = expandAbbreviations(text)
-  const sr = await search($, s, query, tsid, undefined, SEARCH_MS)
+  const sr = await search($, s, query, tsid, undefined, SEARCH_MS, tsid, await searchOrigin($, L, s))  // notePrompt ran first: the count includes this prompt
   if (!sr.resp) {
     await save({ tsid, userPrompt: e.text, hook: 'UserPromptSubmit' })  // nothing rendered: no label (§31 omit)
     await relLog($, s, { timestamp: await nowIso($), event: 'error', hook: 'UserPromptSubmit', location: 'mod.search', error: sr.error ?? null, stderr_sample: sr.stderr, pin_failed: sr.pinFailed || undefined, pin_ms: sr.pinMs, session_id: s.sessionId, project_id: s.project, hook_ms: await $.clock.now() - t0, source: 'mod' })

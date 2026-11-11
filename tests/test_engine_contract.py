@@ -236,6 +236,22 @@ def test_real_core_search_headers_and_session_stamp(real, tmp_path):
 
 
 @needs_real
+@pytest.mark.parametrize("extra", [{"interactive": False, "human_prompt_count": 0}, {"interactive": True, "human_prompt_count": 3},
+                                   {"interactive": True}, {}])
+def test_real_core_search_body_carries_the_headless_fields(real, tmp_path, extra):
+    """8.2.3: the real core's searchPatterns body is a plain object; the engine adds the two fields, each only when sent."""
+    bin_dir, srv, env = real
+    env["PATH"] = E.path_with(bin_dir)
+    r = subprocess.run([E.node_bin(), str(E.ENGINE / "search.js")],
+                       input=json.dumps({"query": "hook json", "org": "org_fake", "project": "prj_fake", **extra}),
+                       capture_output=True, text=True, env=env, timeout=60)
+    assert r.returncode == 0, r.stderr
+    body = [q["body"] for q in srv.requests() if q["path"].startswith("/patterns/search")][0]
+    assert {k: body[k] for k in ("interactive", "human_prompt_count") if k in body} == extra
+    assert body["pattern"]["content"] == "hook json"
+
+
+@needs_real
 def test_real_core_search_parity_with_ace_cli_on_fake_server(real, tmp_path):
     """Same server answer -> engine JSON == `ace-cli search --json` JSON (hermetic parity)."""
     bin_dir, srv, env = real

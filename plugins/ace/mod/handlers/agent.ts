@@ -3,7 +3,7 @@
 import { renderArm } from './prompt.ts'
 import { nowIso, relLog, searchRow } from '../io/log.ts'
 import { SEARCH_MS, hitResult, reuseGet, reuseStore, search } from '../io/spawn.ts'
-import { type Load, type Sess, readState, updateState, uuid, type HookArgs, disabled, ensure, refreshMarker } from '../io/state.ts'
+import { type Load, type Sess, readState, searchOrigin, updateState, uuid, type HookArgs, disabled, ensure, refreshMarker } from '../io/state.ts'
 import { injectedContents } from '../lib/evidence.ts'
 import { type StateUpdate } from '../lib/state.ts'
 import { skipReason, subagentQuery } from '../lib/text.ts'
@@ -50,7 +50,7 @@ export async function beforeSpawn($: any, L: Load, s: Sess, e: any) {
     return { out: e, state }
   }
   const cached = await reuseGet($, L, s, 'subagent', query, 'spawn:' + tsid)  // a spawn is a new agent: it has used nothing yet
-  const sr: any = cached ? hitResult(cached) : await search($, s, query, tsid, undefined, SEARCH_MS)
+  const sr: any = cached ? hitResult(cached) : await search($, s, query, tsid, undefined, SEARCH_MS, tsid, await searchOrigin($, L, s))
   if (!cached) await reuseStore($, L, s, 'subagent', query, 'spawn:' + tsid, sr.resp)
   if (!sr.resp) {
     await logSubagentError($, s, sr)

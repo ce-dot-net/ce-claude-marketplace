@@ -5,6 +5,19 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.2.3] - 2026-11-11
+
+### Added
+- The engine search sends two optional fields in the `POST /patterns/search` body (server contract; the server treats
+  a search as headless when `interactive === false` AND `human_prompt_count` is 0/null): `interactive` (bool) and
+  `human_prompt_count` (int >= 0). Same source and semantics as the 8.2.2 trace fields (session.start `isInteractive`;
+  the conversation's `prompt-origin.json`), each sent only when known and never defaulted: a failed origin read leaves
+  the count out instead of sending 0. `false` and `0` are values and reach the body (headless `-p`). The main search
+  counts the current prompt; subagent-start, late subagent and domain-shift searches carry the conversation's values.
+  `engine/search.js` validates the types (bool / non-negative integer, else dropped) and adds them to the core's
+  plain-object request body; no SDK change. Deliberate limit: the ace-cli fallback has no flag for them, so a fallback
+  search sends neither (absent = unknown, the server learns normally). The Python chain never sends them.
+
 ## [8.2.2] - 2026-11-11
 
 ### Added

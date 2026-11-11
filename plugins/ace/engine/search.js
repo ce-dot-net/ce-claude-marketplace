@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 'use strict';
-// stdin JSON {query, org, project, session_id?, top_k?} -> stdout: the `ace-cli search --json` object.
+// stdin JSON {query, org, project, session_id?, top_k?, interactive?, human_prompt_count?} -> stdout: the `ace-cli search --json` object.
 // Exit 3 = gate failed, exit 1 = runtime/server failure (error on stderr, nothing on stdout).
 // Mirrors @ace-sdk/cli dist/commands/search.js minus SessionStorage: session_id reaches the server
 // for its retrieval-log stamp, sessions.db is never opened.
@@ -24,10 +24,18 @@ const { AceClient, createContext } = loadCoreOrExit();
   // (render_full_pct, feedback_downvote): capture the raw /patterns/search body as the fallback.
   // 3.4.0+ passes them through, so the result wins and the capture is unused.
   const switches = {};
+  // 8.2.3: the headless signal for the server (headless = interactive === false AND human_prompt_count 0/null).
+  // Each only when valid, never defaulted; the core has no parameter for them, so they join its body here.
+  const origin = {};
+  if (typeof input.interactive === 'boolean') origin.interactive = input.interactive;
+  if (Number.isSafeInteger(input.human_prompt_count) && input.human_prompt_count >= 0) origin.human_prompt_count = input.human_prompt_count;
   const rawRequest = typeof client.request === 'function' ? client.request.bind(client) : null;
-  if (rawRequest) client.request = async (endpoint, method, body) => {
-    const r = await rawRequest(endpoint, method, body);
-    if (typeof endpoint === 'string' && endpoint.startsWith('/patterns/search') && r && typeof r === 'object') {
+  if (rawRequest) client.request = async (endpoint, method, body, ...rest) => {  // rest: core's opts (signal), passed on untouched
+    const isSearch = typeof endpoint === 'string' && endpoint.startsWith('/patterns/search');
+    // a plain-object body only (core 3.3.x: searchPatterns builds one); any other shape is sent untouched
+    if (isSearch && body && Object.getPrototypeOf(body) === Object.prototype) body = { ...body, ...origin };
+    const r = await rawRequest(endpoint, method, body, ...rest);
+    if (isSearch && r && typeof r === 'object') {
       for (const k of ['render_full_pct', 'feedback_downvote', 'client_policy']) if (k in r) switches[k] = r[k];  // 8.1.4: client_policy (dormant)
     }
     return r;
