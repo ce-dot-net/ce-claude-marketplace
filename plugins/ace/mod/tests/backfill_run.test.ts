@@ -1,6 +1,6 @@
 // 8.2.0 backfill orchestration with every I/O faked (post, get, sleep, now, ledger store): flow, stops, polling, ledger writes.
 import { expect, test } from 'claude-code/testing'
-import { buildItems, DEFAULT_LIMIT, DEFAULT_SOURCES, MAX_LIMIT, previewLines, runBackfill, parseLimit, parseBackfillFlags, stepBackfill, newRun, runActive, startLine, RUN_TTL_MS, type Deps } from '../lib/backfill_run.ts'
+import { buildItems, DEFAULT_LIMIT, DEFAULT_SOURCES, MAX_LIMIT, POLL_MS, POLL_RETRY_MS, previewLines, runBackfill, parseLimit, parseBackfillFlags, stepBackfill, newRun, runActive, startLine, RUN_TTL_MS, type Deps } from '../lib/backfill_run.ts'
 import { emptyLedger, add, parse, serialize, statusOf, type Ledger } from '../lib/ledger.ts'
 
 const K = (n: number) => 'bootstrap:' + n.toString(16).padStart(32, '0')
@@ -444,4 +444,73 @@ test('backfill_batch carries noise_excluded', async () => {
   f.d.sources = { [K(1)]: 'session' }; f.d.noiseExcluded = 7
   await runBackfill(all, f.d)
   expect(f.rows.filter(x => x.event === 'backfill_batch')).toMatchObject([{ event: 'backfill_batch', total: 1, noise_excluded: 7 }])
+})
+
+// ---- 8.2.4: a transient poll failure (no network, 502/503/504) is retried, bounded; the post is never repeated ----
+const NET = { exit: 1, stderr: 'fetch failed (ENOTFOUND)' }
+test('poll: ENOTFOUND then recovery: the job finishes, ONE post, the ledger holds the keys sent', async () => {
+  const f = fake({ posts: [acc('j', 1)], gets: [NET, ok(200, jobBody([K(1)]))] })
+  const r = await runBackfill(items(1), f.d)
+  expect(r.stopped).toBe(undefined)
+  expect(f.posted.length).toBe(1)
+  expect(r.report.sent).toBe(1)
+  expect(statusOf(f.ledger(), K(1))).toBe('sent')
+  expect(f.log.filter(x => x.startsWith('sleep:'))).toEqual([`sleep:${POLL_RETRY_MS[0]}`])
+})
+
+test('poll: 502, 503, 504 are retried too, with a growing wait', async () => {
+  const f = fake({ posts: [acc('j', 1)], gets: [ok(502, null), ok(503, null), ok(504, null), ok(200, jobBody([K(1)]))] })
+  const r = await runBackfill(items(1), f.d)
+  expect(r.stopped).toBe(undefined)
+  expect(f.posted.length).toBe(1)
+  expect(f.log.filter(x => x.startsWith('sleep:'))).toEqual(POLL_RETRY_MS.slice(0, 3).map(ms => `sleep:${ms}`))
+})
+
+test('poll: the retry budget is bounded (a few tries, growing, <= 15 min in all)', () => {
+  expect(POLL_RETRY_MS.length).toBeGreaterThanOrEqual(3)
+  expect(POLL_RETRY_MS.length).toBeLessThanOrEqual(6)
+  for (let i = 1; i < POLL_RETRY_MS.length; i++) expect(POLL_RETRY_MS[i]).toBeGreaterThanOrEqual(POLL_RETRY_MS[i - 1])
+  expect(POLL_RETRY_MS.reduce((a, b) => a + b, 0)).toBeLessThanOrEqual(15 * 60_000)
+})
+
+test('poll: persistent network failure stops after the bounded retries with a clear line; no re-post, ledger untouched', async () => {
+  const f = fake({ posts: [acc('j', 1)], gets: [NET] })
+  const r = await runBackfill(items(1), f.d)
+  expect(f.log.filter(x => x.startsWith('get:')).length).toBe(POLL_RETRY_MS.length + 1)
+  expect(f.posted.length).toBe(1)
+  expect(f.saves.length).toBe(0)
+  expect(statusOf(f.ledger(), K(1))).toBe(undefined)
+  expect(r.stopped).toContain('ENOTFOUND')
+  expect(r.stopped).toContain('später')
+})
+
+test('poll: the retry count starts over after a good answer (each job gets the full budget)', async () => {
+  const all = items(21)
+  const gets = [...POLL_RETRY_MS.map(() => NET), ok(200, jobBody(all.slice(0, 20).map(i => i.idempotency_key))),
+    ...POLL_RETRY_MS.map(() => NET), ok(200, jobBody([K(21)]))]
+  const f = fake({ posts: [acc('j1', 20), acc('j2', 1)] })
+  let gi = 0
+  f.d.get = async (job: string) => { f.log.push('get:' + job); return gets[gi++] }
+  const r = await runBackfill(all, f.d)
+  expect(r.stopped).toBe(undefined)
+  expect(f.posted.length).toBe(2)
+  expect(r.report.sent).toBe(21)
+})
+
+test('poll: auth answers, 429 and other engine exits still stop at once (no retry)', async () => {
+  for (const g of [ok(401, null), ok(402, null), { exit: 3 }, ok(429, { code: 'BACKFILL_DAY_LIMIT_REACHED' })]) {
+    const f = fake({ posts: [acc('j', 1)], gets: [g] })
+    const r = await runBackfill(items(1), f.d)
+    expect(f.log.filter(x => x.startsWith('get:')).length).toBe(1)
+    expect(r.stopped).toBeTruthy()
+  }
+})
+
+test('stepBackfill: a transient poll failure asks for the next step after the retry wait (waitMs); the state stays plain JSON', async () => {
+  const f = fake({ posts: [acc('j', 1)], gets: [NET, ok(200, jobBody([K(1)]))] })
+  const st = newRun(1, 0)
+  expect(await stepBackfill(items(1), st, f.d)).toEqual({ done: false, waitMs: POLL_RETRY_MS[0] })   // post, then the first poll fails
+  expect((await stepBackfill(items(1), JSON.parse(JSON.stringify(st)), f.d)).done).toBe(true)
+  expect(f.posted.length).toBe(1)
+  expect(POLL_MS).toBe(60_000)
 })
