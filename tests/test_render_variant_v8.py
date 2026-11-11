@@ -193,6 +193,23 @@ def test_render_path_omitted_with_render_variant(box):
     assert "render_variant" not in t and "render_path" not in t
 
 
+# ── 8.2.2: interactive / prompt_origin / human_prompt_count are MOD-chain only ─────────────
+
+ORIGIN_FIELDS = ("interactive", "prompt_origin", "human_prompt_count")
+
+
+def test_python_learn_trace_never_sets_origin_fields(box):
+    t = _main_learn(box, pattern_ids=IDS, retrieval_log_ids={IDS[0]: 7}, render_variant="budget")["trace"]
+    assert not any(k in t for k in ORIGIN_FIELDS)
+
+
+def test_permission_denied_trace_never_sets_origin_fields(clean_env, tmp_path):
+    from test_permission_denied_v8 import _stored
+    m = _stored(tmp_path, clean_env, "budget")
+    t = m._build_trace({"session_id": "pd-rv", "tool_name": "Bash", "tool_input": {"command": "ls"}})
+    assert not any(k in t for k in ORIGIN_FIELDS)
+
+
 def test_permission_denied_render_path(clean_env, tmp_path):
     from test_permission_denied_v8 import _stored
     m = _stored(tmp_path, clean_env, "budget")

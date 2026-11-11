@@ -117,6 +117,16 @@ test('8.2.1: render_path "mod" travels with render_variant, omitted with it', ()
   expect(['render_variant' in unknown, 'render_path' in unknown]).toEqual([false, false])
 })
 
+test('8.2.2: interactive / prompt_origin / human_prompt_count only when known; prompt_origin capped at 64', () => {
+  const a = { userPrompt: 'fix it', answer: 'done', playbookUsed: [], agentType: 'main', appliedLogIds: [], nowIso: 'x', effort: 'normal', tools: [] }
+  const known = buildTrace({ ...a, interactive: false, promptOrigin: 'composer', humanPromptCount: 0 }).trace
+  expect([known.interactive, known.prompt_origin, known.human_prompt_count]).toEqual([false, 'composer', 0])
+  const none = buildTrace(a).trace
+  expect(['interactive' in none, 'prompt_origin' in none, 'human_prompt_count' in none]).toEqual([false, false, false])
+  expect(buildTrace({ ...a, promptOrigin: 'k'.repeat(100) }).trace.prompt_origin).toBe('k'.repeat(64))
+  expect(buildTrace({ ...a, interactive: true, humanPromptCount: 3 }).trace).toMatchObject({ interactive: true, human_prompt_count: 3 })
+})
+
 test('8.1.3: stderr alone never marks a step failed; grep exit 1 is not a failed step', () => {
   expect(toolRec('Bash', { command: 'git push' }, { stdout: '', stderr: 'To github.com:o/r.git', interrupted: false, exitCode: 0 }, false, undefined, 0, 1).failed).toBe(false)
   expect(toolRec('Bash', { command: 'npm i' }, { stdout: '', stderr: 'npm warn x' }, false, undefined, 0, 1).failed).toBe(false)
