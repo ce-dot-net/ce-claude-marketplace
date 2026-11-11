@@ -2,7 +2,7 @@
 import { readText, rm, run, writePrivate, readJson } from '../io/fs.ts'
 import { logsSafe, nowIso, relLog } from '../io/log.ts'
 import { LAUNCHER_MS, aceEnv, cliHead, engineScript, gitContext, ids } from '../io/spawn.ts'
-import { type Load, type Sess, clearTools, cohortEnv, readState, stateFile, takeDownvote, takeTools, uuid, type HookArgs, classicFresh, clearDeferred, deferFile, disabled, enqueue, ensure, pendingFile, refreshMarker } from '../io/state.ts'
+import { type Load, type Sess, clearTools, cohortEnv, readState, stateFile, takeDownvote, takeTools, uuid, type HookArgs, classicFresh, clearDeferred, deferFile, disabled, enqueue, ensure, pendingFile, readOrigin, refreshMarker } from '../io/state.ts'
 import { traceVariant } from '../lib/cohort.ts'
 import { type ToolRec, appliedLogIds, parseAceReview, parseUsedIds, selfEvalPrompt, usedPatternIds } from '../lib/evidence.ts'
 import { pyDumps, pyLoads } from '../lib/pyjson.ts'
@@ -74,7 +74,7 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
       tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied, usedIds: bySource, downvote,
       nowIso: await nowIso($), renderVariant: variant, conversationId: s.sessionId, effort, git, summaryCap,
       pluginVersion: s.clientId.slice(s.clientId.lastIndexOf('/') + 1),
-      interactive: L.interactive, promptOrigin: L.promptOrigin, humanPromptCount: L.promptOrigin === undefined ? undefined : L.humanPrompts })
+      interactive: L.interactive, ...await readOrigin($, s) })
     const qid = uuid()  // 8.1.4: the trace queue id = the engine's Idempotency-Key = the temp file name
     const traceFile = `${s.root}/tmp/ace-trace-${qid}.json`
     await writePrivate($, traceFile, pyDumps(trace))

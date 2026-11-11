@@ -350,6 +350,51 @@ test('8.2.2: no origin -> unclassified; count 0 still sent once a prompt was see
   expect([t.prompt_origin, t.human_prompt_count, t.interactive]).toEqual(['unclassified', 0, false])
 })
 
+test('8.2.2: two conversations in one load (/clear) never mix origin or count', async ($, on) => {
+  let sid = SID
+  const h = host(on, { search: () => ({ stdout: S8 }), sid: () => sid, files: { [`${PDIR}/sessions/sess-2/mod-classic`]: '1800000000000' } })
+  await submit($, HUMAN, 'sdk')
+  await submit($, HUMAN, 'bridge')
+  await $.session.end({ sessionId: SID, reason: 'clear' } as any)
+  sid = 'sess-2'
+  await mainTask($, h)  // composer, the new conversation's first prompt
+  await done($, 'all done')
+  const t = h.trace(h.learns()[0]!)
+  expect([t.conversation_id, t.prompt_origin, t.human_prompt_count]).toEqual(['sess-2', 'composer', 1])
+})
+
+test('8.2.2: stored per session on disk: a reload (fresh load) keeps the first origin and adds to the count', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), files: { [`${SDIR}/prompt-origin.json`]: JSON.stringify({ origin: 'sdk', humanPrompts: 5 }) } })
+  await mainTask($, h)  // composer: never overwrites the stored first origin
+  await done($, 'all done')
+  const t = h.trace(h.learns()[0]!)
+  expect([t.prompt_origin, t.human_prompt_count]).toEqual(['sdk', 6])
+  expect(JSON.parse(h.files.get(`${SDIR}/prompt-origin.json`)!)).toEqual({ origin: 'sdk', humanPrompts: 6 })
+})
+
+test('8.2.2: keyed on the CC session id, never the task pin: two tasks share one file and the count grows', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  await done($, 'all done')
+  await submit($, HUMAN, 'bridge')
+  await $.turn.start({ text: HUMAN, turnId: 't2' } as any)
+  await $.tool.call({ tool: 'Edit', file_path: '/proj/x.py', old_string: 'b', new_string: 'c' } as any)
+  await $.tool.call({ tool: 'Bash', command: 'pytest -q' } as any)
+  await $.turn.complete({ answer: 'done again', durationMs: 5, isAborted: false, turnId: 't2', reason: 'answer' } as any)
+  const [t1, t2] = h.learns().map((l: any) => h.trace(l))
+  expect(t1.session_id).not.toBe(t2.session_id)  // two task pins
+  expect([t1.conversation_id, t2.conversation_id]).toEqual([SID, SID])
+  expect([t1.prompt_origin, t1.human_prompt_count, t2.prompt_origin, t2.human_prompt_count]).toEqual(['composer', 1, 'composer', 2])
+  expect([...h.files.keys()].filter((k: string) => k.endsWith('/prompt-origin.json'))).toEqual([`${SDIR}/prompt-origin.json`])
+})
+
+test('8.2.2: a failed origin write never breaks the prompt', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), beforeWrite: async (p: string) => { if (p.endsWith('/prompt-origin.json')) throw new Error('disk full') } })
+  const r: any = await submit($)
+  expect(h.searches().length).toBe(1)
+  expect(r.context?.[0]?.startsWith('<ace-patterns')).toBe(true)
+})
+
 test('8.2.2: a subagent trace carries the conversation\'s origin fields', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }) })
   await $.session.start({ cwd: CWD, surface: null, isInteractive: true } as any)

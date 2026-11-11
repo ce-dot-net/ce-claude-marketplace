@@ -80,14 +80,27 @@ export type Load = {
   claims: Set<string>                           // ponytail: in-process; the marker silences the Python hook, so no second process races this one
   queues: Map<string, Promise<unknown>>         // per state file: parallel hooks read-merge-write in turn
   interactive: boolean | undefined              // item 1a: session.start isInteractive (false: -p / SDK, no Haiku wait); undefined = unknown
-  promptOrigin: string | undefined              // 8.2.2: the first prompt.submit's origin.kind this load ('unclassified' without one)
-  humanPrompts: number                          // 8.2.2: composer + bridge prompts this load (a reload restarts it: a lower bound)
   pendingLearns: Set<{ ctl: AbortController; flush: () => Promise<boolean> }>  // item 1b: self-evals session.end must not lose
 }
 export async function ensure($: any, L: Load): Promise<Sess | null> {
   if (L.sess && L.sess.sessionId === await $.session.id()) return L.sess
   L.sess = await resolveSession($, await $.session.root(), L)  // the session cwd can move to a subdir; the project cannot
   return L.sess
+}
+// 8.2.2: the conversation's origin fields, on disk under the CC session dir (never the task pin): a reload or resume
+// keeps them, a /clear (new session id) starts over. Removed with the session dir at session.end.
+export const originFile = (s: Sess) => `${s.sdir}/prompt-origin.json`
+export async function notePrompt($: any, s: Sess, kind: string | undefined) {
+  try {
+    const o = await readJson($, originFile(s))
+    const origin = typeof o?.origin === 'string' ? o.origin : kind || 'unclassified'  // the first ever seen, never overwritten
+    const human = (num(o?.humanPrompts) ?? 0) + (kind === 'composer' || kind === 'bridge' ? 1 : 0)
+    await writePrivate($, originFile(s), JSON.stringify({ origin, humanPrompts: human }))
+  } catch { /* never break the prompt */ }
+}
+export async function readOrigin($: any, s: Sess): Promise<{ promptOrigin?: string; humanPromptCount?: number }> {
+  const o = await readJson($, originFile(s))
+  return typeof o?.origin === 'string' ? { promptOrigin: o.origin, humanPromptCount: num(o.humanPrompts) ?? 0 } : {}
 }
 export const stateFile = (s: Sess, key: string) => `${s.sdir}/patterns-used-${safe(key)}.json`
 export async function disabled($: any, s: Sess) {
@@ -214,5 +227,5 @@ export function newLoad(): Load {
     turnAnchor: new Map(), tools: new Map(), spawnPrompts: new Map(), placeholders: new Set(), late: new Map(), agentTypes: new Map(),
     earlyStart: new Map(), agentEffort: new Map(), lastClaim: new Map(), markerAt: 0, claims: new Set(), queues: new Map(),
     stopDefer: null, deferred: undefined, handback: new Map(), reuseUsed: new Set(), compacted: false, mainSeen: 0,
-    interactive: undefined, promptOrigin: undefined, humanPrompts: 0, pendingLearns: new Set() }
+    interactive: undefined, pendingLearns: new Set() }
 }

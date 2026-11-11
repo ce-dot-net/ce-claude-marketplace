@@ -83,7 +83,9 @@ Round 2 of 8.0.0 already ships `prompt_id` as the task anchor (PreToolUse `Agent
   `render_path` (`mod` | `python`, the chain that rendered) travels next to it, under the same condition.
 - Since 8.2.2 (mod chain only; the Python chain never sets them; each omitted when unknown): `interactive` (session.start
   `isInteractive`, never defaulted), `prompt_origin` (origin.kind of the conversation's first prompt.submit, any kind,
-  max 64 chars, `unclassified` without one) and `human_prompt_count` (prompts with origin `composer` or `bridge` so far;
-  in-memory per mod load, so it restarts at 0 after a reload/resume: a lower bound). Subagent traces carry the same values.
+  max 64 chars, `unclassified` without one) and `human_prompt_count` (prompts with origin `composer` or `bridge` so far).
+  Both live in `sessions/<cc-session-id>/prompt-origin.json` (the conversation, never the task pin): they survive a
+  reload/resume, never cross a `/clear`, and go with the session dir. Limit: a conversation begun before 8.2.2 reports
+  the first prompt after the update; the count is a lower bound. Subagent traces carry the same values.
 - `parent_agent_id` is the server-declared name for the parent prompt id (the local state keeps `parent_task_id`).
 - `effort_level` / `effort_weight` are dropped server-side (not stored or persisted); they stay in the local relevance log only.
