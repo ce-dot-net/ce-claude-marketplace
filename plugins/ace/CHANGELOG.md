@@ -5,6 +5,27 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.2.4] - Unreleased
+
+### Fixed
+- The `ACE ▼ Server nicht erreichbar` band (state `server_error`) no longer sticks for the whole session. The mod probed
+  the connection once per load, so a short failure at session start (live: a deploy restart's <1 min 502 window) kept
+  the band although the server was healthy again. Now only `server_error` (timeout, 502, generic CLI failure) is
+  re-probed in the background: one `$.clock.after` at a time, 15 s, 30 s, 60 s, then every 5 min, at most 30 tries
+  (~2.5 h). A failing try is silent (no log, no toast); a recovered one clears the band and the ▼ and logs
+  `ACE: Server wieder erreichbar` once; a different answer (e.g. `expired`) replaces the band, one-shot. Any later
+  successful server search (main, subagent, domain shift; engine or ace-cli, never a local cache hit) clears the band
+  the same way without an extra request. The chain stops on heal, on a new context step (rebind), at session end and
+  with the module load (its timers go with it). `not_logged_in`, `expired`, `unbound`, `project_not_found`,
+  `no_access`, `cli_missing` and the config states stay one-shot (not transient). `classify` is unchanged. The Python
+  chain needs no change: it shows its context line once per session as a `systemMessage` and keeps no banner.
+- The bootstrap backfill no longer stops the whole run on a transient network error while polling its job (live:
+  `fetch failed (ENOTFOUND)` after the machine lost the network). A poll without an answer (engine exit 1) or with
+  502/503/504 is asked again after 30 s, 60 s, 120 s, 240 s, 300 s (12.5 min in all; the count is per job and starts
+  over after any real answer), then the run stops with a line naming the cause. Only the poll retries: the batch is
+  already posted, so nothing is re-posted, and the ledger changes only on a job answer. 401/402, other engine exits
+  and every post-side answer (429 `BACKFILL_DAY_LIMIT_REACHED`: stop and remember) are unchanged.
+
 ## [8.2.3] - 2026-11-11
 
 ### Added
