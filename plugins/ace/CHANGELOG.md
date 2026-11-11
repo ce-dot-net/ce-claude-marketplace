@@ -10,9 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 - The `ACE ▼ Server nicht erreichbar` band (state `server_error`) no longer sticks for the whole session. The mod probed
   the connection once per load, so a short failure at session start (live: a deploy restart's <1 min 502 window) kept
-  the band although the server was healthy again. Now only `server_error` (timeout, 502, generic CLI failure) is
+  the band although the server was healthy again. Now only `server_error` (timeout, 502, or an unclassified CLI failure; the latter never heals by itself, it is only re-probed) is
   re-probed in the background: one `$.clock.after` at a time, 15 s, 30 s, 60 s, then every 5 min, at most 30 tries
-  (~2.5 h). A failing try is silent (no log, no toast); a recovered one clears the band and the ▼ and logs
+  (~2.3 h). A failing try is silent (no log, no toast); a recovered one clears the band and the ▼ and logs
   `ACE: Server wieder erreichbar` once; a different answer (e.g. `expired`) replaces the band, one-shot. Any later
   successful server search (main, subagent, domain shift; engine or ace-cli, never a local cache hit) clears the band
   the same way without an extra request. The chain stops on heal, on a new context step (rebind), at session end and
