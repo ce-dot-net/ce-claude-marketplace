@@ -50,7 +50,7 @@ export async function beforeSpawn($: any, L: Load, s: Sess, e: any) {
     return { out: e, state }
   }
   const cached = await reuseGet($, L, s, 'subagent', query, 'spawn:' + tsid)  // a spawn is a new agent: it has used nothing yet
-  const sr: any = cached ? hitResult(cached) : await search($, s, query, tsid, undefined, SEARCH_MS, tsid, await searchOrigin($, L, s))
+  const sr: any = cached ? hitResult(cached) : await search($, s, query, tsid, undefined, SEARCH_MS, tsid, await searchOrigin($, L, s), L)
   if (!cached) await reuseStore($, L, s, 'subagent', query, 'spawn:' + tsid, sr.resp)
   if (!sr.resp) {
     await logSubagentError($, s, sr)

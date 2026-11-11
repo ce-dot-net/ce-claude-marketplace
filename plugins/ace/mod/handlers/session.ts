@@ -41,5 +41,6 @@ export async function sessionEnd($: HookArgs<'session.end'>[0], L: Load, e: Hook
   } catch { /* never block the exit */ }
   L.tools.clear(); L.turnAnchor.clear(); L.spawnPrompts.clear(); L.late.clear(); L.agentTypes.clear(); L.earlyStart.clear()
   L.agentEffort.clear(); L.domains = null; L.sess = null; L.markerAt = 0
+  L.reprobeGen++  // 8.2.4: stops a server_error re-probe chain
   return next(e)
 }
