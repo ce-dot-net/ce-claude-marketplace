@@ -93,7 +93,7 @@ export async function startContext($: any, L: Load, cwd: string) {
   } catch { /* the hooks keep the binding they resolved */ }
 }
 // 8.2.4 self-heal of a `server_error` band (a 502/timeout at session start, e.g. a deploy restart). One $.clock.after at a
-// time (no loop, no interval): 15 s, 30 s, 60 s, then every 5 min, at most MAX_REPROBES tries (~2.5 h; a later successful
+// time (no loop, no interval): 15 s, 30 s, 60 s, then every 5 min, at most MAX_REPROBES tries (~2.3 h; a later successful
 // search still heals it). The chain stops when the band is no longer server_error, on a new startContext, at session end
 // (L.reprobeGen bumped) and with the module load (its timers go with it). A failing try is silent.
 export const REPROBE_MS = [15_000, 30_000, 60_000], REPROBE_EVERY_MS = 300_000, MAX_REPROBES = 30
