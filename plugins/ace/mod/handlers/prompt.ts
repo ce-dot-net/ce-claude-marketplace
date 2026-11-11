@@ -90,7 +90,7 @@ export async function onPrompt($: any, L: Load, e: any): Promise<any> {
   }
 
   const query = expandAbbreviations(text)
-  const sr = await search($, s, query, tsid, undefined, SEARCH_MS, tsid, await searchOrigin($, L, s))  // notePrompt ran first: the count includes this prompt
+  const sr = await search($, s, query, tsid, undefined, SEARCH_MS, tsid, await searchOrigin($, L, s), L)  // notePrompt ran first: the count includes this prompt
   if (!sr.resp) {
     await save({ tsid, userPrompt: e.text, hook: 'UserPromptSubmit' })  // nothing rendered: no label (§31 omit)
     await relLog($, s, { timestamp: await nowIso($), event: 'error', hook: 'UserPromptSubmit', location: 'mod.search', error: sr.error ?? null, stderr_sample: sr.stderr, pin_failed: sr.pinFailed || undefined, pin_ms: sr.pinMs, session_id: s.sessionId, project_id: s.project, hook_ms: await $.clock.now() - t0, source: 'mod' })

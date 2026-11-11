@@ -57,6 +57,7 @@ export type Load = {
   ctxState: State | null | undefined            // verify's state; undefined = not checked yet
   ctxLogged: boolean                            // the one `context` row of this load
   verifying: Promise<unknown> | undefined
+  reprobeGen: number                            // 8.2.4: the server_error re-probe chain of this number is the live one (bumped = stopped)
   pendingMain: string | null | undefined        // set by prompt.submit, bound to the next main turn.start
   pendingTitle: string | undefined              // classic.UserPromptSubmit answers it
   stopEffort: string | undefined                // classic.Stop's effort for the turn.complete learn
@@ -233,7 +234,7 @@ export async function clearDeferred($: any, L: Load, s: Sess) {
 export type HookArgs<E extends EventName> = Parameters<Hook<E>>
 // Per-load state, fresh in each register (a reload starts over).
 export function newLoad(): Load {
-  return { sess: null, env0: undefined, ctx: undefined, ctxCwd: undefined, ctxState: undefined, ctxLogged: false, verifying: undefined, pendingMain: undefined, pendingTitle: undefined, stopEffort: undefined, domains: null,
+  return { sess: null, env0: undefined, ctx: undefined, ctxCwd: undefined, ctxState: undefined, ctxLogged: false, verifying: undefined, reprobeGen: 0, pendingMain: undefined, pendingTitle: undefined, stopEffort: undefined, domains: null,
     turnAnchor: new Map(), tools: new Map(), spawnPrompts: new Map(), placeholders: new Set(), late: new Map(), agentTypes: new Map(),
     earlyStart: new Map(), agentEffort: new Map(), lastClaim: new Map(), markerAt: 0, claims: new Set(), queues: new Map(),
     stopDefer: null, deferred: undefined, handback: new Map(), reuseUsed: new Set(), compacted: false, mainSeen: 0,
