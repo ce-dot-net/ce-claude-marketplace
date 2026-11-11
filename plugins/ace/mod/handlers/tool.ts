@@ -3,7 +3,7 @@ import { logSubagentError, subagentRender } from './agent.ts'
 import { readJson, readText } from '../io/fs.ts'
 import { nowIso, relLog } from '../io/log.ts'
 import { DOMAIN_MS, hitResult, reuseGet, reuseStore, search } from '../io/spawn.ts'
-import { type Load, type Sess, disabled, ensure, readState, updateState, uuid, type HookArgs, recordTool, refreshMarker } from '../io/state.ts'
+import { type Load, type Sess, disabled, ensure, readState, searchOrigin, updateState, uuid, type HookArgs, recordTool, refreshMarker } from '../io/state.ts'
 import { injectedContents } from '../lib/evidence.ts'
 import { renderDomainShift } from '../lib/render.ts'
 import { safeComponent as safe } from '../lib/state.ts'
@@ -22,7 +22,7 @@ export async function lateInject($: any, L: Load, s: Sess, key: string): Promise
   if (!st || await disabled($, s)) return null
   const t0 = await $.clock.now()
   const tsid: string = st.task_session_id
-  const sr = await search($, s, query, tsid, undefined, DOMAIN_MS)
+  const sr = await search($, s, query, tsid, undefined, DOMAIN_MS, tsid, await searchOrigin($, L, s))
   if (!sr.resp) { await logSubagentError($, s, sr); return null }
   const r = await subagentRender($, s, sr, query, st.agent_type ?? 'unknown', tsid, t0, st.parent_task_id, { late: true })
   await updateState($, L, s, key, { ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort,
@@ -57,7 +57,7 @@ export async function domainShift($: any, L: Load, e: any, key: string): Promise
     const state = await readState($, s, key)
     const tsid: string = state?.task_session_id ?? uuid()
     const cached = await reuseGet($, L, s, 'domain', query, key)
-    const sr: any = cached ? hitResult(cached) : await search($, s, query, undefined, 8, DOMAIN_MS, tsid)  // §16 P8: no pin; tsid for the state merge and --session-id
+    const sr: any = cached ? hitResult(cached) : await search($, s, query, undefined, 8, DOMAIN_MS, tsid, await searchOrigin($, L, s))  // §16 P8: no pin; tsid for the state merge and --session-id
     if (!cached) await reuseStore($, L, s, 'domain', query, key, sr.resp)
     // A failed search stays retryable. Parallel domains: the newest claim writes, so the finishing order cannot flip it.
     if (sr.resp && L.lastClaim.get(key) === matched) await $.fs.write(lastFile, matched)

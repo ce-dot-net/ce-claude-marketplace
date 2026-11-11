@@ -1,6 +1,6 @@
 // Engine and ace-cli runner through `$`: search with pin/backoff/budgets, the §32 local reuse cache, git context.
 import { run, writePrivate } from './fs.ts'
-import { type Load, type Sess, storeFullPct } from './state.ts'
+import { type Load, type SearchOrigin, type Sess, storeFullPct } from './state.ts'
 import { pyDumps, pyLoads, sanitize } from '../lib/pyjson.ts'
 import { REUSE_TTL_MS, reuseEnabled, reuseKey } from '../lib/state.ts'
 import { parseDiffStat } from '../lib/trace.ts'
@@ -28,9 +28,11 @@ export async function engineScript($: any, name: string): Promise<string | null>
   return await $.fs.exists(p).catch(() => false) ? p : null
 }
 // One engine search: { resp } or { why } (fall back to ace-cli), or { timeout } (no fallback, as ace_cli._search_lib).
-export async function engineSearch($: any, s: Sess, script: string, query: string, sid: string | undefined, topK: number | undefined, budgetMs: number) {
+export async function engineSearch($: any, s: Sess, script: string, query: string, sid: string | undefined, topK: number | undefined, budgetMs: number, origin: SearchOrigin = {}) {
   const payload: any = { query, org: s.org, project: s.project, session_id: sid, top_k: topK }
   for (const k of Object.keys(payload)) if (!payload[k]) delete payload[k]
+  // 8.2.3: false and 0 are values here (headless -p); only unknown (undefined/null) stays out
+  for (const [k, v] of Object.entries(origin)) if (v !== undefined && v !== null) payload[k] = v
   let r: any
   try { r = await $.process.run(['node', script], { stdin: JSON.stringify(payload), env: aceEnv(s), timeoutMs: budgetMs }) }
   catch (err) { return /ENOENT|not found/i.test(String(err)) ? { why: 'spawn failed: ' + String(err).slice(0, 200) } : { timeout: true } }
@@ -46,13 +48,14 @@ export async function engineSearch($: any, s: Sess, script: string, query: strin
 // ace_cli.run_search + §11 A1: while pin-backoff is young no pin at all; a locked/empty pinned search is re-run ONCE
 // without the pin, only within what is left of the blocking budget. Every CLI spawn carries --session-id <task session>
 // (cli >= 4.3.1: request field, no sessions.db; capped at 512): `sid` defaults to the pin, domain shift passes it unpinned;
-// the engine stdin carries the same `sid` as session_id.
-export async function search($: any, s: Sess, query: string, pin: string | undefined, topK: number | undefined, budgetMs: number, sid: string | undefined = pin) {
+// the engine stdin carries the same `sid` as session_id. 8.2.3: `origin` (interactive / human_prompt_count) reaches only
+// the engine's request body; the ace-cli path has no flag for it (deliberate: absent = unknown, the server learns normally).
+export async function search($: any, s: Sess, query: string, pin: string | undefined, topK: number | undefined, budgetMs: number, sid: string | undefined = pin, origin: SearchOrigin = {}) {
   const t0 = await $.clock.now()
   let engineWhy: string | undefined = 'no engine'
   const eng = await engineScript($, 'search.js')
   if (eng) {
-    const e = await engineSearch($, s, eng, query, sid, topK, budgetMs)  // engine never pins: session_id is the task stamp
+    const e = await engineSearch($, s, eng, query, sid, topK, budgetMs, origin)  // engine never pins: session_id is the task stamp
     const ms = await $.clock.now() - t0
     if ('resp' in e) await storeFullPct($, s, e.resp)
     if ('resp' in e) return { resp: e.resp, error: undefined, ms, pinFailed: false, pinSkipped: undefined, pinMs: undefined, stderr: '', engine: 'lib', engineWhy: 'ok' }
