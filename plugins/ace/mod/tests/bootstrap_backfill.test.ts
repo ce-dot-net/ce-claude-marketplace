@@ -97,6 +97,21 @@ test('approved: the CLI bootstrap runs, then the backfill posts the batch and re
   expect(t2).toContain('0 Aufgaben')
 })
 
+test('8.2.4 approved: the job poll loses the network once (engine exit 1), the detached run waits and finishes; ONE post', async ($, on) => {
+  let last: any, gets = 0
+  const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }), backfill: (cmd, _argv, stdin) => {
+    if (cmd === 'post') { last = JSON.parse(stdin!); return { status: 202, body: { job_id: 'j1', accepted: last.items.length, duplicates: 0, status_url: '/u' } } }
+    if (++gets === 1) return { exit: 1 }
+    return { status: 200, body: { state: 'finished', items: last.items.map((i: any) => ({ idempotency_key: i.idempotency_key, state: 'done', patterns_created: 1, failed_chunks: 0 })) } } } })
+  await start($)
+  await run($, '--approved')
+  await idle($, h)
+  expect(gets).toBe(2)
+  expect(bf(h).filter((r: any) => r.argv[2] === 'post').length).toBe(1)
+  expect(h.logs.join('\n')).toContain('Backfill fertig: 3 gesendet')
+  expect(h.logs.join('\n')).not.toContain('gestoppt')
+})
+
 test('approved with 429: stops, stores the resume time, the next run says so without calling the engine', async ($, on) => {
   const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn() }), backfill: () => ({ status: 429, body: { limit: 100, current: 100 } }) })
   await start($)

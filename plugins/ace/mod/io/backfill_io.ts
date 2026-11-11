@@ -116,7 +116,7 @@ async function tick($: any, key: string): Promise<void> {
     await $.state.set(RUN, st)
     const n = await progress(items, st, d)
     $.ui.status(`Backfill ${n}/${st.total}`)
-    $.clock.after(POLL_MS, () => { void tick($, key).catch(() => undefined) })
+    $.clock.after(r.waitMs ?? POLL_MS, () => { void tick($, key).catch(() => undefined) })
   } catch (err) {
     const base: RunState | undefined = st
     if (base) { const m = `Backfill: Fehler ${String(err).slice(0, 160)}`; base.lines.push(m); base.stopped = base.stopped ?? m; await end($, base, key).catch(() => undefined) }
