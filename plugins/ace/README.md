@@ -320,7 +320,7 @@ MIT License - See [LICENSE](../../LICENSE)
 
 ---
 
-**Version**: v8.2.3
+**Version**: v8.2.4
 **Maintainer**: CE.NET Team
 **Requires**: Claude Code >= 2.1.311, ace-cli 4.4.2 pinned in package.json (@ace-sdk/core >= 3.8.2; installed with the plugin; a global ace-cli >= the pin is an untested fallback), Python >= 3.10 for the fallback hooks (Ubuntu 22.04+, Debian 12+, Homebrew/pyenv; the macOS system 3.9 is not enough, the mod chain is unaffected). Windows not supported (WSL2 works).
 **Architecture**: mod + Python hooks + CLI/engine (no MCP)
