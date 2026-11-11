@@ -236,7 +236,8 @@ def test_real_core_search_headers_and_session_stamp(real, tmp_path):
 
 
 @needs_real
-@pytest.mark.parametrize("extra", [{"interactive": False, "human_prompt_count": 0}, {}])
+@pytest.mark.parametrize("extra", [{"interactive": False, "human_prompt_count": 0}, {"interactive": True, "human_prompt_count": 3},
+                                   {"interactive": True}, {}])
 def test_real_core_search_body_carries_the_headless_fields(real, tmp_path, extra):
     """8.2.3: the real core's searchPatterns body is a plain object; the engine adds the two fields, each only when sent."""
     bin_dir, srv, env = real
