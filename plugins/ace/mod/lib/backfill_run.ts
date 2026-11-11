@@ -7,6 +7,9 @@ import { add, pending, type Ledger } from './ledger.ts'
 
 export const DEFAULT_LIMIT = 100, MAX_LIMIT = 100
 export const POLL_MS = 60_000, MAX_POLLS = 400   // ~6.7 h of 60 s polls per job: a bound, never an endless loop
+// 8.2.4: a job poll without an answer (no network: engine exit 1) or with 502/503/504 is asked again after these waits
+// (12.5 min in all), then the run stops. Only the poll: the job's batch is already posted, so a retry never re-posts.
+export const POLL_RETRY_MS = [30_000, 60_000, 120_000, 240_000, 300_000]
 export const ITEMS_PER_MINUTE = 5                // measured server rate (3..5 items a minute)
 
 // `--limit N` (1..100, `--limit=N` too) out of the bootstrap arguments; `rest` is what is left for parseBootstrapArgs.
@@ -120,7 +123,7 @@ const LATER = 'Backfill gestoppt: Server gerade nicht erreichbar, später erneut
 
 // Run marker: the JSON state of one backfill run (kept in $.state), enough to continue after a module reload. Single flight + TTL.
 export const RUN_TTL_MS = 3 * 3_600_000   // a marker whose last beat is older than this is stale (crashed run): ignored
-export type RunState = { startedAt: number, beat: number, total: number, posted: string[], split?: Record<Source, number>, job?: string, jobKeys?: string[], judged?: string[], causes?: Record<string, number>, polls: number, report: Report, lines: string[], stopped?: string,
+export type RunState = { startedAt: number, beat: number, total: number, posted: string[], split?: Record<Source, number>, job?: string, jobKeys?: string[], judged?: string[], causes?: Record<string, number>, polls: number, pollFails?: number, report: Report, lines: string[], stopped?: string,
   args?: { root: string, orgId?: string, projectId: string, days: number, limit: number, sources?: Source[] } }
 export const newRun = (total: number, now: number): RunState => ({ startedAt: now, beat: now, total, posted: [], polls: 0, lines: [],
   report: { sent: 0, partial: 0, failed: 0, skipped: 0, duplicates: 0, patternsCreated: 0, failedChunks: 0, finished: false } })
@@ -135,8 +138,9 @@ const dupLine = (st: RunState) => st.report.duplicates ? [`${st.report.duplicate
 export const finalLines = (st: RunState): string[] => [reportLine(st.report) + (st.report.failed ? topCause(st) : '') + splitText(st), ...dupLine(st), ...st.lines, ...(st.stopped ? ['Ledger gespeichert; ein erneuter Lauf macht dort weiter.'] : [])]
 
 // ONE step of a run (state `st` is mutated, plain JSON between steps): at most one job GET per call, plus any posts that can go
-// without waiting. done=false means "call again after POLL_MS" (the server does at most 5 items a minute: never poll faster).
-export async function stepBackfill(all: Item[], st: RunState, d: Deps): Promise<{ done: boolean }> {
+// without waiting. done=false means "call again after POLL_MS" (the server does at most 5 items a minute: never poll faster),
+// or after waitMs when a poll failed transiently (8.2.4).
+export async function stepBackfill(all: Item[], st: RunState, d: Deps): Promise<{ done: boolean, waitMs?: number }> {
   const lg = async (row: any) => { try { await d.log?.({ ...row, projectId: st.args?.projectId }) } catch { /* diagnosis only */ } }
   const why = (label: string, n = 1) => { st.causes = st.causes ?? {}; st.causes[label] = (st.causes[label] ?? 0) + n }
   const stop = (m: string) => { st.stopped = m; st.lines.push(m) }
@@ -147,12 +151,19 @@ export async function stepBackfill(all: Item[], st: RunState, d: Deps): Promise<
   let todo = all.filter(i => open.has(i.idempotency_key) && !posted.has(i.idempotency_key))
   if (!todo.length && !st.job && !st.posted.length) { st.lines.push(all.length ? `Backfill: 0 Aufgaben zu senden, ${all.length} bereits gesendet` : 'Backfill: 0 Aufgaben zu senden'); return finish() }
 
-  // true = job finished, false = ask again later, 'stop' = run ended
-  async function pollOne(job: string): Promise<boolean | 'stop'> {
+  // true = job finished, false = ask again later, a number = ask again after that many ms (transient failure), 'stop' = run ended
+  async function pollOne(job: string): Promise<boolean | number | 'stop'> {
     if (st.polls++ >= MAX_POLLS) { stop('Backfill: der Server ist nach langem Warten noch nicht fertig, später erneut ausführen (Duplikate werden erkannt).'); return 'stop' }
     const g = await d.get(job)
     await lg({ event: 'backfill_response', op: 'get', ...(g.exit !== 0 ? { exit: g.exit, stderr: (g.stderr ?? '').slice(0, 200) } : describeAnswer(g.status ?? 0, g.body)), kind: g.exit !== 0 ? 'engine' : 'job' })
-    if (g.exit !== 0) { stop(g.exit === 1 ? 'Backfill gestoppt: keine Antwort beim Abfragen des Jobs, später erneut ausführen.' : `Backfill gestoppt: Job-Abfrage fehlgeschlagen (Engine exit ${g.exit}).`); return 'stop' }
+    if (g.exit === 1 || (g.exit === 0 && (g.status === 502 || g.status === 503 || g.status === 504))) {
+      const n = st.pollFails ?? 0
+      if (n < POLL_RETRY_MS.length) { st.pollFails = n + 1; return POLL_RETRY_MS[n] }
+      stop(`Backfill gestoppt: Job-Abfrage nach ${n + 1} Versuchen ohne Antwort (${g.exit === 1 ? g.stderr || 'keine Antwort' : `HTTP ${g.status}`}), später erneut ausführen (bereits Gesendetes bleibt vermerkt, Duplikate werden erkannt).`)
+      return 'stop'
+    }
+    st.pollFails = undefined
+    if (g.exit !== 0) { stop(`Backfill gestoppt: Job-Abfrage fehlgeschlagen (Engine exit ${g.exit}).`); return 'stop' }
     if (g.status === 404) return true            // unknown job: treated as submitted
     if (g.status === 401) { stop(NO_AUTH); return 'stop' }
     if (g.status === 402) { stop(NO_PLAN); return 'stop' }
@@ -171,6 +182,7 @@ export async function stepBackfill(all: Item[], st: RunState, d: Deps): Promise<
     if (st.job) {
       const p = await pollOne(st.job)
       if (p === 'stop') return finish()
+      if (typeof p === 'number') return { done: false, waitMs: p }
       if (!p) return { done: false }
       st.job = undefined; st.jobKeys = undefined; st.polls = 0; st.judged = undefined
     }
@@ -234,7 +246,7 @@ export async function runBackfill(all: Item[], d: Deps): Promise<{ report: Repor
   for (;;) {
     const r = await stepBackfill(all, st, d)
     if (r.done) break
-    await d.sleep!(POLL_MS)
+    await d.sleep!(r.waitMs ?? POLL_MS)
   }
   return { report: st.report, lines: finalLines(st), stopped: st.stopped }
 }
