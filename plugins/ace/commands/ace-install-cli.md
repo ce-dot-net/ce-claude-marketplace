@@ -10,7 +10,9 @@ allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_
 
 Each plugin version runs exactly the ace-cli it was tested with: the exact pin in `${CLAUDE_PLUGIN_ROOT}/package.json`,
 installed by Claude Code into `${CLAUDE_PLUGIN_ROOT}/node_modules` when the plugin is installed or updated.
-Node.js is required. Run the steps in order and stop at the first one that fixes it.
+Node.js and npm are required (Node >= the pinned CLI's `engines.node`, today 20; without them the installer refuses with
+`npm/node fehlt (Node >= 20 nötig)`: install Node, e.g. via nvm or apt). Where the mod runs, `/ace:ace-install-cli --approved`
+installs at once like the band button. Run the steps in order and stop at the first one that fixes it.
 
 ## Step 1: Report
 

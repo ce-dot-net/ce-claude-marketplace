@@ -111,10 +111,12 @@ test('a failed action is told as failed, the pending is gone', async ($, on) => 
   expect(cliRuns(h, 'learn').length).toBe(1)
 })
 
-test('--approved on a command that needs the band (login) is not run; the preview says to use the button', async ($, on) => {
-  const h = host(on, { cli: a => a[0] === 'status' ? { exitCode: 1, stdout: '', stderr: 'Server error (401): token expired' } : undefined })
+// 8.2.5: login and install run from --approved (tests/login_nobrowser.test.ts); bind/clean still need the band
+test('--approved on a command that needs the band (bind) is not run; the preview says to use the button', async ($, on) => {
+  const h = host(on, { env: { ACE_AUTO_ADOPT: '0' }, files: { [`${CWD}/.git/config`]: '[core]\n' } })
   await start($)
-  const t = await run($, 'login', '--approved')
+  const t = await run($, 'configure', 'org_a prj_p --approved')
   expect(t).toContain('Button')
-  expect(h.runs.some((r: any) => cliOf(r.argv)?.[0] === 'login')).toBe(false)
+  expect(h.files.has(`${CWD}/.ace/config.json`)).toBe(false)
+  expect(h.runs.some((r: any) => cliOf(r.argv)?.[0] === 'init')).toBe(false)
 })

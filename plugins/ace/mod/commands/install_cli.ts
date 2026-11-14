@@ -13,6 +13,8 @@ export async function installCliCmd($: any, _k: Kit): Promise<string> {
       return confirm($, { label: 'SQLite-Cache reparieren', kind: 'install',
         preview: `ace-cli ${found} (pinned ${pin}) ✓, but the SQLite cache is ${st.sqlite}\nThe button runs only \`npm rebuild better-sqlite3\` in ${$.plugin.root} and nothing else; SessionStart does it by itself unless ACE_AUTO_INSTALL=0.` })
     }
+    const st = await installer($, ['--status'], 15_000)  // 8.2.5: no node/npm -> say so before offering the button
+    const tool = st.state === 'unavailable' && /Node >= \d+/.test(st.detail) ? `\n${st.detail}` : ''
     return confirm($, { label: 'ace-cli installieren', kind: 'install',
-      preview: `pinned ${pin}, found: ${found}\nThe button runs the plugin's installer (npm ci --ignore-scripts && npm rebuild better-sqlite3) in ${$.plugin.root}; SessionStart does it by itself unless ACE_AUTO_INSTALL=0.` })
+      preview: `pinned ${pin}, found: ${found}${tool}\nThe button runs the plugin's installer (npm ci --ignore-scripts && npm rebuild better-sqlite3) in ${$.plugin.root}; SessionStart does it by itself unless ACE_AUTO_INSTALL=0.` })
 }

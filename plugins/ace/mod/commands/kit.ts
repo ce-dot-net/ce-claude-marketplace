@@ -31,15 +31,17 @@ export async function confirm($: any, p: NonNullable<AcePending>): Promise<strin
 // 8.2.0 `--approved`, the second half of confirm (runCommand calls it after every command, `before` = the pending that
 // waited when the command began). A confirm text gets the exact line to type; with the token the action runs at once through the
 // same executor as the button (io/pending.ts). clear and cleanup (destructive) run only when the IDENTICAL pending (label + argv) was
-// already waiting; kinds that need the band (bind, clean, login, install) never run from a typed line.
-const DESTRUCTIVE = ['clear', 'cleanup'], EXEC_KINDS = ['cli', 'exec', 'export']
+// already waiting; bind and clean never run from a typed line. 8.2.5: login and install run at once like their button
+// (`band` = ui/band.ts bandAction, passed in by runCommand: the band owns the Load these two rebind).
+const DESTRUCTIVE = ['clear', 'cleanup'], EXEC_KINDS = ['cli', 'exec', 'export'], BAND_KINDS = ['login', 'install']
 const same = (a: any, b: any) => !!a && !!b && a.label === b.label && JSON.stringify(a.argv ?? null) === JSON.stringify(b.argv ?? null)
-export async function approveOrHint($: any, k: Kit, cmd: Cmd, before: any, text: string): Promise<string> {
+export async function approveOrHint($: any, k: Kit, cmd: Cmd, before: any, text: string, band?: (p: any) => Promise<string>): Promise<string> {
   if (!text.includes(CONFIRM_MARK)) return text
   const p: any = ((await $.state.get(PENDING)) as any).value
   if (!p) return text
   const line = `/ace:${cmd.md} ${k.args.trim()}`.trim() + ' --approved'
   if (!k.approved) return `${text}\nOder tippen: ${line}`
+  if (band && BAND_KINDS.includes(p.kind)) return band(p)
   if (!EXEC_KINDS.includes(p.kind)) return `${text}\n--approved gilt hier nicht: den Button [${p.label}] über der Eingabe benutzen.`
   if (DESTRUCTIVE.includes(cmd.name) && !same(before, p))
     return `${text}\n--approved löscht nur, wenn genau diese Vorschau schon wartet: erst die Vorschau prüfen, dann ${line} (oder den Button).`

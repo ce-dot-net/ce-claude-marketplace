@@ -24,6 +24,7 @@ import { tune, tuneCmd } from './tune'
 import { configure, configureCmd } from './configure'
 import { login, loginCmd } from './login'
 import { installCli, installCliCmd } from './install_cli'
+import { bandAction } from '../ui/band'
 
 export const ace: Cmd = { name: 'ace', description: 'ACE overview: binding, state and every command' }
 export async function aceCmd($: any, { c }: Kit): Promise<string> {
@@ -51,7 +52,7 @@ export async function runCommand($: any, L: Load, cmd: Cmd, args: string): Promi
   const a = stripApproved(args ?? '')  // 8.2.0: the standalone token never reaches a command
   const k: Kit = { c, args: a.args, cli: kitCli($, c), approved: a.approved }
   const before = ((await $.state.get({ plugin: 'ace', key: 'pending' })) as any).value
-  try { return cap(await approveOrHint($, k, cmd, before, await dispatch($, cmd.name, k))) } catch (err) { return `ACE ▼ ${cmd.name} failed: ${String(err).slice(0, 300)}` }
+  try { return cap(await approveOrHint($, k, cmd, before, await dispatch($, cmd.name, k), p => bandAction($, L, p))) } catch (err) { return `ACE ▼ ${cmd.name} failed: ${String(err).slice(0, 300)}` }
 }
 
 // A switch, not a table of functions: `$` reaches only function declarations (the mods loader's rule).
