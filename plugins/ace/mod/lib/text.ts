@@ -58,7 +58,7 @@ export function matchDomainToPath(domain: string, path: string): boolean {
   return false
 }
 export const domainNames = (domains: Record<string, unknown>) =>
-  [...new Set(Object.keys(domains).map(k => k.split(':')[0].toLowerCase()))].sort()
+  [...new Set(Object.keys(domains).map(k => k.split(':')[0]!.toLowerCase()))].sort()
 export const basenameQuery = (p: string) => (p.replace(/\/+$/, '').split('/').pop() || '').replace(/\.[^.]*$/, '')
 
 // ---------- ace_subagent_start ----------

@@ -1,7 +1,7 @@
 // 8.2.0 tool-noise filter for session items (pure). A session task is full of failed lookups ("File does not exist", "grep found 0 files")
 // that teach nothing; they are dropped from the step list BEFORE the trace is built, so the trace (step numbers, failed_steps, success)
 // is computed from the remaining steps by the live buildTrace/taskOutcome. All patterns live in NOISE: one place, one name each.
-import type { ToolRec } from './evidence.ts'
+import type { ToolRec } from './evidence'
 
 // Matched against the step's summarized result. First match names the drop. Only NON-decisive steps (reads, greps, globs, read-only Bash)
 // are ever dropped: a failed Edit/Write/build stays, its failure still counts against the task.

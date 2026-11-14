@@ -1,7 +1,7 @@
 // A user-given path for a command (export target, import source): it must stay inside the repo root (c.root) by
 // text AND by the realpath of its parent dir, and the target must not be a symlink (security review 8.1.0).
-import { normPath } from '../context/resolve.ts'
-import { run } from '../io/fs.ts'
+import { normPath } from '../context/resolve'
+import { run } from '../io/fs'
 
 export type Checked = { ok: true, abs: string, rel: string, exists: boolean } | { ok: false, why: string }
 async function realDir($: any, dir: string): Promise<string | null> {

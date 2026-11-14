@@ -1,7 +1,7 @@
 // classic.UserPromptSubmit / Stop / SubagentStop: the mod-classic marker, the session title, the Stop effort and
 // the background-task deferral (turn.complete carries neither).
-import { type HookArgs, type Load, refreshMarker, touchClassic } from '../io/state.ts'
-import { delegatedRunning } from '../lib/trace.ts'
+import { type HookArgs, type Load, refreshMarker, touchClassic } from '../io/state'
+import { delegatedRunning } from '../lib/trace'
 
 export const effortOf = (e: any): unknown => e.effort && typeof e.effort === 'object' ? e.effort.level : e.effort
 

@@ -1,9 +1,9 @@
 // Relevance-log rows (ace_relevance_logger) through `$`: the search row builder, timestamps, APPEND_SH appends,
 // and the symlink check for files written into the repo-controlled logs dir.
-import { run } from './fs.ts'
-import { type Sess } from './state.ts'
-import { num, pyDumps } from '../lib/pyjson.ts'
-import { APPEND_SH } from '../lib/sh.ts'
+import { run } from './fs'
+import { type Sess } from './state'
+import { num, pyDumps } from '../lib/pyjson'
+import { APPEND_SH } from '../lib/sh'
 
 // relevance log 'search' row (ace_relevance_logger.log_search_metrics)
 export function searchRow(a: { hook: string; sessionId: string; userPrompt: string; query: string; returned: any[];

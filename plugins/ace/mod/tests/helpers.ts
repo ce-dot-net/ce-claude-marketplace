@@ -55,7 +55,8 @@ export type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; 
   realpaths?: Record<string, string>  // REALPATH_SH answers (a symlinked path); default: the path as given
   backfill?: (cmd: string, argv: string[], stdin?: string) => { exit?: number, status?: number, body?: any } | undefined  // 8.2.0: engine/backfill.js answers
   mockClock?: boolean  // 8.2.0: $.clock timers held on mock.clock (h.clock.advance moves them); clock.now follows it
-  claimed?: boolean }  // 8.1.4: the detached learn child already claimed the trace (the parent's `mv` finds nothing)
+  claimed?: boolean  // 8.1.4: the detached learn child already claimed the trace (the parent's `mv` finds nothing)
+  spawn?: (argv: string[]) => AsyncGenerator<{ stream: 'stdout' | 'stderr', text: string }, { code: number | null, signal: string | null }> }  // $.process.spawn (the streamed device login)
 export type Run = { argv: string[]; stdin?: string; env?: Record<string, string>; timeoutMs?: number; files: Set<string> }
 
 // In-memory engine: fs (with mtimes on the mocked clock), env, clock, session, process. Every argv is recorded.
@@ -148,6 +149,12 @@ export function host(on: any, o: Opts = {}) {
       for (const a of argv) for (const k of [...files.keys()]) if (k === a || k.startsWith(a + '/')) files.delete(k)
     return res(0, '')
   })
+  const spawns: string[][] = []
+  on('process.spawn', async function* (_$: any, e: any) {  // a stand-in for a call on $: yields the chunks, returns { value: result }
+    spawns.push([...e.argv])
+    return { value: o.spawn ? yield* o.spawn([...e.argv]) : { code: 0, signal: null } }
+  } as any)
+  if (!clk) on('clock.after', () => ({ value: { cancel() {} } }))  // timers never fire without the mock clock
   on('ui.log', (_$: any, e: any) => { if (e.to !== 'debug') logs.push(e.text); else debug.push(e.text); return { value: undefined } })
   on('ui.status', (_$: any, e: any) => { statuses.push(e.text); return { value: undefined } })
   on('ui.toast', (_$: any, e: any) => { toasts.push(e.text); return { value: undefined } })
@@ -186,7 +193,7 @@ export function host(on: any, o: Opts = {}) {
   const learnArgv = (r: Run) => r.argv.slice(r.argv.indexOf('ace-cli'))
   const flag = (argv: string[], f: string) => { const i = argv.indexOf(f); return i < 0 ? undefined : argv[i + 1] }
   const trace = (r: Run) => JSON.parse(files.get(flag(learnArgv(r), '--transcript')!)!)
-  return { files, mtime, reads, runs, logs, statuses, toasts, clock: clk!, marker: () => marker, setMarker: (v: any) => { marker = v; markerV++ }, envAsked, envSet, env, registered, debug,
+  return { files, mtime, reads, runs, spawns, logs, statuses, toasts, clock: clk!, marker: () => marker, setMarker: (v: any) => { marker = v; markerV++ }, envAsked, envSet, env, registered, debug,
     band: () => { const l = [...debug].reverse().find(x => x.startsWith('ace band ')); return l ? JSON.parse(l.slice(9)) : null },
     pending: () => { const l = [...debug].reverse().find(x => x.startsWith('ace pending ')); return l ? JSON.parse(l.slice(12)) : null }, searches, learns, rows, state, pin, learnArgv, flag, trace, modelCalls,
     advance: (ms: number) => { now += ms }, now: () => now, put }

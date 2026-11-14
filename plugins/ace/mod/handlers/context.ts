@@ -1,13 +1,13 @@
 // The session's context step (8.1.0), started by session.start: export the core's ids, adopt a legacy binding,
 // remember the remote, then ONE background `status` (verify), the ONE `context` row, the ▼ status and the band.
-import { ADOPT_LINE, WARN_LINES, type Ctx, type State, adopt, cliIds, contextRow, exportEnv, localState, problemLine, remember, untracked, verify } from '../context/index.ts'
-import { run, writePrivate } from '../io/fs.ts'
-import { cliRun } from '../io/cli.ts'
-import { installer } from '../io/installer.ts'
-import { nowIso } from '../io/log.ts'
-import { type Load, dataRoot, resolveContextOnce } from '../io/state.ts'
-import { pyDumps } from '../lib/pyjson.ts'
-import { APPEND_SH } from '../lib/sh.ts'
+import { ADOPT_LINE, WARN_LINES, type Ctx, type State, adopt, classify, cliIds, contextRow, exportEnv, localState, problemLine, remember, untracked, verify } from '../context/index'
+import { run, writePrivate } from '../io/fs'
+import { cliRun } from '../io/cli'
+import { installer } from '../io/installer'
+import { nowIso } from '../io/log'
+import { type Load, dataRoot, resolveContextOnce } from '../io/state'
+import { pyDumps } from '../lib/pyjson'
+import { APPEND_SH } from '../lib/sh'
 
 const BAND = { plugin: 'ace', key: 'band' } as const
 export const SHORT: Record<string, string> = { unbound: 'nicht verbunden', not_logged_in: 'nicht angemeldet', expired: 'Anmeldung abgelaufen',
@@ -40,16 +40,18 @@ export function suggest(projects: { orgId: string, projectId: string, name: stri
   return projects.find(p => p.name.toLowerCase() === name) ?? projects.find(p => p.name.toLowerCase().includes(name) || name.includes(p.name.toLowerCase())) ?? null
 }
 export const INSTALL_FAILED = 'ACE ▼ ace-cli konnte nicht automatisch installiert werden'
+// 8.2.5: the installer's reason when node/npm is missing or too old (ace_cli_installer.toolchain_problem): shown as is
+export const TOOLCHAIN = /Node >= \d+/
 // `retry`: the automatic install failed; the band's one action is then [Erneut versuchen] (the same installer).
 export async function publish($: any, L: Load, c: Ctx, state: State | null, retry?: string) {
   L.ctxState = state
   showStatus($, state)
   let projects: { orgId: string, projectId: string, name: string }[] = []
   if (state === 'unbound' || state === 'project_not_found' || state === 'no_access') projects = await projectList($, c)
-  const band = { state, line: retry ? INSTALL_FAILED : problemLine(state), retry: retry ?? null, projectId: (c as any).projectId ?? null,
+  const band = { state, line: retry && TOOLCHAIN.test(retry) ? `ACE ▼ ${retry}` : retry ? INSTALL_FAILED : problemLine(state), retry: retry ?? null, projectId: (c as any).projectId ?? null,
     suggestion: state === 'unbound' ? suggest(projects, c.root) : null, projects, picking: false, dismissed: false }
   await $.state.set(BAND, band)
-  $.ui.log(`ace band ${JSON.stringify({ state, suggestion: band.suggestion, retry: band.retry })}`, { to: 'debug' })  // the debug log says what the band shows
+  $.ui.log(`ace band ${JSON.stringify({ state, line: band.line, suggestion: band.suggestion, retry: band.retry })}`, { to: 'debug' })  // the debug log says what the band shows
 }
 // The whole step. Never throws: the hooks still run on whatever binding resolved.
 export async function startContext($: any, L: Load, cwd: string) {
@@ -66,13 +68,16 @@ export async function startContext($: any, L: Load, cwd: string) {
     if (a && !a.path) $.ui.log(WARN_LINES.worktree_topology_untrusted)
     else if (a?.path && await untracked(a.path.replace(/\/\.ace\/config\.json$/, ''), git)) $.ui.log(ADOPT_LINE)
     const local = localState(c)
-    if (local) {
+    if (local && local !== 'unbound') {
       await publish($, L, c, local)
       await logOnce($, L, c, local)
       return
     }
     L.verifying = (async () => {
-      const probe = () => verify(c, argv => cliRun($, c as any, argv, { timeoutMs: 20_000 }))
+      // 8.2.5: unbound needs no status call, but configure and login need the CLI: a missing one is installed first
+      // (CLI -> login -> configure) through the same quiet install as a bound session's cli_missing.
+      const probe = local ? () => cliPresent($).then(ok => (ok ? local : 'cli_missing' as State))
+        : () => verify(c, argv => cliRun($, c as any, argv, { timeoutMs: 20_000 }))
       let st = await probe()
       let retry: string | undefined, installed = false
       if (st === 'cli_missing') {
@@ -84,6 +89,7 @@ export async function startContext($: any, L: Load, cwd: string) {
           if (w.state === 'ok') st = await probe()  // the CLI is resolved per call: no restart
           else retry = w.detail || w.state
         } else if (e.state === 'failed') retry = e.detail || 'failed'
+        else if (e.state === 'unavailable' && TOOLCHAIN.test(e.detail)) retry = e.detail  // no node/npm: no install attempt
       }
       await publish($, L, c, st === 'ok' ? null : st, st === 'cli_missing' ? retry : undefined)
       await logOnce($, L, c, st)
@@ -91,6 +97,11 @@ export async function startContext($: any, L: Load, cwd: string) {
       if (st === 'ok' && !installed) await installer($, ['--ensure'], 30_000)  // 8.1.2: AFTER the status/band: quiet background `npm rebuild better-sqlite3` when only the binding is missing; never a band
     })().catch(() => undefined)
   } catch { /* the hooks keep the binding they resolved */ }
+}
+// The cheap CLI probe of an unbound repo: `--version`, no server. Only a spawn failure / missing module counts as missing.
+export async function cliPresent($: any): Promise<boolean> {
+  const r = await cliRun($, null, ['--version'], { timeoutMs: 10_000 })
+  return classify(r.exitCode, r.stderr, !!r.spawnError, false) !== 'cli_missing'
 }
 // 8.2.4 self-heal of a `server_error` band (a 502/timeout at session start, e.g. a deploy restart). One $.clock.after at a
 // time (no loop, no interval): 15 s, 30 s, 60 s, then every 5 min, at most MAX_REPROBES tries (~2.3 h; a later successful

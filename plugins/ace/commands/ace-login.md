@@ -8,6 +8,10 @@ allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_
 
 Browser-based device code authentication flow. This replaces the old API token entry method.
 
+No browser is needed on this machine (remote / SSH): `--no-browser` prints the URL and the code; open the URL on any
+device and enter the code. Where the mod runs, the band's [Anmelden] or `/ace:ace-login --approved` does the same and
+shows the URL and the code directly.
+
 ## Instructions for Claude
 
 When user runs `/ace-login`, execute the device code authentication flow:

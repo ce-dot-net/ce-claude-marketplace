@@ -5,6 +5,36 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.2.5] - 2026-11-14
+
+### Fixed
+- Login works on remote / SSH machines without a browser. The band's [Anmelden] (and `/ace:ace-login`) now runs
+  `ace-cli login --no-browser` (always, also locally) through `$.process.spawn`, so its output is read while the CLI
+  still waits: as soon as the verification URL and the code are printed, a toast and a log line say
+  `ACE: Öffne <URL> und gib den Code <CODE> ein`. Output that cannot be read (no URL + code after 10 s, or an exit
+  without them) is shown as its first ~300 characters. The 300 s limit stays (the stream is closed, which ends the
+  CLI); then `ACE: angemeldet` / `ACE: Login nicht abgeschlossen` and the rebind as before. The button is labelled
+  `Anmelden` (no "(Browser)" any more). argv only, no shell, no temporary file.
+- A fresh machine without ace-cli in an unbound repo showed only `ACE ▼ Repo nicht verbunden` (and SessionStart
+  `ace-cli not found`): the unbound path returned before the CLI check, so the automatic install never ran, while
+  configure and login both need the CLI. The unbound path now probes `ace-cli --version` (no server call) and, when the
+  CLI is missing, runs the same quiet background install as a bound session (no band while it runs; `cli_missing`
+  with [Erneut versuchen] only on failure; after success the `unbound` band). Order: CLI, then login, then configure.
+  With the CLI present nothing changes (no status call, no installer).
+- No node / npm (or a node older than the pinned CLI's `engines.node`, read from `package-lock.json`, today 20) is
+  detected before any install attempt: `ace_cli_installer.py` answers `unavailable` with
+  `npm/node fehlt (Node >= 20 nötig): installiere z.B. via nvm/apt, dann /ace:ace-install-cli` (or `node vX zu alt
+  ...`). The mod's band shows that line (state `cli_missing`), `/ace:ace-install-cli` puts it in the preview,
+  `/ace:ace-doctor` on the ace-cli line, and the Python SessionStart message names the reason instead of only
+  `ace-cli not found`.
+
+### Changed
+- `--approved` now also runs `/ace:ace-login` and `/ace:ace-install-cli` at once, exactly like their band button (on
+  Moshi / herdr / remote terminals the button is often not usable). `/ace:ace-login --approved` returns the URL and
+  the code in the command's own text while the login keeps waiting in the background. Bind, the cleaned rewrite,
+  `clear` and `cleanup` are unchanged (bind/clean only by the button; the destructive pair only when the identical
+  preview waits).
+
 ## [8.2.4] - 2026-11-11
 
 ### Fixed

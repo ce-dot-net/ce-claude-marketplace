@@ -28,19 +28,19 @@ export function sha256Hex(text: string): string {
   for (let o = 0; o < bytes.length; o += 64) {
     const w: number[] = []
     for (let i = 0; i < 64; i++) {
-      if (i < 16) w[i] = bytes[o + 4 * i] << 24 | bytes[o + 4 * i + 1] << 16 | bytes[o + 4 * i + 2] << 8 | bytes[o + 4 * i + 3]
+      if (i < 16) w[i] = bytes[o + 4 * i]! << 24 | bytes[o + 4 * i + 1]! << 16 | bytes[o + 4 * i + 2]! << 8 | bytes[o + 4 * i + 3]!
       else {
-        const a = w[i - 15], b = w[i - 2]
-        w[i] = (w[i - 16] + (rr(a, 7) ^ rr(a, 18) ^ a >>> 3) + w[i - 7] + (rr(b, 17) ^ rr(b, 19) ^ b >>> 10)) | 0
+        const a = w[i - 15]!, b = w[i - 2]!
+        w[i] = (w[i - 16]! + (rr(a, 7) ^ rr(a, 18) ^ a >>> 3) + w[i - 7]! + (rr(b, 17) ^ rr(b, 19) ^ b >>> 10)) | 0
       }
     }
-    let [a, b, c, d, e, f, g, h] = H
+    let [a, b, c, d, e, f, g, h] = H as [number, number, number, number, number, number, number, number]
     for (let i = 0; i < 64; i++) {
-      const t1 = (h + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & f) ^ (~e & g)) + K[i] + w[i]) | 0
+      const t1 = (h + (rr(e, 6) ^ rr(e, 11) ^ rr(e, 25)) + ((e & f) ^ (~e & g)) + K[i]! + w[i]!) | 0
       const t2 = ((rr(a, 2) ^ rr(a, 13) ^ rr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c))) | 0
       h = g; g = f; f = e; e = (d + t1) | 0; d = c; c = b; b = a; a = (t1 + t2) | 0
     }
-    ;[a, b, c, d, e, f, g, h].forEach((v, i) => { H[i] = (H[i] + v) | 0 })
+    ;[a, b, c, d, e, f, g, h].forEach((v, i) => { H[i] = (H[i]! + v) | 0 })
   }
   return H.map(v => (v >>> 0).toString(16).padStart(8, '0')).join('')
 }

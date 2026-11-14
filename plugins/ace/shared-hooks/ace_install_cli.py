@@ -184,6 +184,8 @@ def startup(ev, sid, pid, cli=None):
         elif inst["state"] == "failed":
             notice = ["⚠️ [ACE] %s; the automatic install failed (%s). Run /ace:ace-install-cli to retry. ACE learns once it is installed."
                       % (why, (inst.get("detail") or "see ace-hook-errors.log")[:160])]
+        elif inst["state"] == "unavailable" and "Node >=" in (inst.get("detail") or ""):  # 8.2.5: no node/npm: say so
+            notice = ["⚠️ [ACE] %s: %s. Run /ace:ace-install-cli afterwards. ACE learns once it is installed." % (why, inst["detail"])]
         else:
             notice = ["⚠️ [ACE] %s. Run /ace:ace-install-cli. ACE learns once it is installed." % why]
 

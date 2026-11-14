@@ -1,9 +1,9 @@
 // 8.2.0 backfill orchestration, ALL I/O injected (post/get/sleep/now/ledger/resume): item building, preview text, the sequential send loop.
 // Pure of `$`: io/backfill_io.ts supplies the real post/get (engine/backfill.js), ledger file and clock; tests supply fakes.
-import { readSession, selectBalanced, taskKey } from './backfill.ts'
-import { readGitLog, readMergeLog } from './backfill_git.ts'
-import { applyJob, batches, classify, describeAnswer, failedItems, reportLine, toItem, type Item, type Report } from './backfill_send.ts'
-import { add, pending, type Ledger } from './ledger.ts'
+import { readSession, selectBalanced, taskKey } from './backfill'
+import { readGitLog, readMergeLog } from './backfill_git'
+import { applyJob, batches, classify, describeAnswer, failedItems, reportLine, toItem, type Item, type Report } from './backfill_send'
+import { add, pending, type Ledger } from './ledger'
 
 export const DEFAULT_LIMIT = 100, MAX_LIMIT = 100
 export const POLL_MS = 60_000, MAX_POLLS = 400   // ~6.7 h of 60 s polls per job: a bound, never an endless loop
@@ -17,7 +17,7 @@ export function parseLimit(args: string): { ok: true, limit: number, rest: strin
   const toks = args.trim().split(/\s+/).filter(Boolean), rest: string[] = []
   let limit: number | undefined
   for (let i = 0; i < toks.length; i++) {
-    const t = toks[i]
+    const t = toks[i]!
     if (t !== '--limit' && !t.startsWith('--limit=')) { rest.push(t); continue }
     const v = t === '--limit' ? toks[++i] : t.slice(8)
     if (limit !== undefined || v === undefined || !/^\d{1,3}$/.test(v)) return { ok: false }
@@ -43,9 +43,9 @@ export function parseBackfillFlags(args: string): BackfillFlags {
   const toks = args.trim().split(/\s+/).filter(Boolean), rest: string[] = []
   let only = false, project: string | undefined, org: string | undefined, sources: Source[] | undefined
   for (let i = 0; i < toks.length; i++) {
-    const t = toks[i]
+    const t = toks[i]!
     if (t === '--backfill-only') { only = true; continue }
-    const k = t.split('=')[0]
+    const k = t.split('=')[0]!
     if (k === '--backfill-only') return bad
     if (k === '--sources') {  // comma list, strict: known tokens only, no empty entry, no duplicate, one flag; stored in canonical order
       const v = t.includes('=') ? t.slice(k.length + 1) : toks[++i]
@@ -158,7 +158,7 @@ export async function stepBackfill(all: Item[], st: RunState, d: Deps): Promise<
     await lg({ event: 'backfill_response', op: 'get', ...(g.exit !== 0 ? { exit: g.exit, stderr: (g.stderr ?? '').slice(0, 200) } : describeAnswer(g.status ?? 0, g.body)), kind: g.exit !== 0 ? 'engine' : 'job' })
     if (g.exit === 1 || (g.exit === 0 && (g.status === 502 || g.status === 503 || g.status === 504))) {
       const n = st.pollFails ?? 0
-      if (n < POLL_RETRY_MS.length) { st.pollFails = n + 1; return POLL_RETRY_MS[n] }
+      if (n < POLL_RETRY_MS.length) { st.pollFails = n + 1; return POLL_RETRY_MS[n]! }
       stop(`Backfill gestoppt: Job-Abfrage nach ${n + 1} Versuchen ohne Antwort (${g.exit === 1 ? g.stderr || 'keine Antwort' : `HTTP ${g.status}`}), später erneut ausführen (bereits Gesendetes bleibt vermerkt, Duplikate werden erkannt).`)
       return 'stop'
     }

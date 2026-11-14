@@ -1,14 +1,14 @@
 // tool.call: tool records for the learn, the late subagent inject at a run's first tool call, the domain shift.
-import { logSubagentError, subagentRender } from './agent.ts'
-import { readJson, readText } from '../io/fs.ts'
-import { nowIso, relLog } from '../io/log.ts'
-import { DOMAIN_MS, hitResult, reuseGet, reuseStore, search } from '../io/spawn.ts'
-import { type Load, type Sess, disabled, ensure, readState, searchOrigin, updateState, uuid, type HookArgs, recordTool, refreshMarker } from '../io/state.ts'
-import { injectedContents } from '../lib/evidence.ts'
-import { renderDomainShift } from '../lib/render.ts'
-import { safeComponent as safe } from '../lib/state.ts'
-import { basenameQuery, domainNames, matchDomainToPath } from '../lib/text.ts'
-import { toolRec } from '../lib/trace.ts'
+import { logSubagentError, subagentRender } from './agent'
+import { readJson, readText } from '../io/fs'
+import { nowIso, relLog } from '../io/log'
+import { DOMAIN_MS, hitResult, reuseGet, reuseStore, search } from '../io/spawn'
+import { type Load, type Sess, disabled, ensure, readState, searchOrigin, updateState, uuid, type HookArgs, recordTool, refreshMarker } from '../io/state'
+import { injectedContents } from '../lib/evidence'
+import { renderDomainShift } from '../lib/render'
+import { safeComponent as safe } from '../lib/state'
+import { basenameQuery, domainNames, matchDomainToPath } from '../lib/text'
+import { toolRec } from '../lib/trace'
 
 // The subagent report tool. CC 2.1.316's typed tool table (claude-code-tools) has no entry for it (only the Agent
 // result's internal `handback` fields mention it), but it exists at runtime as `SubagentHandback({ message })`

@@ -1,5 +1,5 @@
-import { type Cmd, type Kit, confirm } from './kit.ts'
-import { cliIds } from '../context/index.ts'
+import { type Cmd, type Kit, confirm } from './kit'
+import { cliIds } from '../context/index'
 export const learn: Cmd = { name: 'learn', md: 'ace-learn', description: 'Send one lesson (preview + confirm)', argumentHint: '<lesson>', bound: true }
 export async function learnCmd($: any, { c, args }: Kit): Promise<string> {
     const t = args.trim()

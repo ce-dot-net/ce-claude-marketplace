@@ -206,6 +206,38 @@ def _bad_lock(r):
     return any(isinstance(v, dict) and v.get("resolved") and not str(v["resolved"]).startswith("https://") for v in pk.values())
 
 
+NODE_FLOOR_DEFAULT = 20
+TOOLCHAIN_HINT = "installiere z.B. via nvm/apt, dann /ace:ace-install-cli"
+
+
+def node_floor(r=None):
+    """The Node major the pinned CLI needs: its `engines.node` in package-lock.json (readable before any install)."""
+    try:
+        pk = json.loads(((r or root()) / "package-lock.json").read_text()).get("packages", {})
+        m = re.search(r"(\d+)", str(pk.get("node_modules/@ace-sdk/cli", {}).get("engines", {}).get("node", "")))
+        return int(m.group(1)) if m else NODE_FLOOR_DEFAULT
+    except Exception:
+        return NODE_FLOOR_DEFAULT
+
+
+def toolchain_problem(r=None, version=True, timeout=5):
+    """8.2.5: None when node and npm are on PATH and node is new enough, else the one line the person reads (band,
+    /ace:ace-install-cli, doctor, SessionStart). A node that does not answer in time is not judged (never a wait)."""
+    floor = node_floor(r)
+    if not shutil.which("npm") or not shutil.which("node"):
+        return "npm/node fehlt (Node >= %d nötig): %s" % (floor, TOOLCHAIN_HINT)
+    if not version:
+        return None
+    try:
+        out = subprocess.run(["node", "-p", "process.versions.node"], capture_output=True, text=True, timeout=timeout).stdout
+        m = re.search(r"(\d+)\.\d+\.\d+", out)
+        if m and int(m.group(1)) < floor:
+            return "node v%s zu alt (Node >= %d nötig): %s" % (m.group(0), floor, TOOLCHAIN_HINT)
+    except Exception:
+        pass
+    return None
+
+
 def decide(auto=True, now=None, env=None, quick=False):
     """(state, detail). `auto` = the SessionStart rules (opt-out, managed, throttle); manual skips those three.
     `quick` = the sync SessionStart row: the sqlite probe is bounded (SYNC_PROBE_S); node not answering = "start"
@@ -225,8 +257,9 @@ def decide(auto=True, now=None, env=None, quick=False):
         return "off", "ACE_AUTO_INSTALL=0"
     if auto and env.get("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC"):
         return "unavailable", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC is set"
-    if not shutil.which("npm") or not shutil.which("node"):
-        return "unavailable", "npm or node not on PATH"
+    tool = toolchain_problem(r, version=not sq, timeout=SYNC_PROBE_S if quick else 5)  # repair mode: node already runs the CLI
+    if tool:
+        return "unavailable", tool
     if _unsafe_node_modules(r):
         return "unavailable", "node_modules is a symlink leaving the plugin dir"
     if _bad_lock(r):

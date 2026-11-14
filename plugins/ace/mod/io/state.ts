@@ -1,14 +1,14 @@
 // Session state through `$`: Sess resolution, per-load state (Load), the mod-active/mod-classic markers, the
 // patterns-used / mod-tools / pending / deferral files (queued read-merge-write), cohort env and server switches.
 import type { EventName, Hook } from 'claude-code'
-import { readJson, readText, rm, writePrivate } from './fs.ts'
-import { BACKFILL_FLAG_FILE, serverBackfill, CLIENT_POLICY_FILE, FEEDBACK_DOWNVOTE_FILE, RENDER_FULL_PCT_FILE, serverDownvote, serverFullPct, storedDownvote, storedFullPct, validClientPolicy } from '../lib/cohort.ts'
-import { relLog } from './log.ts'
-import { REJECTION_PREV_MAX_AGE_S, type ToolRec } from '../lib/evidence.ts'
-import { num, pyDumps } from '../lib/pyjson.ts'
-import { type StateUpdate, dataRootFromPluginRoot, mergeState, safeComponent as safe } from '../lib/state.ts'
-import { type Ctx, type Env, type State, exportEnv, readEnv, resolveContext } from '../context/index.ts'
-import { cliRun } from './cli.ts'
+import { readJson, readText, rm, writePrivate } from './fs'
+import { BACKFILL_FLAG_FILE, serverBackfill, CLIENT_POLICY_FILE, FEEDBACK_DOWNVOTE_FILE, RENDER_FULL_PCT_FILE, serverDownvote, serverFullPct, storedDownvote, storedFullPct, validClientPolicy } from '../lib/cohort'
+import { relLog } from './log'
+import { REJECTION_PREV_MAX_AGE_S, type ToolRec } from '../lib/evidence'
+import { num, pyDumps } from '../lib/pyjson'
+import { type StateUpdate, dataRootFromPluginRoot, mergeState, safeComponent as safe } from '../lib/state'
+import { type Ctx, type Env, type State, exportEnv, readEnv, resolveContext } from '../context/index'
+import { cliRun } from './cli'
 
 export const MARKER_REFRESH_MS = 60_000           // between handoffs; plugin_data_dir.MOD_AFTER_TOOL_S is 120 s, MOD_HANDOFF_S 15 s
 export const MAX_TOOL_RECS = 1000                 // ponytail: the trace keeps the last 50 + failures anyway; older steps are lost past this
