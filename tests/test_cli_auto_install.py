@@ -117,6 +117,30 @@ def test_no_npm_falls_back(box, monkeypatch):
     assert s == "unavailable" and "npm" in why
 
 
+def test_no_node_names_the_toolchain_and_the_node_floor(box, monkeypatch):
+    """8.2.5: a remote Linux without node/npm: no install attempt, a clear reason with the CLI's Node floor (lockfile engines)."""
+    (box.bin / "node").unlink()
+    monkeypatch.setenv("PATH", str(box.bin))
+    s, why = box.inst.decide()
+    assert s == "unavailable"
+    assert "npm/node fehlt (Node >= 20 nötig)" in why and "nvm/apt" in why and "/ace:ace-install-cli" in why
+    assert box.inst.ensure()["detail"] == why and box.calls() == []
+    assert box.inst.run()["state"] == "unavailable" and box.calls() == []  # the button path: no npm call either
+
+
+def test_node_too_old_is_refused_before_npm(box, monkeypatch, tmp_path):
+    f = tmp_path / "abi"
+    f.write_text("18")  # the fake node answers `-p` with "18:v18.0.0"
+    monkeypatch.setenv("FAKE_NODE_ABI", str(f))
+    s, why = box.inst.decide()
+    assert s == "unavailable" and "Node >= 20 nötig" in why and "18" in why
+    assert box.calls() == []
+
+
+def test_node_floor_reads_the_lockfile_engines(box):
+    assert box.inst.node_floor() == 20
+
+
 def test_read_only_plugin_dir_falls_back(box):
     box.root.chmod(0o555)
     try:
@@ -287,6 +311,7 @@ def test_e2e_no_npm_falls_back_to_message(e2e):
     (env.bin / "npm").unlink()
     r, _ = _start(env, box)
     assert "Run /ace:ace-install-cli" in parse_stdout(r.stdout)["systemMessage"]
+    assert "npm/node fehlt (Node >= 20 nötig)" in parse_stdout(r.stdout)["systemMessage"]  # 8.2.5: the reason, not just "not found"
 
 
 # ---- the Python chain's ▼ line stays quiet while the install runs ----

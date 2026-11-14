@@ -27,8 +27,9 @@ export async function doctorCmd($: any, { c, cli }: Kit): Promise<string> {
     const py = await run($, [`${$.plugin.root}/scripts/ace-python`])  // the fallback hooks' interpreter (>= 3.10)
     out.push(py && py.exitCode === 0 ? `python   ✓ ${String(py.stdout).trim()}` : 'python   ✗ Python >= 3.10 needed for the fallback hooks; the mod chain is unaffected')
     const v = await cliRun($, null, ['--version'], { timeoutMs: 10_000 })
-    out.push(v.exitCode === 0 ? `ace-cli  ✓ ${v.stdout.trim().split('\n')[0]}` : `ace-cli  ✗ ${problemLine('cli_missing')}`)
     const ai = await installer($, ['--status'], 15_000)  // 8.1.1: the background install of the pinned CLI
+    const tool = ai.state === 'unavailable' && /Node >= \d+/.test(ai.detail) ? ai.detail : ''  // 8.2.5: no node/npm
+    out.push(v.exitCode === 0 ? `ace-cli  ✓ ${v.stdout.trim().split('\n')[0]}` : `ace-cli  ✗ ${tool || problemLine('cli_missing')}`)
     out.push(`install  auto-install ${ai.state}${ai.detail ? ` (${ai.detail})` : ''}`)
     if (ai.sqlite) out.push(`SQLite cache: ${ai.sqlite}`)  // 8.1.2: off = RAM-only, never a band
     if (cc.bound && v.exitCode === 0) {

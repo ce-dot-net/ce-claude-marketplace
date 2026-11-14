@@ -35,7 +35,8 @@ docs/technical/ARCHITECTURE.md "Task outcome (8.1.3)".
   `ACE_AUTO_ADOPT=0`), and a file-bound remote teaches the per-machine remote map, so a fresh clone binds by itself.
 - **Status only on problems.** One background `ace-cli status` per session; nothing is shown when ok. On a problem:
   `ACE ▼ <state>` in the status area and one band above the prompt with exactly one action (Verbinden, Anmelden,
-  Anderes wählen, Bereinigt neu schreiben, ace-cli installieren). A device login starts only on the button press.
+  Anderes wählen, Bereinigt neu schreiben, ace-cli installieren). A device login starts only on the button press (or
+  `/ace:ace-login --approved`); it needs no browser (8.2.5): the URL and the code are shown, open them on any device.
   `Server nicht erreichbar` heals itself (8.2.4): it is checked again in the background (15 s, 30 s, 60 s, then every
   5 min, at most 30 times) and cleared by the first successful search; the other states stay until you act.
   The Python chain shows one line per session instead.
@@ -159,7 +160,7 @@ confirm button. Elsewhere the markdown fallback runs.
 | `/ace:ace-bootstrap [mode] [level]` or `--mode X --thoroughness Y` or `--backfill-only [--sources session,git,merge] [--limit N] [--days-back N] [--target-project prj_x --target-org org_x] [--approved]` | Build the playbook from the codebase (legacy, sends raw code) or backfill redacted traces from session transcripts, fix/revert commits and merged PRs (default: all three, the limit shared round-robin so no source starves another; `--sources` narrows): preview + confirm (or `--approved`) |
 | `/ace:ace-tune [show \| key=value ...]` | Show or change server settings (writes: preview + confirm) |
 | `/ace:ace-configure [org_ prj_]` | Bind the repo: name-matched suggestion, `.gitignore` diff, confirm |
-| `/ace:ace-login` | Login state; the device login starts on the button press |
+| `/ace:ace-login [--approved]` | Login state; the device login (no browser needed, works over SSH: URL + code are shown) starts on the button press or with `--approved` |
 | `/ace:ace-install-cli` | The pinned ace-cli; reinstall on the button press |
 
 ### The Playbook
@@ -220,7 +221,10 @@ bind via `ACE_ORG_ID`/`ACE_PROJECT_ID`. Check any directory with `scripts/ace-co
 
 ### "ace-cli not found"
 
-Run `/ace:ace-install-cli` (it reports which CLI is used and repairs a missing install).
+Run `/ace:ace-install-cli` (it reports which CLI is used and repairs a missing install; `--approved` installs at once
+where the band button cannot be pressed). The install needs `node` and `npm` on PATH (Node >= the pinned CLI's
+`engines.node`, today 20); without them the band, the preview and `/ace:ace-doctor` say
+`npm/node fehlt (Node >= 20 nötig)`: install Node (e.g. via nvm or apt), then run `/ace:ace-install-cli`.
 
 ### "ACE ▼ Repo nicht verbunden"
 

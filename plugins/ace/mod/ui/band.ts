@@ -6,6 +6,7 @@ import { type Ctx, WARN_LINES, bindInit, cliIds, cliInit, repoWrite, writeBindin
 import { REMOVE_SHADOW_SH, REPO_WRITE_WHY } from '../lib/sh'
 import { run } from '../io/fs'
 import { cliRun, cap } from '../io/cli'
+import { cliHead } from '../io/spawn'
 import { installer } from '../io/installer'
 import { execExport, execPending } from '../io/pending'
 import { type Load } from '../io/state'
@@ -85,20 +86,67 @@ export async function runPending($: any, L: Load, p: any) {
 export async function exportTo($: any, L: Load, rel: string) {
   $.ui.toast((await execExport($, L.ctx, rel)).toast)
 }
-export async function startLogin($: any, L: Load) {
-  $.ui.toast('ACE: Login im Browser bestätigen')
+// 8.2.5: the device login without a browser (remote / SSH): `ace-cli login --no-browser` prints the URL and the code, then
+// polls until confirmed. Streamed through $.process.spawn (argv only), so both are shown while the CLI still waits.
+export const LOGIN_MS = 300_000, LOGIN_UNKNOWN_MS = 10_000
+const ANSI = /\u001b\[[0-9;]*[A-Za-z]/g, URL_RE = /https?:\/\/[^\s"'<>]+/
+export function parseLogin(raw: string): { url: string, code: string } | null {
+  const t = raw.replace(ANSI, '')
+  const url = /"verification_url"\s*:\s*"([^"]+)"/.exec(t)?.[1] ?? URL_RE.exec(t)?.[0]
+  const code = /"user_code"\s*:\s*"([^"]+)"/.exec(t)?.[1] ?? /code manually:\s*([A-Za-z0-9-]+)/i.exec(t)?.[1]
+    ?? /\b[A-Z0-9]{3,}-[A-Z0-9]{3,}\b/.exec(t.replace(new RegExp(URL_RE.source, 'g'), ''))?.[0]
+  return url && code ? { url, code } : null
+}
+// Resolves with the line the person needs (URL + code, else the first ~300 characters of what the CLI said) as soon as
+// it is known; the login itself runs on (300 s), then 'angemeldet' / 'Login nicht abgeschlossen' and the rebind.
+export function startLogin($: any, L: Load): Promise<string> {
+  $.ui.toast('ACE: Login startet …')
+  let tell!: (s: string) => void
+  const shown = new Promise<string>(r => { tell = r })
+  let out = '', told = false
+  const say = (line: string) => { if (told) return; told = true; $.ui.toast(line); $.ui.log(line); tell(line) }
+  const raw = () => `ACE: ace-cli login sagt: ${out.replace(ANSI, '').trim().slice(0, 300)}`
   void (async () => {
-    const r = await cliRun($, null, ['login'], { timeoutMs: 300_000 })
-    $.ui.toast(r.exitCode === 0 ? 'ACE: angemeldet' : 'ACE: Login nicht abgeschlossen')
+    let code: number | null = null
+    const timers: any[] = []
+    const after = (ms: number, fn: () => void) => { try { timers.push($.clock.after(ms, fn)) } catch { /* no timer: the CLI's own poll limit ends it */ } }
+    try {
+      const s = $.process.spawn({ argv: [...await cliHead($), 'login', '--no-browser'], env: { NO_COLOR: '1' } })
+      after(LOGIN_MS, () => { void s.return(undefined) })  // leaving the stream kills the child
+      after(LOGIN_UNKNOWN_MS, () => { if (out.trim()) say(raw()) })  // output we cannot read: show it
+      for await (const { text } of s) {
+        if (told) continue
+        out = (out + text).slice(0, 20_000)
+        const p = parseLogin(out.slice(0, out.lastIndexOf('\n') + 1))  // whole lines only: a piece may end mid-code
+        if (p) say(`ACE: Öffne ${p.url} und gib den Code ${p.code} ein`)
+      }
+      code = (await s.result.catch(() => ({ code: null }))).code
+    } catch { /* cannot start (no CLI) or killed: not completed */ }
+    for (const t of timers) t?.cancel?.()
+    const end = code === 0 ? 'ACE: angemeldet' : 'ACE: Login nicht abgeschlossen'
+    if (!told) {  // never got URL + code: the CLI's own words (if any) as a log line, then the end
+      told = true
+      if (code !== 0 && out.trim()) $.ui.log(raw())
+      tell(code !== 0 && out.trim() ? raw() : end)
+    }
+    $.ui.toast(end)
     await rebind($, L, await $.session.root())
-  })().catch(() => undefined)
+  })().catch(() => tell('ACE: Login nicht abgeschlossen'))
+  return shown
 }
 // The same installer SessionStart starts in the background (io/installer.ts); a press is never throttled.
-export async function install($: any, L: Load) {
+export async function install($: any, L: Load): Promise<string> {
   $.ui.toast('ACE: ace-cli wird installiert')
   const r = await installer($, ['--run'], 600_000)
-  $.ui.toast(r.state === 'ok' ? 'ACE: ace-cli installiert' : `ACE: Installation fehlgeschlagen${r.detail ? ` (${r.detail.slice(0, 120)})` : ''}`)
+  const line = r.state === 'ok' ? 'ACE: ace-cli installiert' : `ACE: Installation fehlgeschlagen${r.detail ? ` (${r.detail.slice(0, 200)})` : ''}`
+  $.ui.toast(line)
   await rebind($, L, await $.session.root())
+  return line
+}
+// 8.2.5 `--approved` for the two band kinds that are safe to run from a typed line (Moshi/herdr: no button to press).
+export async function bandAction($: any, L: Load, p: any): Promise<string> {
+  await $.state.set(PENDING, null)
+  return p.kind === 'login' ? startLogin($, L) : install($, L)
 }
 
 export async function renderBand($: any, L: Load, e: any, next: any) {
