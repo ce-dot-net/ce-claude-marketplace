@@ -1,29 +1,30 @@
 // The one command table (8.1.0). Every /ace:ace-<name> markdown command is answered here, model-free, wherever
 // mods run (the markdown stays the fallback where they do not); `/ace` is the mod's own overview.
-import { type Cmd, type Kit, approveOrHint, kitCli, unboundLine, cap } from './kit.ts'
-import { stripApproved } from '../lib/approved.ts'
-import { localState, problemLine } from '../context/index.ts'
-import { type Load, resolveContextOnce } from '../io/state.ts'
-import { search, searchCmd } from './search.ts'
-import { patterns, patternsCmd } from './patterns.ts'
-import { top, topCmd } from './top.ts'
-import { status, statusCmd } from './status.ts'
-import { domains, domainsCmd } from './domains.ts'
-import { exportPatterns, exportPatternsCmd } from './export_patterns.ts'
-import { insights, insightsCmd } from './insights.ts'
-import { graph, graphCmd } from './graph.ts'
-import { doctor, doctorCmd } from './doctor.ts'
-import { test, testCmd } from './test.ts'
-import { cleanup, cleanupCmd } from './cleanup.ts'
-import { clear, clearCmd } from './clear.ts'
-import { delta, deltaCmd } from './delta.ts'
-import { importPatterns, importPatternsCmd } from './import_patterns.ts'
-import { learn, learnCmd } from './learn.ts'
-import { bootstrap, bootstrapCmd } from './bootstrap.ts'
-import { tune, tuneCmd } from './tune.ts'
-import { configure, configureCmd } from './configure.ts'
-import { login, loginCmd } from './login.ts'
-import { installCli, installCliCmd } from './install_cli.ts'
+import { type Cmd, type Kit, approveOrHint, kitCli, unboundLine, cap } from './kit'
+import { stripApproved } from '../lib/approved'
+import { localState, problemLine } from '../context/index'
+import { type Load, resolveContextOnce } from '../io/state'
+import { search, searchCmd } from './search'
+import { patterns, patternsCmd } from './patterns'
+import { top, topCmd } from './top'
+import { status, statusCmd } from './status'
+import { domains, domainsCmd } from './domains'
+import { exportPatterns, exportPatternsCmd } from './export_patterns'
+import { insights, insightsCmd } from './insights'
+import { graph, graphCmd } from './graph'
+import { doctor, doctorCmd } from './doctor'
+import { test, testCmd } from './test'
+import { cleanup, cleanupCmd } from './cleanup'
+import { clear, clearCmd } from './clear'
+import { delta, deltaCmd } from './delta'
+import { importPatterns, importPatternsCmd } from './import_patterns'
+import { learn, learnCmd } from './learn'
+import { bootstrap, bootstrapCmd } from './bootstrap'
+import { tune, tuneCmd } from './tune'
+import { configure, configureCmd } from './configure'
+import { login, loginCmd } from './login'
+import { installCli, installCliCmd } from './install_cli'
+import { bandAction } from '../ui/band'
 
 export const ace: Cmd = { name: 'ace', description: 'ACE overview: binding, state and every command' }
 export async function aceCmd($: any, { c }: Kit): Promise<string> {
@@ -51,7 +52,7 @@ export async function runCommand($: any, L: Load, cmd: Cmd, args: string): Promi
   const a = stripApproved(args ?? '')  // 8.2.0: the standalone token never reaches a command
   const k: Kit = { c, args: a.args, cli: kitCli($, c), approved: a.approved }
   const before = ((await $.state.get({ plugin: 'ace', key: 'pending' })) as any).value
-  try { return cap(await approveOrHint($, k, cmd, before, await dispatch($, cmd.name, k))) } catch (err) { return `ACE ▼ ${cmd.name} failed: ${String(err).slice(0, 300)}` }
+  try { return cap(await approveOrHint($, k, cmd, before, await dispatch($, cmd.name, k), p => bandAction($, L, p))) } catch (err) { return `ACE ▼ ${cmd.name} failed: ${String(err).slice(0, 300)}` }
 }
 
 // A switch, not a table of functions: `$` reaches only function declarations (the mods loader's rule).

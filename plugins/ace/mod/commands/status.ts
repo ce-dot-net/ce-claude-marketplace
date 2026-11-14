@@ -1,4 +1,4 @@
-import { type Cmd, type Kit, failLine, json } from './kit.ts'
+import { type Cmd, type Kit, failLine, json } from './kit'
 export const status: Cmd = { name: 'status', md: 'ace-status', description: 'Playbook statistics and the binding', bound: true }
 export async function statusCmd($: any, { c, cli }: Kit): Promise<string> {
     const r = await cli(['status', '--json'])

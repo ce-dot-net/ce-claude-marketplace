@@ -55,6 +55,7 @@ test('an injection canary in pattern text is shown as text, never executed', asy
 test('unbound: a bound command answers the one problem line and calls nothing', async ($, on) => {
   const h = host(on, { noSettings: true })
   await start($)
+  for (let i = 0; i < 20; i++) await new Promise(r => setTimeout(r, 2))  // 8.2.5: SessionStart's own background CLI probe settles first
   const n = h.runs.length
   expect(await run($, 'search', 'x')).toBe(LINES.unbound)
   expect(await run($, 'clear')).toBe(LINES.unbound)

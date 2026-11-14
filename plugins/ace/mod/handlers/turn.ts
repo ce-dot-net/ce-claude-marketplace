@@ -1,15 +1,15 @@
 // turn.start / turn.complete: task anchors, the learn (Haiku self-eval, F-080 credit, detached launcher), abstain/reap.
-import { readText, rm, run, writePrivate, readJson } from '../io/fs.ts'
-import { logsSafe, nowIso, relLog } from '../io/log.ts'
-import { LAUNCHER_MS, aceEnv, cliHead, engineScript, gitContext, ids } from '../io/spawn.ts'
-import { type Load, type Sess, clearTools, cohortEnv, readState, stateFile, takeDownvote, takeTools, uuid, type HookArgs, classicFresh, clearDeferred, deferFile, disabled, enqueue, ensure, pendingFile, readOrigin, refreshMarker } from '../io/state.ts'
-import { traceVariant } from '../lib/cohort.ts'
-import { type ToolRec, appliedLogIds, parseAceReview, parseUsedIds, selfEvalPrompt, usedPatternIds } from '../lib/evidence.ts'
-import { pyDumps, pyLoads } from '../lib/pyjson.ts'
-import { safeComponent as safe } from '../lib/state.ts'
-import { FALLBACK_ON_3, OUTCOME_RULE, buildTrace, detachedLearnArgv, hasSubstantialWork, isTrivialTask, learnArgv, reclaimTrace } from '../lib/trace.ts'
-import { learnLine } from '../ui/status.ts'
-import { anchorRun, checkPlaceholder } from './agent.ts'
+import { readText, rm, run, writePrivate, readJson } from '../io/fs'
+import { logsSafe, nowIso, relLog } from '../io/log'
+import { LAUNCHER_MS, aceEnv, cliHead, engineScript, gitContext, ids } from '../io/spawn'
+import { type Load, type Sess, clearTools, cohortEnv, readState, stateFile, takeDownvote, takeTools, uuid, type HookArgs, classicFresh, clearDeferred, deferFile, disabled, enqueue, ensure, pendingFile, readOrigin, refreshMarker } from '../io/state'
+import { traceVariant } from '../lib/cohort'
+import { type ToolRec, appliedLogIds, parseAceReview, parseUsedIds, selfEvalPrompt, usedPatternIds } from '../lib/evidence'
+import { pyDumps, pyLoads } from '../lib/pyjson'
+import { safeComponent as safe } from '../lib/state'
+import { FALLBACK_ON_3, OUTCOME_RULE, buildTrace, detachedLearnArgv, hasSubstantialWork, isTrivialTask, learnArgv, reclaimTrace } from '../lib/trace'
+import { learnLine } from '../ui/status'
+import { anchorRun, checkPlaceholder } from './agent'
 
 // Reap a finished task's state; main keeps rendered-main.txt for the SessionStart compact re-inject (patterns_used_state).
 export async function reap($: any, L: Load, s: Sess, key: string, state: any) {
@@ -179,7 +179,7 @@ export async function turnStart($: HookArgs<'turn.start'>[0], L: Load, e: HookAr
           anchor = typeof tsid === 'string' && tsid ? tsid : null  // never store undefined: undefined means "this load never heard the turn"
         } else anchor = (s && (await readState($, s, 'main'))?.task_session_id) ?? null
       }
-      L.turnAnchor.set(e.turnId, anchor)
+      L.turnAnchor.set(e.turnId, anchor as string | null)
       L.pendingMain = undefined
     } else {
       const s = await ensure($, L)

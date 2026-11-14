@@ -1,5 +1,5 @@
-import { type Cmd, type Kit, confirm, failLine, json } from './kit.ts'
-import { cliIds } from '../context/index.ts'
+import { type Cmd, type Kit, confirm, failLine, json } from './kit'
+import { cliIds } from '../context/index'
 export const clear: Cmd = { name: 'clear', md: 'ace-clear', description: 'Clear the playbook (preview + confirm)', bound: true }
 export async function clearCmd($: any, { c, cli }: Kit): Promise<string> {
     const s = await cli(['status', '--json'])

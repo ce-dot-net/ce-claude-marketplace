@@ -159,7 +159,7 @@ exit "${FAKE_LEARN_RC:-0}"
 
 
 def _launcher_argv(job):
-    p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", str(HERE / "mod_parity_node.mjs")],
+    p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", "--import", str(HERE / "ts_resolve.mjs"), str(HERE / "mod_parity_node.mjs")],
                        input=json.dumps({"fixtures": [], "sids": [], "envs": [], "roots": [], "learnJob": job}),
                        capture_output=True, text=True, timeout=60)
     assert p.returncode == 0, "mod lib/trace.ts did not run:\n" + p.stderr[-2000:]
@@ -356,7 +356,7 @@ def test_detached_engine_learn_falls_back_to_cli_only_on_exit_3(tmp_path, engine
 # ---------- §24: the mod's shell writers, run for real ----------
 
 def _shell():
-    p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", str(HERE / "mod_parity_node.mjs")],
+    p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", "--import", str(HERE / "ts_resolve.mjs"), str(HERE / "mod_parity_node.mjs")],
                        input=json.dumps({"fixtures": [], "sids": [], "envs": [], "roots": [], "learnJob": None}),
                        capture_output=True, text=True, timeout=60)
     assert p.returncode == 0, p.stderr[-2000:]

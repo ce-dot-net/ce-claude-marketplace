@@ -1,4 +1,4 @@
-import { type Cmd, type Kit, cap, failLine, json, patternLines } from './kit.ts'
+import { type Cmd, type Kit, cap, failLine, json, patternLines } from './kit'
 export const search: Cmd = { name: 'search', md: 'ace-search', description: 'Semantic search in the ACE playbook', argumentHint: '<query>', bound: true }
 export async function searchCmd($: any, { args, cli }: Kit): Promise<string> {
     const q = args.trim()

@@ -1,6 +1,6 @@
 // File I/O through `$`: process runner, rm, JSON/text reads, private (0600, atomic) writes via lib/sh.ts PRIVATE_WRITE_SH.
-import { pyLoads } from '../lib/pyjson.ts'
-import { PRIVATE_WRITE_SH } from '../lib/sh.ts'
+import { pyLoads } from '../lib/pyjson'
+import { PRIVATE_WRITE_SH } from '../lib/sh'
 
 export async function run($: any, argv: string[], init: any = {}) {
   try { return await $.process.run(argv, { timeoutMs: 5000, ...init }) } catch { return null }

@@ -1,4 +1,4 @@
-import { type Cmd, type Kit, confirm } from './kit.ts'
+import { type Cmd, type Kit, confirm } from './kit'
 // Rotated relevance logs and v7 leftovers older than N days in <log root>/.claude/data/logs; preview, then the button.
 export const CLEANUP_NAMES = ['ace-relevance.1.jsonl', 'ace-relevance.2.jsonl', 'ace-relevance.3.jsonl']
 export const cleanup: Cmd = { name: 'cleanup', md: 'ace-cleanup', description: 'Delete rotated ACE logs (preview + confirm)', argumentHint: '[days]' }

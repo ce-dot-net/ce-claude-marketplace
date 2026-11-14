@@ -1,6 +1,6 @@
 // The pinned plugin-local ace-cli installer (8.1.1): ONE implementation, shared-hooks/utils/ace_cli_installer.py.
 // Every caller here (the quiet SessionStart window, the band's [Erneut versuchen], /ace:ace-install-cli) only spawns it.
-import { python } from '../commands/py.ts'
+import { python } from '../commands/py'
 
 export type Inst = { state: 'ok' | 'started' | 'running' | 'failed' | 'off' | 'unavailable' | string, detail: string, sqlite?: string }  // sqlite: --status only (8.1.2)
 // args: --ensure (start in the background when due) | --wait (ensure, then block until done) | --run (install now) | --status

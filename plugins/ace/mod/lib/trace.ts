@@ -1,10 +1,10 @@
 // Learn side (ace_after_task + trace_truncate): tool records, trivial/substantial gates, trace build + truncate,
 // learn argv and the detached learn launcher. Pure: no `$`, no I/O.
-import { pyDumps } from './pyjson.ts'
-import { cpSlice, isMachinePrompt } from './text.ts'
-import { toolHaystack, type ToolRec } from './evidence.ts'
-import { APPEND_SH } from './sh.ts'
-import { sha256Hex } from './cohort.ts'
+import { pyDumps } from './pyjson'
+import { cpSlice, isMachinePrompt } from './text'
+import { toolHaystack, type ToolRec } from './evidence'
+import { APPEND_SH } from './sh'
+import { sha256Hex } from './cohort'
 
 // ---------- ace_after_task ----------
 const TRIVIAL = [/<command-message>ace[:\-]/i, /ace:ace-/i, /(?:^|\s)\/ace-[\w:-]*(?:\s|$)/i, /ace-status/i, /ace-patterns/i, /ace-search/i,
@@ -60,7 +60,7 @@ export function summarizeResult(tool: string, res: any, isError = false, denied?
   if (tool === 'Edit' || tool === 'Write') return 'Success'
   if (tool === 'Read') { const c = res.file?.content ?? res.content ?? ''; return `Read ${c ? c.split('\n').length : 0} lines` }
   if (tool === 'Bash' && exitCode(res)) return `Exit code ${exitCode(res)}`
-  if (tool === 'Bash') { const first = String(res.stdout || '').split('\n')[0]; return res.stdout ? (cut(first, 60) || 'Success') : 'Success' }
+  if (tool === 'Bash') { const first = String(res.stdout || '').split('\n')[0]!; return res.stdout ? (cut(first, 60) || 'Success') : 'Success' }
   if (tool === 'Grep' || tool === 'Glob') { const f = res.filenames ?? res.files; return Array.isArray(f) ? `Found ${f.length} files` : cut(JSON.stringify(res), 100) }
   if (tool === 'Task' || tool === 'Agent') return 'Task completed'
   return cut(JSON.stringify(res), 100)
@@ -118,9 +118,9 @@ function splitTop(s: string, seps: string[]): string[] {
     if (s.startsWith('<<', i) && !s.startsWith('<<<', i)) {  // heredoc: remember the delimiter
       let j = i + 2
       if (j < n && s[j] === '-') j++
-      while (j < n && ' \t'.includes(s[j])) j++
+      while (j < n && ' \t'.includes(s[j]!)) j++
       let k = j
-      while (k < n && !' \t\n;|&<>()'.includes(s[k])) k++
+      while (k < n && !' \t\n;|&<>()'.includes(s[k]!)) k++
       const d = s.slice(j, k).replace(/['"\\]/g, '')
       if (d) pend.push(d)
       cur += s.slice(i, k); i = k; continue
@@ -148,7 +148,7 @@ function splitTop(s: string, seps: string[]): string[] {
 
 // fam is in table, by family prefix ('git diff HEAD' is in 'git diff').
 const inTable = (fam: string, table: string[]) => table.some(e => fam === e || fam.startsWith(e + ' '))
-const pyStrip = (x: string, chars: string) => { let a = 0, b = x.length; while (a < b && chars.includes(x[a])) a++; while (b > a && chars.includes(x[b - 1])) b--; return x.slice(a, b) }
+const pyStrip = (x: string, chars: string) => { let a = 0, b = x.length; while (a < b && chars.includes(x[a]!)) a++; while (b > a && chars.includes(x[b - 1]!)) b--; return x.slice(a, b) }
 const WS = ' \t\n\r\x0b\x0c'  // Python str.strip()/split() whitespace (ASCII)
 
 // 8 hex chars of sha256 over the whitespace-collapsed text (ace_after_task._norm_hash).
@@ -169,14 +169,14 @@ const writesTo = (t: string) => !!t && t !== '/dev/null' && !t.startsWith('&')
 function httpKey(first: string, w: string[]): string {
   let method: string | null = null, host = ''
   for (let i = 1; i < w.length; i++) {
-    const x = w[i]
-    if ((x === '-X' || x === '--request' || x === '--method') && i + 1 < w.length) { method = method || w[i + 1].toUpperCase(); i++ }
+    const x = w[i]!
+    if ((x === '-X' || x === '--request' || x === '--method') && i + 1 < w.length) { method = method || w[i + 1]!.toUpperCase(); i++ }
     else if (x.startsWith('--request=') || x.startsWith('--method=')) method = method || x.slice(x.indexOf('=') + 1).toUpperCase()
     else if (x.startsWith('-X') && x.length > 2 && !x.startsWith('--')) method = method || x.slice(2).toUpperCase()
     else if (['-d', '-F', '--form', '--json'].includes(x) || x.startsWith('--data') || x.startsWith('--post-')) method = method || 'POST'
     else if (!host && SCHEME.test(x)) {
       let h = x.slice(x.indexOf('://') + 3)
-      for (const c of '/?#') h = h.split(c)[0]
+      for (const c of '/?#') h = h.split(c)[0]!
       host = h.split('@').pop()!.toLowerCase()
     }
   }
@@ -192,8 +192,8 @@ function stageFamily(text: string): [string, boolean, string] {
     if (k >= 0) { body = text.slice(k + 1); text = text.slice(0, k) }
   }
   const raw = splitTop(pyStrip(text, WS), [' ', '\t', '\n']).filter(x => x && x !== '!')
-  if (raw.length && raw[0].startsWith('(')) {  // subshell: its own chain decides
-    const inner = raw[0].slice(1)
+  if (raw.length && raw[0]!.startsWith('(')) {  // subshell: its own chain decides
+    const inner = raw[0]!.slice(1)
     const [fam, dec, key] = analyze(inner.endsWith(')') ? inner.slice(0, -1) : inner)
     return [fam, !dec, key]
   }
@@ -204,36 +204,36 @@ function stageFamily(text: string): [string, boolean, string] {
     if (!x) continue
     const m = REDIR.exec(x)
     if (m) {  // a redirection: '>'/'>>'/'1>'/'&>' to a file writes (not '2>&1', not '> /dev/null')
-      outRedir = ['>', '>>', '>|'].includes(m[2]) && ['', '1', '&'].includes(m[1])
+      outRedir = ['>', '>>', '>|'].includes(m[2]!) && ['', '1', '&'].includes(m[1]!)
       if (m[3]) writes = writes || (outRedir && writesTo(m[3]))
       else skip = true
       continue
     }
     w.push(x)
   }
-  while (w.length && (WRAPPERS.includes(w[0]) || KW_SKIP.includes(w[0]) || ASSIGN.test(w[0]) || w[0] === 'timeout' || ((w[0] === 'uv' || w[0] === 'poetry') && w[1] === 'run'))) {
+  while (w.length && (WRAPPERS.includes(w[0]!) || KW_SKIP.includes(w[0]!) || ASSIGN.test(w[0]!) || w[0] === 'timeout' || ((w[0] === 'uv' || w[0] === 'poetry') && w[1] === 'run'))) {
     if (w[0] === 'timeout') {
       w = w.slice(1)
-      while (w.length && w[0].startsWith('-')) w = w.slice(1)
+      while (w.length && w[0]!.startsWith('-')) w = w.slice(1)
       w = w.slice(1)
     } else if ((w[0] === 'uv' || w[0] === 'poetry') && w[1] === 'run') w = w.slice(2)
     else w = w.slice(1)
   }
-  if (!w.length || KW_NONE.includes(w[0])) return ['', true, '']
-  const first = w[0].split('/').pop()!
+  if (!w.length || KW_NONE.includes(w[0]!)) return ['', true, '']
+  const first = w[0]!.split('/').pop()!
   let fam = first, script: string | null = null
   if (first === 'sed' && w.slice(1).some(x => SHORT_I.test(x) || x === '--in-place' || x.startsWith('--in-place='))) fam = 'sed-i'  // edits in place: not read-only
   else if ((first === 'awk' || first === 'gawk') && AWK_INPLACE.test(' ' + w.slice(1).join(' ') + ' ')) fam = 'awk-i'
   else if (first === 'perl' && w.slice(1).some(x => PERL_I.test(x))) fam = 'perl-pi'
   else if (first === 'curl' || first === 'wget') return [first, !writes && inTable(first, READ_ONLY_BASH), httpKey(first, w)]
-  else if ((first === 'python' || first === 'python3') && w.length > 2 && w[1] === '-m') fam = w[2]
+  else if ((first === 'python' || first === 'python3') && w.length > 2 && w[1] === '-m') fam = w[2]!
   else if (first === 'command' && (w[1] === '-v' || w[1] === '-V')) fam = 'command -v'
   else if (Object.prototype.hasOwnProperty.call(SUBCOMMAND_TOOLS, first)) {
     const rest = w.slice(1)
     let tok: string | null = null, sus = false
     while (rest.length) {
       const x = rest.shift()!
-      if (SUBCOMMAND_TOOLS[first] === 1 && (x === '-c' || x === '-e')) { tok = x; script = rest.length ? rest[0] : ''; break }
+      if (SUBCOMMAND_TOOLS[first] === 1 && (x === '-c' || x === '-e')) { tok = x; script = rest.length ? rest[0]! : ''; break }
       if (x.startsWith('-')) { if (first === 'git' && (x === '-C' || x === '-c') && rest.length) rest.shift(); continue }
       if (/[ \t\n]/.test(x)) continue  // a quoted string is no subcommand or script
       sus = suspicious(x)
@@ -243,8 +243,8 @@ function stageFamily(text: string): [string, boolean, string] {
     if (tok && !sus) {
       fam = `${first} ${tok}`
       // ponytail: the second token is taken only right after the first (no flag-value parsing)
-      if (SUBCOMMAND_TOOLS[first] === 2 && rest.length && !rest[0].startsWith('-')) {
-        if (suspicious(rest[0])) fam = first  // never a URL, userinfo or token in a family: the first word only
+      if (SUBCOMMAND_TOOLS[first] === 2 && rest.length && !rest[0]!.startsWith('-')) {
+        if (suspicious(rest[0]!)) fam = first  // never a URL, userinfo or token in a family: the first word only
         else fam += ` ${rest[0]}`
       }
     }
@@ -262,13 +262,13 @@ function analyze(cmd: string): [string, boolean, string] {
   for (const it of splitTop(cmd, CHAIN)) {
     const stages = splitTop(it, ['|']).filter(x => pyStrip(x, WS))
     if (stages.length) {
-      const r = stageFamily(pyStrip(pyStrip(stages[stages.length - 1], WS), '&'))
+      const r = stageFamily(pyStrip(pyStrip(stages[stages.length - 1]!, WS), '&'))
       if (r[0]) items.push(r)
     }
   }
   if (!items.length) return ['', true, '']
   const nonro = items.filter(x => !x[1])
-  const pick = nonro.length ? nonro[nonro.length - 1] : items[items.length - 1]
+  const pick = (nonro.length ? nonro[nonro.length - 1] : items[items.length - 1])!
   return [pick[0], nonro.length > 0, pick[2]]
 }
 
@@ -277,7 +277,7 @@ export function bashStep(cmd: unknown): [string, boolean, string] {
   const c = typeof cmd === 'string' ? cmd : cmd === null || cmd === undefined ? '' : String(cmd)  // the RAW command: it never leaves the plugin
   try { return analyze(c) } catch {  // ponytail: unparsable input falls back to the first word
     const w = c.split(/[ \t\n\r\x0b\x0c]+/).filter(Boolean)
-    let fam = w.length ? w[0].split('/').pop()! : ''
+    let fam = w.length ? w[0]!.split('/').pop()! : ''
     if (suspicious(fam)) fam = ''
     return [fam, !inTable(fam, READ_ONLY_BASH), fam]
   }
@@ -334,7 +334,7 @@ const DELIM_MAX = 256
 // The end of the shell word starting at i in text (an open quote runs to the closing quote on a later line, else to the end).
 function stdinWordEnd(t: string, i: number): number {
   const n = t.length
-  while (i < n && !WORD_END.includes(t[i])) {
+  while (i < n && !WORD_END.includes(t[i]!)) {
     const c = t[i]
     if (c === '\\') i += 2
     else if (c === "'" || c === '"' || (c === '$' && t[i + 1] === "'")) {
@@ -370,8 +370,8 @@ function hereDocs(l: string): [string, boolean][] | null {
     if (dash) i++
     while (l[i] === ' ' || l[i] === '\t') i++
     let d: string
-    if (l[i] === "'" || l[i] === '"') { const e = l.indexOf(l[i], i + 1); if (e < 0) return null; d = l.slice(i + 1, e); i = e + 1 }
-    else { if (l[i] === '\\') i++; let e = i; while (e < l.length && !DELIM_END.includes(l[e])) e++; d = l.slice(i, e); i = e }
+    if (l[i] === "'" || l[i] === '"') { const e = l.indexOf(l[i]!, i + 1); if (e < 0) return null; d = l.slice(i + 1, e); i = e + 1 }
+    else { if (l[i] === '\\') i++; let e = i; while (e < l.length && !DELIM_END.includes(l[e]!)) e++; d = l.slice(i, e); i = e }
     if (!d || d.length > DELIM_MAX) return null
     out.push([d, dash])
     k = i
@@ -437,7 +437,7 @@ function redactSpans(text: string): string {
     if (!best) break
     const start = best.index + best[0].length
     let k = best.index - 1
-    while (k >= 0 && !TOKEN_SEP.includes(text[k])) k--
+    while (k >= 0 && !TOKEN_SEP.includes(text[k]!)) k--
     let end: number
     if (text.slice(k + 1, best.index).includes('://')) { const e = searchFrom(URL_VALUE_END, text, start); end = e ? e.index : text.length }  // a URL query value
     else {
@@ -519,7 +519,7 @@ function stepKey(tool: string, input: any): { key: string; dec: boolean } {
 // through turn.complete (isAborted / reason) and on purpose sends no trace for them (turn.ts); the classic chain sees none.
 export function taskOutcome(tools: ToolRec[]): { success: boolean; failed_steps: number; aborted: boolean } {
   const st = tools.map(t => ({ s: t.intr ? 'interrupted' : t.failed ? 'failed' : 'ok', key: t.key ?? t.tool, dec: t.dec ?? DECISIVE_TOOLS.includes(t.tool) }))
-  const aborted = st.length > 0 && st[st.length - 1].s === 'interrupted'
+  const aborted = st.length > 0 && st[st.length - 1]!.s === 'interrupted'
   let success = !aborted
   st.forEach((x, i) => {
     if (x.s === 'failed' && x.dec && !st.slice(i + 1).some(y => y.s === 'ok' && y.key === x.key)) success = false

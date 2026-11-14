@@ -192,7 +192,7 @@ def test_forged_commondir_never_binds_or_logs_into_the_victim_both_chains(box, m
     node = shutil.which('node')
     if not node:
         pytest.skip('node not found')
-    out = subprocess.run([node, '--experimental-transform-types', '--no-warnings', '--input-type=module', '-e',
+    out = subprocess.run([node, '--experimental-transform-types', '--no-warnings', '--import', str(REPO / 'tests/e2e/ts_resolve.mjs'), '--input-type=module', '-e',
                           MOD_RESOLVE % (PLUGIN, PLUGIN), str(a)], capture_output=True, text=True, timeout=60)
     assert out.returncode == 0, out.stderr
     m = json.loads(out.stdout)
@@ -212,7 +212,7 @@ def test_a_real_linked_worktree_still_verifies_in_both_chains(box):
     node = shutil.which('node')
     if not node:
         pytest.skip('node not found')
-    out = subprocess.run([node, '--experimental-transform-types', '--no-warnings', '--input-type=module', '-e',
+    out = subprocess.run([node, '--experimental-transform-types', '--no-warnings', '--import', str(REPO / 'tests/e2e/ts_resolve.mjs'), '--input-type=module', '-e',
                           MOD_RESOLVE % (PLUGIN, PLUGIN), str(wt)], capture_output=True, text=True, timeout=60)
     m = json.loads(out.stdout)
     assert (m['r']['bound'], m['r']['source'], m['g']['untrusted']) == (True, 'settings_file', False), out.stdout
