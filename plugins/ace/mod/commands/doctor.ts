@@ -1,10 +1,10 @@
-import { type Cmd, type Kit, json } from './kit.ts'
-import { classify, globalConfigPath, problemLine, readEnv } from '../context/index.ts'
-import { cliRun } from '../io/cli.ts'
-import { run } from '../io/fs.ts'
-import { installer } from '../io/installer.ts'
-import { dataRoot } from '../io/state.ts'
-import { CLIENT_POLICY_FILE, clientPolicyLine } from '../lib/cohort.ts'
+import { type Cmd, type Kit, json } from './kit'
+import { classify, globalConfigPath, problemLine, readEnv } from '../context/index'
+import { cliRun } from '../io/cli'
+import { run } from '../io/fs'
+import { installer } from '../io/installer'
+import { dataRoot } from '../io/state'
+import { CLIENT_POLICY_FILE, clientPolicyLine } from '../lib/cohort'
 // Local checks plus one status call: binding (source, path, tried, warnings), CLI, auth/server, global projectId warning.
 export const doctor: Cmd = { name: 'doctor', md: 'ace-doctor', description: 'Diagnose binding, CLI, login and server' }
 export async function doctorCmd($: any, { c, cli }: Kit): Promise<string> {

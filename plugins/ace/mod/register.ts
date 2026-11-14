@@ -3,17 +3,17 @@
 // mod-active marker is fresh. ace-cli is consumed as-is via $.process.run; state lives on disk in the Python formats.
 // Wiring only: one on(event, hook) per event; each hook hands its arguments and the per-load state to its handler.
 import type { Register } from 'claude-code'
-import { newLoad } from './io/state.ts'
-import { sessionStart, sessionEnd } from './handlers/session.ts'
-import { sessionCompact } from './handlers/compact.ts'
-import { promptCompose } from './handlers/compose.ts'
-import { promptSubmit } from './handlers/prompt.ts'
-import { classicUserPromptSubmit, classicStop, classicSubagentStop } from './handlers/classic.ts'
-import { turnStart, turnComplete } from './handlers/turn.ts'
-import { agentSpawn } from './handlers/agent.ts'
-import { toolCall } from './handlers/tool.ts'
-import { commandRun } from './handlers/command.ts'
-import { renderBand } from './ui/band.ts'
+import { newLoad } from './io/state'
+import { sessionStart, sessionEnd } from './handlers/session'
+import { sessionCompact } from './handlers/compact'
+import { promptCompose } from './handlers/compose'
+import { promptSubmit } from './handlers/prompt'
+import { classicUserPromptSubmit, classicStop, classicSubagentStop } from './handlers/classic'
+import { turnStart, turnComplete } from './handlers/turn'
+import { agentSpawn } from './handlers/agent'
+import { toolCall } from './handlers/tool'
+import { commandRun } from './handlers/command'
+import { renderBand } from './ui/band'
 
 export const register: Register = (on) => {
   const L = newLoad()

@@ -1,16 +1,16 @@
 // The AbovePrompt band (8.1.0): nothing when ok; a pending write's ONE confirm button; else exactly one action per
 // problem state (unbound -> Verbinden, login states -> Anmelden, not_found/no_access -> Anderes wählen,
 // config_refused -> Bereinigt neu schreiben, cli_missing -> installieren). Every action runs only on its press.
-import { startContext } from '../handlers/context.ts'
-import { type Ctx, WARN_LINES, bindInit, cliIds, cliInit, repoWrite, writeBinding, WriteRefused } from '../context/index.ts'
-import { REMOVE_SHADOW_SH, REPO_WRITE_WHY } from '../lib/sh.ts'
-import { run } from '../io/fs.ts'
-import { cliRun, cap } from '../io/cli.ts'
-import { installer } from '../io/installer.ts'
-import { execExport, execPending } from '../io/pending.ts'
-import { type Load } from '../io/state.ts'
-import { CLIENT_POLICY_FILE, clientPolicyBand } from '../lib/cohort.ts'
-import { readText } from '../io/fs.ts'
+import { startContext } from '../handlers/context'
+import { type Ctx, WARN_LINES, bindInit, cliIds, cliInit, repoWrite, writeBinding, WriteRefused } from '../context/index'
+import { REMOVE_SHADOW_SH, REPO_WRITE_WHY } from '../lib/sh'
+import { run } from '../io/fs'
+import { cliRun, cap } from '../io/cli'
+import { installer } from '../io/installer'
+import { execExport, execPending } from '../io/pending'
+import { type Load } from '../io/state'
+import { CLIENT_POLICY_FILE, clientPolicyBand } from '../lib/cohort'
+import { readText } from '../io/fs'
 
 const BAND = { plugin: 'ace', key: 'band' } as const
 const PENDING = { plugin: 'ace', key: 'pending' } as const

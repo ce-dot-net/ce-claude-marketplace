@@ -1,7 +1,7 @@
 // F-080 evidence: self-eval prompt + review parse, used-pattern ids (H1/H2), applied log ids, eval stats/injection,
 // user-rejection match (ace_feedback). Pure: no `$`, no I/O.
-import { PyFloat, num, pyFloatRepr } from './pyjson.ts'
-import { cps, cpSlice, normWs } from './text.ts'
+import { PyFloat, num, pyFloatRepr } from './pyjson'
+import { cps, cpSlice, normWs } from './text'
 
 export type ToolRec = { tool: string; action: string; result: string; failed: boolean; start_ms: number; end_ms: number; commit?: string
   hay?: string  // hay: the call's toolHaystack (item H2 used check), never sent in the trace
@@ -45,7 +45,7 @@ export function selfEvalPrompt(a: { task: string; answer: string; ids: string[];
 export function parseUsedIds(text: string, injected: string[]): string[] {
   const m = /ACE_USED:\s*([^\n]*)/.exec(text || '')
   if (!m) return []
-  const named = new Set(m[1].split(/[\s,;]+/).map(x => x.replace(/^[`'"<\[(]+|[`'">\]).]+$/g, '')).filter(Boolean))
+  const named = new Set(m[1]!.split(/[\s,;]+/).map(x => x.replace(/^[`'"<\[(]+|[`'">\]).]+$/g, '')).filter(Boolean))
   return injected.filter(id => named.has(id))
 }
 
@@ -96,8 +96,8 @@ export function distinctiveTokens(content: unknown): Set<string> {
   }
   for (const raw of text.split(/\s+/).filter(Boolean)) {
     let a = Array.from(raw), i = 0, j = a.length
-    while (i < j && STRIP.has(a[i])) i++
-    while (j > i && STRIP.has(a[j - 1])) j--
+    while (i < j && STRIP.has(a[i]!)) i++
+    while (j > i && STRIP.has(a[j - 1]!)) j--
     let w = a.slice(i, j).join('')
     while (w.endsWith('.')) w = w.slice(0, -1)
     if (qualifies(w)) toks.add(w.toLowerCase())
@@ -130,7 +130,7 @@ export function injectedContents(patterns: any[], ids: string[]): Record<string,
 // one trace count as "all shown" (the trace falls to COLD), so `used` comes ordered by evidence and is cut at 20.
 export const APPLIED_LOG_IDS_CAP = 20
 export function appliedLogIds(used: string[], rlog: Record<string, number>): { ids: number[]; capped: boolean } {
-  const all = used.filter(id => id in rlog).map(id => rlog[id])
+  const all = used.filter(id => id in rlog).map(id => rlog[id]!)
   return { ids: all.slice(0, APPLIED_LOG_IDS_CAP), capped: all.length > APPLIED_LOG_IDS_CAP }
 }
 
@@ -148,9 +148,9 @@ export function rejectionMatch(text: string | undefined): string | null {
   for (const phrase of REJECTION_PHRASES) {
     for (let i = low.indexOf(phrase); i >= 0; i = low.indexOf(phrase, i + 1)) {
       const j = i + phrase.length
-      if ((i > 0 && isWordChar(low[i - 1])) || (j < low.length && isWordChar(low[j]))) continue
+      if ((i > 0 && isWordChar(low[i - 1]!)) || (j < low.length && isWordChar(low[j]!))) continue
       const before = low.slice(0, i), words = before.split(/\s+/).filter(Boolean)
-      if (words.length && before !== before.trimEnd() && ['nicht', 'not'].includes(words[words.length - 1])) continue
+      if (words.length && before !== before.trimEnd() && ['nicht', 'not'].includes(words[words.length - 1]!)) continue
       if (best === null || phrase.length > best.length) best = phrase
       break
     }

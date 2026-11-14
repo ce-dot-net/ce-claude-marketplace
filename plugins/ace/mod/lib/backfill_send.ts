@@ -1,9 +1,9 @@
 // 8.2.0 backfill send helpers (pure, unwired, no I/O): task -> server item, batching, response classification, job status -> ledger.
 // Server contract: POST /traces/backfill {source:'bootstrap', items:[{idempotency_key, occurred_at, trace}]}, 1..20 items, body <= 5 MiB.
-import { buildTrace } from './trace.ts'
-import { safeText } from './backfill_git.ts'
-import type { ToolRec } from './evidence.ts'
-import { add, MAX_ATTEMPTS, statusOf, type Ledger } from './ledger.ts'
+import { buildTrace } from './trace'
+import { safeText } from './backfill_git'
+import type { ToolRec } from './evidence'
+import { add, MAX_ATTEMPTS, statusOf, type Ledger } from './ledger'
 
 export type Item = { idempotency_key: string, occurred_at: string, trace: any }
 export const MAX_ITEMS = 20

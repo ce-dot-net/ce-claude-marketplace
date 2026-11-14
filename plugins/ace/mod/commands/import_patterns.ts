@@ -1,6 +1,6 @@
-import { type Cmd, type Kit, confirm } from './kit.ts'
-import { cliIds } from '../context/index.ts'
-import { insideRoot } from './paths.ts'
+import { type Cmd, type Kit, confirm } from './kit'
+import { cliIds } from '../context/index'
+import { insideRoot } from './paths'
 export const importPatterns: Cmd = { name: 'import-patterns', md: 'ace-import-patterns', description: 'Import a playbook JSON (preview + confirm)', argumentHint: '<file>', bound: true }
 export async function importPatternsCmd($: any, { c, args }: Kit): Promise<string> {
     const f = args.trim()

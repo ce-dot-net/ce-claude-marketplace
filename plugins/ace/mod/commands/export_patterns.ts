@@ -1,5 +1,5 @@
-import { type Cmd, type Kit, confirm } from './kit.ts'
-import { insideRoot } from './paths.ts'
+import { type Cmd, type Kit, confirm } from './kit'
+import { insideRoot } from './paths'
 // The export is a write: a path inside the repo root only (no symlink, realpath checked), a preview, the button.
 // The press runs `ace-cli export` to stdout and writes the file through REPO_WRITE_SH (atomic, symlink-refusing).
 export const exportPatterns: Cmd = { name: 'export-patterns', md: 'ace-export-patterns', description: 'Export the playbook to a JSON file in the repo (preview + confirm)', argumentHint: '[file]', bound: true }

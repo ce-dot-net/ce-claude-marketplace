@@ -9,7 +9,7 @@ export const num = (x: unknown): number | undefined =>
 
 export function pyLoads(src: string): any {
   let i = 0
-  const ws = () => { while (i < src.length && ' \t\n\r'.includes(src[i])) i++ }
+  const ws = () => { while (i < src.length && ' \t\n\r'.includes(src[i]!)) i++ }
   const val = (): any => {
     ws()
     const c = src[i]
@@ -62,7 +62,7 @@ export function pyFloatRepr(x: number): string {
   if (Number.isNaN(x)) return 'NaN'
   if (!Number.isFinite(x)) return x > 0 ? 'Infinity' : '-Infinity'
   if (x === 0) return Object.is(x, -0) ? '-0.0' : '0.0'
-  const [mant, e] = x.toExponential().split('e')
+  const [mant, e] = x.toExponential().split('e') as [string, string]
   const exp = Number(e)
   const neg = mant.startsWith('-')
   const digits = mant.replace('-', '').replace('.', '')

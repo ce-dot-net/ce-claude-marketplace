@@ -1,9 +1,9 @@
-import { type Cmd, type Kit, confirm, json } from './kit.ts'
-import { cliIds } from '../context/index.ts'
-import { run } from '../io/fs.ts'
-import { collect, flagOn } from '../io/backfill_io.ts'
-import { parseBackfillFlags, parseLimit, previewLines } from '../lib/backfill_run.ts'
-import { parseBootstrapArgs } from '../lib/bootstrap_args.ts'
+import { type Cmd, type Kit, confirm, json } from './kit'
+import { cliIds } from '../context/index'
+import { run } from '../io/fs'
+import { collect, flagOn } from '../io/backfill_io'
+import { parseBackfillFlags, parseLimit, previewLines } from '../lib/backfill_run'
+import { parseBootstrapArgs } from '../lib/bootstrap_args'
 export const bootstrap: Cmd = { name: 'bootstrap', md: 'ace-bootstrap', description: 'Build the playbook from the codebase (preview + confirm)', argumentHint: '[mode] [thoroughness] | --mode X --thoroughness Y | --backfill-only [--sources git,merge,session] [--limit N]', bound: true }
 const ONLY_LINE = '--sources und --target-project gelten nur mit --backfill-only (sonst liefe der Bootstrap im gebundenen Projekt). Nichts gespeichert.'
 const DAYS: Record<string, number> = { light: 30, medium: 90, deep: 180 }  // the CLI's git window per level (--days-back overrides)
@@ -23,7 +23,7 @@ async function facts($: any, root: string, days: number, cli: Kit['cli']): Promi
   const lines: string[] = []
   if (files) {
     const ext = new Map<string, number>()
-    for (const f of files) { const m = /\.([A-Za-z0-9]+)$/.exec(f.split('/').pop()!); const e = m ? m[1].toLowerCase() : '-'; ext.set(e, (ext.get(e) ?? 0) + 1) }
+    for (const f of files) { const m = /\.([A-Za-z0-9]+)$/.exec(f.split('/').pop()!); const e = m ? m[1]!.toLowerCase() : '-'; ext.set(e, (ext.get(e) ?? 0) + 1) }
     const top = [...ext].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, 5).map(([e, n]) => `${e} ${n}`).join(', ')
     lines.push(`Dateien: ${files.length} Dateien (${top})`)
     const root1 = ['CLAUDE.md', 'README.md', 'ARCHITECTURE.md'].filter(n => files.includes(n))
@@ -45,13 +45,13 @@ function leaveLine(mode: string | undefined): string {
 
 export async function bootstrapCmd($: any, { c, args, cli }: Kit): Promise<string> {
     const lim = parseLimit(args)
-    if (!lim.ok) return 'Usage: --limit N (1 bis 100)\n' + parseBootstrapArgs('--invalid').usage
+    if (!lim.ok) return 'Usage: --limit N (1 bis 100)\n' + (parseBootstrapArgs('--invalid') as { usage: string }).usage
     const bfl = parseBackfillFlags(lim.rest)
     if (!bfl.ok) return bfl.line
     if (!bfl.only && (bfl.sources || bfl.project)) return ONLY_LINE
     const a = parseBootstrapArgs(bfl.rest)
     if (!a.ok) return a.usage
-    const days = Number(a.flags[a.flags.indexOf('--days-back') + 1]) || (a.level ? DAYS[a.level] : 90)
+    const days = Number(a.flags[a.flags.indexOf('--days-back') + 1]) || (a.level ? DAYS[a.level]! : 90)
     // --target-project: only the destination changes (sessions and git stay the cwd's); a target equal to the bound one is no change
     const bound = c as any, tProject = bfl.project ?? bound.projectId, tOrg = bfl.org ?? bound.orgId
     const moved = tProject !== bound.projectId || tOrg !== bound.orgId
@@ -71,7 +71,7 @@ export async function bootstrapCmd($: any, { c, args, cli }: Kit): Promise<strin
     if (f.commits !== null && f.commits < 20) warn.push(`Nur ${f.commits} Commits im Fenster: Online-Lernen ist meist besser.`)
     const argv = ['bootstrap', '--json', ...(a.mode ? ['--mode', a.mode] : []), ...(a.level ? ['--thoroughness', a.level] : []), ...a.flags, '--repo-path', c.root, ...cliIds(c)]
     const on = await flagOn($, c.root)
-    const bf = previewLines(on ? await collect($, c as any, days, lim.limit) : { items: [], sessionTasks: 0, gitTasks: 0, skipped: 0 }, { flag: on, limit: lim.limit })
+    const bf = previewLines(on ? await collect($, c as any, days, lim.limit) : { items: [], sources: {}, sessionTasks: 0, gitTasks: 0, skipped: 0 }, { flag: on, limit: lim.limit })
     return confirm($, { label: 'Bootstrap starten', kind: 'cli', argv, report: 'bootstrap', ...(on ? { backfill: { days, limit: lim.limit } } : {}),
       preview: [`Bootstrap von ${c.root} in ${(c as any).projectId}: Modus ${a.mode ?? 'Standard des Servers'}, Tiefe ${a.level ?? 'Standard des Servers'} (merged mit dem Playbook)`,
         ...f.lines, ...warn, ...bf].join('\n') })

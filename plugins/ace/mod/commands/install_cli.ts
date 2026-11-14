@@ -1,6 +1,6 @@
-import { type Cmd, type Kit, confirm } from './kit.ts'
-import { cliRun } from '../io/cli.ts'
-import { installer } from '../io/installer.ts'
+import { type Cmd, type Kit, confirm } from './kit'
+import { cliRun } from '../io/cli'
+import { installer } from '../io/installer'
 export const installCli: Cmd = { name: 'install-cli', md: 'ace-install-cli', description: 'The pinned ace-cli: show, or reinstall on a button press' }
 export async function installCliCmd($: any, _k: Kit): Promise<string> {
     let pin = '?'

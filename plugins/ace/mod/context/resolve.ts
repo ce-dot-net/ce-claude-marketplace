@@ -79,7 +79,7 @@ export async function git(cwd: string, read: Reader, realpath: (p: string) => st
     if (txt !== null) {
       const m = /^\s*gitdir:\s*(.+?)\s*$/.exec(txt)
       if (!m) return { root: d, mainRoot: null, config: null, untrusted: false }
-      const gitdir = join(d, m[1])
+      const gitdir = join(d, m[1]!)
       const common = await quiet(read, join(gitdir, 'commondir'))
       if (common === null) return { root: d, mainRoot: null, config: join(gitdir, 'config'), untrusted: false }   // submodule
       const cd = join(gitdir, common.trim())
@@ -105,7 +105,7 @@ export function originUrl(text: string | null): string | null {
     if (s.startsWith('[')) { section = s; continue }
     if (section === '[remote "origin"]') {
       const m = /^url\s*=\s*(.+)$/.exec(s)
-      if (m) return m[1].trim()
+      if (m) return m[1]!.trim()
     }
   }
   return null
@@ -117,18 +117,18 @@ export function normalizeRemote(url: string | null): string | null {
   let host: string, path: string
   const m = /^[A-Za-z][A-Za-z0-9+.-]*:\/\/(.*)$/.exec(url)
   if (m) {
-    const i = m[1].indexOf('/')
-    const hostpart = i < 0 ? m[1] : m[1].slice(0, i)
-    path = i < 0 ? '' : m[1].slice(i + 1)
+    const i = m[1]!.indexOf('/')
+    const hostpart = i < 0 ? m[1]! : m[1]!.slice(0, i)
+    path = i < 0 ? '' : m[1]!.slice(i + 1)
     host = hostpart.slice(hostpart.lastIndexOf('@') + 1)
   } else {
     const s = /^(?:[^@/]+@)?([^:/]+):(.+)$/.exec(url)
     if (!s) return null
-    host = s[1]; path = s[2]
+    host = s[1]!; path = s[2]!
   }
   host = host.toLowerCase()
   const a = ALIAS_RE.exec(host)
-  if (a) host = a[1]
+  if (a) host = a[1]!
   path = path.replace(/^\/+|\/+$/g, '')
   if (path.endsWith('.git')) path = path.slice(0, -4)
   return host && path ? `${host}/${path}` : null
@@ -265,7 +265,7 @@ async function resolveInner(cwd: string, env: Record<string, string | undefined>
   // Spec 1.4: --org > winner's org > first org in order > default_org_id. orgFrom = where the org came from.
   let org: string | null | undefined
   let orgFrom: Entry | undefined
-  if (entries[0].org) org = entries[0].org
+  if (entries[0]!.org) org = entries[0]!.org
   else if (win.org) { org = win.org; orgFrom = win }
   else { orgFrom = entries.find(e => e.org); org = orgFrom ? orgFrom.org : o.defaultOrgId }
   if (!org) return done({ bound: false, reason: 'no_org', projectId: win.prj!, source: win.source, path: win.path })

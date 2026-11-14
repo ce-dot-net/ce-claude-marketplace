@@ -1,9 +1,9 @@
 // Pure state shapes: data-root derivation (plugin_data_dir), patterns-used merge (append_patterns_used),
 // reuse-cache keys (ace_search_cache). No `$`, no I/O.
-import { sha256Hex } from './cohort.ts'
-import { cpSlice } from './text.ts'
-import { isValidPatternId, STATE_CAP } from './render.ts'
-import { CONTENT_CAP } from './evidence.ts'
+import { sha256Hex } from './cohort'
+import { cpSlice } from './text'
+import { isValidPatternId, STATE_CAP } from './render'
+import { CONTENT_CAP } from './evidence'
 
 // ---------- plugin_data_dir ----------
 export const safeComponent = (c: string | undefined | null): string => {

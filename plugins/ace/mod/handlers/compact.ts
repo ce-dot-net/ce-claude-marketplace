@@ -1,7 +1,7 @@
 // session.compact: the mod-compact marker (the Python SessionStart(compact) re-inject steps aside) and the
 // §31 dedupe reset after a main compaction.
-import { rm } from '../io/fs.ts'
-import { type HookArgs, type Load, disabled, ensure } from '../io/state.ts'
+import { rm } from '../io/fs'
+import { type HookArgs, type Load, disabled, ensure } from '../io/state'
 
 // item A: patterns survive a main compaction natively. session.compact (not on guarded seats) sets the flag and the
 // mod-compact marker (the Python SessionStart(compact) re-inject steps aside); prompt.compose then adds the task's

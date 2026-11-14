@@ -1,17 +1,17 @@
 // 8.2.0 real I/O of the bootstrap backfill: sources (Claude Code transcripts, git), the HMAC ledger file with a per-install key,
 // the engine/backfill.js calls, the resume time. The orchestration itself is lib/backfill_run.ts (all I/O injected).
 // The plugin never holds a token: only engine/backfill.js talks to the server (through the core client).
-import { readText, run, writePrivate } from './fs.ts'
-import { APPEND_SH } from '../lib/sh.ts'
-import { pyDumps } from '../lib/pyjson.ts'
-import { engineScript, ids } from './spawn.ts'
-import { dataRoot, uuid } from './state.ts'
-import { DEFAULT_SOURCES, POLL_MS, buildItems, finalLines, newRun, progress, runActive, startLine, stepBackfill, type Built, type Deps, type EngineAnswer, type RunState, type Source } from '../lib/backfill_run.ts'
-import type { Item } from '../lib/backfill_send.ts'
-import { GIT_LOG_ARGV, GIT_MERGES_ARGV } from '../lib/backfill_git.ts'
-import { BACKFILL_FLAG_FILE, storedBackfill } from '../lib/cohort.ts'
-import { emptyLedger, parse, serialize, type Ledger } from '../lib/ledger.ts'
-import { safeComponent } from '../lib/state.ts'
+import { readText, run, writePrivate } from './fs'
+import { APPEND_SH } from '../lib/sh'
+import { pyDumps } from '../lib/pyjson'
+import { engineScript, ids } from './spawn'
+import { dataRoot, uuid } from './state'
+import { DEFAULT_SOURCES, POLL_MS, buildItems, finalLines, newRun, progress, runActive, startLine, stepBackfill, type Built, type Deps, type EngineAnswer, type RunState, type Source } from '../lib/backfill_run'
+import type { Item } from '../lib/backfill_send'
+import { GIT_LOG_ARGV, GIT_MERGES_ARGV } from '../lib/backfill_git'
+import { BACKFILL_FLAG_FILE, storedBackfill } from '../lib/cohort'
+import { emptyLedger, parse, serialize, type Ledger } from '../lib/ledger'
+import { safeComponent } from '../lib/state'
 
 const MAX_FILES = 200, MAX_FILE_BYTES = 4 * 1024 * 1024 - 1024  // $.fs.read is text only, 4 MiB
 const RESUME = { plugin: 'ace', key: 'backfill-resume' } as const

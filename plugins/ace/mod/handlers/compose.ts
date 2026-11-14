@@ -1,6 +1,6 @@
 // prompt.compose: after a main compaction, the task's re-inject copy of the patterns as its own section.
-import { readText } from '../io/fs.ts'
-import { type HookArgs, type Load, readState } from '../io/state.ts'
+import { readText } from '../io/fs'
+import { type HookArgs, type Load, readState } from '../io/state'
 
 export async function promptCompose($: HookArgs<'prompt.compose'>[0], L: Load, e: HookArgs<'prompt.compose'>[1], next: HookArgs<'prompt.compose'>[2]) {
   const r: any = await next(e)

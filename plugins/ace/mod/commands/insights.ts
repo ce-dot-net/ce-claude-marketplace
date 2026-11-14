@@ -1,5 +1,5 @@
-import { type Cmd, type Kit } from './kit.ts'
-import { python } from './py.ts'
+import { type Cmd, type Kit } from './kit'
+import { python } from './py'
 export const insights: Cmd = { name: 'insights', md: 'ace-insights', description: 'Recap of the relevance log', argumentHint: '[hours]' }
 export async function insightsCmd($: any, { c, args }: Kit): Promise<string> {
     const h = args.trim() || '24'

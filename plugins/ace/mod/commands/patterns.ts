@@ -1,5 +1,5 @@
-import { type Cmd, type Kit, cap, failLine, json, oneLine } from './kit.ts'
-import { safeToken } from './paths.ts'
+import { type Cmd, type Kit, cap, failLine, json, oneLine } from './kit'
+import { safeToken } from './paths'
 export const patterns: Cmd = { name: 'patterns', md: 'ace-patterns', description: 'The playbook by section', argumentHint: '[section] [min-reward]', bound: true }
 export async function patternsCmd($: any, { args, cli }: Kit): Promise<string> {
     const [section, min] = args.trim().split(/\s+/).filter(Boolean)

@@ -1,6 +1,6 @@
 // One argv-only ace-cli spawn for the core and the commands: the pinned CLI head, the core's ids in the child env
 // (never a leaked binding), stdout capped, a spawn failure / kill told apart from an answer. No shell, ever.
-import { cliHead } from './spawn.ts'
+import { cliHead } from './spawn'
 
 export const OUT_CAP = 60_000  // probe 3: a command's output is capped at about 60 KB
 export type CliResult = { exitCode: number | null, stdout: string, stderr: string, spawnError?: boolean, timeout?: boolean }

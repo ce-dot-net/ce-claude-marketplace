@@ -1,4 +1,4 @@
-import { type Cmd, type Kit, cap, failLine, json } from './kit.ts'
+import { type Cmd, type Kit, cap, failLine, json } from './kit'
 export const domains: Cmd = { name: 'domains', md: 'ace-domains', description: 'Pattern domains', argumentHint: '[min-patterns]', bound: true }
 export async function domainsCmd($: any, { args, cli }: Kit): Promise<string> {
     const min = args.trim()

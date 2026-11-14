@@ -1,7 +1,7 @@
 // Pattern rendering (ace_pattern_render): allow-list strip, bandit_rank sort, full/budget/compact/domain-shift renders.
 // Pure: no `$`, no I/O.
-import { PyFloat, num, pyDumps, pyFloatRepr } from './pyjson.ts'
-import { cps, cpLen, cpSlice } from './text.ts'
+import { PyFloat, num, pyDumps, pyFloatRepr } from './pyjson'
+import { cps, cpLen, cpSlice } from './text'
 
 // ---------- utils/validation.is_valid_pattern_id ----------
 export const isValidPatternId = (id: unknown): boolean =>
@@ -79,7 +79,7 @@ const openTag = (tag: string, shown: number, total: number, attrs: string, extra
 function credit(pats: any[], rlog: Record<string, number>) {
   const ids = pats.filter(p => truthy(p.id) && isValidPatternId(p.id)).map(p => p.id as string)
   const keep = new Set(ids), out: Record<string, number> = {}
-  for (const k of Object.keys(rlog)) if (keep.has(k)) out[k] = rlog[k]
+  for (const k of Object.keys(rlog)) if (keep.has(k)) out[k] = rlog[k]!
   return { ids, rlog: out }
 }
 

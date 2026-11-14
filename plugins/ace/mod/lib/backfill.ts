@@ -2,11 +2,11 @@
 // built through the SAME toolRec / taskOutcome / buildTrace / redact the live learn path uses (lib/trace.ts). No `$`, no I/O: the caller
 // hands over the text (or any line iterator, to stream a big file). The trace carries no session_id, an empty playbook_used and no
 // field the live trace body does not have; `source: "bootstrap"` and the original date are the caller's to add (a later slice).
-import { buildTrace, hasSubstantialWork, isTrivialTask, taskOutcome, toolRec } from './trace.ts'
-import { LEADING_REMINDER, isMachinePrompt, skipReason } from './text.ts'
-import type { ToolRec } from './evidence.ts'
-import { sha256Hex } from './cohort.ts'
-import { denoise } from './backfill_noise.ts'
+import { buildTrace, hasSubstantialWork, isTrivialTask, taskOutcome, toolRec } from './trace'
+import { LEADING_REMINDER, isMachinePrompt, skipReason } from './text'
+import type { ToolRec } from './evidence'
+import { sha256Hex } from './cohort'
+import { denoise } from './backfill_noise'
 
 export type BackfillTask = {
   sessionId: string      // the transcript's session uuid ('' when it names none and the caller gave none)
@@ -131,6 +131,6 @@ export function selectTasks<T extends Pick<BackfillTask, 'success' | 'decisive' 
 export function selectBalanced<T extends Pick<BackfillTask, 'success' | 'decisive' | 'endMs'>>(groups: T[][], n: number): T[] {
   const ranked = groups.map(g => selectTasks(g, n)).filter(g => g.length), out: T[] = []
   for (let i = 0; out.length < Math.floor(n) && ranked.some(g => i < g.length); i++)
-    for (const g of ranked) if (i < g.length && out.length < Math.floor(n)) out.push(g[i])
+    for (const g of ranked) if (i < g.length && out.length < Math.floor(n)) out.push(g[i]!)
   return out
 }

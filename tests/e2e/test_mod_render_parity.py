@@ -52,7 +52,7 @@ ROOTS = [["/h", "/h/.claude/plugins/cache/ce-dot-net-marketplace/ace/8.0.0", "ac
 def node_out():
     job = {"fixtures": FIXTURES, "sids": SIDS, "envs": ENVS, "roots": ROOTS, "learnJob": None, "used": USED,
            "variants": VARIANTS}
-    p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", str(HERE / "mod_parity_node.mjs")],
+    p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", "--import", str(HERE / "ts_resolve.mjs"), str(HERE / "mod_parity_node.mjs")],
                        input=json.dumps(job), capture_output=True, text=True, timeout=120)
     assert p.returncode == 0, "mod renderer did not run (plugins/ace/mod/lib/render.ts):\n" + p.stderr[-2000:]
     return json.loads(p.stdout)

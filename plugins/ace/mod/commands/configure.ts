@@ -1,7 +1,7 @@
-import { type Cmd, type Kit, confirm } from './kit.ts'
-import { fixGitignore, gitignoreDiff } from '../context/index.ts'
-import { projectList, suggest } from '../handlers/context.ts'
-import { run } from '../io/fs.ts'
+import { type Cmd, type Kit, confirm } from './kit'
+import { fixGitignore, gitignoreDiff } from '../context/index'
+import { projectList, suggest } from '../handlers/context'
+import { run } from '../io/fs'
 // Bind this repo: writes the tracked .ace/config.json at the MAIN checkout root (never settings.json, never a token);
 // shows the .gitignore diff when the file is ignored. Everything only after the button.
 export const configure: Cmd = { name: 'configure', md: 'ace-configure', description: 'Bind this repo to an ACE project (preview + confirm)', argumentHint: '[prj_... | org_... prj_...]' }
