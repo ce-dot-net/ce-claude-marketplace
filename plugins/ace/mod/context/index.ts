@@ -1,9 +1,9 @@
 // The one core of the mod (8.1.0): binding, verify, export, adopt, the context log row. Every handler and every
 // command takes its ids from here; nothing else reads settings.json, .ace/config.json or ACE_* binding env.
 // Mirror: shared-hooks/utils/ace_project_context.py (same states, same lines: ./lines.ts).
-import { FileTooLarge, MAX_REPO_FILE, dirname, git, join, normPath, originUrl, normalizeRemote, resolve, type Reader, type Result } from './resolve.ts'
-import { LINES, ADOPT_LINE, WARN_LINES } from './lines.ts'
-import { REALPATH_SH, REPO_WRITE_SH, REPO_WRITE_WHY } from '../lib/sh.ts'
+import { FileTooLarge, MAX_REPO_FILE, dirname, git, join, normPath, originUrl, normalizeRemote, resolve, type Reader, type Result } from './resolve'
+import { LINES, ADOPT_LINE, WARN_LINES } from './lines'
+import { REALPATH_SH, REPO_WRITE_SH, REPO_WRITE_WHY } from '../lib/sh'
 
 export type State = 'ok' | 'unbound' | 'not_logged_in' | 'expired' | 'project_not_found' | 'no_access' | 'server_error'
   | 'cli_missing' | 'config_refused' | 'config_invalid'
@@ -88,7 +88,7 @@ export function cliChecksTopology(version: string | null | undefined): boolean {
   if (!m) return false
   const v = m.slice(1).map(Number)
   const i = v.findIndex((x, k) => x !== TOPOLOGY_CLI[k])
-  return i < 0 || v[i] > TOPOLOGY_CLI[i]
+  return i < 0 || v[i]! > TOPOLOGY_CLI[i]!
 }
 export async function resolveContext($: any, cwd: string, envIn: Env, o: { dataRoot?: string, flags?: { org?: string, project?: string },
   cli?: (argv: string[], opts?: any) => Promise<any> } = {}): Promise<Ctx> {
@@ -149,7 +149,7 @@ export function classify(exitCode: number | null | undefined, stderr: string, sp
   for (const line of err.split('\n')) {
     let code: unknown
     try { code = JSON.parse(line)?.error?.code } catch { continue }
-    if (typeof code === 'string' && NAMES[code]) return NAMES[code]
+    if (typeof code === 'string' && NAMES[code]) return NAMES[code]!
     if (typeof code === 'string' && code) return 'server_error'  // new CLI generic exit 1 (subscription 403): never from text
   }
   if (/Cannot find module|MODULE_NOT_FOUND|ace-cli not found/.test(err)) return 'cli_missing'
@@ -274,7 +274,7 @@ async function findShadow($: any, cwd: string): Promise<string | null> {
   const read = fsReader($), top = (await git(normPath(cwd), read)).root
   for (let d = normPath(cwd); ; d = dirname(d)) {
     const f = `${d}/.ace/config.json`
-    if (typeof await read(f).catch(() => null) === 'string') return f
+    if (typeof await (read(f) as Promise<string | null>).catch(() => null) === 'string') return f
     if (d === top || dirname(d) === d) return null
   }
 }

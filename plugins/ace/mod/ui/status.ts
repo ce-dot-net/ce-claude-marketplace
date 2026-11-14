@@ -1,6 +1,6 @@
 // The visible notices: per-prompt status line, search summary/error lines, session title, end-of-task learn line.
 // Pure strings; the handlers show them through $.ui.log.
-import { num } from '../lib/pyjson.ts'
+import { num } from '../lib/pyjson'
 
 // item 2: the ONE end-of-task line (v7.1.14 "✅ [ACE] N% quality | ~Xm saved | Learning in background"), unknown parts
 // left out. Same text as the Python Stop systemMessage (ace_after_task.learn_line).

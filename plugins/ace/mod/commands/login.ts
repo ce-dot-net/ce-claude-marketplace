@@ -1,6 +1,6 @@
-import { type Cmd, type Kit, confirm } from './kit.ts'
-import { classify, problemLine } from '../context/index.ts'
-import { cliRun } from '../io/cli.ts'
+import { type Cmd, type Kit, confirm } from './kit'
+import { classify, problemLine } from '../context/index'
+import { cliRun } from '../io/cli'
 // Shows the login state. A device login starts only on the button press, never by itself.
 export const login: Cmd = { name: 'login', md: 'ace-login', description: 'Login state; device login on a button press' }
 export async function loginCmd($: any, { c }: Kit): Promise<string> {

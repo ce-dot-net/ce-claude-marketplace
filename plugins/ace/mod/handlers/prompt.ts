@@ -1,16 +1,16 @@
 // prompt.submit: the main search -> cohort render -> inject, the patterns-used state, the rejection downvote,
 // the status line and session title.
-import { readJson, rm, writePrivate } from '../io/fs.ts'
-import { nowIso, relLog, searchRow } from '../io/log.ts'
-import { SEARCH_MS, search } from '../io/spawn.ts'
-import { type Load, type Sess, clearDeferred, clearTools, cohortEnv, deferredAnchor, disabled, downvoteEnabled, ensure, notePrompt, pendingFile, readState, searchOrigin, touchMarker, updateState, uuid, type HookArgs, refreshMarker } from '../io/state.ts'
-import { type Cohort, renderCohort } from '../lib/cohort.ts'
-import { REJECTION_PREV_MAX_AGE_S, evalStats, injectedContents, rejectionMatch } from '../lib/evidence.ts'
-import { num, pyDumps } from '../lib/pyjson.ts'
-import { domainsSummary, renderBudget, renderCompact, renderFull, renderPatternsDict } from '../lib/render.ts'
-import { type StateUpdate, mergeState } from '../lib/state.ts'
-import { MACHINE_ORIGINS, domainNames, expandAbbreviations, isNoTaskCommand, skipReason } from '../lib/text.ts'
-import { searchErrorLine, searchSummary, sessionTitle, statusLine, topDomains } from '../ui/status.ts'
+import { readJson, rm, writePrivate } from '../io/fs'
+import { nowIso, relLog, searchRow } from '../io/log'
+import { SEARCH_MS, search } from '../io/spawn'
+import { type Load, type Sess, clearDeferred, clearTools, cohortEnv, deferredAnchor, disabled, downvoteEnabled, ensure, notePrompt, pendingFile, readState, searchOrigin, touchMarker, updateState, uuid, type HookArgs, refreshMarker } from '../io/state'
+import { type Cohort, renderCohort } from '../lib/cohort'
+import { REJECTION_PREV_MAX_AGE_S, evalStats, injectedContents, rejectionMatch } from '../lib/evidence'
+import { num, pyDumps } from '../lib/pyjson'
+import { domainsSummary, renderBudget, renderCompact, renderFull, renderPatternsDict } from '../lib/render'
+import { type StateUpdate, mergeState } from '../lib/state'
+import { MACHINE_ORIGINS, domainNames, expandAbbreviations, isNoTaskCommand, skipReason } from '../lib/text'
+import { searchErrorLine, searchSummary, sessionTitle, statusLine, topDomains } from '../ui/status'
 
 // ace_feedback.on_human_prompt: a rejection of the previous main task -> a pending downvote with its evidenced ids.
 export async function onRejection($: any, s: Sess, text: string) {

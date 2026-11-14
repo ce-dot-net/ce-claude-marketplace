@@ -1,10 +1,10 @@
 // Runs a pending write exactly as the band's button does (ui/band.ts runPending) and as `--approved` does (commands/kit.ts):
 // one executor, so the button and the typed line cannot drift apart. No band, no rebind: only the action and its result lines.
-import { run } from './fs.ts'
-import { cap, cliRun } from './cli.ts'
-import { cliIds, repoWrite } from '../context/index.ts'
-import { backfillPhase } from './backfill_io.ts'
-import { reportLine } from '../lib/reports.ts'
+import { run } from './fs'
+import { cap, cliRun } from './cli'
+import { cliIds, repoWrite } from '../context/index'
+import { backfillPhase } from './backfill_io'
+import { reportLine } from '../lib/reports'
 
 export type Done = { ok: boolean, toast: string, out: string }
 // kind cli | exec. The result line: `<label> erledigt` / `fehlgeschlagen (exit N)`; out = the named report line, else stdout/stderr (2000 chars).

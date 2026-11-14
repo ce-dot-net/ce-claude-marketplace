@@ -13,7 +13,7 @@ export function parseBootstrapArgs(args: string): BootstrapArgs {
   const nums = new Map<string, string>(), pos: string[] = []
   const setOnce = (cur: string | undefined, v: string) => cur === undefined || cur === v ? v : null  // the same value twice is no conflict
   for (let i = 0; i < toks.length; i++) {
-    let t = toks[i]
+    let t = toks[i]!
     if (!t.startsWith('--')) { pos.push(t); continue }
     let val: string | undefined
     const eq = t.indexOf('=')

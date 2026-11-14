@@ -1,10 +1,10 @@
 // Engine and ace-cli runner through `$`: search with pin/backoff/budgets, the §32 local reuse cache, git context.
-import { run, writePrivate } from './fs.ts'
-import { type Load, type SearchOrigin, type Sess, storeFullPct } from './state.ts'
-import { pyDumps, pyLoads, sanitize } from '../lib/pyjson.ts'
-import { REUSE_TTL_MS, reuseEnabled, reuseKey } from '../lib/state.ts'
-import { parseDiffStat } from '../lib/trace.ts'
-import { serverReachable } from '../handlers/context.ts'
+import { run, writePrivate } from './fs'
+import { type Load, type SearchOrigin, type Sess, storeFullPct } from './state'
+import { pyDumps, pyLoads, sanitize } from '../lib/pyjson'
+import { REUSE_TTL_MS, reuseEnabled, reuseKey } from '../lib/state'
+import { parseDiffStat } from '../lib/trace'
+import { serverReachable } from '../handlers/context'
 
 export const SEARCH_MS = 25000, DOMAIN_MS = 17000 // §11 A2: blocking budget per search, retry included
 export const PIN_SHARE = 0.6                      // of a search budget, for the pinned attempt

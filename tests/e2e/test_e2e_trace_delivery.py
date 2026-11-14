@@ -132,7 +132,7 @@ def _send_python(w, trace, timeout=300):
 
 
 def _launcher_argv(job):
-    p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", str(HERE / "mod_parity_node.mjs")],
+    p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", "--import", str(HERE / "ts_resolve.mjs"), str(HERE / "mod_parity_node.mjs")],
                        input=json.dumps({"fixtures": [], "sids": [], "envs": [], "roots": [], "learnJob": job}),
                        capture_output=True, text=True, timeout=60)
     assert p.returncode == 0, p.stderr[-2000:]
@@ -282,7 +282,7 @@ def test_the_race_a_delayed_reader_keeps_its_trace(world):
     time.sleep(0.5)  # LAUNCHER_MS is over: the parent gives up on the launcher now
     js = world.root / "reclaim.mjs"
     js.write_text(RECLAIM_JS % {"trace": json.dumps((SRC / "mod" / "lib" / "trace.ts").as_uri())})
-    p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", str(js), str(f)], capture_output=True, text=True, timeout=30)
+    p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", "--import", str(HERE / "ts_resolve.mjs"), str(js), str(f)], capture_output=True, text=True, timeout=30)
     assert p.returncode == 0, p.stderr
     assert json.loads(p.stdout) is None, "the child already owns the trace: the parent must not take it"
     deadline = time.monotonic() + 15
@@ -308,7 +308,7 @@ def test_the_parent_gives_up_before_the_child_starts_the_trace_is_queued_not_los
                         "cwd": str(world.proj), "on": True, "meta": {"project": "prj_fake", "hook": "Stop", "agent_type": "main"}})
     js = world.root / "reclaim.mjs"
     js.write_text(RECLAIM_JS % {"trace": json.dumps((SRC / "mod" / "lib" / "trace.ts").as_uri())})
-    p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", str(js), str(f)], capture_output=True, text=True, timeout=30)
+    p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", "--import", str(HERE / "ts_resolve.mjs"), str(js), str(f)], capture_output=True, text=True, timeout=30)
     parked = json.loads(p.stdout)
     if parked:  # what turn.ts does with a won claim
         subprocess.run([sys.executable, "-I", str(world.plugin / "shared-hooks" / "utils" / "ace_trace_queue.py"), "--enqueue",

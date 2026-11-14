@@ -1,13 +1,13 @@
 // The session's context step (8.1.0), started by session.start: export the core's ids, adopt a legacy binding,
 // remember the remote, then ONE background `status` (verify), the ONE `context` row, the ▼ status and the band.
-import { ADOPT_LINE, WARN_LINES, type Ctx, type State, adopt, cliIds, contextRow, exportEnv, localState, problemLine, remember, untracked, verify } from '../context/index.ts'
-import { run, writePrivate } from '../io/fs.ts'
-import { cliRun } from '../io/cli.ts'
-import { installer } from '../io/installer.ts'
-import { nowIso } from '../io/log.ts'
-import { type Load, dataRoot, resolveContextOnce } from '../io/state.ts'
-import { pyDumps } from '../lib/pyjson.ts'
-import { APPEND_SH } from '../lib/sh.ts'
+import { ADOPT_LINE, WARN_LINES, type Ctx, type State, adopt, cliIds, contextRow, exportEnv, localState, problemLine, remember, untracked, verify } from '../context/index'
+import { run, writePrivate } from '../io/fs'
+import { cliRun } from '../io/cli'
+import { installer } from '../io/installer'
+import { nowIso } from '../io/log'
+import { type Load, dataRoot, resolveContextOnce } from '../io/state'
+import { pyDumps } from '../lib/pyjson'
+import { APPEND_SH } from '../lib/sh'
 
 const BAND = { plugin: 'ace', key: 'band' } as const
 export const SHORT: Record<string, string> = { unbound: 'nicht verbunden', not_logged_in: 'nicht angemeldet', expired: 'Anmeldung abgelaufen',

@@ -2,7 +2,7 @@
 // rerun sends nothing twice and an aborted run resumes. Strings in, strings out: the caller does the I/O and owns the secret
 // (the per-install random key, same idea as ace_trace_queue's queue.key: one local HMAC key, never in the repo or the file).
 // Line format: v1 TAB key TAB status TAB atMs TAB attempts TAB hmac. A line with a bad/missing signature is dropped and counted.
-import { sha256Hex } from './cohort.ts'
+import { sha256Hex } from './cohort'
 
 export type Status = 'sent' | 'failed' | 'skipped' | 'skipped-failed'
 export type Entry = { status: Status, atMs: number, attempts: number }
@@ -81,10 +81,10 @@ export function parse(text: string, secret: string): Ledger {
     if (line.trim() === '') continue
     if (++seen > MAX_LINES) { l.dropped++; break }
     const f = line.split('\t')
-    if (over || f.length !== 6 || f[0] !== 'v1' || !KEY_RE.test(f[1]) || !STATUSES.has(f[2]) || !/^\d{1,15}$/.test(f[3]) || !/^[0-3]$/.test(f[4])) { l.dropped++; continue }
+    if (over || f.length !== 6 || f[0] !== 'v1' || !KEY_RE.test(f[1]!) || !STATUSES.has(f[2]!) || !/^\d{1,15}$/.test(f[3]!) || !/^[0-3]$/.test(f[4]!)) { l.dropped++; continue }
     const e: Entry = { status: f[2] as Status, atMs: Number(f[3]), attempts: Number(f[4]) }
-    if (!sameSig(f[5], hmac(secret, body(f[1], e)))) { l.dropped++; continue }
-    if (!put(l, f[1], e)) l.dropped++
+    if (!sameSig(f[5]!, hmac(secret, body(f[1]!, e)))) { l.dropped++; continue }
+    if (!put(l, f[1]!, e)) l.dropped++
   }
   return l
 }

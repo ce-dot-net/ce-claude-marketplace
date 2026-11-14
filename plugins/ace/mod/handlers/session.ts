@@ -1,10 +1,10 @@
 // session.start / session.end: the session and its marker at start; at the end the pending self-evals are flushed
 // and the session dir is removed unless a detached learn still holds its lock.
-import { rm } from '../io/fs.ts'
-import { type HookArgs, type Load, ensure, resolveSession, touchMarker } from '../io/state.ts'
-import { startContext } from './context.ts'
-import { registerCommands } from '../commands/index.ts'
-import { resumeBackfill } from '../io/backfill_io.ts'
+import { rm } from '../io/fs'
+import { type HookArgs, type Load, ensure, resolveSession, touchMarker } from '../io/state'
+import { startContext } from './context'
+import { registerCommands } from '../commands/index'
+import { resumeBackfill } from '../io/backfill_io'
 
 export const LEARN_LOCK_MS = 600_000              // ace_session_end.py: learn timeout 300 s + margin
 

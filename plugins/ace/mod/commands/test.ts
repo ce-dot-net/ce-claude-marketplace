@@ -1,5 +1,5 @@
-import { type Cmd, type Kit, failLine, json } from './kit.ts'
-import { cliRun } from '../io/cli.ts'
+import { type Cmd, type Kit, failLine, json } from './kit'
+import { cliRun } from '../io/cli'
 // Read-only round trip: CLI version, status, one search with --top-k 1.
 export const test: Cmd = { name: 'test', md: 'ace-test', description: 'Read-only connectivity test', bound: true }
 export async function testCmd($: any, { cli }: Kit): Promise<string> {

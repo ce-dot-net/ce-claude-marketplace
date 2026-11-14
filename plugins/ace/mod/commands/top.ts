@@ -1,5 +1,5 @@
-import { type Cmd, type Kit, cap, failLine, json, patternLines } from './kit.ts'
-import { safeToken } from './paths.ts'
+import { type Cmd, type Kit, cap, failLine, json, patternLines } from './kit'
+import { safeToken } from './paths'
 export const top: Cmd = { name: 'top', md: 'ace-top', description: 'Top-rated patterns', argumentHint: '[limit] [section]', bound: true }
 export async function topCmd($: any, { args, cli }: Kit): Promise<string> {
     const [limit, section] = args.trim().split(/\s+/).filter(Boolean)

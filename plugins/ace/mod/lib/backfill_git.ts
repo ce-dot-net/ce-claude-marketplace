@@ -1,7 +1,7 @@
 // 8.2.0 git reader (pure, NOT wired): the text of `git log` (run GIT_LOG_ARGV, pass stdout) -> fix tasks for the bootstrap backfill.
 // No `$`, no I/O. Author/committer name and email are never requested by the format and never emitted; everything that leaves is redacted.
-import { redact } from './trace.ts'
-import { sha256Hex } from './cohort.ts'
+import { redact } from './trace'
+import { sha256Hex } from './cohort'
 
 // Per commit: RS, then sha NUL date NUL subject NUL body NUL, then (git's --name-only) a blank line and the touched files.
 export const GIT_LOG_FORMAT = '%x1e%H%x00%cI%x00%s%x00%b%x00'
@@ -34,10 +34,10 @@ function parse(text: string): Raw[] {
   for (const chunk of text.split('\x1e')) {
     const f = chunk.split('\x00')
     // sha, date, subject, body, trailer; the sha is emitted as is, so only a hex sha counts (an RS inside a message cannot forge one)
-    if (f.length < 5 || !/^[0-9a-f]{7,64}$/i.test(f[0].trim())) continue
-    const ms = Date.parse(f[1].trim())
-    out.push({ sha: f[0].trim(), ms: Number.isFinite(ms) ? ms : 0, subject: f[2].trim(), body: f[3],
-      files: f[4].split('\n').map(s => s.trim()).filter(Boolean) })
+    if (f.length < 5 || !/^[0-9a-f]{7,64}$/i.test(f[0]!.trim())) continue
+    const ms = Date.parse(f[1]!.trim())
+    out.push({ sha: f[0]!.trim(), ms: Number.isFinite(ms) ? ms : 0, subject: f[2]!.trim(), body: f[3]!,
+      files: f[4]!.split('\n').map(s => s.trim()).filter(Boolean) })
   }
   return out
 }
@@ -60,7 +60,7 @@ const KEY_OR_ECHO = new RegExp(`${KEY_WORD.source}|${ECHO.source}`, 'i')
 const STDIN_FLAG = /--(?:password-stdin|with-token)\b/i
 const PEM = /-{2,}\s*BEGIN\b/i
 // the word a cut broke (/\S*$/ would be quadratic on a long run of non-space)
-function dropLastWord(s: string): string { let i = s.length; while (i > 0 && !/\s/.test(s[i - 1])) i--; return s.slice(0, i) }
+function dropLastWord(s: string): string { let i = s.length; while (i > 0 && !/\s/.test(s[i - 1]!)) i--; return s.slice(0, i) }
 const cutAt = (s: string, k: number) => k >= 0 ? s.slice(0, k) + '[redacted]' : s
 const fold = (s: string) => s.normalize('NFKD').replace(/[\p{M}\p{Cf}\u115f\u1160\u3164\uffa0\u2800]/gu, '').replace(/[\r\n\v\f\x85\u2028\u2029]+/g, ' ')
 function rules(s: string): string {
@@ -92,7 +92,7 @@ function normalize(s: string): string {
 function clean(subject: string): string {
   const s = subject.replace(/\s*\(#\d+\)\s*$/, '')
   const m = /^(?:fix|feat|chore|refactor|docs|test|perf|build|ci|style|revert)(?:\(([^)]*)\))?!?:\s*(.+)$/i.exec(s)
-  return m ? (m[1] ? `${m[1]}: ${m[2]}` : m[2]) : s
+  return m ? (m[1] ? `${m[1]}: ${m[2]}` : m[2]!) : s
 }
 
 const unquote = (s: string) => s.replace(/^revert\s+"?/i, '').replace(/"\s*$/, '').trim()

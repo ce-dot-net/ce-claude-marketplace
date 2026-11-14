@@ -1,9 +1,9 @@
 // What every model-free command gets: the core's binding, an argv-only CLI with the core's ids, the 60 KB cap,
 // and the confirm step of the writing commands (a preview + one button in the band; nothing runs before the press).
-import { type Ctx, classify, cliIds, problemLine, localState } from '../context/index.ts'
-import { cap, cliRun, type CliResult } from '../io/cli.ts'
-import { execExport, execPending } from '../io/pending.ts'
-import type { AcePending } from '../types/index.d.ts'
+import { type Ctx, classify, cliIds, problemLine, localState } from '../context/index'
+import { cap, cliRun, type CliResult } from '../io/cli'
+import { execExport, execPending } from '../io/pending'
+import type { AcePending } from '../types/index.d'
 
 const PENDING = { plugin: 'ace', key: 'pending' } as const
 export type Kit = { c: Ctx, args: string, cli: (argv: string[], o?: { stdin?: string, timeoutMs?: number }) => Promise<CliResult>, approved?: boolean }

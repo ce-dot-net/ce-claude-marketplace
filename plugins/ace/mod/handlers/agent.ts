@@ -1,12 +1,12 @@
 // agent.spawn: the subagent search + inject (fork, resume and workflow-placeholder rules), and the anchors a run
 // gets when no hook can rewrite its prompt.
-import { renderArm } from './prompt.ts'
-import { nowIso, relLog, searchRow } from '../io/log.ts'
-import { SEARCH_MS, hitResult, reuseGet, reuseStore, search } from '../io/spawn.ts'
-import { type Load, type Sess, readState, searchOrigin, updateState, uuid, type HookArgs, disabled, ensure, refreshMarker } from '../io/state.ts'
-import { injectedContents } from '../lib/evidence.ts'
-import { type StateUpdate } from '../lib/state.ts'
-import { skipReason, subagentQuery } from '../lib/text.ts'
+import { renderArm } from './prompt'
+import { nowIso, relLog, searchRow } from '../io/log'
+import { SEARCH_MS, hitResult, reuseGet, reuseStore, search } from '../io/spawn'
+import { type Load, type Sess, readState, searchOrigin, updateState, uuid, type HookArgs, disabled, ensure, refreshMarker } from '../io/state'
+import { injectedContents } from '../lib/evidence'
+import { type StateUpdate } from '../lib/state'
+import { skipReason, subagentQuery } from '../lib/text'
 
 export async function logSubagentError($: any, s: Sess, sr: any) { return relLog($, s, { timestamp: await nowIso($), event: 'error', hook: 'SubagentStart', location: 'mod.search', error: sr.error ?? null, stderr_sample: sr.stderr, pin_failed: sr.pinFailed || undefined, pin_ms: sr.pinMs, session_id: s.sessionId, source: 'mod' }) }
 export async function subagentRender($: any, s: Sess, sr: any, query: string, agentType: string, tsid: string, t0: number, parent: string | undefined, extra: any) {
