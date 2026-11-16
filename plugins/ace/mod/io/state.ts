@@ -154,7 +154,7 @@ export function enqueue<T>(L: Load, path: string, fn: () => Promise<T>): Promise
 export function updateState($: any, L: Load, s: Sess, key: string, u: StateUpdate, reset = false) {
   const path = stateFile(s, key)
   return enqueue(L, path, async () => {
-    const state = mergeState(reset ? undefined : await readJson($, path), u)
+    const state = mergeState(reset ? undefined : await readJson($, path), { searchOrg: s.org, searchProject: s.project, ...u })
     await writePrivate($, path, pyDumps(state))
     return state
   })

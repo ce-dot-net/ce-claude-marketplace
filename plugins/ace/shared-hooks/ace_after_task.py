@@ -1580,6 +1580,30 @@ def main():
         except OSError:
             pass
 
+        # 8.2.6: learn into the org/project the SEARCH ran in (stored at search time), never the hook cwd's: the
+        # server scores a search row only when trace and search share (org, project, retrieval_id). A subagent in
+        # another bound repo resolved that repo's project and was learned there. No stored binding: the cwd's, as before.
+        if not no_agent_state:
+            _bind = load_state(session_id, agent_id, hook_event_name)
+            _sp, _so = _bind.get('search_project'), _bind.get('search_org')
+            if isinstance(_sp, str) and _sp and isinstance(_so, str) and _so and (_sp, _so) != (context['project'], context['org']):
+                context = dict(context, project=_sp, org=_so)
+                # the lock and the gates belong in the search project's session dir (the mod keeps its markers there)
+                _old_lock, lock_file = lock_file, plugin_data_dir.learn_lock(
+                    _sp, session_id, agent_id if hook_event_name == 'SubagentStop' else None)
+                try:
+                    lock_file.touch()
+                    lock_taken = True
+                except OSError:
+                    pass
+                if not lock_present:  # ours, not another in-flight learn's
+                    try:
+                        _old_lock.unlink()
+                    except OSError:
+                        pass
+                if plugin_data_dir.is_disabled(_sp, session_id) or plugin_data_dir.mod_owns_learn(_sp, session_id, plugin_data_dir.MOD_HANDOFF_S):
+                    sys.exit(0)
+
         # STEP 1: task description — state `user_prompt` (C1), else bounded transcript tail
         # SubagentStop: SubagentStart's stored query first (§13.2); transcript is only the fallback.
         stored, src, st = '', '', {}

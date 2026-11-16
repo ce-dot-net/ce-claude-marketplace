@@ -43,6 +43,8 @@ test('agent.spawn: own search, FRESH uuid4 pin per subagent (never the parent pi
   expect(st.hook_event_name).toBe('SubagentStart')
   expect(st.user_prompt).toBe(p1)
   expect(h.state('agent-2')!.task_session_id).toBe(s2)
+  // 8.2.6: the binding the search ran with, read back by the Python learn (search_org / search_project)
+  expect([st.search_org, st.search_project]).toEqual(['org_t', PRJ])
 })
 
 test('agent.spawn from a Workflow: real prompt searched and rewritten, workflow run id logged', async ($, on) => {

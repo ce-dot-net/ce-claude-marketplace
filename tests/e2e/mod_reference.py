@@ -217,7 +217,8 @@ def expected_main_state(search_text, prompt=HUMAN_PROMPT, tsid=TSID_PLACEHOLDER)
                                  render_variant="full",  # the mod's full arm (ACE_RENDER_FULL_PCT=100 in the TS host)
                                  pattern_contents=pus.injected_contents(resp.get("similar_patterns"), ids),  # §31
                                  eval_stats=pus.eval_stats([p for p in resp.get("similar_patterns") if p.get("id") in ids],
-                                                           resp.get("similar_patterns")))
+                                                           resp.get("similar_patterns")),
+                                 binding={"org": "org_t", "project": "prj_t"})  # 8.2.6: the TS host's binding
         return (Path(d) / "patterns-used-main.json").read_text()
 
 

@@ -336,7 +336,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         if agent_type == 'fork' and os.environ.get('ACE_SUBAGENT_INJECT_FORKS') != '1':
             try:
                 append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id,
-                                     hook_event_name='SubagentStart', project_id=project,
+                                     hook_event_name='SubagentStart', project_id=project, binding=context,
                                      parent_task_id=parent_task_id)
                 log_search_skipped('SubagentStart', 'fork_inherits_context', session_id, project)
             except Exception as e:
@@ -368,7 +368,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
         try:
             append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id,
                                  user_prompt=query, hook_event_name='SubagentStart',
-                                 project_id=project, parent_task_id=parent_task_id,
+                                 project_id=project, binding=context, parent_task_id=parent_task_id,
                                  query_source=query_source)
         except Exception as e:
             log_error('SubagentStart', 'ace_subagent_start.anchor', session_id, project, e)
@@ -423,7 +423,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
             try:
                 append_patterns_used(session_id, agent_id, [],
                                      retrieval_id=retrieval_id,
-                                     task_session_id=task_session_id, project_id=project, render_variant=_cohort)
+                                     task_session_id=task_session_id, project_id=project, render_variant=_cohort, binding=context)
             except Exception as e:
                 log_error('SubagentStart', 'ace_subagent_start.control', session_id, project, e)
 
@@ -441,7 +441,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                         retrieval_id=retrieval_id,
                         retrieval_log_ids=retrieval_log_map,
                         task_session_id=task_session_id,
-                        project_id=project, rendered_context=ace_context, render_variant=_cohort,
+                        project_id=project, rendered_context=ace_context, render_variant=_cohort, binding=context,
                         pattern_contents=injected_contents(patterns_response.get('similar_patterns'), pattern_ids),
                     )
                 except Exception as e:
@@ -461,7 +461,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                         retrieval_id=retrieval_id,
                         retrieval_log_ids=retrieval_log_map,
                         task_session_id=task_session_id,
-                        project_id=project, rendered_context=ace_context, render_variant=_cohort,
+                        project_id=project, rendered_context=ace_context, render_variant=_cohort, binding=context,
                         pattern_contents=injected_contents(patterns_response.get('similar_patterns'), pattern_ids),
                     )
                 except Exception as e:
