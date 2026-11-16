@@ -39,7 +39,7 @@ from ace_project_context import get_context
 from utils.git_utils import get_git_context, detect_commits_in_session
 from ace_relevance_logger import log_event, log_execution_metrics, log_hook_error, log_stop_telemetry
 from patterns_used_state import (load_playbook_used, reap_patterns_used,
-                                 load_retrieval_ids, load_task_session_id, load_state)
+                                 load_retrieval_ids, load_task_session_id, load_state, load_search_binding)
 import plugin_data_dir
 from ace_cli import run_learn  # C2: single spawn + DESIGN §8 'database is locked' retry
 sys.path.insert(0, str(Path(__file__).parent))
@@ -1455,6 +1455,34 @@ def handback_summary(path, cap=4000):
         return None
 
 
+def _learn_context(cwd_ctx, session_id, agent_id, hook, no_agent_state):
+    """8.2.6: the org/project a trace is learned into. The server scores a search row only when trace and search share
+    (org, project, retrieval_id), so the learn goes to the project the task's SEARCH ran in (load_search_binding), not
+    to the hook cwd's (a subagent in another bound repo, or in an unbound dir). Same org only: work from a repo bound to
+    another org never goes into that org's corpus (cwd project kept, logged). No stored binding: the cwd's, as before."""
+    if no_agent_state:
+        return cwd_ctx
+    try:
+        b = load_search_binding(session_id, agent_id, hook)
+    except Exception:
+        b = None
+    cur = cwd_ctx or {}
+    if not b or b == (cur.get('org'), cur.get('project')):
+        return cwd_ctx
+    so, sp = b
+    row = dict(session_id=session_id, hook=hook, agent_id=agent_id if hook == 'SubagentStop' else None)
+    try:
+        if cwd_ctx and cur.get('org') != so:
+            log_event('learn_rebound_skipped_cross_org', cwd_org=cur.get('org'), cwd_project=cur.get('project'),
+                      search_org=so, search_project=sp, **row)
+            return cwd_ctx
+        log_event('learn_rebound', from_project=cur.get('project'), to_project=sp, org=so, **row)
+    except Exception:
+        if cwd_ctx and cur.get('org') != so:
+            return cwd_ctx
+    return dict(cur, org=so, project=sp)
+
+
 def main():
     """
     ACE After Task Hook (Stop / SubagentStop) — dispatches learning to a detached child
@@ -1502,18 +1530,6 @@ def main():
         if hook_event_name == 'SubagentStop' and not event.get('agent_type') and event.get('agent_id'):
             sys.exit(0)
 
-        # Get project context
-        context = get_context()
-        if not context:
-            skip_learning("No project context found", event)
-            sys.exit(0)
-        if plugin_data_dir.is_disabled(context['project'], session_id) or plugin_data_dir.mod_owns_learn(context['project'], session_id, plugin_data_dir.MOD_HANDOFF_S):
-            sys.exit(0)  # session flag (CLI unusable), project flag (P-26), or the mod learns (its classic.* hooks run)
-
-        # Self-eval answer in the last message -> review file for the statusline (after the gates)
-        if hook_event_name == 'Stop':
-            parse_ace_review(last_assistant_message)
-
         # Handle SubagentStop: use agent's transcript. transcript_path is the MAIN session's
         # (cc_hooks_reference.md:2591); a degenerate event without agent_transcript_path must
         # not read the main prompt (v7.1.4 -main fallback) -> Stage 2 skip below.
@@ -1541,6 +1557,18 @@ def main():
         # No recoverable agent_id: every per-agent state read would resolve to the MAIN agent's
         # file (prompt, tsid, F-080 ids, and load_playbook_used would delete it) -> read none.
         no_agent_state = hook_event_name == 'SubagentStop' and not agent_id
+
+        # Project context: the cwd's, unless the task's search ran in another project of the same org (8.2.6).
+        context = _learn_context(get_context(), session_id, agent_id, hook_event_name, no_agent_state)
+        if not context:
+            skip_learning("No project context found", event)
+            sys.exit(0)
+        if plugin_data_dir.is_disabled(context['project'], session_id) or plugin_data_dir.mod_owns_learn(context['project'], session_id, plugin_data_dir.MOD_HANDOFF_S):
+            sys.exit(0)  # session flag (CLI unusable), project flag (P-26), or the mod learns (its classic.* hooks run)
+
+        # Self-eval answer in the last message -> review file for the statusline (after the gates)
+        if hook_event_name == 'Stop':
+            parse_ace_review(last_assistant_message)
 
         # Telemetry: real learn-lock state at hook start + background task count
         lock_file = plugin_data_dir.learn_lock(
@@ -1576,33 +1604,9 @@ def main():
         # the dir (released in `finally` on every skip path; the learn job owns it once dispatched).
         try:
             lock_file.touch()
-            lock_taken = True
+            lock_taken = not lock_present  # a lock that was there (the mod's or another learn's) is never ours to remove
         except OSError:
             pass
-
-        # 8.2.6: learn into the org/project the SEARCH ran in (stored at search time), never the hook cwd's: the
-        # server scores a search row only when trace and search share (org, project, retrieval_id). A subagent in
-        # another bound repo resolved that repo's project and was learned there. No stored binding: the cwd's, as before.
-        if not no_agent_state:
-            _bind = load_state(session_id, agent_id, hook_event_name)
-            _sp, _so = _bind.get('search_project'), _bind.get('search_org')
-            if isinstance(_sp, str) and _sp and isinstance(_so, str) and _so and (_sp, _so) != (context['project'], context['org']):
-                context = dict(context, project=_sp, org=_so)
-                # the lock and the gates belong in the search project's session dir (the mod keeps its markers there)
-                _old_lock, lock_file = lock_file, plugin_data_dir.learn_lock(
-                    _sp, session_id, agent_id if hook_event_name == 'SubagentStop' else None)
-                try:
-                    lock_file.touch()
-                    lock_taken = True
-                except OSError:
-                    pass
-                if not lock_present:  # ours, not another in-flight learn's
-                    try:
-                        _old_lock.unlink()
-                    except OSError:
-                        pass
-                if plugin_data_dir.is_disabled(_sp, session_id) or plugin_data_dir.mod_owns_learn(_sp, session_id, plugin_data_dir.MOD_HANDOFF_S):
-                    sys.exit(0)
 
         # STEP 1: task description — state `user_prompt` (C1), else bounded transcript tail
         # SubagentStop: SubagentStart's stored query first (§13.2); transcript is only the fallback.
