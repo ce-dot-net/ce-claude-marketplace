@@ -206,6 +206,7 @@ def _search_and_inject(event, ctx, project, org, sid, agent_id, last_file, last,
     append_patterns_used(sid, agent_id or None, kept_ids,
                          retrieval_id=None if has_rid else (result.get('retrieval_id') or None),
                          retrieval_log_ids=rlog, task_session_id=tsid, project_id=project,
+                         binding=None if has_rid else ctx,  # 8.2.6: the project goes with the retrieval_id
                          pattern_contents=injected_contents(kept, kept_ids))
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PostToolUse", "additionalContext": additional}}))

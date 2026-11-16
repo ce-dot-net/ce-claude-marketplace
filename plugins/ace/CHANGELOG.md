@@ -5,6 +5,21 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.2.6] - Unreleased
+
+### Fixed
+- A subagent trace was learned into the wrong project when the subagent's cwd resolved to another bound project
+  than its search (prod: traces searched in one project, learned into another; the server scores a search row only
+  when trace and search share org, project and retrieval_id, so no HOT/WARM/COLD tier, and reflector + curator
+  learned the work into the wrong corpus). The Python Stop/SubagentStop took org/project from `get_context()` of the
+  hook cwd. Now every search-time state write (mod and Python: UserPromptSubmit, SubagentStart, domain shift with its
+  retrieval_id) stores the search binding as the new optional state keys `search_org` / `search_project`, and the
+  Python learn sends the trace with that org/project (`ace-cli learn --org/--project`). The learn is never dropped on
+  a mismatch; it goes to the search project. The disabled / mod-owns-learn gates are checked again in the search
+  project's session dir, where the mod keeps its markers (before, a live mod in the search project was not seen, so
+  the Python chain learned a second time into the cwd project and stamped `render_path: python`). No stored binding
+  (no search, state files of older versions): unchanged, the cwd-resolved project.
+
 ## [8.2.5] - 2026-11-14
 
 ### Fixed
