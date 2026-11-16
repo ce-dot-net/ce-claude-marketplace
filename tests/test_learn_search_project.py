@@ -40,21 +40,44 @@ def _bound(path, org, project):
     return path
 
 
-def _env(a):
+def _env(a, fake_bin=None):
     env = {k: v for k, v in os.environ.items() if k not in ("ACE_PROJECT_ID", "ACE_ORG_ID", "ACE_CONTEXT")}
     env.update(ACE_LEARN_INLINE="1")
     if a is not None:
         env["CLAUDE_PROJECT_DIR"] = str(a)
+    if fake_bin is not None:
+        env["PATH"] = str(fake_bin) + os.pathsep + env.get("PATH", "")
     return env
+
+
+TRACE_CLI = r'''#!%s
+import json, os, sys
+argv = sys.argv[1:]
+rec = {"argv": argv}
+if "--transcript" in argv:
+    rec["trace"] = json.load(open(argv[argv.index("--transcript") + 1]))
+with open(os.environ["ACE_FAKE_CLI_LOG"], "a") as fh:
+    fh.write(json.dumps(rec) + "\n")
+print("{}")
+'''
+
+
+def _trace_cli(tmp_path):
+    """A fake ace-cli that also records the learned trace (the shared fake logs argv only)."""
+    d = tmp_path / "trace-bin"
+    d.mkdir()
+    (d / "ace-cli").write_text(TRACE_CLI % sys.executable)
+    (d / "ace-cli").chmod(0o755)
+    return d
 
 
 def _sdir(project):
     return pus.state_file_path(SID, AGENT, project_id=project).parent
 
 
-def _seed_state(state_project, extra=None, rid="ret-A"):
-    """The search-time state of the subagent, as a writer leaves it (under the session's project dir)."""
-    sf = pus.state_file_path(SID, AGENT, project_id=state_project)
+def _seed_state(state_project, extra=None, rid="ret-A", agent=AGENT):
+    """The search-time state of the subagent (or the main agent: agent=None), as a writer leaves it."""
+    sf = pus.state_file_path(SID, agent, project_id=state_project)
     sf.parent.mkdir(parents=True, exist_ok=True)
     st = {"pattern_ids": [PID], "retrieval_id": rid, "retrieval_log_ids": {PID: 7}, "task_session_id": "tsid-A",
           "user_prompt": PROMPT, "hook_event_name": "SubagentStart", "render_variant": "full"}
@@ -62,7 +85,7 @@ def _seed_state(state_project, extra=None, rid="ret-A"):
     sf.write_text(json.dumps(st))
 
 
-def _stop(cwd, a, transcript_dir, work=True):
+def _stop(cwd, a, transcript_dir, work=True, hook="SubagentStop", fake_bin=None):
     tr = transcript_dir / ("agent-%s.jsonl" % AGENT)
     lines = [{"type": "user", "message": {"role": "user", "content": PROMPT}}]
     if work:
@@ -74,11 +97,12 @@ def _stop(cwd, a, transcript_dir, work=True):
                       {"type": "tool_result", "tool_use_id": "toolu_2", "content": "1 passed"}]}}]
     lines += [{"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "Done."}]}}]
     tr.write_text("".join(json.dumps(x) + "\n" for x in lines))  # the subagent's work (after_task prefers it)
-    ev = {"session_id": SID, "hook_event_name": "SubagentStop", "cwd": str(cwd), "agent_id": AGENT,
-          "agent_type": "general-purpose", "agent_transcript_path": str(tr), "transcript_path": str(tr),
+    ev = {"session_id": SID, "hook_event_name": hook, "cwd": str(cwd), "transcript_path": str(tr),
           "last_assistant_message": "Done.", "stop_hook_active": False, "background_tasks": []}
+    if hook == "SubagentStop":
+        ev.update(agent_id=AGENT, agent_type="general-purpose", agent_transcript_path=str(tr))
     r = subprocess.run([sys.executable, str(SHARED / "ace_after_task.py")], input=json.dumps(ev), text=True,
-                       capture_output=True, cwd=str(cwd), env=_env(a), timeout=60)
+                       capture_output=True, cwd=str(cwd), env=_env(a, fake_bin), timeout=60)
     assert r.returncode == 0, r.stderr
 
 
@@ -139,7 +163,9 @@ def test_stale_mod_marker_python_render_path_still_learns_into_search_project(tm
 
 def test_fresh_mod_in_search_project_owns_the_learn_and_keeps_its_lock(tmp_path, fake_cli_calls):
     """The mod (search project's session dir) is live and its classic hooks run: it learns, the Python chain steps
-    aside and leaves the mod's in-flight lock (mod/handlers/turn.ts learn-inflight-<key>.lock) alone."""
+    aside. The gates run before the hook touches any lock, so the mod's in-flight lock (mod/handlers/turn.ts
+    learn-inflight-<key>.lock) is left alone (b131c31 took the lock first and removed it on the gate exit). The
+    lock_present rule itself: test_skip_releases_its_own_lock_but_keeps_a_foreign_one."""
     a, b = _two_projects(tmp_path)
     _seed_state("prj_A", BIND_A)
     sdir = _mod_markers("prj_A")
@@ -159,11 +185,11 @@ def test_unbound_cwd_learns_into_search_project(tmp_path, fake_cli_calls):
     assert _target(fake_cli_calls) == ("org_X", "prj_A")
 
 
-@pytest.mark.parametrize("gate", ["disabled", "mod"])
+@pytest.mark.parametrize("gate", ["session_disabled", "mod"])
 def test_gated_cwd_project_does_not_drop_the_search_project_learn(tmp_path, fake_cli_calls, gate):
     a, b = _two_projects(tmp_path)
     _seed_state("prj_A", BIND_A)
-    if gate == "disabled":
+    if gate == "session_disabled":
         _sdir("prj_B").mkdir(parents=True, exist_ok=True)
         (_sdir("prj_B") / "disabled.flag").write_text("")
     else:
@@ -171,6 +197,77 @@ def test_gated_cwd_project_does_not_drop_the_search_project_learn(tmp_path, fake
         _mod_markers("prj_B")
     _stop(b, a, tmp_path)
     assert _target(fake_cli_calls) == ("org_X", "prj_A")
+
+
+def test_project_disabled_flag_on_cwd_project_is_never_rebound_away(tmp_path, fake_cli_calls):
+    """TROUBLESHOOTING.md: a project disabled.flag turns ACE off for that whole project; a learn from it never goes
+    anywhere else."""
+    a, b = _two_projects(tmp_path)
+    _seed_state("prj_A", BIND_A)
+    pdir = _sdir("prj_B").parent.parent
+    pdir.mkdir(parents=True, exist_ok=True)
+    (pdir / "disabled.flag").write_text("")
+    _stop(b, a, tmp_path)
+    assert _learns(fake_cli_calls) == []
+
+
+# ---------- the MAIN Stop: no rebind from an unbound / gated cwd (its main state can be an earlier task's) ----------
+
+def _stale_main(project):
+    _seed_state(project, {"search_org": "org_X", "search_project": project, "task_session_id": "tsid-OLD",
+                          "hook_event_name": "UserPromptSubmit", "user_prompt": "OLD prompt about billing"},
+                rid="ret-OLD", agent=None)
+
+
+def test_main_stop_in_unbound_cwd_skips_despite_a_stale_main_binding(tmp_path, fake_cli_calls):
+    _bound(tmp_path / "B", "org_X", "prj_B")
+    c = tmp_path / "C"
+    c.mkdir()
+    _stale_main("prj_B")  # left while the session worked in B; the UPS in C exits before its anchor write
+    _stop(c, c, tmp_path, hook="Stop")
+    assert _learns(fake_cli_calls) == []
+
+
+def test_main_stop_in_gated_cwd_does_not_rebind(tmp_path, fake_cli_calls):
+    a, b = _two_projects(tmp_path)
+    _stale_main("prj_A")
+    _sdir("prj_B").mkdir(parents=True, exist_ok=True)
+    (_sdir("prj_B") / "disabled.flag").write_text("")  # session flag in the cwd project
+    _stop(b, a, tmp_path, hook="Stop")
+    assert _learns(fake_cli_calls) == []
+
+
+def test_main_stop_in_bound_cwd_with_the_current_binding_rebinds(tmp_path, fake_cli_calls):
+    a, b = _two_projects(tmp_path)
+    _seed_state("prj_A", BIND_A, agent=None)
+    _stop(b, a, tmp_path, hook="Stop")
+    assert _target(fake_cli_calls) == ("org_X", "prj_A")
+
+
+def test_ups_search_then_domain_shift_keep_the_ups_credit(tmp_path, monkeypatch):
+    """A stale main file of another project must not capture the UPS writes (no project_id): the Stop then reads
+    the UPS retrieval_id and prompt, as on 8.2.5."""
+    a = _bound(tmp_path / "A", "org_X", "prj_A")
+    _bound(tmp_path / "B", "org_X", "prj_B")
+    _stale_main("prj_B")
+    stale = pus.state_file_path(SID, None, project_id="prj_B")
+    before = stale.read_text()
+    monkeypatch.setenv("CLAUDE_PROJECT_DIR", str(a))
+    for k in ("ACE_PROJECT_ID", "ACE_ORG_ID", "ACE_CONTEXT"):
+        monkeypatch.delenv(k, raising=False)
+    monkeypatch.chdir(a)
+    pus.append_patterns_used(SID, None, [], task_session_id="tsid-NEW", user_prompt="NEW",
+                             hook_event_name="UserPromptSubmit", reset=True)
+    pus.append_patterns_used(SID, None, [PID], retrieval_id="ret-NEW", task_session_id="tsid-NEW", user_prompt="NEW",
+                             hook_event_name="UserPromptSubmit", binding={"org": "org_X", "project": "prj_A"})
+    sf = pus.state_file_path(SID, None, None, "prj_A")  # ace_domain_shift: explicit project, rid kept when present
+    has_rid = sf.exists() and bool(pus._read_state_file(sf)[1])
+    pus.append_patterns_used(SID, None, ["ctx-1234567890-ffff"], retrieval_id=None if has_rid else "ret-DS",
+                             task_session_id="tsid-NEW", project_id="prj_A",
+                             binding=None if has_rid else {"org": "org_X", "project": "prj_A"})
+    st = pus.load_state(SID, None, "Stop")
+    assert (st.get("retrieval_id"), st.get("user_prompt")) == ("ret-NEW", "NEW"), st
+    assert stale.read_text() == before
 
 
 def test_no_claude_project_dir_still_finds_the_search_state(tmp_path, fake_cli_calls):
@@ -192,6 +289,19 @@ def test_cross_org_keeps_cwd_project_and_logs(tmp_path, fake_cli_calls):
     assert (row[0]["cwd_org"], row[0]["cwd_project"], row[0]["search_org"], row[0]["search_project"]) == \
         ("org_Y", "prj_B", "org_X", "prj_A")
     assert _rows(b, "learn_rebound") == []
+
+
+def test_cross_org_drops_the_other_orgs_f080_fields(tmp_path, fake_cli_calls):
+    a, b = _two_projects(tmp_path, org_b="org_Y")
+    _seed_state("prj_A", BIND_A)
+    _stop(b, a, tmp_path, fake_bin=_trace_cli(tmp_path))
+    calls = [c for c in fake_cli_calls() if c["argv"][:1] == ["learn"]]
+    assert len(calls) == 1
+    argv, trace = calls[0]["argv"], calls[0]["trace"]
+    assert (_flag(argv, "--org"), _flag(argv, "--project")) == ("org_Y", "prj_B")
+    assert "--retrieval-id" not in argv and "--applied-log-ids" not in argv, argv
+    assert not trace.get("retrieval_id") and not trace.get("applied_log_ids") and not trace.get("playbook_used"), trace
+    assert len(_rows(b, "learn_rebound_skipped_cross_org")) == 1
 
 
 # ---------- unchanged behaviour ----------
@@ -244,9 +354,12 @@ def test_skip_releases_its_own_lock_but_keeps_a_foreign_one(tmp_path, fake_cli_c
     lock = _sdir("prj_A") / ("learn-inflight-%s.lock" % AGENT)
     assert not lock.exists(), "the hook's own lock must be released on a skip"
     _seed_state("prj_A", BIND_A)
-    lock.write_text("")  # another learn of this agent is in flight
+    lock.write_text("")  # another learn of this agent is in flight (or a stale one)
+    old = time.time() - 3600
+    os.utime(lock, (old, old))
     _stop(b, a, tmp_path, work=False)
     assert lock.exists(), "a lock that was there before the hook is never removed by it"
+    assert abs(lock.stat().st_mtime - old) < 1, "an existing lock is not refreshed by a skipping hook"
 
 
 # ---------- writers ----------
@@ -258,6 +371,13 @@ def test_writer_stores_search_binding_with_a_retrieval_id_and_keeps_it_on_merge(
     st = pus.load_state(SID, AGENT, "SubagentStop", project_id="p")
     assert st["search_org"] == "org_X" and st["search_project"] == "prj_A"
     assert list(st)[-2:] == ["search_org", "search_project"]  # mod parity: last keys (mergeState)
+
+
+def test_writer_takes_the_binding_as_a_pair(tmp_path):
+    pus.append_patterns_used(SID, AGENT, [], project_id="p", retrieval_id="r", binding={"org": "org_X", "project": "prj_A"})
+    pus.append_patterns_used(SID, AGENT, [], project_id="p", binding={"org": "org_Z", "project": None})
+    st = pus.load_state(SID, AGENT, "SubagentStop", project_id="p")
+    assert (st["search_org"], st["search_project"]) == ("org_X", "prj_A")
 
 
 def test_writer_without_retrieval_id_stores_no_binding(tmp_path):
@@ -278,5 +398,9 @@ def test_state_path_finds_the_session_file_in_another_project(tmp_path, monkeypa
     """Without $CLAUDE_PROJECT_DIR the default project is the cwd's; the session's one state file elsewhere wins."""
     monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
     _seed_state("prj_A")
-    assert pus.state_file_path(SID, AGENT) == pus.state_file_path(SID, AGENT, project_id="prj_A")
-    assert pus.state_file_path(SID, "other-agent") != pus.state_file_path(SID, "other-agent", project_id="prj_A")
+    assert pus.state_file_path(SID, AGENT, find=True) == pus.state_file_path(SID, AGENT, project_id="prj_A")
+    assert pus.load_state(SID, AGENT, "SubagentStop").get("retrieval_id") == "ret-A"
+    assert pus.state_file_path(SID, "other-agent", find=True) != pus.state_file_path(SID, "other-agent", project_id="prj_A")
+    assert pus.state_file_path(SID, AGENT) != pus.state_file_path(SID, AGENT, project_id="prj_A"), "writers never follow"
+    _seed_state("prj_A", agent=None)
+    assert pus.state_file_path(SID, None, find=True) != pus.state_file_path(SID, None, project_id="prj_A"), "never main"

@@ -72,14 +72,15 @@ def _state_dir(state_dir=None, session_id=None, project_id=None, create=False):
     return plugin_data_dir.session_dir(_project_id(project_id), session_id, create=create)
 
 
-def state_file_path(session_id, agent_id, state_dir=None, project_id=None):
+def state_file_path(session_id, agent_id, state_dir=None, project_id=None, find=False):
     agent_suffix = agent_id if agent_id else 'main'
     name = f'patterns-used-{agent_suffix}.json'
     p = _state_dir(state_dir, session_id, project_id) / name
-    if state_dir is None and not project_id and session_id and not p.exists():
-        # 8.2.6: one rule for writer and reader without $CLAUDE_PROJECT_DIR: the default project resolves from the
-        # hook cwd, which can be another project than the one the state was written in (the mod writes under the
-        # session's project, SubagentStart under its cwd's). A session id is unique: its one file in another project.
+    if find and agent_id and state_dir is None and not project_id and session_id and not p.exists():
+        # 8.2.6, readers of an AGENT file only: without $CLAUDE_PROJECT_DIR the default project resolves from the hook
+        # cwd, which can be another project than the one the agent's SubagentStart wrote in. An agent id is unique:
+        # its one file in another project. Never for 'main' (several projects can hold a main file of the session)
+        # and never for writers (they would follow a stale file).
         import glob
         sdir = plugin_data_dir.session_dir('_', session_id, create=False)
         hits = glob.glob(str(plugin_data_dir.data_root() / 'projects' / '*' / 'sessions' / glob.escape(sdir.name)
@@ -371,11 +372,12 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
         if isinstance(es, dict):
             state['eval_stats'] = es  # self-eval numbers of the task's search, read by Stop
         b = binding if isinstance(binding, dict) else {}
-        if merged_rid:  # 8.2.6, mod parity: only a search that produced a retrieval_id binds the learn
-            for key, val in (('search_org', b.get('org')), ('search_project', b.get('project'))):
-                val = val or prior.get(key)
-                if val:
-                    state[key] = val
+        if merged_rid:  # 8.2.6, mod parity: only a search that produced a retrieval_id binds the learn; a pair or none
+            pair = (b.get('org'), b.get('project'))
+            if not all(isinstance(x, str) and x for x in pair):
+                pair = (prior.get('search_org'), prior.get('search_project'))
+            if all(isinstance(x, str) and x for x in pair):
+                state['search_org'], state['search_project'] = pair
         _atomic_write(sf, json.dumps(state))
     return existing_ids
 
@@ -403,7 +405,7 @@ def load_playbook_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
     if not session_id:
         return []
     if hook_event_name == 'SubagentStop':
-        files = [state_file_path(session_id, agent_id, state_dir, project_id)]
+        files = [state_file_path(session_id, agent_id, state_dir, project_id, find=True)]
     else:
         files = [state_file_path(session_id, None, state_dir, project_id)]
     seen = set()
@@ -453,7 +455,7 @@ def reap_patterns_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
     if not session_id:
         return
     if hook_event_name == 'SubagentStop':
-        f = state_file_path(session_id, agent_id, state_dir, project_id)
+        f = state_file_path(session_id, agent_id, state_dir, project_id, find=True)
     else:
         f = state_file_path(session_id, None, state_dir, project_id)
     try:
@@ -480,7 +482,7 @@ def load_retrieval_ids(session_id, agent_id, hook_event_name='Stop', state_dir=N
     if not session_id:
         return {}
     if hook_event_name == 'SubagentStop':
-        sf = state_file_path(session_id, agent_id, state_dir, project_id)
+        sf = state_file_path(session_id, agent_id, state_dir, project_id, find=True)
     else:
         sf = state_file_path(session_id, None, state_dir, project_id)
     try:
@@ -507,7 +509,7 @@ def load_task_session_id(session_id, agent_id, hook_event_name='Stop', state_dir
     if not session_id:
         return None
     if hook_event_name == 'SubagentStop':
-        sf = state_file_path(session_id, agent_id, state_dir, project_id)
+        sf = state_file_path(session_id, agent_id, state_dir, project_id, find=True)
     else:
         sf = state_file_path(session_id, None, state_dir, project_id)
     try:
@@ -537,7 +539,7 @@ def load_state(session_id, agent_id, hook_event_name='Stop', state_dir=None, pro
         return {}
     aid = agent_id if hook_event_name == 'SubagentStop' else None
     try:
-        raw = json.loads(state_file_path(session_id, aid, state_dir, project_id).read_text())
+        raw = json.loads(state_file_path(session_id, aid, state_dir, project_id, find=True).read_text())
         return raw if isinstance(raw, dict) else {}
     except Exception:
         return {}

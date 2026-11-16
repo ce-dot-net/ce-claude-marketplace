@@ -7,6 +7,7 @@ import G from './fixtures/golden.ts'
 import USED_CASES from './fixtures/used_cases.ts'
 import REJECTION_CASES from './fixtures/rejection_cases.ts'
 import { pyLoads } from '../lib/pyjson.ts'
+import { mergeState } from '../lib/state.ts'
 import { renderPatternsDict } from '../lib/render.ts'
 import { traceVariant, renderCohort, serverFullPct, storedFullPct } from '../lib/cohort.ts'
 import { hasSubstantialWork, toolRec } from '../lib/trace.ts'
@@ -327,4 +328,12 @@ test('§32 agent.spawn: a different task text is a different key (server)', asyn
   await spawn($, 'audit the learn trace builder for missing fields')
   await spawn($, 'audit the learn trace builder for other things')
   expect(h2.searches().length).toBe(2)
+})
+
+test('8.2.6 mergeState: the search binding only with a retrieval_id, and only as a pair (no mixing)', () => {
+  expect('search_project' in mergeState({}, { searchOrg: 'o', searchProject: 'p' })).toBe(false)
+  const st = mergeState({}, { retrievalId: 'r', searchOrg: 'o', searchProject: 'p' })
+  expect([st.search_org, st.search_project]).toEqual(['o', 'p'])
+  const half = mergeState(st, { searchOrg: 'z' })
+  expect([half.search_org, half.search_project]).toEqual(['o', 'p'])
 })

@@ -14,18 +14,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   learned the work into the wrong corpus). The Python Stop/SubagentStop took org/project from `get_context()` of the
   hook cwd.
   - Every search-time state write that holds a retrieval_id (mod and Python: UserPromptSubmit, SubagentStart, domain
-    shift) stores the search binding as the new optional state keys `search_org` / `search_project`. Anchor, fork and
-    failed-search writes (no retrieval_id) store none.
-  - The Python learn reads that binding first and sends the trace (`ace-cli learn --org/--project`), its learn lock
-    and its gates (disabled flag, mod owns the learn) to the search project. A cwd that is unbound or gated no longer
-    drops a learn with a stored binding. Row `learn_rebound` (from_project, to_project, org).
+    shift) stores the search binding as the new optional state keys `search_org` / `search_project`, always as a
+    pair. Anchor, fork and failed-search writes (no retrieval_id) store none.
+  - The Python learn sends the trace (`ace-cli learn --org/--project`), its learn lock and its gates (disabled flag,
+    mod owns the learn) to the search project when the stored binding differs from the cwd's. Row `learn_rebound`
+    (from_project, to_project, org).
+  - From an unbound or gated cwd (disabled flag, live mod) only a SubagentStop is rebound: its agent file is written
+    by its own SubagentStart. A main Stop there keeps the old behaviour (unbound: no learn), because the
+    UserPromptSubmit in such a cwd exits before its anchor write and a main binding found there belongs to an
+    earlier task. A cwd project with a project `disabled.flag` is never rebound away from.
   - Same org only: when the cwd is bound to another org than the search, the learn stays in the cwd project as before
-    (the work of a repo of one org never goes into another org's corpus). Row `learn_rebound_skipped_cross_org`
-    (both org/project pairs, no content).
-  - The state file is found by session id across the project dirs when the default project (from
-    `$CLAUDE_PROJECT_DIR`, else the cwd) holds none, so the fix also works without `$CLAUDE_PROJECT_DIR`.
-  - A learn lock that existed before the hook (the mod's in-flight learn, or another learn of the same agent) is
-    never removed by the Python hook; before, stepping aside for the mod could delete the mod's lock.
+    and the other org's F-080 fields (retrieval_id, applied_log_ids, playbook_used) are dropped from the trace.
+    Row `learn_rebound_skipped_cross_org` (both org/project pairs, no content).
+  - A reader of a subagent's state file finds it by session and agent id across the project dirs when the default
+    project (from `$CLAUDE_PROJECT_DIR`, else the cwd) holds none, so a SubagentStop also works without
+    `$CLAUDE_PROJECT_DIR`. Main-agent files and all writers keep the default project only.
+  - A learn lock that existed before the hook (the mod's in-flight learn, another learn, a stale one) is neither
+    removed nor refreshed by the Python hook; the gates run before any lock is taken.
   - No stored binding (no search, state files of older versions): unchanged, the cwd-resolved project.
 
 ## [8.2.5] - 2026-11-14

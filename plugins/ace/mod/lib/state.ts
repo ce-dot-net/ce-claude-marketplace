@@ -49,9 +49,8 @@ export function mergeState(prior: any, u: StateUpdate): any {
   const es = u.evalStats ?? p.eval_stats  // self-eval numbers of the task's search, read by Stop (Python key order)
   if (es && typeof es === 'object' && !Array.isArray(es)) state.eval_stats = es
   if (state.retrieval_id) {  // 8.2.6 (Python key order): only a search that produced a retrieval_id binds the learn
-    const so = u.searchOrg || p.search_org, sp = u.searchProject || p.search_project
-    if (so) state.search_org = so
-    if (sp) state.search_project = sp
+    const [so, sp] = u.searchOrg && u.searchProject ? [u.searchOrg, u.searchProject] : [p.search_org, p.search_project]
+    if (so && sp) { state.search_org = so; state.search_project = sp }  // a pair or none
   }
   const at = u.agentType ?? p.agent_type // mod-only: its turn.complete carries no agent type; Python ignores the key
   if (at) state.agent_type = at
