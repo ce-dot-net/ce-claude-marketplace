@@ -50,6 +50,7 @@ def _env(a, fake_bin=None):
     return env
 
 
+SEARCH_8 = REPO / "tests" / "e2e" / "fixtures" / "mod" / "search_8.json"  # a real search answer (retrieval_id)
 TRACE_CLI = r'''#!%s
 import json, os, sys
 argv = sys.argv[1:]
@@ -58,7 +59,10 @@ if "--transcript" in argv:
     rec["trace"] = json.load(open(argv[argv.index("--transcript") + 1]))
 with open(os.environ["ACE_FAKE_CLI_LOG"], "a") as fh:
     fh.write(json.dumps(rec) + "\n")
-print("{}")
+if argv[:1] == ["search"]:
+    print(open(%r).read())
+else:
+    print("{}")
 '''
 
 
@@ -66,7 +70,7 @@ def _trace_cli(tmp_path):
     """A fake ace-cli that also records the learned trace (the shared fake logs argv only)."""
     d = tmp_path / "trace-bin"
     d.mkdir()
-    (d / "ace-cli").write_text(TRACE_CLI % sys.executable)
+    (d / "ace-cli").write_text(TRACE_CLI % (sys.executable, str(SEARCH_8)))
     (d / "ace-cli").chmod(0o755)
     return d
 
@@ -85,7 +89,7 @@ def _seed_state(state_project, extra=None, rid="ret-A", agent=AGENT):
     sf.write_text(json.dumps(st))
 
 
-def _stop(cwd, a, transcript_dir, work=True, hook="SubagentStop", fake_bin=None):
+def _stop(cwd, a, transcript_dir, work=True, hook="SubagentStop", fake_bin=None, prompt_id=None):
     tr = transcript_dir / ("agent-%s.jsonl" % AGENT)
     lines = [{"type": "user", "message": {"role": "user", "content": PROMPT}}]
     if work:
@@ -101,7 +105,18 @@ def _stop(cwd, a, transcript_dir, work=True, hook="SubagentStop", fake_bin=None)
           "last_assistant_message": "Done.", "stop_hook_active": False, "background_tasks": []}
     if hook == "SubagentStop":
         ev.update(agent_id=AGENT, agent_type="general-purpose", agent_transcript_path=str(tr))
+    if prompt_id:
+        ev["prompt_id"] = prompt_id  # G2: CC's task anchor, identical from UserPromptSubmit to Stop
     r = subprocess.run([sys.executable, str(SHARED / "ace_after_task.py")], input=json.dumps(ev), text=True,
+                       capture_output=True, cwd=str(cwd), env=_env(a, fake_bin), timeout=60)
+    assert r.returncode == 0, r.stderr
+
+
+def _ups(cwd, a, prompt, prompt_id, fake_bin=None):
+    """The real UserPromptSubmit hook (ace_before_task.py)."""
+    ev = {"session_id": SID, "hook_event_name": "UserPromptSubmit", "cwd": str(cwd), "prompt": prompt,
+          "prompt_id": prompt_id, "transcript_path": ""}
+    r = subprocess.run([sys.executable, str(SHARED / "ace_before_task.py")], input=json.dumps(ev), text=True,
                        capture_output=True, cwd=str(cwd), env=_env(a, fake_bin), timeout=60)
     assert r.returncode == 0, r.stderr
 
@@ -223,8 +238,8 @@ def test_main_stop_in_unbound_cwd_skips_despite_a_stale_main_binding(tmp_path, f
     _bound(tmp_path / "B", "org_X", "prj_B")
     c = tmp_path / "C"
     c.mkdir()
-    _stale_main("prj_B")  # left while the session worked in B; the UPS in C exits before its anchor write
-    _stop(c, c, tmp_path, hook="Stop")
+    _stale_main("prj_B")  # session root B; the UPS in C exits before its anchor write
+    _stop(c, tmp_path / "B", tmp_path, hook="Stop", prompt_id="tsid-OLD")  # even a matching anchor: no rebind
     assert _learns(fake_cli_calls) == []
 
 
@@ -233,15 +248,52 @@ def test_main_stop_in_gated_cwd_does_not_rebind(tmp_path, fake_cli_calls):
     _stale_main("prj_A")
     _sdir("prj_B").mkdir(parents=True, exist_ok=True)
     (_sdir("prj_B") / "disabled.flag").write_text("")  # session flag in the cwd project
-    _stop(b, a, tmp_path, hook="Stop")
+    _stop(b, a, tmp_path, hook="Stop", prompt_id="tsid-OLD")
     assert _learns(fake_cli_calls) == []
 
 
 def test_main_stop_in_bound_cwd_with_the_current_binding_rebinds(tmp_path, fake_cli_calls):
     a, b = _two_projects(tmp_path)
-    _seed_state("prj_A", BIND_A, agent=None)
-    _stop(b, a, tmp_path, hook="Stop")
+    _seed_state("prj_A", BIND_A, agent=None)  # task_session_id tsid-A = this task's anchor
+    _stop(b, a, tmp_path, hook="Stop", prompt_id="tsid-A")
     assert _target(fake_cli_calls) == ("org_X", "prj_A")
+
+
+@pytest.mark.parametrize("prompt_id", [None, "pid-other"])
+def test_main_stop_without_its_own_anchor_keeps_cwd_project(tmp_path, fake_cli_calls, prompt_id):
+    a, b = _two_projects(tmp_path)
+    _seed_state("prj_A", BIND_A, agent=None)
+    _stop(b, a, tmp_path, hook="Stop", prompt_id=prompt_id)
+    assert _target(fake_cli_calls) == ("org_X", "prj_B")
+
+
+@pytest.mark.parametrize("prompt", ["fix it", "/ace-status", "<task-notification>x</task-notification>"])
+def test_main_stop_after_an_unanchored_ups_keeps_cwd_project(tmp_path, fake_cli_calls, prompt):
+    """Task 1 searched in A and was interrupted; task 2 in cwd B is a short / ACE-command / machine prompt, so the
+    real UPS exits before its anchor write and the main state still holds task 1's binding. 8.2.5 behaviour: B."""
+    a, b = _two_projects(tmp_path)
+    _seed_state("prj_A", {**BIND_A, "task_session_id": "tsid-OLD", "hook_event_name": "UserPromptSubmit",
+                          "user_prompt": "OLD task about billing in A"}, rid="ret-OLD", agent=None)
+    _ups(b, a, prompt, "pid-2")
+    assert pus.load_state(SID, None, "Stop", project_id="prj_A").get("task_session_id") == "tsid-OLD"
+    _stop(b, a, tmp_path, hook="Stop", prompt_id="pid-2")
+    assert _target(fake_cli_calls) == ("org_X", "prj_B")
+
+
+def test_main_stop_rebinds_after_its_ups_searched_in_the_session_project(tmp_path, fake_cli_calls):
+    """Positive path with the real hooks: the UPS of this task searched in A (anchor = prompt_id), the Stop runs in
+    cwd B -> learned into A; the rejection-downvote side files stay with the UPS's (cwd) project."""
+    a, b = _two_projects(tmp_path)
+    fake = _trace_cli(tmp_path)
+    _ups(a, a, PROMPT, "pid-1", fake_bin=fake)
+    st = pus.load_state(SID, None, "Stop", project_id="prj_A")
+    assert (st.get("task_session_id"), st.get("search_project")) == ("pid-1", "prj_A"), st
+    _stop(b, a, tmp_path, hook="Stop", prompt_id="pid-1", fake_bin=fake)
+    learns = _learns(fake_cli_calls)
+    assert len(learns) == 1 and (_flag(learns[0], "--org"), _flag(learns[0], "--project")) == ("org_X", "prj_A")
+    # ace_feedback: the next UPS in B reads last-main-applied.json under the cwd project (ace_before_task on_human_prompt)
+    assert (_sdir("prj_B") / "last-main-applied.json").exists()
+    assert not (_sdir("prj_A") / "last-main-applied.json").exists()
 
 
 def test_ups_search_then_domain_shift_keep_the_ups_credit(tmp_path, monkeypatch):
@@ -301,6 +353,7 @@ def test_cross_org_drops_the_other_orgs_f080_fields(tmp_path, fake_cli_calls):
     assert (_flag(argv, "--org"), _flag(argv, "--project")) == ("org_Y", "prj_B")
     assert "--retrieval-id" not in argv and "--applied-log-ids" not in argv, argv
     assert not trace.get("retrieval_id") and not trace.get("applied_log_ids") and not trace.get("playbook_used"), trace
+    assert trace.get("session_id") != "tsid-A", trace  # the other org's task pin
     assert len(_rows(b, "learn_rebound_skipped_cross_org")) == 1
 
 
