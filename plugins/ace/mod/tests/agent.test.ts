@@ -133,6 +133,7 @@ test('§16 P7 fork: own uuid4 pin + state (parent_task_id), no search / inject, 
   expect(UUID4.test(st.task_session_id)).toBe(true)
   expect(st.task_session_id).not.toBe(main)
   expect(st.parent_task_id).toBe(main)
+  expect('search_project' in st || 'search_org' in st).toBe(false)  // 8.2.6: no search answered, no binding
   expect(h.rows().some((x: any) => x.event === 'search_skipped' && x.reason === 'fork_inherits_context')).toBe(true)
   await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
   await done($, 'fork done', 'agent-1')

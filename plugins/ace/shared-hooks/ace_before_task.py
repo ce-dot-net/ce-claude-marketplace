@@ -451,7 +451,7 @@ def main():
             pass
         try:
             append_patterns_used(session_id, agent_id, [], task_session_id=task_session_id,
-                                 user_prompt=user_prompt, hook_event_name='UserPromptSubmit', reset=True, binding=context)
+                                 user_prompt=user_prompt, hook_event_name='UserPromptSubmit', reset=True)
         except Exception:
             pass  # non-fatal
 

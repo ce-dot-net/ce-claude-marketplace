@@ -74,7 +74,19 @@ def _state_dir(state_dir=None, session_id=None, project_id=None, create=False):
 
 def state_file_path(session_id, agent_id, state_dir=None, project_id=None):
     agent_suffix = agent_id if agent_id else 'main'
-    return _state_dir(state_dir, session_id, project_id) / f'patterns-used-{agent_suffix}.json'
+    name = f'patterns-used-{agent_suffix}.json'
+    p = _state_dir(state_dir, session_id, project_id) / name
+    if state_dir is None and not project_id and session_id and not p.exists():
+        # 8.2.6: one rule for writer and reader without $CLAUDE_PROJECT_DIR: the default project resolves from the
+        # hook cwd, which can be another project than the one the state was written in (the mod writes under the
+        # session's project, SubagentStart under its cwd's). A session id is unique: its one file in another project.
+        import glob
+        sdir = plugin_data_dir.session_dir('_', session_id, create=False)
+        hits = glob.glob(str(plugin_data_dir.data_root() / 'projects' / '*' / 'sessions' / glob.escape(sdir.name)
+                             / glob.escape(name)))
+        if len(hits) == 1:
+            return Path(hits[0])
+    return p
 
 
 def _filter_retrieval_log_ids(retrieval_log_ids):
@@ -294,7 +306,8 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
     bool guard: retrieval_log_ids values that are bool are excluded even though
     bool is a subclass of int.
     binding: the get_context() dict the SEARCH ran with -> search_org / search_project, the project the learn
-    must go to (8.2.6: never the learn hook's cwd project). Kept on later merges that pass none.
+    goes to (8.2.6, ace_after_task._learn_context). Stored only while the state has a retrieval_id (a search ran
+    and answered); kept on later merges that pass none.
     reset=True: a NEW task starts (UPS anchor write) - ignore whatever an interrupted earlier
     task left on disk (Stop does not run on interrupt, cc_hooks_reference.md:2733) so its
     ids/retrieval_id are never credited to this task.
@@ -358,10 +371,11 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
         if isinstance(es, dict):
             state['eval_stats'] = es  # self-eval numbers of the task's search, read by Stop
         b = binding if isinstance(binding, dict) else {}
-        for key, val in (('search_org', b.get('org')), ('search_project', b.get('project'))):  # 8.2.6, mod parity
-            val = val or prior.get(key)
-            if val:
-                state[key] = val
+        if merged_rid:  # 8.2.6, mod parity: only a search that produced a retrieval_id binds the learn
+            for key, val in (('search_org', b.get('org')), ('search_project', b.get('project'))):
+                val = val or prior.get(key)
+                if val:
+                    state[key] = val
         _atomic_write(sf, json.dumps(state))
     return existing_ids
 
@@ -501,6 +515,16 @@ def load_task_session_id(session_id, agent_id, hook_event_name='Stop', state_dir
         return tsid or None
     except Exception:
         return None
+
+
+def load_search_binding(session_id, agent_id, hook_event_name='Stop'):
+    """8.2.6: (search_org, search_project) the task's search ran with, else None (no search, no retrieval_id, a state
+    of an older version). Read before the learn lock: it only decides which project the learn (and its lock) go to."""
+    st = load_state(session_id, agent_id, hook_event_name)
+    so, sp = st.get('search_org'), st.get('search_project')
+    if st.get('retrieval_id') and isinstance(so, str) and so and isinstance(sp, str) and sp:
+        return so, sp
+    return None
 
 
 def load_state(session_id, agent_id, hook_event_name='Stop', state_dir=None, project_id=None):

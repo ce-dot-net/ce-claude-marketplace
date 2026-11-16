@@ -12,13 +12,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   than its search (prod: traces searched in one project, learned into another; the server scores a search row only
   when trace and search share org, project and retrieval_id, so no HOT/WARM/COLD tier, and reflector + curator
   learned the work into the wrong corpus). The Python Stop/SubagentStop took org/project from `get_context()` of the
-  hook cwd. Now every search-time state write (mod and Python: UserPromptSubmit, SubagentStart, domain shift with its
-  retrieval_id) stores the search binding as the new optional state keys `search_org` / `search_project`, and the
-  Python learn sends the trace with that org/project (`ace-cli learn --org/--project`). The learn is never dropped on
-  a mismatch; it goes to the search project. The disabled / mod-owns-learn gates are checked again in the search
-  project's session dir, where the mod keeps its markers (before, a live mod in the search project was not seen, so
-  the Python chain learned a second time into the cwd project and stamped `render_path: python`). No stored binding
-  (no search, state files of older versions): unchanged, the cwd-resolved project.
+  hook cwd.
+  - Every search-time state write that holds a retrieval_id (mod and Python: UserPromptSubmit, SubagentStart, domain
+    shift) stores the search binding as the new optional state keys `search_org` / `search_project`. Anchor, fork and
+    failed-search writes (no retrieval_id) store none.
+  - The Python learn reads that binding first and sends the trace (`ace-cli learn --org/--project`), its learn lock
+    and its gates (disabled flag, mod owns the learn) to the search project. A cwd that is unbound or gated no longer
+    drops a learn with a stored binding. Row `learn_rebound` (from_project, to_project, org).
+  - Same org only: when the cwd is bound to another org than the search, the learn stays in the cwd project as before
+    (the work of a repo of one org never goes into another org's corpus). Row `learn_rebound_skipped_cross_org`
+    (both org/project pairs, no content).
+  - The state file is found by session id across the project dirs when the default project (from
+    `$CLAUDE_PROJECT_DIR`, else the cwd) holds none, so the fix also works without `$CLAUDE_PROJECT_DIR`.
+  - A learn lock that existed before the hook (the mod's in-flight learn, or another learn of the same agent) is
+    never removed by the Python hook; before, stepping aside for the mod could delete the mod's lock.
+  - No stored binding (no search, state files of older versions): unchanged, the cwd-resolved project.
 
 ## [8.2.5] - 2026-11-14
 
