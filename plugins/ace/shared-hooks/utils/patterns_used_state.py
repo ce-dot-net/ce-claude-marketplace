@@ -519,11 +519,15 @@ def load_task_session_id(session_id, agent_id, hook_event_name='Stop', state_dir
         return None
 
 
-def load_search_binding(session_id, agent_id, hook_event_name='Stop'):
+def load_search_binding(session_id, agent_id, hook_event_name='Stop', anchor=None):
     """8.2.6: (search_org, search_project) the task's search ran with, else None (no search, no retrieval_id, a state
-    of an older version). Read before the learn lock: it only decides which project the learn (and its lock) go to."""
+    of an older version). Read before the learn lock: it only decides which project the learn (and its lock) go to.
+    anchor: the main Stop's prompt_id; the main state counts only when it is THIS task's (task_session_id == anchor),
+    since a UserPromptSubmit that exits before its anchor write leaves an earlier task's state behind."""
     st = load_state(session_id, agent_id, hook_event_name)
     so, sp = st.get('search_org'), st.get('search_project')
+    if hook_event_name != 'SubagentStop' and not (anchor and st.get('task_session_id') == anchor):
+        return None
     if st.get('retrieval_id') and isinstance(so, str) and so and isinstance(sp, str) and sp:
         return so, sp
     return None

@@ -1455,11 +1455,13 @@ def handback_summary(path, cap=4000):
         return None
 
 
-def _learn_context(cwd_ctx, session_id, agent_id, hook, no_agent_state):
+def _learn_context(cwd_ctx, session_id, agent_id, hook, no_agent_state, prompt_id=None):
     """8.2.6: (context, cross_org) for the learn. The server scores a search row only when trace and search share
     (org, project, retrieval_id), so the learn goes to the project the task's SEARCH ran in (load_search_binding), not
     to the hook cwd's. Rules:
     - no stored binding, or the cwd's own: the cwd's context, as before;
+    - a main Stop: only with the binding of THIS task (state task_session_id == the Stop's prompt_id, the G2 anchor);
+      no prompt_id, or another task's state: the cwd's context, as before;
     - the cwd project has a project disabled.flag: never rebound away from it;
     - unbound or gated cwd: only a SubagentStop rebinds (its agent file is written by its own SubagentStart). A main
       Stop keeps the old skip: the UPS in such a cwd exits before its anchor write, so a main binding there belongs to
@@ -1468,7 +1470,7 @@ def _learn_context(cwd_ctx, session_id, agent_id, hook, no_agent_state):
     if no_agent_state:
         return cwd_ctx, False
     try:
-        b = load_search_binding(session_id, agent_id, hook)
+        b = load_search_binding(session_id, agent_id, hook, anchor=prompt_id)
     except Exception:
         b = None
     cur = cwd_ctx or {}
@@ -1572,7 +1574,11 @@ def main():
         no_agent_state = hook_event_name == 'SubagentStop' and not agent_id
 
         # Project context: the cwd's, unless the task's search ran in another project of the same org (8.2.6).
-        context, _cross_org = _learn_context(get_context(), session_id, agent_id, hook_event_name, no_agent_state)
+        cwd_ctx = get_context()
+        context, _cross_org = _learn_context(cwd_ctx, session_id, agent_id, hook_event_name, no_agent_state,
+                                             event.get('prompt_id') or None)
+        # the UPS side files (rejection downvote, learn-deferred) live under the cwd project, where the UPS reads them
+        ups_project = (cwd_ctx or context or {}).get('project')
         if not context:
             skip_learning("No project context found", event)
             sys.exit(0)
@@ -1604,13 +1610,13 @@ def main():
                 types[str(t)] = types.get(str(t), 0) + 1
             try:
                 log_event("learn_deferred", session_id=session_id, types=types)
-                plugin_data_dir.session_dir(context['project'], session_id).joinpath('learn-deferred').touch()
+                plugin_data_dir.session_dir(ups_project, session_id).joinpath('learn-deferred').touch()
             except Exception:
                 pass
             sys.exit(0)
         if hook_event_name == 'Stop':
             try:
-                plugin_data_dir.session_dir(context['project'], session_id, create=False).joinpath('learn-deferred').unlink()
+                plugin_data_dir.session_dir(ups_project, session_id, create=False).joinpath('learn-deferred').unlink()
             except OSError:
                 pass
         # S9: hold the learn lock BEFORE reading any session state so a SessionEnd in between keeps
@@ -1776,6 +1782,7 @@ def main():
         retrieval_id = _retrieval_id_from_state
         if _cross_org:  # 8.2.6: ids of the other org's search can never join here and must not travel into this org
             retrieval_id, applied_log_ids, playbook_used, _used, _capped = None, [], [], [], False
+            task_session_id = None  # its task pin too
 
         # v7.1.3 R1: emit invariant monitor record (SubagentStop only).
         # Emitted BEFORE Stage 2 so the keymap record is always written even when
@@ -1867,10 +1874,10 @@ def main():
         if hook_event_name == 'Stop':  # rejection downvote: the previous main task's evidenced ids, consumed once
             try:
                 import ace_feedback
-                _down = ace_feedback.take_pending_downvote(context['project'], session_id)
+                _down = ace_feedback.take_pending_downvote(ups_project, session_id)
                 if _down:
                     trace["feedback"] = {"kind": "downvote", "applied_log_ids": _down}
-                ace_feedback.record_main_applied(context['project'], session_id, task_session_id, applied_log_ids)
+                ace_feedback.record_main_applied(ups_project, session_id, task_session_id, applied_log_ids)
             except Exception:
                 pass
 
