@@ -265,7 +265,10 @@ def test_real_core_search_parity_with_ace_cli_on_fake_server(real, tmp_path):
     assert lib.returncode == 0, lib.stderr
     out = json.loads(lib.stdout)
     switches = {k: out.pop(k) for k in ("feedback_downvote", "render_full_pct") if k in out}
-    assert out == json.loads(cli.stdout)  # parity, plus the server switches the core (and so the CLI) drops
+    cli_out = json.loads(cli.stdout)
+    for k in switches:  # a CLI on core >= 3.4.0 (the pinned 4.4.4) passes them through too, an older one drops them
+        assert cli_out.pop(k, switches[k]) == switches[k]
+    assert out == cli_out  # parity, plus the server switches an older core (and so the CLI) drops
     assert switches == {"feedback_downvote": True, "render_full_pct": 0}
     bodies = [q["body"] for q in srv.requests() if q["path"].startswith("/patterns/search")]
     for body in bodies:  # searchPatterns generates these two per call (temp_search_<Date.now()>)

@@ -215,4 +215,8 @@ def test_resolve_pinned_core_loads_through_public_exports():
                        env=dict(os.environ, PATH="/usr/bin:/bin"), timeout=20)
     out = json.loads(r.stdout)
     assert r.returncode == 0 and out["ok"] is True, out
-    assert out["load"] == "exports" and out["core_version"] >= "3.4.0"
+    # numeric, not a string compare ("3.10.0" < "3.4.0" as strings); 8.2.8: the locked core (3.10.0) passes MIN_CORE
+    # (kept at 3.2.2: a method gate, not the floor) and the same-major check
+    assert out["load"] == "exports" and tuple(map(int, out["core_version"].split("."))) >= (3, 4, 0)
+    lock = json.loads((_REPO_PLUGIN / "package-lock.json").read_text())["packages"]
+    assert out["core_version"] == lock["node_modules/@ace-sdk/core"]["version"]
