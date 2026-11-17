@@ -5,6 +5,16 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.2.8] - 2026-11-17
+
+### Changed
+- Pinned `@ace-sdk/cli` 4.4.4 (exact; the lock resolves `@ace-sdk/core` 3.10.0). Requires: ace-cli >= 4.4.4, @ace-sdk/core >= 3.10.0.
+- ace-cli 4.4.4 `learn --no-stream` now exits 1 with `{"success": false, "stored": false[, "quota_exceeded": true]}` when the server did not store the trace (before: exit 0, success). The trace queue now reads this result: `stored: false` is requeued with a new key (at most 3 times, then dead/), a quota answer waits like the engine's; such a trace is no longer counted as sent or logged as lost. The parser is bounded.
+- The engine gate stays at core >= 3.2.2 (a method check, not the floor); core 3.10.0 passes it. A transitive lockfile refresh (babel, typescript-eslint, vue compiler, semver, postcss, minimatch 11 via skott) came with the new resolution.
+
+### Known limits
+- On the ace-cli fallback, `stored: null` (first send still running) and a missing `stored` (older servers) still count as sent; only the in-process engine tells `stored: null` apart.
+
 ## [8.2.7] - 2026-11-17
 
 ### Fixed
