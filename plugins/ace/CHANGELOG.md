@@ -5,6 +5,48 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.2.6] - 2026-11-17
+
+### Fixed
+- A subagent trace was learned into the wrong project when the subagent's cwd resolved to another bound project
+  than its search (prod: traces searched in one project, learned into another; the server scores a search row only
+  when trace and search share org, project and retrieval_id, so no HOT/WARM/COLD tier, and reflector + curator
+  learned the work into the wrong corpus). The Python Stop/SubagentStop took org/project from `get_context()` of the
+  hook cwd.
+  - Every search-time state write that holds a retrieval_id (mod and Python: UserPromptSubmit, SubagentStart, domain
+    shift) stores the search binding as the new optional state keys `search_org` / `search_project`, always as a
+    pair. Anchor, fork and failed-search writes (no retrieval_id) store none.
+  - The Python learn sends the trace (`ace-cli learn --org/--project`), its learn lock and its gates (disabled flag,
+    mod owns the learn) to the search project when the stored binding differs from the cwd's. Row `learn_rebound`
+    (from_project, to_project, org). The UserPromptSubmit side files (rejection downvote, learn-deferred marker) stay
+    under the cwd project, where the next UserPromptSubmit reads them.
+  - A main Stop uses a binding only when the main state belongs to THIS task: its `task_session_id` equals the
+    Stop's `prompt_id` (the task anchor the UserPromptSubmit stored). A short, machine or `/ace-` prompt exits before
+    its anchor write and leaves an earlier task's state behind; such a Stop, or one without `prompt_id`, keeps the
+    cwd project as before.
+  - From an unbound or gated cwd (disabled flag, live mod) only a SubagentStop is rebound: its agent file is written
+    by its own SubagentStart. A main Stop there keeps the old behaviour (unbound: no learn), because the
+    UserPromptSubmit in such a cwd exits before its anchor write and a main binding found there belongs to an
+    earlier task. A cwd project with a project `disabled.flag` is never rebound away from.
+  - Same org only: when the cwd is bound to another org than the search, the learn stays in the cwd project as before
+    and the other org's F-080 fields (retrieval_id, applied_log_ids, playbook_used) and its task pin
+    (`task_session_id`, the trace's `session_id`) are dropped from the trace.
+    Row `learn_rebound_skipped_cross_org` (both org/project pairs, no content).
+  - A reader of a subagent's state file finds it by session and agent id across the project dirs when the default
+    project (from `$CLAUDE_PROJECT_DIR`, else the cwd) holds none, so a SubagentStop also works without
+    `$CLAUDE_PROJECT_DIR`. Main-agent files and all writers keep the default project only.
+  - A learn lock that existed before the hook (the mod's in-flight learn, another learn, a stale one) is neither
+    removed nor refreshed by the Python hook; the gates run before any lock is taken.
+  - No stored binding (no search, state files of older versions): unchanged, the cwd-resolved project.
+
+### Known limits
+- Only a fake `ace-cli` was exercised, not the engine (`@ace-sdk/core`); no live Claude Code session and no server test.
+- The mod's learn path after a fresh mod-active marker is untested.
+- A learn lock left by a crashed learn is not cleared.
+- `CLAUDE_PROJECT_DIR` in real events is only fixture-evidenced.
+- A rare duplicate trace is possible if SubagentStart and SubagentStop resolve different cwd projects while the mod is
+  active (the Python learn is not skipped).
+
 ## [8.2.5] - 2026-11-14
 
 ### Fixed

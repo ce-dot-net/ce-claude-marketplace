@@ -7,6 +7,7 @@ import G from './fixtures/golden.ts'
 import USED_CASES from './fixtures/used_cases.ts'
 import REJECTION_CASES from './fixtures/rejection_cases.ts'
 import { pyLoads } from '../lib/pyjson.ts'
+import { mergeState } from '../lib/state.ts'
 import { renderPatternsDict } from '../lib/render.ts'
 import { traceVariant, renderCohort, serverFullPct, storedFullPct } from '../lib/cohort.ts'
 import { hasSubstantialWork, toolRec } from '../lib/trace.ts'
@@ -43,6 +44,8 @@ test('agent.spawn: own search, FRESH uuid4 pin per subagent (never the parent pi
   expect(st.hook_event_name).toBe('SubagentStart')
   expect(st.user_prompt).toBe(p1)
   expect(h.state('agent-2')!.task_session_id).toBe(s2)
+  // 8.2.6: the binding the search ran with, read back by the Python learn (search_org / search_project)
+  expect([st.search_org, st.search_project]).toEqual(['org_t', PRJ])
 })
 
 test('agent.spawn from a Workflow: real prompt searched and rewritten, workflow run id logged', async ($, on) => {
@@ -131,6 +134,7 @@ test('§16 P7 fork: own uuid4 pin + state (parent_task_id), no search / inject, 
   expect(UUID4.test(st.task_session_id)).toBe(true)
   expect(st.task_session_id).not.toBe(main)
   expect(st.parent_task_id).toBe(main)
+  expect('search_project' in st || 'search_org' in st).toBe(false)  // 8.2.6: no search answered, no binding
   expect(h.rows().some((x: any) => x.event === 'search_skipped' && x.reason === 'fork_inherits_context')).toBe(true)
   await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
   await done($, 'fork done', 'agent-1')
@@ -324,4 +328,12 @@ test('§32 agent.spawn: a different task text is a different key (server)', asyn
   await spawn($, 'audit the learn trace builder for missing fields')
   await spawn($, 'audit the learn trace builder for other things')
   expect(h2.searches().length).toBe(2)
+})
+
+test('8.2.6 mergeState: the search binding only with a retrieval_id, and only as a pair (no mixing)', () => {
+  expect('search_project' in mergeState({}, { searchOrg: 'o', searchProject: 'p' })).toBe(false)
+  const st = mergeState({}, { retrievalId: 'r', searchOrg: 'o', searchProject: 'p' })
+  expect([st.search_org, st.search_project]).toEqual(['o', 'p'])
+  const half = mergeState(st, { searchOrg: 'z' })
+  expect([half.search_org, half.search_project]).toEqual(['o', 'p'])
 })
