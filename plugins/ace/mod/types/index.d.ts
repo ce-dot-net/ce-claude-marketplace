@@ -23,6 +23,8 @@ export type AcePending = {
   backfill?: { days: number, limit: number, only?: boolean, project?: string, org?: string, sources?: ('session' | 'git' | 'merge')[] }  // 8.2.0 kind 'cli': after the CLI run, the backfill phase (io/backfill_io.ts); only = no CLI run at all, project/org = another destination
   orgId?: string
   projectId?: string
+  cwd?: string     // 8.2.7 kind 'bind': the session cwd the press writes for (`--approved` must match it)
+  target?: string  // 8.2.7 kind 'bind': the file the press writes (named in the preview, matched by `--approved`)
 } | null
 export type AceShadow = { path: string; root: string } | null  // band [Entfernen] (cli 4.4.1 worktree_file_shadows_main)
 export type AcePolicy = string | null  // 8.1.4: the dismissed client_policy band line

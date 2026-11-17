@@ -1,7 +1,8 @@
 // The one command table (8.1.0). Every /ace:ace-<name> markdown command is answered here, model-free, wherever
 // mods run (the markdown stays the fallback where they do not); `/ace` is the mod's own overview.
 import { type Cmd, type Kit, approveOrHint, kitCli, unboundLine, cap } from './kit'
-import { stripApproved } from '../lib/approved'
+import { flagHint, stripApproved } from '../lib/approved'
+import { refreshUnbound } from '../handlers/context'
 import { localState, problemLine } from '../context/index'
 import { type Load, resolveContextOnce } from '../io/state'
 import { search, searchCmd } from './search'
@@ -29,7 +30,7 @@ import { bandAction } from '../ui/band'
 export const ace: Cmd = { name: 'ace', description: 'ACE overview: binding, state and every command' }
 export async function aceCmd($: any, { c }: Kit): Promise<string> {
     const cc: any = c
-    const head = cc.bound ? `ACE · ${cc.projectId} (org ${cc.orgId}) via ${cc.source}` : problemLine(localState(c))!
+    const head = cc.bound ? `ACE · ${cc.projectId} (org ${cc.orgId}) via ${cc.source}` : problemLine(localState(c), c)!
     return [head, '', ...COMMANDS.filter(x => x.name !== 'ace').map(x => `/ace:${x.md}${x.argumentHint ? ` ${x.argumentHint}` : ''}  ${x.description}`)].join('\n')
 }
 
@@ -46,13 +47,16 @@ export async function registerCommands($: any) {
   await $.command.register({ name: 'ace', description: ace.description })
 }
 export async function runCommand($: any, L: Load, cmd: Cmd, args: string): Promise<string> {
-  const c = await resolveContextOnce($, L, await $.session.root())
-  if (cmd.bound && !c.bound) return unboundLine(c)
-  if (cmd.bound && localState(c)) return unboundLine(c)
+  let c = await resolveContextOnce($, L, await $.session.root())
+  if (!c.bound) { await refreshUnbound($, L, true); c = L.ctx ?? c }  // 8.2.7: a binding file written since: no restart needed
+  const hint = flagHint(args ?? '')  // 8.2.7: a near miss of --approved is told, never acted on (after the cap: never cut)
+  const withHint = (t: string) => hint ? `${t}\n${hint}` : t
+  if (cmd.bound && !c.bound) return withHint(unboundLine(c))
+  if (cmd.bound && localState(c)) return withHint(unboundLine(c))
   const a = stripApproved(args ?? '')  // 8.2.0: the standalone token never reaches a command
   const k: Kit = { c, args: a.args, cli: kitCli($, c), approved: a.approved }
   const before = ((await $.state.get({ plugin: 'ace', key: 'pending' })) as any).value
-  try { return cap(await approveOrHint($, k, cmd, before, await dispatch($, cmd.name, k), p => bandAction($, L, p))) } catch (err) { return `ACE ▼ ${cmd.name} failed: ${String(err).slice(0, 300)}` }
+  try { return withHint(cap(await approveOrHint($, k, cmd, before, await dispatch($, cmd.name, k), p => bandAction($, L, p)))) } catch (err) { return `ACE ▼ ${cmd.name} failed: ${String(err).slice(0, 300)}` }
 }
 
 // A switch, not a table of functions: `$` reaches only function declarations (the mods loader's rule).

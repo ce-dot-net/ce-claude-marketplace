@@ -226,23 +226,73 @@ def _qualifies(w):
     return bool(re.search(r"[A-Za-z0-9_]\.[A-Za-z0-9_]", w))  # dotted identifier or a file name with an extension
 
 
-def distinctive_tokens(content):
-    """Lowercased distinctive tokens of a pattern: backticked spans (and their first two words: command +
-    subcommand), paths, CLI flags, identifiers with '_', '.', '::' or camelCase; length >= 4. Mod parity."""
+# 8.2.7: universal shell vocabulary (POSIX tools, git subcommands, common flags) is in every task's tool calls and
+# says nothing about a pattern: a token made only of these words is no evidence. Mod parity (UNIVERSAL_WORDS).
+# ponytail: a fixed list; learn it from a corpus if new noise shows up.
+_UNIVERSAL = frozenset(
+    "git status diff log add commit checkout push pull show branch stash fetch merge rebase reset grep egrep rg find ls "
+    "cat head tail sed awk echo printf cd pwd rm cp mv mkdir touch chmod wc sort uniq xargs tee curl jq python python3 "
+    "pip node npm npx bun pytest bash sh zsh sudo env export source date which true false ps pgrep pkill kill lsof "
+    "-m -c -q -r -e -n -l -i -v -f -x -la -rf -name -type --stat --oneline --json --help --version --verbose --quiet "
+    "--force --all 2>/dev/null /dev/null 2>&1 >/dev/null && || | "
+    "test tests run lint build install start dev format check typecheck rstest cargo make go yarn pnpm tsc eslint prettier ruff mypy docker gh".split())
+
+
+def _anchored(w):
+    """A token that names something specific: a path, identifier ('_', '::', camelCase) or dotted name. An
+    ENV_STYLE name is not (ORG_ID, PROJECT_ID, NODE_ENV sit in many projects' commands): a weak token only."""
+    if re.fullmatch(r"[A-Z][A-Z0-9]*(_[A-Z0-9]+)+", w):
+        return False
+    return bool("/" in w or "_" in w or "::" in w or re.search(r"[a-z][A-Z]", w)
+                or re.search(r"[A-Za-z0-9_]\.[A-Za-z0-9_]", w))
+
+
+def evidence_tokens(content):
+    """{token: strong} of a pattern: distinctive tokens (backticked spans and their first two words, paths, CLI
+    flags, identifiers; lowercased, length >= 4) without universal shell vocabulary. strong = anchored or a
+    multi-word span; a single plain backticked word or a lone flag is weak. Mod parity (evidenceTokens)."""
     text = str(content or "")[:CONTENT_CAP]
-    toks = set()
+    toks = {}
+
+    def add(t, strong):
+        low = t.lower()
+        words = low.split(" ")
+        if low in _TOKEN_STOP or all(w in _UNIVERSAL or (len(words) > 1 and w.startswith("-")) for w in words):
+            return
+        toks[low] = toks.get(low, False) or strong
+
     for span in re.findall(r"`([^`\n]+)`", text):
         span = " ".join(span.split())
-        if len(span) >= 4:
-            toks.add(span.lower())
         words = span.split(" ")
+        if len(span) >= 4:
+            add(span, len(words) > 1 or _anchored(span))
         if len(words) >= 2 and len(words[0] + " " + words[1]) >= 4:
-            toks.add((words[0] + " " + words[1]).lower())
+            add(words[0] + " " + words[1], True)
     for w in text.split():
         w = w.strip(_STRIP).rstrip(".")
         if _qualifies(w):
-            toks.add(w.lower())
-    return {t for t in toks if t not in _TOKEN_STOP}
+            add(w, _anchored(w))
+    return toks
+
+
+def distinctive_tokens(content):
+    """Lowercased evidence tokens of a pattern (evidence_tokens keys). Mod parity."""
+    return set(evidence_tokens(content))
+
+
+def _is_word(c):
+    return c.isascii() and (c.isalnum() or c == "_")
+
+
+def _has_token(hay, t):
+    """t in hay as a whole token: a word character at an edge of t must not continue into hay (regex \\b)."""
+    i = hay.find(t)
+    while i >= 0:
+        j = i + len(t)
+        if not (_is_word(t[0]) and i > 0 and _is_word(hay[i - 1])) and not (_is_word(t[-1]) and j < len(hay) and _is_word(hay[j])):
+            return True
+        i = hay.find(t, i + 1)
+    return False
 
 
 APPLIED_LOG_IDS_CAP = 20  # server 5.15.8: more than 20 applied_log_ids in one trace = "all shown" (trace -> COLD)
@@ -250,14 +300,17 @@ APPLIED_LOG_IDS_CAP = 20  # server 5.15.8: more than 20 applied_log_ids in one t
 
 def used_pattern_ids(ids, contents, message, haystack=""):
     """§31 / item H2: the injected ids ACTUALLY USED, in injected order. Used = its id appears in the final
-    message / report or the tool inputs, or >= 2 of its distinctive tokens appear in the tool-call inputs
-    (`haystack`, tool_haystack). A token in more than 30% of the injected patterns (and more than one) is too
-    generic and does not count. ponytail: substring match; word-boundary matching if false positives show up.
+    message / report or the tool inputs, or its evidence tokens appear as whole tokens in the tool-call inputs
+    (`haystack`, tool_haystack): >= 3 of them, or >= 2 with one strong (a path / identifier / multi-word span), or
+    one multi-word span whose command is not universal (the pattern's own project command). 8.2.7: two plain
+    words or flags were 25% false hits on foreign tasks. A token in more than 30% of the
+    injected patterns (and more than one) is too generic and does not count. An absolute count, never a share
+    of the pattern's tokens: a long pattern does not fire more often than a short one at the same overlap.
     """
     msg = _norm_ws(message)[:USED_MESSAGE_CAP]
     hay = haystack or ""
     ids = [p for p in ids or [] if isinstance(p, str) and p]
-    toks = {pid: distinctive_tokens((contents or {}).get(pid)) for pid in ids}
+    toks = {pid: evidence_tokens((contents or {}).get(pid)) for pid in ids}
     df = {}
     for ts in toks.values():
         for t in ts:
@@ -267,8 +320,11 @@ def used_pattern_ids(ids, contents, message, haystack=""):
     for pid in ids:
         if pid in msg or pid.lower() in hay:
             out.append(pid)
-        elif hay and sum(1 for t in toks[pid] - generic if t in hay) >= 2:
-            out.append(pid)
+        elif hay:
+            hits = [(t, strong) for t, strong in toks[pid].items() if t not in generic and _has_token(hay, t)]
+            if (len(hits) >= 3 or (len(hits) >= 2 and any(st for _, st in hits))
+                    or any(st and " " in t and t.split(" ")[0] not in _UNIVERSAL for t, st in hits)):
+                out.append(pid)
     return out
 
 

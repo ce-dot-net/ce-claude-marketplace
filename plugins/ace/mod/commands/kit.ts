@@ -18,7 +18,7 @@ export function failLine(r: CliResult): string {
   const detail = String(r.stderr ?? '').split('\n').find(l => l.trim())?.slice(0, 200) ?? ''
   return (problemLine(st) ?? `ACE ▼ Fehler (exit ${r.exitCode})`) + (detail && st === 'server_error' ? `\n${detail}` : '')
 }
-export function unboundLine(c: Ctx) { return problemLine(localState(c) ?? 'unbound')! }
+export function unboundLine(c: Ctx) { return problemLine(localState(c) ?? 'unbound', c)! }
 export function json(r: CliResult): any {
   try { return JSON.parse(r.stdout) } catch { return undefined }
 }
@@ -31,10 +31,13 @@ export async function confirm($: any, p: NonNullable<AcePending>): Promise<strin
 // 8.2.0 `--approved`, the second half of confirm (runCommand calls it after every command, `before` = the pending that
 // waited when the command began). A confirm text gets the exact line to type; with the token the action runs at once through the
 // same executor as the button (io/pending.ts). clear and cleanup (destructive) run only when the IDENTICAL pending (label + argv) was
-// already waiting; bind and clean never run from a typed line. 8.2.5: login and install run at once like their button
-// (`band` = ui/band.ts bandAction, passed in by runCommand: the band owns the Load these two rebind).
+// already waiting; clean never runs from a typed line. 8.2.5: login and install run at once like their button
+// (`band` = ui/band.ts bandAction, passed in by runCommand: the band owns the Load these rebind).
+// 8.2.7 (deviates from the 8.2.0 design, for remote/mobile without a button): bind runs from a typed line too, but like
+// clear only when the IDENTICAL bind preview (label + org + project + cwd + target file) was already waiting; never a freshly typed target.
 const DESTRUCTIVE = ['clear', 'cleanup'], EXEC_KINDS = ['cli', 'exec', 'export'], BAND_KINDS = ['login', 'install']
 const same = (a: any, b: any) => !!a && !!b && a.label === b.label && JSON.stringify(a.argv ?? null) === JSON.stringify(b.argv ?? null)
+  && a.kind === b.kind && a.orgId === b.orgId && a.projectId === b.projectId && a.cwd === b.cwd && a.target === b.target
 export async function approveOrHint($: any, k: Kit, cmd: Cmd, before: any, text: string, band?: (p: any) => Promise<string>): Promise<string> {
   if (!text.includes(CONFIRM_MARK)) return text
   const p: any = ((await $.state.get(PENDING)) as any).value
@@ -42,6 +45,8 @@ export async function approveOrHint($: any, k: Kit, cmd: Cmd, before: any, text:
   const line = `/ace:${cmd.md} ${k.args.trim()}`.trim() + ' --approved'
   if (!k.approved) return `${text}\nOder tippen: ${line}`
   if (band && BAND_KINDS.includes(p.kind)) return band(p)
+  if (band && p.kind === 'bind') return same(before, p) ? band(p)
+    : `${text}\n--approved verbindet nur, wenn genau diese Vorschau schon wartet: erst die Vorschau prüfen, dann ${line} (oder den Button).`
   if (!EXEC_KINDS.includes(p.kind)) return `${text}\n--approved gilt hier nicht: den Button [${p.label}] über der Eingabe benutzen.`
   if (DESTRUCTIVE.includes(cmd.name) && !same(before, p))
     return `${text}\n--approved löscht nur, wenn genau diese Vorschau schon wartet: erst die Vorschau prüfen, dann ${line} (oder den Button).`
