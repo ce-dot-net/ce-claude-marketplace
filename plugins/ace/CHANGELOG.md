@@ -5,7 +5,7 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [8.2.6] - Unreleased
+## [8.2.6] - 2026-11-17
 
 ### Fixed
 - A subagent trace was learned into the wrong project when the subagent's cwd resolved to another bound project
@@ -38,6 +38,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - A learn lock that existed before the hook (the mod's in-flight learn, another learn, a stale one) is neither
     removed nor refreshed by the Python hook; the gates run before any lock is taken.
   - No stored binding (no search, state files of older versions): unchanged, the cwd-resolved project.
+
+### Known limits
+- Only a fake `ace-cli` was exercised, not the engine (`@ace-sdk/core`); no live Claude Code session and no server test.
+- The mod's learn path after a fresh mod-active marker is untested.
+- A learn lock left by a crashed learn is not cleared.
+- `CLAUDE_PROJECT_DIR` in real events is only fixture-evidenced.
+- A rare duplicate trace is possible if SubagentStart and SubagentStop resolve different cwd projects while the mod is
+  active (the Python learn is not skipped).
 
 ## [8.2.5] - 2026-11-14
 
