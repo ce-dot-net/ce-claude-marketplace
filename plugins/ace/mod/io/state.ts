@@ -7,11 +7,12 @@ import { relLog } from './log'
 import { REJECTION_PREV_MAX_AGE_S, type ToolRec } from '../lib/evidence'
 import { num, pyDumps } from '../lib/pyjson'
 import { type StateUpdate, dataRootFromPluginRoot, mergeState, safeComponent as safe } from '../lib/state'
-import { type Ctx, type Env, type State, exportEnv, readEnv, resolveContext } from '../context/index'
+import { type Ctx, type Env, type State, exportEnv, globalConfigPath, machineMapPath, readEnv, resolveContext } from '../context/index'
 import { cliRun } from './cli'
 
 export const MARKER_REFRESH_MS = 60_000           // between handoffs; plugin_data_dir.MOD_AFTER_TOOL_S is 120 s, MOD_HANDOFF_S 15 s
-export const MAX_TOOL_RECS = 1000                 // ponytail: the trace keeps the last 50 + failures anyway; older steps are lost past this
+export const UNBOUND_RECHECK_MS = 15_000
+export const MAX_TOOL_RECS = 1000                // ponytail: the trace keeps the last 50 + failures anyway; older steps are lost past this
 export type Sess = { sessionId: string; cwd: string; project: string; org?: string; root: string; pdir: string; sdir: string;
   logs: string; logRoot: string; minChars: number; extraPrefixes: string[]; clientId: string }
 export const uuid = (): string => {
@@ -31,7 +32,29 @@ export async function resolveContextOnce($: any, L: Load, cwd: string): Promise<
   L.env0 ??= await readEnv($)
   L.ctx = await resolveContext($, cwd, L.env0, { dataRoot: await dataRoot($), cli: (argv, o) => cliRun($, null, argv, o) })
   L.ctxCwd = cwd
+  L.ctxPrint = L.ctx.bound ? undefined : await bindingPrint($, L, L.ctx, cwd)
+  L.ctxCheckAt = await $.clock.now()
   return L.ctx
+}
+// 8.2.7: size + mtime of the files an unbound resolution depends on (the walked binding files, the repo/main roots'
+// .ace/config.json and .claude/settings.json, the global config, the machine remote map): a few stats, no read.
+async function bindingPrint($: any, L: Load, c: any, cwd: string): Promise<string> {
+  const ps = new Set<string>([...(c.tried ?? []).map((t: any) => t?.path), c.path, globalConfigPath(L.env0 ?? {}), machineMapPath(await dataRoot($))])
+  for (const r of [cwd, c.root, c.gitRoot, c.mainRoot]) if (r) { ps.add(`${r}/.ace/config.json`); ps.add(`${r}/.claude/settings.json`) }
+  const out: string[] = []
+  for (const p of [...ps].filter(x => typeof x === 'string' && x).slice(0, 40))  // ponytail: a 40-path cap; a deeper walk misses its top files
+    out.push(await $.fs.stat(p).then((s: any) => `${p}:${s?.size}:${s?.mtimeMs}`, () => `${p}:-`))
+  return out.join('\n')
+}
+// 8.2.7: has an unbound resolution become stale? Only unbound, at most every UNBOUND_RECHECK_MS (force: a command asks now),
+// and only when the binding files changed. A bound context is never checked again in this load.
+export async function unboundStale($: any, L: Load, force = false): Promise<boolean> {
+  const c = L.ctx
+  if (!c || c.bound || !L.ctxCwd) return false
+  const now = await $.clock.now()
+  if (!force && now - (L.ctxCheckAt ?? 0) < UNBOUND_RECHECK_MS) return false
+  L.ctxCheckAt = now
+  return await bindingPrint($, L, c, L.ctxCwd) !== L.ctxPrint
 }
 export async function resolveSession($: any, cwd: string, L?: Load): Promise<Sess | null> {
   const c: any = L ? await resolveContextOnce($, L, cwd) : await resolveContext($, cwd, await readEnv($), { dataRoot: await dataRoot($) })
@@ -54,6 +77,9 @@ export type Load = {
   env0: Env | undefined                         // the env as the session started (the core's input; never our own export)
   ctx: Ctx | undefined                          // the core's binding for ctxCwd
   ctxCwd: string | undefined
+  ctxPrint?: string                             // 8.2.7: bindingPrint of an unbound ctx (undefined when bound)
+  ctxCheckAt?: number                           // 8.2.7: last resolve / staleness check (clock ms)
+  refreshing?: Promise<boolean>                 // 8.2.7: the refreshUnbound that is running
   ctxState: State | null | undefined            // verify's state; undefined = not checked yet
   ctxLogged: boolean                            // the one `context` row of this load
   verifying: Promise<unknown> | undefined

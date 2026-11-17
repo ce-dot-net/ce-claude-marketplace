@@ -111,12 +111,13 @@ test('a failed action is told as failed, the pending is gone', async ($, on) => 
   expect(cliRuns(h, 'learn').length).toBe(1)
 })
 
-// 8.2.5: login and install run from --approved (tests/login_nobrowser.test.ts); bind/clean still need the band
-test('--approved on a command that needs the band (bind) is not run; the preview says to use the button', async ($, on) => {
+// 8.2.5: login and install run from --approved (tests/login_nobrowser.test.ts). 8.2.7: bind too, but only on the identical
+// waiting preview (tests/rebind.test.ts); without one it is not run
+test('--approved bind without a waiting preview is not run; the preview says to check it first', async ($, on) => {
   const h = host(on, { env: { ACE_AUTO_ADOPT: '0' }, files: { [`${CWD}/.git/config`]: '[core]\n' } })
   await start($)
   const t = await run($, 'configure', 'org_a prj_p --approved')
-  expect(t).toContain('Button')
+  expect(t).toMatch(/erst die Vorschau/)
   expect(h.files.has(`${CWD}/.ace/config.json`)).toBe(false)
   expect(h.runs.some((r: any) => cliOf(r.argv)?.[0] === 'init')).toBe(false)
 })
