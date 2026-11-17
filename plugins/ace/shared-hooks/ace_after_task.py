@@ -1871,6 +1871,8 @@ def main():
         trace["applied_log_ids"] = applied_log_ids  # server contract: [] when nothing was used, never omitted
         trace["used_ids_model"] = 0  # per-source counters for the server (the Python chain has no Haiku source)
         trace["used_ids_tokens"] = len(_used)
+        trace["used_ids_model_list"] = []  # 8.2.7: the ids per source (ids only, injected order, <= 50), mod parity
+        trace["used_ids_tokens_list"] = list(_used)[:50]
         if hook_event_name == 'Stop':  # rejection downvote: the previous main task's evidenced ids, consumed once
             try:
                 import ace_feedback

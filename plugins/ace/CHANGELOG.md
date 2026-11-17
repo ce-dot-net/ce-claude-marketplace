@@ -5,6 +5,26 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.2.7] - 2026-11-17
+
+### Fixed
+- Band and `/ace:ace-status` stayed on "Repo nicht verbunden" after a binding was written (remote/mobile): an unbound context (also config_invalid / config_refused) is now resolved again when its binding files change (size + mtime of the walked `.ace/config.json` / `.claude/settings.json`, repo and main roots, global config, remote map): on every `/ace:` command (waits for a running band refresh) and from the band's render at most every 15 s. A failed resolution keeps the old context; a bound context is never checked again.
+- The unbound reasons are told apart in the band, status and commands: no project bound, `no_org`, `org_not_member`. IDs are shown only when they match org_/prj_ + 1-64 of [A-Za-z0-9_-]. Mod only: the Python chain still says "Repo nicht verbunden".
+- A near miss of `--approved` (edit distance <= 2) adds "meintest du --approved?".
+- The bind preview names the file the press writes.
+
+### Changed (security note: deviates from the 8.2.0 design)
+- `/ace:ace-configure ... --approved` binds from a typed line (remote/mobile have no button), only for the IDENTICAL bind preview already waiting (label, org, project, cwd, target file); never a freshly typed target, never without a waiting preview. The button is unchanged. `clean` never runs from a typed line.
+
+### Used-label quality (server request)
+- Haiku self-eval sees every injected pattern (content cut per pattern, block capped at 24,000 chars; `</patterns>` masked) instead of the first ~20.
+- Word match: general shell/dev vocabulary and upper-case env names no longer count; hit rule: pattern id in the text, or >= 3 tokens, or >= 2 with one strong, or a project-specific multi-word span. Whole-token matches. Same rule in the Python chain. On 18 real full-arm samples: 15/60 -> 0/60 false hits for foreign answers, control 12/12.
+- Trace carries `used_ids_model_list` and `used_ids_tokens_list` (pattern ids only, at most 50 each); the server ignores them until it stores them.
+
+### Known limits
+- Env changes during a session and sources only the CLI evaluates are not seen by the binding fingerprint.
+- The word-match general vocabulary list is fixed and calibrated on a small sample.
+
 ## [8.2.6] - 2026-11-17
 
 ### Fixed

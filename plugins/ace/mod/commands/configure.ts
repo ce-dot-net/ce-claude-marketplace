@@ -1,5 +1,5 @@
 import { type Cmd, type Kit, confirm } from './kit'
-import { fixGitignore, gitignoreDiff } from '../context/index'
+import { fixGitignore, fsReader, gitignoreDiff, initTarget, realpathVia } from '../context/index'
 import { projectList, suggest } from '../handlers/context'
 import { run } from '../io/fs'
 // Bind this repo: writes the tracked .ace/config.json at the MAIN checkout root (never settings.json, never a token);
@@ -26,13 +26,17 @@ export async function configureCmd($: any, { c, args }: Kit): Promise<string> {
     if (!prj || !org) return 'Usage: /ace:ace-configure [org_...] prj_...  (the project must be in /ace:ace-configure\'s list, or give the org)'
     return confirmBind($, main, org, prj, projects.find(p => p.projectId === prj)?.name ?? prj)
 }
-export async function confirmBind($: any, main: string, orgId: string, projectId: string, name: string) {
+// 8.2.7: the preview names the file the press writes: the init target of the session cwd (bindInit's), which can differ
+// from the session root's checkout (a nested repo). The pending carries cwd + target, so `--approved` matches them too.
+export async function confirmBind($: any, _main: string, orgId: string, projectId: string, name: string) {
+  const cwd = await $.session.cwd()
+  const main = (await initTarget(cwd, fsReader($), realpathVia((argv, init) => run($, argv, init)))).root
   let gi = ''
   if ((await run($, ['git', '-C', main, 'check-ignore', '-q', '.ace/config.json']))?.exitCode === 0) {
     let before = ''
     try { before = await $.fs.read(`${main}/.gitignore`) } catch { /* none */ }
     gi = `\n.gitignore ignores it; this change makes it trackable:\n${gitignoreDiff(before, fixGitignore(before).text)}`
   }
-  return confirm($, { label: `Verbinden: ${name}`, kind: 'bind', orgId, projectId,
+  return confirm($, { label: `Verbinden: ${name}`, kind: 'bind', orgId, projectId, cwd, target: `${main}/.ace/config.json`,
     preview: `Writes ${main}/.ace/config.json:\n${JSON.stringify({ orgId, projectId }, null, 2)}${gi}\nNothing is staged or committed; commit it to bind every clone.` })
 }
