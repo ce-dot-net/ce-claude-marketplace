@@ -568,11 +568,13 @@ export function truncateTrace(trace: any): any {
   return trace
 }
 
+export const USED_IDS_LIST_CAP = 50
 export function buildTrace(a: {
   userPrompt: string; tools: ToolRec[]; answer: string; playbookUsed: string[]; agentType: string; tsid?: string; agentId?: string
   parentTaskId?: string; retrievalId?: string; appliedLogIds: number[]; nowIso: string; renderVariant?: string; effort: string; git?: any
   conversationId?: string
-  usedIds?: { used_ids_model: number; used_ids_tokens: number }  // per-source counters (Haiku, H2), 0 when none
+  // per-source counters (Haiku, H2), 0 when none; 8.2.7: the ids themselves per source (ids only, injected order, <= 50)
+  usedIds?: { used_ids_model: number; used_ids_tokens: number; used_ids_model_list?: string[]; used_ids_tokens_list?: string[] }
   downvote?: number[]  // the previous main task's evidenced ids after a user rejection
   summaryCap?: number  // 2000 for the closing answer, 4000 for a SubagentHandback report (ace_after_task.handback_summary)
   pluginVersion?: string  // 8.1.4: the manifest x.y.z (the version in X-ACE-Client)
@@ -601,6 +603,8 @@ export function buildTrace(a: {
   trace.applied_log_ids = a.appliedLogIds // server contract: [] when nothing was used, never omitted
   trace.used_ids_model = a.usedIds?.used_ids_model ?? 0
   trace.used_ids_tokens = a.usedIds?.used_ids_tokens ?? 0
+  trace.used_ids_model_list = (a.usedIds?.used_ids_model_list ?? []).slice(0, USED_IDS_LIST_CAP)  // 8.2.7: [] when none, never omitted
+  trace.used_ids_tokens_list = (a.usedIds?.used_ids_tokens_list ?? []).slice(0, USED_IDS_LIST_CAP)
   if (a.downvote?.length) trace.feedback = { kind: 'downvote', applied_log_ids: a.downvote }  // never retrieval_id, never text
   trace.effort_level = a.effort
   trace.effort_weight = effortWeight(a.effort)

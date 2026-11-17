@@ -25,16 +25,27 @@ export function evalStats(injected: any[], returned: any[]): { avg_relevance: nu
 
 // item D / H1: the Haiku self-eval request (a $.model.complete prompt, never the conversation): the task, its tool
 // calls, the injected patterns as `id: content` lines and the final answer, each capped; two lines back.
+// 8.2.7: EVERY injected pattern is listed (a 6,000-char cut showed Haiku only the first ~20 of a full arm's ~100, so
+// it could never name a later one). The content per pattern shrinks with the count to keep the block near
+// SELF_EVAL_PATTERN_CHARS: 8 patterns keep all 600 chars, 100 get ~200 (~24k chars, ~6k tokens; Haiku p50 ~5 s in
+// the 8.2.7 probe, inside the 15 s SELF_EVAL_MS), ~300 get ~40, never under 20. The block never passes the budget:
+// only when even id + 20 chars per pattern does not fit (~400+ ids) is the list cut, injected order kept.
+// A pattern text cannot close the block early: its "</patterns>" is masked.
+export const SELF_EVAL_PATTERN_CHARS = 24000
 export function selfEvalPrompt(a: { task: string; answer: string; ids: string[]; contents: Record<string, string>; tools: ToolRec[] }): string {
+  const per = Math.max(20, Math.min(CONTENT_CAP, Math.floor(SELF_EVAL_PATTERN_CHARS / Math.max(1, a.ids.length)) - 40))
   const lines: string[] = []
   let n = 0
   for (const id of a.ids) {
-    const l = `${id}: ${normWs(a.contents?.[id] ?? '')}`
-    if (n + l.length + 1 > 6000) break
+    const l = `${id}: ${cpSlice(normWs(a.contents?.[id] ?? ''), per).replace(/<\/patterns>/gi, '</ patterns>')}`
+    if (n + l.length + 1 > SELF_EVAL_PATTERN_CHARS) break
     lines.push(l); n += l.length + 1
   }
   const tools = cpSlice(a.tools.map(t => `${t.tool}: ${t.action}${t.failed ? ' (failed)' : ''}`).join('\n'), 4000)
   return 'You review one finished coding task for a pattern library. Patterns were injected into the agent before it worked.\n' +
+    'The tool calls below already ran in the agent\'s session; their output is left out on purpose. Do not call any tool: judge from this text only. ' +
+    'A pattern counts as used when the tool calls or the final answer follow its specific advice, whether or not you can verify the outcome; ' +
+    'a generic step any task takes (reading a file, running a linter) is not using a pattern.\n' +
     '<task>\n' + cpSlice(a.task, 2000) + '\n</task>\n<tool_calls>\n' + tools + '\n</tool_calls>\n' +
     '<patterns>\n' + lines.join('\n') + '\n</patterns>\n<final_answer>\n' + cpSlice(a.answer, 4000) + '\n</final_answer>\n' +
     'Answer with exactly two lines and nothing else:\n' +
@@ -68,12 +79,24 @@ export function evalInjection(d: any): string {
 }
 
 // §31 / item H2 "actually used" (patterns_used_state.used_pattern_ids): evidence in what the task DID. Its id in the
-// final message / report or the tool inputs, or >= 2 of its distinctive tokens in the tool-call inputs; a token in
-// more than 30% of the injected patterns (and more than one) is too generic. Injected order.
+// final message / report or the tool inputs, or its evidence tokens as whole tokens in the tool-call inputs: >= 3, or
+// >= 2 with one strong (a path / identifier / multi-word span), or one multi-word span whose command is not universal
+// (the pattern's own project command). 8.2.7: two plain words or flags were 25% false hits on foreign tasks. A token
+// in more than 30% of the injected patterns (and more than one) is too generic. An absolute
+// count, never a share of the pattern's tokens: a long pattern does not fire more often than a short one. Injected order.
 export const CONTENT_CAP = 600, USED_MESSAGE_CAP = 50000
 const TOOL_INPUT_KEYS = ['command', 'file_path', 'path', 'pattern', 'glob', 'notebook_path', 'url']
 const TOKEN_STOP = new Set(['and/or', 'e.g.', 'i.e.', 'etc.', 'n/a', 'w/o', 'http://', 'https://', 'true/false', 'yes/no'])
 const STRIP = new Set(Array.from("`'\"()[]{}<>,;:!?*"))
+// 8.2.7: universal shell vocabulary (POSIX tools, git subcommands, common flags) is in every task's tool calls and says
+// nothing about a pattern: a token made only of these words is no evidence. Python parity (_UNIVERSAL).
+// ponytail: a fixed list; learn it from a corpus if new noise shows up.
+const UNIVERSAL = new Set(('git status diff log add commit checkout push pull show branch stash fetch merge rebase reset grep egrep rg find ls ' +
+  'cat head tail sed awk echo printf cd pwd rm cp mv mkdir touch chmod wc sort uniq xargs tee curl jq python python3 ' +
+  'pip node npm npx bun pytest bash sh zsh sudo env export source date which true false ps pgrep pkill kill lsof ' +
+  '-m -c -q -r -e -n -l -i -v -f -x -la -rf -name -type --stat --oneline --json --help --version --verbose --quiet ' +
+  '--force --all 2>/dev/null /dev/null 2>&1 >/dev/null && || | ' +
+  'test tests run lint build install start dev format check typecheck rstest cargo make go yarn pnpm tsc eslint prettier ruff mypy docker gh').split(' '))
 // tool_haystack: lowercased tool-call inputs (Bash commands, paths, Grep/Glob patterns, Edit targets), never edit bodies
 export function toolHaystack(inputs: any[]): string {
   const parts: string[] = []
@@ -86,13 +109,22 @@ const qualifies = (w: string) => {
   if (/^--?[A-Za-z][A-Za-z0-9_-]*$/.test(w)) return true
   return /[A-Za-z0-9_]\.[A-Za-z0-9_]/.test(w)
 }
-export function distinctiveTokens(content: unknown): Set<string> {
-  const text = cpSlice(String(content ?? ''), CONTENT_CAP), toks = new Set<string>()
+// names something specific: a path, an identifier ('_', '::', camelCase) or a dotted name. An ENV_STYLE name is not:
+// the same names (ORG_ID, PROJECT_ID, NODE_ENV) sit in many projects' commands, so it only counts as a weak token.
+const anchored = (w: string) => !/^[A-Z][A-Z0-9]*(_[A-Z0-9]+)+$/.test(w) && (w.includes('/') || w.includes('_') || w.includes('::') || /[a-z][A-Z]/.test(w) || /[A-Za-z0-9_]\.[A-Za-z0-9_]/.test(w))
+// {token: strong}: backticked spans (and their first two words), paths, CLI flags, identifiers; lowercased, length >= 4,
+// no universal vocabulary. strong = anchored or a multi-word span; a single plain backticked word or a lone flag is weak.
+export function evidenceTokens(content: unknown): Map<string, boolean> {
+  const text = cpSlice(String(content ?? ''), CONTENT_CAP), toks = new Map<string, boolean>()
+  const add = (t: string, strong: boolean) => {
+    const low = t.toLowerCase(), words = low.split(' ')
+    if (TOKEN_STOP.has(low) || words.every(w => UNIVERSAL.has(w) || (words.length > 1 && w.startsWith('-')))) return
+    toks.set(low, toks.get(low) || strong)
+  }
   for (const m of text.matchAll(/`([^`\n]+)`/g)) {
-    const span = normWs(m[1])
-    if (cps(span).length >= 4) toks.add(span.toLowerCase())
-    const w = span.split(' ')
-    if (w.length >= 2 && cps(w[0] + ' ' + w[1]).length >= 4) toks.add((w[0] + ' ' + w[1]).toLowerCase())
+    const span = normWs(m[1]), w = span.split(' ')
+    if (cps(span).length >= 4) add(span, w.length > 1 || anchored(span))
+    if (w.length >= 2 && cps(w[0] + ' ' + w[1]).length >= 4) add(w[0] + ' ' + w[1], true)
   }
   for (const raw of text.split(/\s+/).filter(Boolean)) {
     let a = Array.from(raw), i = 0, j = a.length
@@ -100,24 +132,33 @@ export function distinctiveTokens(content: unknown): Set<string> {
     while (j > i && STRIP.has(a[j - 1]!)) j--
     let w = a.slice(i, j).join('')
     while (w.endsWith('.')) w = w.slice(0, -1)
-    if (qualifies(w)) toks.add(w.toLowerCase())
+    if (qualifies(w)) add(w, anchored(w))
   }
-  for (const t of [...toks]) if (TOKEN_STOP.has(t)) toks.delete(t)
   return toks
+}
+export const distinctiveTokens = (content: unknown): Set<string> => new Set(evidenceTokens(content).keys())
+// t in hay as a whole token: a word character at an edge of t must not continue into hay (regex \b)
+const isWord = (c: string | undefined) => !!c && /^[A-Za-z0-9_]$/.test(c)
+function hasToken(hay: string, t: string): boolean {
+  for (let i = hay.indexOf(t); i >= 0; i = hay.indexOf(t, i + 1)) {
+    const j = i + t.length
+    if (!(isWord(t[0]) && isWord(hay[i - 1])) && !(isWord(t[t.length - 1]) && isWord(hay[j]))) return true
+  }
+  return false
 }
 export function usedPatternIds(ids: string[], contents: Record<string, string>, message: string | undefined, haystack = ''): string[] {
   const msg = cpSlice(normWs(message), USED_MESSAGE_CAP)
   const list = (ids ?? []).filter(id => typeof id === 'string' && id)
-  const toks = new Map(list.map(id => [id, distinctiveTokens(contents?.[id])] as const))
+  const toks = new Map(list.map(id => [id, evidenceTokens(contents?.[id])] as const))
   const df = new Map<string, number>()
-  for (const ts of toks.values()) for (const t of ts) df.set(t, (df.get(t) ?? 0) + 1)
+  for (const ts of toks.values()) for (const t of ts.keys()) df.set(t, (df.get(t) ?? 0) + 1)
   const generic = new Set([...df].filter(([, n]) => n > 1 && n > 0.3 * list.length).map(([t]) => t))
   return list.filter(id => {
     if (msg.includes(id) || haystack.includes(id.toLowerCase())) return true
     if (!haystack) return false
-    let hits = 0
-    for (const t of toks.get(id)!) if (!generic.has(t) && haystack.includes(t)) hits++
-    return hits >= 2
+    const hits = [...toks.get(id)!].filter(([t]) => !generic.has(t) && hasToken(haystack, t))
+    return hits.length >= 3 || (hits.length >= 2 && hits.some(([, strong]) => strong)) ||
+      hits.some(([t, strong]) => strong && t.includes(' ') && !UNIVERSAL.has(t.split(' ')[0]!))
   })
 }
 export function injectedContents(patterns: any[], ids: string[]): Record<string, string> {

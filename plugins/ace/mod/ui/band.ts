@@ -1,7 +1,7 @@
 // The AbovePrompt band (8.1.0): nothing when ok; a pending write's ONE confirm button; else exactly one action per
 // problem state (unbound -> Verbinden, login states -> Anmelden, not_found/no_access -> Anderes wählen,
 // config_refused -> Bereinigt neu schreiben, cli_missing -> installieren). Every action runs only on its press.
-import { startContext } from '../handlers/context'
+import { refreshUnbound, startContext } from '../handlers/context'
 import { type Ctx, WARN_LINES, bindInit, cliIds, cliInit, repoWrite, writeBinding, WriteRefused } from '../context/index'
 import { REMOVE_SHADOW_SH, REPO_WRITE_WHY } from '../lib/sh'
 import { run } from '../io/fs'
@@ -33,13 +33,17 @@ async function afterInit($: any, c: Ctx | undefined, r: { path: string, gitignor
   await $.state.set(SHADOW, r.shadowedBy && c?.gitRoot ? { path: r.shadowedBy, root: c.gitRoot } : null)
 }
 // Bind = `ace-cli init --json --fix-gitignore` (the press is the confirmation), our writer only for a CLI without it.
-export async function bindTo($: any, L: Load, orgId: string, projectId: string) {
+// The returned line is what a typed `--approved` shows (the button ignores it).
+export async function bindTo($: any, L: Load, orgId: string, projectId: string, cwd?: string): Promise<string> {
   const c = L.ctx as Ctx | undefined
-  if (!(c?.mainRoot ?? c?.gitRoot)) { $.ui.toast('ACE: kein Git-Repo, nichts geschrieben'); return }
-  try { await afterInit($, c, await bindInit($, await $.session.cwd(), orgId, projectId, (argv: string[], o?: any) => cliRun($, null, argv, o), (argv, init) => run($, argv, init))) }
-  catch (err) { $.ui.toast(`ACE: nicht geschrieben (${err instanceof WriteRefused ? err.message : String(err).slice(0, 120)})`); return }
+  const no = (line: string) => { $.ui.toast(line); return line }
+  if (!(c?.mainRoot ?? c?.gitRoot)) return no('ACE: kein Git-Repo, nichts geschrieben')
+  let path: string
+  try { const r = await bindInit($, cwd ?? await $.session.cwd(), orgId, projectId, (argv: string[], o?: any) => cliRun($, null, argv, o), (argv, init) => run($, argv, init)); path = r.path; await afterInit($, c, r) }
+  catch (err) { return no(`ACE: nicht geschrieben (${err instanceof WriteRefused ? err.message : String(err).slice(0, 120)})`) }
   await $.state.set(PENDING, null)
   await rebind($, L, await $.session.root())
+  return `ACE: verbunden mit ${projectId} (org ${orgId}), ${path} geschrieben. Bitte committen.`
 }
 // [Entfernen]: delete only the shadowing worktree file (REMOVE_SHADOW_SH: no symlink, inside the worktree root).
 export async function removeShadow($: any, L: Load) {
@@ -73,7 +77,7 @@ export async function cleanRewrite($: any, L: Load) {
 export async function runPending($: any, L: Load, p: any) {
   await $.state.set(PENDING, null)
   const c: any = L.ctx
-  if (p.kind === 'bind') return bindTo($, L, p.orgId, p.projectId)
+  if (p.kind === 'bind') return bindTo($, L, p.orgId, p.projectId, p.cwd)
   if (p.kind === 'clean') return cleanRewrite($, L)
   if (p.kind === 'login') return startLogin($, L)
   if (p.kind === 'install') return install($, L)
@@ -143,13 +147,15 @@ export async function install($: any, L: Load): Promise<string> {
   await rebind($, L, await $.session.root())
   return line
 }
-// 8.2.5 `--approved` for the two band kinds that are safe to run from a typed line (Moshi/herdr: no button to press).
+// 8.2.5 `--approved` for the band kinds that run from a typed line (Moshi/herdr: no button to press). 8.2.7: bind (the
+// caller, kit.approveOrHint, passes it only for the identical waiting preview).
 export async function bandAction($: any, L: Load, p: any): Promise<string> {
   await $.state.set(PENDING, null)
-  return p.kind === 'login' ? startLogin($, L) : install($, L)
+  return p.kind === 'login' ? startLogin($, L) : p.kind === 'bind' ? bindTo($, L, p.orgId, p.projectId, p.cwd) : install($, L)
 }
 
 export async function renderBand($: any, L: Load, e: any, next: any) {
+  if (L.ctx && !L.ctx.bound) void refreshUnbound($, L)  // 8.2.7: throttled (unboundStale); a rebind republishes the band state
   const pending: any = (await $.state.get(PENDING)).value
   const band: any = (await $.state.get(BAND)).value
   const { Box, Text, Button, Select } = $.ui.resolve(e) as any

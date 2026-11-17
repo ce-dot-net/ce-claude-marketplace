@@ -1,11 +1,11 @@
 // The session's context step (8.1.0), started by session.start: export the core's ids, adopt a legacy binding,
 // remember the remote, then ONE background `status` (verify), the ONE `context` row, the ▼ status and the band.
-import { ADOPT_LINE, WARN_LINES, type Ctx, type State, adopt, classify, cliIds, contextRow, exportEnv, localState, problemLine, remember, untracked, verify } from '../context/index'
+import { ADOPT_LINE, WARN_LINES, type Ctx, type State, adopt, classify, cliIds, contextRow, exportEnv, localState, problemLine, remember, unboundReason, untracked, verify } from '../context/index'
 import { run, writePrivate } from '../io/fs'
 import { cliRun } from '../io/cli'
 import { installer } from '../io/installer'
 import { nowIso } from '../io/log'
-import { type Load, dataRoot, resolveContextOnce } from '../io/state'
+import { type Load, dataRoot, resolveContextOnce, unboundStale } from '../io/state'
 import { pyDumps } from '../lib/pyjson'
 import { APPEND_SH } from '../lib/sh'
 
@@ -20,8 +20,9 @@ export async function contextLog($: any, c: Ctx, row: any, state: State) {
   await run($, ['/bin/sh', '-c', APPEND_SH, 'sh', `${c.root}/.claude/data/logs/ace-relevance.jsonl`, c.root], { stdin: pyDumps(row) + '\n' })
 }
 // ▼ only on problems; nothing (cleared) when ok or still checking.
-export function showStatus($: any, state: State | null | undefined) {
-  $.ui.status(state && state !== 'ok' ? `ACE ▼ ${SHORT[state] ?? state}` : undefined)
+export function showStatus($: any, state: State | null | undefined, c?: Ctx) {
+  const short = (state === 'unbound' && unboundReason(c)?.short) || (state && SHORT[state]) || state
+  $.ui.status(state && state !== 'ok' ? `ACE ▼ ${short}` : undefined)
 }
 // The band's projects: name-matched suggestion for unbound, the pick list for not_found / no_access.
 export async function projectList($: any, c: Ctx): Promise<{ orgId: string, projectId: string, name: string }[]> {
@@ -45,10 +46,10 @@ export const TOOLCHAIN = /Node >= \d+/
 // `retry`: the automatic install failed; the band's one action is then [Erneut versuchen] (the same installer).
 export async function publish($: any, L: Load, c: Ctx, state: State | null, retry?: string) {
   L.ctxState = state
-  showStatus($, state)
+  showStatus($, state, c)
   let projects: { orgId: string, projectId: string, name: string }[] = []
   if (state === 'unbound' || state === 'project_not_found' || state === 'no_access') projects = await projectList($, c)
-  const band = { state, line: retry && TOOLCHAIN.test(retry) ? `ACE ▼ ${retry}` : retry ? INSTALL_FAILED : problemLine(state), retry: retry ?? null, projectId: (c as any).projectId ?? null,
+  const band = { state, line: retry && TOOLCHAIN.test(retry) ? `ACE ▼ ${retry}` : retry ? INSTALL_FAILED : problemLine(state, c), retry: retry ?? null, projectId: (c as any).projectId ?? null,
     suggestion: state === 'unbound' ? suggest(projects, c.root) : null, projects, picking: false, dismissed: false }
   await $.state.set(BAND, band)
   $.ui.log(`ace band ${JSON.stringify({ state, line: band.line, suggestion: band.suggestion, retry: band.retry })}`, { to: 'debug' })  // the debug log says what the band shows
@@ -97,6 +98,36 @@ export async function startContext($: any, L: Load, cwd: string) {
       if (st === 'ok' && !installed) await installer($, ['--ensure'], 30_000)  // 8.1.2: AFTER the status/band: quiet background `npm rebuild better-sqlite3` when only the binding is missing; never a band
     })().catch(() => undefined)
   } catch { /* the hooks keep the binding they resolved */ }
+}
+// 8.2.7: an unbound context is resolved again when its binding files changed (a `/ace:ace-configure` from the markdown
+// fallback, `ace-cli init`, a login that adds the org): the whole context step then runs again (export, verify, band).
+// The same unbound result (an unrelated config rewrite) changes nothing: a dismissed band stays dismissed.
+// Callers: every command (force: waits for a running refresh, then checks itself), the band's render (throttled by
+// unboundStale; skips while one runs). Never throws; a failed resolution keeps the old context.
+export async function refreshUnbound($: any, L: Load, force = false): Promise<boolean> {
+  while (L.refreshing) {
+    if (!force) return false
+    await L.refreshing
+  }
+  const p = refreshStep($, L, force)
+  L.refreshing = p
+  try { return await p } finally { if (L.refreshing === p) L.refreshing = undefined }
+}
+async function refreshStep($: any, L: Load, force: boolean): Promise<boolean> {
+  const old: any = L.ctx, cwd = L.ctxCwd
+  try {
+    if (!cwd || !await unboundStale($, L, force)) return false
+    L.ctx = undefined  // resolveContextOnce resolves again
+    const c: any = await resolveContextOnce($, L, cwd)
+    const key = (x: any) => JSON.stringify([x?.bound, x?.reason, x?.orgId, x?.projectId, x?.source, x?.path])
+    if (key(c) === key(old)) return false
+    L.sess = null; L.ctxLogged = false
+    await startContext($, L, cwd)
+    return true
+  } catch {
+    if (L.ctx === undefined) { L.ctx = old; L.ctxCwd = cwd }
+    return false
+  }
 }
 // The cheap CLI probe of an unbound repo: `--version`, no server. Only a spawn failure / missing module counts as missing.
 export async function cliPresent($: any): Promise<boolean> {

@@ -333,4 +333,16 @@ export function contextRow(c: Ctx, state: State, nowIso: string, hook = 'session
   if ((c as any).warnings?.length) row.warnings = (c as any).warnings
   return row
 }
-export const problemLine = (s: State | null | undefined) => (s && s !== 'ok' ? (LINES as Record<string, string>)[s] : undefined)
+// 8.2.7: `unbound` has three reasons; the band, the ▼ and the commands tell them apart (no_binding keeps LINES.unbound).
+// Mod only: lines.ts stays the parity copy of the Python LINES, whose chain still says LINES.unbound for all three.
+export function unboundReason(c: any): { line: string, short: string } | undefined {
+  if (!c || c.bound) return undefined
+  // the ids are repo/CLI-controlled text: shown only when they look like ids (else the general line)
+  if (c.reason === 'no_org' && /^prj_[A-Za-z0-9_-]{1,64}$/.test(String(c.projectId))) return { short: 'keine Organisation',
+    line: `ACE ▼ Projekt ${c.projectId} gebunden, aber keine Organisation hinterlegt: /ace:ace-configure org_... ${c.projectId}` }
+  if (c.reason === 'org_not_member' && /^org_[A-Za-z0-9_-]{1,64}$/.test(String(c.orgId))) return { short: 'kein Mitglied der Organisation',
+    line: `ACE ▼ nicht Mitglied der Organisation ${c.orgId} der Bindung: /ace:ace-login (anderes Konto) oder /ace:ace-configure` }
+  return undefined
+}
+export const problemLine = (s: State | null | undefined, c?: unknown) =>
+  (s === 'unbound' && unboundReason(c)?.line) || (s && s !== 'ok' ? (LINES as Record<string, string>)[s] : undefined)

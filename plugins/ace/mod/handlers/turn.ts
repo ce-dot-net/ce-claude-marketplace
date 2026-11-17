@@ -58,7 +58,8 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
     const used = playbook.filter(id => m.has(id) || tk.has(id))  // item H: H1 ∪ H2, injected set, injected order
     const source = m.size && tk.size ? 'both' : m.size ? 'model' : tk.size ? 'tokens' : 'none'
     // item 2: per-source counts (Haiku ids past the whitelist, H2 ids), for the server team
-    const bySource = { used_ids_model: playbook.filter(id => m.has(id)).length, used_ids_tokens: playbook.filter(id => tk.has(id)).length }
+    const modelList = playbook.filter(id => m.has(id)), tokenList = playbook.filter(id => tk.has(id))
+    const bySource = { used_ids_model: modelList.length, used_ids_tokens: tokenList.length }
     // §31: used only (this agent's own tools, report, self-eval); for the 20-cap Haiku ids first, then H2 ids, injected order
     const downvote = key === 'main' ? await takeDownvote($, s) : undefined
     const { ids: applied, capped } = appliedLogIds([...used.filter(id => m.has(id)), ...used.filter(id => !m.has(id))], rlog)
@@ -71,7 +72,7 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
       if (git && commits.length) git.session_commits = commits
     } catch { /* git context is optional */ }
     const { trace, success, failed_steps } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
-      tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied, usedIds: bySource, downvote,
+      tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied, usedIds: { ...bySource, used_ids_model_list: modelList, used_ids_tokens_list: tokenList }, downvote,
       nowIso: await nowIso($), renderVariant: variant, conversationId: s.sessionId, effort, git, summaryCap,
       pluginVersion: s.clientId.slice(s.clientId.lastIndexOf('/') + 1),
       interactive: L.interactive, ...await readOrigin($, s) })
