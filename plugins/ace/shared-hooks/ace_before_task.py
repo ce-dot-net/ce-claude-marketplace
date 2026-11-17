@@ -606,7 +606,7 @@ def main():
                                  task_session_id=task_session_id,
                                  user_prompt=user_prompt,
                                  rendered_context=_rendered_for_state if _rendered_for_state is not None else '',
-                                 hook_event_name='UserPromptSubmit', render_variant=_cohort,
+                                 hook_event_name='UserPromptSubmit', render_variant=_cohort, binding=context,
                                  pattern_contents=injected_contents(original_pattern_list, _pattern_ids),
                                  eval_stats=eval_stats([p for p in original_pattern_list if p.get('id') in _inj],
                                                        original_pattern_list))

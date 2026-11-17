@@ -72,9 +72,22 @@ def _state_dir(state_dir=None, session_id=None, project_id=None, create=False):
     return plugin_data_dir.session_dir(_project_id(project_id), session_id, create=create)
 
 
-def state_file_path(session_id, agent_id, state_dir=None, project_id=None):
+def state_file_path(session_id, agent_id, state_dir=None, project_id=None, find=False):
     agent_suffix = agent_id if agent_id else 'main'
-    return _state_dir(state_dir, session_id, project_id) / f'patterns-used-{agent_suffix}.json'
+    name = f'patterns-used-{agent_suffix}.json'
+    p = _state_dir(state_dir, session_id, project_id) / name
+    if find and agent_id and state_dir is None and not project_id and session_id and not p.exists():
+        # 8.2.6, readers of an AGENT file only: without $CLAUDE_PROJECT_DIR the default project resolves from the hook
+        # cwd, which can be another project than the one the agent's SubagentStart wrote in. An agent id is unique:
+        # its one file in another project. Never for 'main' (several projects can hold a main file of the session)
+        # and never for writers (they would follow a stale file).
+        import glob
+        sdir = plugin_data_dir.session_dir('_', session_id, create=False)
+        hits = glob.glob(str(plugin_data_dir.data_root() / 'projects' / '*' / 'sessions' / glob.escape(sdir.name)
+                             / glob.escape(name)))
+        if len(hits) == 1:
+            return Path(hits[0])
+    return p
 
 
 def _filter_retrieval_log_ids(retrieval_log_ids):
@@ -281,7 +294,7 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
                          task_session_id=None, project_id=None,
                          user_prompt=None, rendered_context=None,
                          hook_event_name=None, reset=False, parent_task_id=None, query_source=None,
-                         render_variant=None, pattern_contents=None, eval_stats=None):
+                         render_variant=None, pattern_contents=None, eval_stats=None, binding=None):
     """Append+dedupe valid pattern IDs to the per-agent file; return the full list.
 
     F-080: optional params retrieval_id (str|None) and retrieval_log_ids (dict|None).
@@ -293,6 +306,9 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
     Backward compat: existing bare-list files are read transparently.
     bool guard: retrieval_log_ids values that are bool are excluded even though
     bool is a subclass of int.
+    binding: the get_context() dict the SEARCH ran with -> search_org / search_project, the project the learn
+    goes to (8.2.6, ace_after_task._learn_context). Stored only while the state has a retrieval_id (a search ran
+    and answered); kept on later merges that pass none.
     reset=True: a NEW task starts (UPS anchor write) - ignore whatever an interrupted earlier
     task left on disk (Stop does not run on interrupt, cc_hooks_reference.md:2733) so its
     ids/retrieval_id are never credited to this task.
@@ -303,7 +319,7 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
     has_retrieval = retrieval_id is not None or bool(retrieval_log_ids)
     has_task_session = task_session_id is not None
     has_extra = bool(user_prompt or rendered_context or hook_event_name or parent_task_id or query_source
-                     or render_variant or pattern_contents or eval_stats)
+                     or render_variant or pattern_contents or eval_stats or binding)
     if not ids and not has_retrieval and not has_task_session and not has_extra:
         return []
     sf = state_file_path(session_id, agent_id, state_dir, project_id)
@@ -355,6 +371,13 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
         es = eval_stats if isinstance(eval_stats, dict) else prior.get('eval_stats')
         if isinstance(es, dict):
             state['eval_stats'] = es  # self-eval numbers of the task's search, read by Stop
+        b = binding if isinstance(binding, dict) else {}
+        if merged_rid:  # 8.2.6, mod parity: only a search that produced a retrieval_id binds the learn; a pair or none
+            pair = (b.get('org'), b.get('project'))
+            if not all(isinstance(x, str) and x for x in pair):
+                pair = (prior.get('search_org'), prior.get('search_project'))
+            if all(isinstance(x, str) and x for x in pair):
+                state['search_org'], state['search_project'] = pair
         _atomic_write(sf, json.dumps(state))
     return existing_ids
 
@@ -382,7 +405,7 @@ def load_playbook_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
     if not session_id:
         return []
     if hook_event_name == 'SubagentStop':
-        files = [state_file_path(session_id, agent_id, state_dir, project_id)]
+        files = [state_file_path(session_id, agent_id, state_dir, project_id, find=True)]
     else:
         files = [state_file_path(session_id, None, state_dir, project_id)]
     seen = set()
@@ -432,7 +455,7 @@ def reap_patterns_used(session_id, agent_id, hook_event_name='Stop', state_dir=N
     if not session_id:
         return
     if hook_event_name == 'SubagentStop':
-        f = state_file_path(session_id, agent_id, state_dir, project_id)
+        f = state_file_path(session_id, agent_id, state_dir, project_id, find=True)
     else:
         f = state_file_path(session_id, None, state_dir, project_id)
     try:
@@ -459,7 +482,7 @@ def load_retrieval_ids(session_id, agent_id, hook_event_name='Stop', state_dir=N
     if not session_id:
         return {}
     if hook_event_name == 'SubagentStop':
-        sf = state_file_path(session_id, agent_id, state_dir, project_id)
+        sf = state_file_path(session_id, agent_id, state_dir, project_id, find=True)
     else:
         sf = state_file_path(session_id, None, state_dir, project_id)
     try:
@@ -486,7 +509,7 @@ def load_task_session_id(session_id, agent_id, hook_event_name='Stop', state_dir
     if not session_id:
         return None
     if hook_event_name == 'SubagentStop':
-        sf = state_file_path(session_id, agent_id, state_dir, project_id)
+        sf = state_file_path(session_id, agent_id, state_dir, project_id, find=True)
     else:
         sf = state_file_path(session_id, None, state_dir, project_id)
     try:
@@ -494,6 +517,20 @@ def load_task_session_id(session_id, agent_id, hook_event_name='Stop', state_dir
         return tsid or None
     except Exception:
         return None
+
+
+def load_search_binding(session_id, agent_id, hook_event_name='Stop', anchor=None):
+    """8.2.6: (search_org, search_project) the task's search ran with, else None (no search, no retrieval_id, a state
+    of an older version). Read before the learn lock: it only decides which project the learn (and its lock) go to.
+    anchor: the main Stop's prompt_id; the main state counts only when it is THIS task's (task_session_id == anchor),
+    since a UserPromptSubmit that exits before its anchor write leaves an earlier task's state behind."""
+    st = load_state(session_id, agent_id, hook_event_name)
+    so, sp = st.get('search_org'), st.get('search_project')
+    if hook_event_name != 'SubagentStop' and not (anchor and st.get('task_session_id') == anchor):
+        return None
+    if st.get('retrieval_id') and isinstance(so, str) and so and isinstance(sp, str) and sp:
+        return so, sp
+    return None
 
 
 def load_state(session_id, agent_id, hook_event_name='Stop', state_dir=None, project_id=None):
@@ -506,7 +543,7 @@ def load_state(session_id, agent_id, hook_event_name='Stop', state_dir=None, pro
         return {}
     aid = agent_id if hook_event_name == 'SubagentStop' else None
     try:
-        raw = json.loads(state_file_path(session_id, aid, state_dir, project_id).read_text())
+        raw = json.loads(state_file_path(session_id, aid, state_dir, project_id, find=True).read_text())
         return raw if isinstance(raw, dict) else {}
     except Exception:
         return {}

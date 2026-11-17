@@ -423,7 +423,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
             try:
                 append_patterns_used(session_id, agent_id, [],
                                      retrieval_id=retrieval_id,
-                                     task_session_id=task_session_id, project_id=project, render_variant=_cohort)
+                                     task_session_id=task_session_id, project_id=project, render_variant=_cohort, binding=context)
             except Exception as e:
                 log_error('SubagentStart', 'ace_subagent_start.control', session_id, project, e)
 
@@ -441,7 +441,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                         retrieval_id=retrieval_id,
                         retrieval_log_ids=retrieval_log_map,
                         task_session_id=task_session_id,
-                        project_id=project, rendered_context=ace_context, render_variant=_cohort,
+                        project_id=project, rendered_context=ace_context, render_variant=_cohort, binding=context,
                         pattern_contents=injected_contents(patterns_response.get('similar_patterns'), pattern_ids),
                     )
                 except Exception as e:
@@ -461,7 +461,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                         retrieval_id=retrieval_id,
                         retrieval_log_ids=retrieval_log_map,
                         task_session_id=task_session_id,
-                        project_id=project, rendered_context=ace_context, render_variant=_cohort,
+                        project_id=project, rendered_context=ace_context, render_variant=_cohort, binding=context,
                         pattern_contents=injected_contents(patterns_response.get('similar_patterns'), pattern_ids),
                     )
                 except Exception as e:

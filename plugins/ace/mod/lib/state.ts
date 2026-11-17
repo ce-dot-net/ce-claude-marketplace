@@ -21,7 +21,8 @@ export function dataRootFromPluginRoot(home: string, root: string, name: string,
 // ---------- patterns_used_state.append_patterns_used: same merge, same key order, same bytes ----------
 export type StateUpdate = { ids?: string[]; retrievalId?: string | null; rlog?: Record<string, number>; tsid?: string | null
   userPrompt?: string; rendered?: string; hook?: string; parentTaskId?: string; agentType?: string; renderVariant?: string
-  contents?: Record<string, string>; evalStats?: { avg_relevance: number; domains: number } }
+  contents?: Record<string, string>; evalStats?: { avg_relevance: number; domains: number }
+  searchOrg?: string; searchProject?: string }  // 8.2.6: the binding the search ran with = where the learn goes
 export function mergeState(prior: any, u: StateUpdate): any {
   const p = prior && typeof prior === 'object' && !Array.isArray(prior) ? prior : {}
   const ids: string[] = Array.isArray(p.pattern_ids) ? [...p.pattern_ids] : Array.isArray(prior) ? [...prior] : []
@@ -47,6 +48,10 @@ export function mergeState(prior: any, u: StateUpdate): any {
   if (Object.keys(pc).length) state.pattern_contents = pc  // §31 (Python writes it after its optional keys too)
   const es = u.evalStats ?? p.eval_stats  // self-eval numbers of the task's search, read by Stop (Python key order)
   if (es && typeof es === 'object' && !Array.isArray(es)) state.eval_stats = es
+  if (state.retrieval_id) {  // 8.2.6 (Python key order): only a search that produced a retrieval_id binds the learn
+    const [so, sp] = u.searchOrg && u.searchProject ? [u.searchOrg, u.searchProject] : [p.search_org, p.search_project]
+    if (so && sp) { state.search_org = so; state.search_project = sp }  // a pair or none
+  }
   const at = u.agentType ?? p.agent_type // mod-only: its turn.complete carries no agent type; Python ignores the key
   if (at) state.agent_type = at
   return state
