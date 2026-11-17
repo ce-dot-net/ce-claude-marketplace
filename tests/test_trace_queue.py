@@ -542,6 +542,44 @@ def test_classify_engine_response(out, answered, action, cls):
     assert Q.classify(6, out, keyed=True, answered=answered) == (action, cls)
 
 
+# ---------- 8.2.8: ace-cli 4.4.4 `learn --no-stream --json` exits 1 on stored:false / quota_exceeded ----------
+# The exact stdout the pinned CLI printed against a local mock (pretty-printed, multi-line), plus its stderr warn line.
+CLI_NOT_STORED = ('{\n  "success": false,\n  "stored": false,\n  "message": "Trace stored.",\n'
+                  '  "task": "User request: x",\n  "timestamp": "2026-11-17T17:00:00.000Z"\n}\n')
+CLI_QUOTA = ('{\n  "success": false,\n  "stored": false,\n  "quota_exceeded": true,\n  "message": "quota",\n'
+             '  "task": "t",\n  "timestamp": "x"\n}\n'
+             '{"level":"warn","message":"Quota exceeded (TRACE_QUOTA_EXCEEDED): 10/10. Upgrade at https://example.invalid"}')
+
+
+@pytest.mark.parametrize("code,out,action,cls", [
+    (1, CLI_NOT_STORED, "requeue", "not_stored"),
+    (1, CLI_QUOTA, "requeue", "quota"),
+    (1, '{"success": false, "stored": false, "message": "x", "task": "t"}', "requeue", "not_stored"),
+    # the task text is the user's: a quoted look-alike inside it decides nothing
+    (1, '{"success": true, "task": "{\\"success\\": false, \\"stored\\": false}"}', "lost", "unknown"),
+    (1, '{"success": false, "stored": true}', "lost", "unknown"),  # not a 4.4.4 shape: unchanged
+])
+def test_classify_cli_444_not_stored_and_quota(code, out, action, cls):
+    assert Q.classify(code, out, keyed=False) == (action, cls)
+
+
+def test_cli_stored_false_is_queued_then_replayed_with_new_keys_and_bounded(qdir):
+    """A CLI send the server answered stored:false is neither counted as sent nor dropped, and never loops."""
+    rows = Q.settle(qdir, qid(1), trace(), META, 1, CLI_NOT_STORED, now=T0, keyed=False)
+    assert rows[0]["event"] == "learn_requeued" and rows[0]["error_class"] == "not_stored", rows
+    keys, now = [], T0
+    for _ in range(6):
+        now += 3 * HOUR
+        Q.replay(qdir, lambda e: (keys.append(e["key"]), (1, CLI_NOT_STORED, False))[1], now=now)
+    assert keys == [qid(1) + "-r1", qid(1) + "-r2", qid(1) + "-r3"] and dead(qdir) == [qid(1) + ".json"] and entries(qdir) == []
+
+
+def test_cli_quota_is_queued_for_later(qdir):
+    rows = Q.settle(qdir, qid(1), trace(), META, 1, CLI_QUOTA, now=T0, keyed=False)
+    assert rows[0]["event"] == "learn_requeued" and rows[0]["error_class"] == "quota"
+    assert json.loads((qdir / (qid(1) + ".json")).read_text())["next_at"] == T0 + 12 * HOUR
+
+
 def test_waits_quota_in_progress_retry_after(qdir):
     assert Q.settle(qdir, qid(1), trace(), META, 5, R(429, retry_after="900"), now=T0)[0]["error_class"] == "quota"
     assert json.loads((qdir / (qid(1) + ".json")).read_text())["next_at"] == T0 + 900
@@ -624,3 +662,14 @@ def test_a_fresh_claim_is_never_taken_back_even_when_the_entry_file_is_old(qdir)
 
     Q.replay(qdir, send, now=T0 + 120)
     assert seen == [[]] and entries(qdir) == []
+
+
+def test_cli_not_stored_parser_is_bounded_on_many_brace_lines():
+    # review 8.2.8: a failed raw_decode costs O(position); 20k "{" lines must not take seconds
+    import time
+    text = '{"k":\n' * 20000
+    t0 = time.time()
+    assert Q._cli_not_stored(text) is None
+    assert time.time() - t0 < 2.0
+    real = '{\n  "success": false,\n  "stored": false,\n  "message": "x"\n}\n'
+    assert Q._cli_not_stored(real)["stored"] is False

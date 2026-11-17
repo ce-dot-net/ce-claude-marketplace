@@ -19,6 +19,7 @@ Rows (the caller adds timestamp/source) never carry trace content.
 """
 import hashlib
 import hmac as _hmac
+import itertools
 import json
 import math
 import os
@@ -94,6 +95,20 @@ def _lines(text):
     return resp, dl, err
 
 
+def _cli_not_stored(text):
+    """ace-cli >= 4.4.4 `learn --no-stream --json` result {"success": false, "stored": false, ...} (pretty-printed,
+    so decoded from a line that starts with "{"), or None. A look-alike inside a JSON string never starts a line."""
+    dec = json.JSONDecoder()
+    for m in itertools.islice(re.finditer(r"(?m)^\{", text), 20):  # bounded: a failed raw_decode costs O(position)
+        try:
+            o = dec.raw_decode(text, m.start())[0]
+        except ValueError:
+            continue
+        if isinstance(o, dict) and o.get("success") is False and o.get("stored") is False:
+            return o
+    return None
+
+
 def _int(v):
     return v if isinstance(v, int) and not isinstance(v, bool) else None
 
@@ -139,6 +154,9 @@ def classify(code, output, keyed=True, answered=False):
         return "requeue", "quota"
     if code == 0:
         return "ok", None
+    cli = _cli_not_stored(text)  # ace-cli >= 4.4.4: exit 1, the server answered but did not store (or quota)
+    if cli is not None:
+        return ("requeue", "quota") if cli.get("quota_exceeded") is True else ("requeue", "not_stored")
     ecode = err.get("code") if err else None
     if ecode in _AUTH_CODES or (ecode is None and not keyed and code in (3, 4)):  # ace-cli: exit 3/4 = auth
         return "dead", "auth"
