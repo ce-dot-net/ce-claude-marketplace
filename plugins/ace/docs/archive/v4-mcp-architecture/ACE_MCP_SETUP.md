@@ -92,7 +92,7 @@ mkdir -p ~/.config/ace
 cat > ~/.config/ace/config.json <<'EOF'
 {
   "serverUrl": "https://ace-api.code-engine.app",
-  "apiToken": "ace_gJ3XjvJK907TLbkKqrwgG8a1YH8wc3BLI9YAcuc0pso",
+  "apiToken": "ace_xxxxxxxxxxxxxxxx",
   "cacheTtlMinutes": 120,
   "autoUpdateEnabled": true
 }
@@ -128,7 +128,7 @@ cd /path/to/your/project
 ```
 
 You'll be prompted for:
-- **Project ID**: Your unique project identifier (e.g., `prj_d3a244129d62c198`)
+- **Project ID**: Your unique project identifier (e.g., `prj_xxxxxxxxxxxxxxxx`)
 
 ### Option B: Manual Setup
 
@@ -145,7 +145,7 @@ mkdir -p .claude
 cat > .claude/settings.json <<'EOF'
 {
   "env": {
-    "ACE_PROJECT_ID": "prj_d3a244129d62c198"
+    "ACE_PROJECT_ID": "prj_xxxxxxxxxxxxxxxx"
   }
 }
 EOF
@@ -159,7 +159,7 @@ EXISTING=$(cat .claude/settings.json)
 
 # Merge ACE_PROJECT_ID using jq
 echo "$EXISTING" | jq \
-  --arg projectId "prj_d3a244129d62c198" \
+  --arg projectId "prj_xxxxxxxxxxxxxxxx" \
   '.env.ACE_PROJECT_ID = $projectId' > .claude/settings.json.tmp
 
 mv .claude/settings.json.tmp .claude/settings.json
@@ -201,7 +201,7 @@ mv .claude/settings.json.tmp .claude/settings.json
 ✅ ACE MCP Status
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MCP Server: ace-pattern-learning ✓ CONNECTED
-Project ID: prj_d3a244129d62c198
+Project ID: prj_xxxxxxxxxxxxxxxx
 Server URL: https://ace-api.code-engine.app
 Playbook Size: 42 patterns (4 sections)
 Cache Status: ACTIVE (TTL: 120 minutes)

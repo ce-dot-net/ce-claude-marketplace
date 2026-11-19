@@ -11,8 +11,8 @@
 **Reproduction**:
 ```bash
 # Setup: Project has 70 patterns confirmed via API
-export ACE_ORG_ID="org_34fYIlitYk4nyFuTvtsAzA6uUJF"
-export ACE_PROJECT_ID="prj_d3a244129d62c198"
+export ACE_ORG_ID="org_xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+export ACE_PROJECT_ID="prj_xxxxxxxxxxxxxxxx"
 
 # BUG: Plain text shows 0
 ce-ace status
@@ -37,12 +37,12 @@ ce-ace status --json
 **Reproduction**:
 ```bash
 # These flags are documented in help/docs but don't work
-ce-ace --org "org_34fYIlitYk4nyFuTvtsAzA6uUJF" --project "prj_d3a244129d62c198" status
+ce-ace --org "org_xxxxxxxxxxxxxxxxxxxxxxxxxxx" --project "prj_xxxxxxxxxxxxxxxx" status
 # Output: Total Bullets: 0 ❌
 
 # Without flags (using env vars) works
-export ACE_ORG_ID="org_34fYIlitYk4nyFuTvtsAzA6uUJF"
-export ACE_PROJECT_ID="prj_d3a244129d62c198"
+export ACE_ORG_ID="org_xxxxxxxxxxxxxxxxxxxxxxxxxxx"
+export ACE_PROJECT_ID="prj_xxxxxxxxxxxxxxxx"
 ce-ace status --json
 # Output: "total_patterns": 70 ✅
 ```

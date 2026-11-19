@@ -42,7 +42,7 @@ The command uses a **5-step bash + AskUserQuestion hybrid approach**:
 
 **API Token** (via AskUserQuestion)
 - **Format**: `ace_` followed by 48 alphanumeric characters
-- **Example**: `ace_wFIuXzQvaR5IVn2SoizOf-ncOKP6bmHDmocaQ3b5aWU`
+- **Example**: `ace_xxxxxxxxxxxxxxxx`
 - **Input**: Text field for user-provided token
 - **Validation**: Token validated against server with `ce-ace config validate --json`
 
@@ -54,7 +54,7 @@ The command uses a **5-step bash + AskUserQuestion hybrid approach**:
 **Project** (via AskUserQuestion)
 - **Options**: Dynamically built from org's project list
 - **Format**: `prj_` followed by 16 hexadecimal characters
-- **Example**: `prj_d3a244129d62c198`
+- **Example**: `prj_xxxxxxxxxxxxxxxx`
 - **Source**: Returned from `ce-ace config validate --json`
 
 ### Project Configuration (.claude/settings.json)
@@ -113,11 +113,11 @@ ce-ace config validate --json
 ### Output Format (ce-ace config validate --json)
 ```json
 {
-  "org_id": "org_34fYIlitYk4nyFuTvtsAzA6uUJF",
+  "org_id": "org_xxxxxxxxxxxxxxxxxxxxxxxxxxx",
   "org_name": "Organization Name",
   "projects": [
     {
-      "project_id": "prj_d3a244129d62c198",
+      "project_id": "prj_xxxxxxxxxxxxxxxx",
       "project_name": "My Project"
     },
     {
@@ -147,8 +147,8 @@ Current format in repository:
 ```json
 {
   "env": {
-    "ACE_ORG_ID": "org_34fYIlitYk4nyFuTvtsAzA6uUJF",
-    "ACE_PROJECT_ID": "prj_d3a244129d62c198"
+    "ACE_ORG_ID": "org_xxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "ACE_PROJECT_ID": "prj_xxxxxxxxxxxxxxxx"
   }
 }
 ```
@@ -275,7 +275,7 @@ Ask: API token? → User provides "ace_xxxxx"
   ↓
 Validate: ace_xxxxx against server ✓
   ↓
-Ask: Which project? → "My Project" selected (prj_d3a244129d62c198)
+Ask: Which project? → "My Project" selected (prj_xxxxxxxxxxxxxxxx)
   ↓
 Save: ~/.config/ace/config.json ✓
   ↓

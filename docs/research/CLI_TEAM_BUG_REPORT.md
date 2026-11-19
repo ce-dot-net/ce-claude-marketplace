@@ -10,14 +10,14 @@
 
 ### Exact Command
 ```bash
-ce-ace --org "org_34fYIlitYk4nyFuTvtsAzA6uUJF" --project "prj_d3a244129d62c198" status
+ce-ace --org "org_xxxxxxxxxxxxxxxxxxxxxxxxxxx" --project "prj_xxxxxxxxxxxxxxxx" status
 ```
 
 ### Environment State
 ```bash
 # These env vars ARE set in the shell
-ACE_ORG_ID=org_34fYIlitYk4nyFuTvtsAzA6uUJF
-ACE_PROJECT_ID=prj_d3a244129d62c198
+ACE_ORG_ID=org_xxxxxxxxxxxxxxxxxxxxxxxxxxx
+ACE_PROJECT_ID=prj_xxxxxxxxxxxxxxxx
 ```
 
 ### Full Output
@@ -30,8 +30,8 @@ ACE_PROJECT_ID=prj_d3a244129d62c198
 
 📋 Final Configuration:
    serverUrl: https://ace-api.code-engine.app
-   projectId: prj_d3a244129d62c198
-   organization: ce-dot-net (org_34fYIlitYk4nyFuTvtsAzA6uUJF)
+   projectId: prj_xxxxxxxxxxxxxxxx
+   organization: ce-dot-net (org_xxxxxxxxxxxxxxxxxxxxxxxxxxx)
 
 ✔ Status retrieved
 📊 Playbook Status

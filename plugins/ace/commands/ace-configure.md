@@ -126,7 +126,7 @@ Build options dynamically from the organizations list. For example:
           description: "org_id"
         }
         // Example:
-        // { label: "Code Engine (owner)", description: "org_34fYIlitYk4nyFuTvtsAzA6uUJF" }
+        // { label: "Code Engine (owner)", description: "org_xxxxxxxxxxxxxxxxxxxxxxxxxxx" }
       ]
     }
   ]
