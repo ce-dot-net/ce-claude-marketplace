@@ -5,6 +5,19 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.2.9] - 2026-11-19
+
+### Added
+- New relevance-log event `rejection_check` {matched, blocked, chars, failed, prev_age_s, prev_ids, session_id, source}: one row per prompt, without text. `failed` order: too_long > prev_stale > empty_ids > switch_off > no_phrase (null = queued).
+- More rejection phrases: "arbeit umsonst", "alles umsonst", "war umsonst", "das war mist", "scheisse aus", "scheiße aus".
+
+### Changed
+- Blockers (nicht, not, nichts, kein..., oder, or) and the rhetorical guard apply only to falsch/wrong.
+- The main Stop always writes `last-main-applied.json`, also for skipped tasks (TS `noteMain` + Python `_note_main_skipped`; parity).
+
+### Security
+- Removed `TEST_ACE_LEARN.sh` (contained a bearer token) and replaced real project/org IDs and tokens in docs with placeholders. Rotate the exposed tokens if not done yet.
+
 ## [8.2.8] - 2026-11-17
 
 ### Changed
