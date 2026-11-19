@@ -114,7 +114,7 @@ git push
 ```json
 {
   "env": {
-    "ACE_API_TOKEN": "ace_REDACTED_TOKEN"
+    "ACE_API_TOKEN": "ace_xxxxxxxxxxxxxxxx"
   }
 }
 ```
@@ -123,7 +123,7 @@ git push
 
 ```bash
 # Bad - token visible in public repo
-export ACE_API_TOKEN="ace_REDACTED_TOKEN"
+export ACE_API_TOKEN="ace_xxxxxxxxxxxxxxxx"
 ```
 
 ---

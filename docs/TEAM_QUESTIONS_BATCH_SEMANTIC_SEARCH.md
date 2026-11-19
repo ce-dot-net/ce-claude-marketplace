@@ -174,7 +174,7 @@ fall back to ace_get_playbook only if query is too broad.
 // .claude/settings.json
 {
   "env": {
-    "ACE_PROJECT_ID": "prj_d3a244129d62c198",
+    "ACE_PROJECT_ID": "prj_xxxxxxxxxxxxxxxx",
     "ACE_API_TOKEN": "ace_xxxxx"  // NEW - project override
   }
 }

@@ -301,8 +301,8 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --org "$ACE_ORG_ID" --project "$ACE_P
 ```
 🎛️  ACE Configuration
 
-ℹ Project: prj_d3a244129d62c198
-ℹ Organization: org_34fYIlitYk4nyFuTvtsAzA6uUJF
+ℹ Project: prj_xxxxxxxxxxxxxxxx
+ℹ Organization: org_xxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ℹ Search/Retrieval:
 ℹ   Constitution Threshold: 0.45 (similarity)
@@ -333,8 +333,8 @@ ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli tune --org "$ACE_ORG_ID" --project "$ACE_P
 
 🎛️  ACE Configuration
 
-ℹ Project: prj_d3a244129d62c198
-ℹ Organization: org_34fYIlitYk4nyFuTvtsAzA6uUJF
+ℹ Project: prj_xxxxxxxxxxxxxxxx
+ℹ Organization: org_xxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 ℹ Search/Retrieval:
 ℹ   Constitution Threshold: 0.5 (similarity)  ← Updated
