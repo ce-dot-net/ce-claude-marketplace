@@ -127,3 +127,56 @@ def test_search_response_gate_is_persisted():
     assert plugin_data_dir.stored_feedback_downvote() is True
     plugin_data_dir.store_server_switches({"feedback_downvote": False})
     assert plugin_data_dir.stored_feedback_downvote() is False
+
+
+# ---- 8.2.9: the per-prompt check row, the skipped-task record, the wider guards ----
+
+def _skipped_stop(box, sid, tsid):
+    """A main Stop with a state but no substantial work (no tool rows): learn_skipped no_substantial_work."""
+    box.write_state(sid, user_prompt="refactor the parser module", pattern_ids=[A], retrieval_id="ret-1",
+                    retrieval_log_ids={A: 7}, task_session_id=tsid, render_variant="budget")
+    p = box.run_after_task(box.stop_event(sid, last_assistant_message="just talking"), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
+    assert p.returncode == 0, p.stderr
+
+
+def test_skipped_main_task_replaces_the_record_with_empty_ids(box):
+    sid = "rej-8"
+    _task(box, sid, "tsid-aaaaaaaa-1", "applied " + A, ACE_FEEDBACK_DOWNVOTE="1")
+    _skipped_stop(box, sid, "tsid-bbbbbbbb-2")
+    rec = json.loads((box.session_dir(sid) / "last-main-applied.json").read_text())
+    assert rec["task_session_id"] == "tsid-bbbbbbbb-2" and rec["applied_log_ids"] == []
+    _prompt(box, sid, "falsch", ACE_FEEDBACK_DOWNVOTE="1")
+    assert "feedback" not in _task(box, sid, "tsid-cccccccc-3", "x", ACE_FEEDBACK_DOWNVOTE="1")  # nothing hits the old task
+    assert [r["failed"] for r in box.relevance_rows("rejection_check")] == ["empty_ids"]
+
+
+def test_check_row_for_every_prompt_without_text(box):
+    sid = "rej-9"
+    _task(box, sid, "tsid-aaaaaaaa-1", "applied " + A, ACE_FEEDBACK_DOWNVOTE="1")
+    for text in ("mach weiter damit", "oder sehe ich das falsch ?", "das ist falsch"):
+        _prompt(box, sid, text, ACE_FEEDBACK_DOWNVOTE="1")
+    rows = box.relevance_rows("rejection_check")
+    assert [(r["matched"], r["blocked"], r["failed"]) for r in rows] == [
+        (None, None, "no_phrase"), (None, "falsch", "no_phrase"), ("das ist falsch", None, None)]
+    assert all(r["prev_ids"] == 1 and isinstance(r["chars"], int) for r in rows)
+    assert not any(t in json.dumps(rows) for t in ("mach weiter", "sehe ich"))
+
+
+def test_check_row_failed_conditions(box):
+    sid = "rej-10"
+    _prompt(box, sid, "falsch", ACE_FEEDBACK_DOWNVOTE="1")                       # no previous record
+    _prompt(box, sid, "x " * 200 + "falsch", ACE_FEEDBACK_DOWNVOTE="1")           # > 300 chars
+    _task(box, sid, "tsid-aaaaaaaa-1", "applied " + A, ACE_FEEDBACK_DOWNVOTE="0")
+    _prompt(box, sid, "falsch", ACE_FEEDBACK_DOWNVOTE="0")                        # switch off
+    assert [r["failed"] for r in box.relevance_rows("rejection_check")] == ["prev_stale", "too_long", "switch_off"]
+
+
+def test_main_stop_without_state_keeps_the_previous_record(box):
+    sid = "rej-11"
+    _task(box, sid, "tsid-aaaaaaaa-1", "applied " + A, ACE_FEEDBACK_DOWNVOTE="1")
+    p = box.run_after_task(box.stop_event(sid, last_assistant_message="notified"), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)  # no state
+    assert p.returncode == 0, p.stderr
+    rec = json.loads((box.session_dir(sid) / "last-main-applied.json").read_text())
+    assert rec["task_session_id"] == "tsid-aaaaaaaa-1" and rec["applied_log_ids"] == [7]
+    _prompt(box, sid, "falsch", ACE_FEEDBACK_DOWNVOTE="1")
+    assert _task(box, sid, "tsid-bbbbbbbb-2", "x", ACE_FEEDBACK_DOWNVOTE="1")["feedback"]["applied_log_ids"] == [7]

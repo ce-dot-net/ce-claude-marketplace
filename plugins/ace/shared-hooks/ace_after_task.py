@@ -64,6 +64,19 @@ except Exception:
 from utils.machine_prompts import is_machine_prompt  # shared with WP-B UPS guard
 
 
+def _note_main_skipped(project, session_id, agent_id, hook_event_name):
+    """8.2.9: a skipped main task (trivial / no substantial work) still becomes the record a rejection downvotes: [] ids."""
+    if hook_event_name != 'Stop':
+        return
+    try:
+        import ace_feedback
+        tsid = load_task_session_id(session_id, agent_id, hook_event_name)
+        if tsid:  # no state (e.g. a task-notification turn): the previous record stays, as in the mod
+            ace_feedback.record_main_applied(project, session_id, tsid, [])
+    except Exception:
+        pass
+
+
 def is_trivial_task(task_description: str) -> bool:
     """
     Filter out trivial tasks that shouldn't trigger learning.
@@ -1647,6 +1660,7 @@ def main():
 
         # STEP 2: QUALITY GATE - trivial / machine-generated prompts (before any db work)
         if is_trivial_task(user_prompt):
+            _note_main_skipped(ups_project, session_id, agent_id, hook_event_name)  # before skip_learning reaps the state
             skip_learning("Trivial task (ACE command or simple query)", event, agent_id,
                           session_id=session_id, working_dir=working_dir)
             sys.exit(0)
@@ -1662,6 +1676,7 @@ def main():
 
         # STEP 4: QUALITY GATE - Check for substantial work
         if not has_substantial_work_from_accumulated(tools):
+            _note_main_skipped(ups_project, session_id, agent_id, hook_event_name)  # before skip_learning reaps the state
             skip_learning("No substantial work (no Edit/Write/Bash tools)", event, agent_id,
                           session_id=session_id, working_dir=working_dir)
             sys.exit(0)

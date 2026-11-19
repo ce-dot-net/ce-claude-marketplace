@@ -5,7 +5,7 @@ import { nowIso, relLog, searchRow } from '../io/log'
 import { SEARCH_MS, search } from '../io/spawn'
 import { type Load, type Sess, clearDeferred, clearTools, cohortEnv, deferredAnchor, disabled, downvoteEnabled, ensure, notePrompt, pendingFile, readState, searchOrigin, touchMarker, updateState, uuid, type HookArgs, refreshMarker } from '../io/state'
 import { type Cohort, renderCohort } from '../lib/cohort'
-import { REJECTION_PREV_MAX_AGE_S, evalStats, injectedContents, rejectionMatch } from '../lib/evidence'
+import { REJECTION_PREV_MAX_AGE_S, evalStats, injectedContents, rejectionProbe } from '../lib/evidence'
 import { num, pyDumps } from '../lib/pyjson'
 import { domainsSummary, renderBudget, renderCompact, renderFull, renderPatternsDict } from '../lib/render'
 import { type StateUpdate, mergeState } from '../lib/state'
@@ -13,15 +13,23 @@ import { MACHINE_ORIGINS, domainNames, expandAbbreviations, isNoTaskCommand, ski
 import { searchErrorLine, searchSummary, sessionTitle, statusLine, topDomains } from '../ui/status'
 
 // ace_feedback.on_human_prompt: a rejection of the previous main task -> a pending downvote with its evidenced ids.
+// 8.2.9: every human main prompt also logs one text-free row `rejection_check` for the server team's detection measurement:
+// {matched phrase | null, blocked phrase (a guard dropped it) | null, chars, failed: the first failing condition in the cheap-first
+// order too_long, prev_stale (no record or >= 6 h), empty_ids, switch_off, no_phrase; null = the downvote was queued}.
 export async function onRejection($: any, s: Sess, text: string) {
-  const matched = rejectionMatch(text)
-  if (!matched) return
-  const prev = await readJson($, `${s.sdir}/last-main-applied.json`)
+  const { matched, blocked, tooLong } = rejectionProbe(text)
+  const prev = tooLong ? undefined : await readJson($, `${s.sdir}/last-main-applied.json`)
   const prevAt = num(prev?.at)  // a seconds float reads back as a PyFloat: compare its value
-  const fresh = prevAt !== undefined && await $.clock.now() / 1000 - prevAt < REJECTION_PREV_MAX_AGE_S
+  const ageS = prevAt !== undefined ? await $.clock.now() / 1000 - prevAt : undefined
+  const fresh = ageS !== undefined && ageS < REJECTION_PREV_MAX_AGE_S
   const ids: number[] = fresh && Array.isArray(prev.applied_log_ids) ? prev.applied_log_ids.filter((x: unknown) => Number.isInteger(x)) : []
-  const sent = ids.length > 0 && await downvoteEnabled($, s)
+  const on = tooLong ? undefined : await downvoteEnabled($, s)
+  const failed = tooLong ? 'too_long' : !fresh ? 'prev_stale' : !ids.length ? 'empty_ids' : !on ? 'switch_off' : !matched ? 'no_phrase' : null
+  const sent = failed === null
   if (sent) await writePrivate($, `${s.sdir}/pending-downvote.json`, JSON.stringify({ applied_log_ids: ids, at: await $.clock.now() / 1000 }))
+  await relLog($, s, { timestamp: await nowIso($), event: 'rejection_check', matched, blocked, chars: [...String(text ?? '')].length, failed,
+    prev_age_s: ageS === undefined ? null : Math.round(ageS), prev_ids: ids.length, session_id: s.sessionId, source: 'mod' })
+  if (!matched) return
   await relLog($, s, { timestamp: await nowIso($), event: 'rejection_detected', matched, downvote_sent: sent,
     prev_task: String(prev?.task_session_id ?? '').slice(0, 8) || null, session_id: s.sessionId, source: 'mod' })
 }

@@ -102,5 +102,85 @@ export default [
  {
   "text": "x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x x falsch",
   "match": "falsch"
+ },
+ {
+  "text": "oder sehe ich das falsch ?",
+  "match": null
+ },
+ {
+  "text": "liege ich falsch?",
+  "match": null
+ },
+ {
+  "text": "es gibt kein richtig oder falsch",
+  "match": null
+ },
+ {
+  "text": "client macht nichts falsch",
+  "match": null
+ },
+ {
+  "text": "das ist keine falsche antwort",
+  "match": null
+ },
+ {
+  "text": "never wrong in my view",
+  "match": null
+ },
+ {
+  "text": "das sieht scheiße aus",
+  "match": "scheiße aus"
+ },
+ {
+  "text": "das war mist",
+  "match": "das war mist"
+ },
+ {
+  "text": "das sieht Scheisse aus was du gebaut hast",
+  "match": "scheisse aus"
+ },
+ {
+  "text": "die ganze arbeit umsonst",
+  "match": "arbeit umsonst"
+ },
+ {
+  "text": "war alles umsonst?",
+  "match": "alles umsonst"
+ },
+ {
+  "text": "ist das umsonst?",
+  "match": null
+ },
+ {
+  "text": "gibt es das umsonst",
+  "match": null
+ },
+ {
+  "text": "nicht umsonst gemacht",
+  "match": null
+ },
+ {
+  "text": "geht das so nicht?",
+  "match": null
+ },
+ {
+  "text": "die logs sind unbrauchbar",
+  "match": null
+ },
+ {
+  "text": "das wollte ich doch nicht",
+  "match": "doch nicht"
+ },
+ {
+  "text": "hab ich doch nicht gesagt",
+  "match": "doch nicht"
+ },
+ {
+  "text": "liege ich falsch?",
+  "match": null
+ },
+ {
+  "text": "ich glaube das ist falsch",
+  "match": "das ist falsch"
  }
 ]

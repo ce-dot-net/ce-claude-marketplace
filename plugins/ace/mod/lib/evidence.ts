@@ -175,26 +175,36 @@ export function appliedLogIds(used: string[], rlog: Record<string, number>): { i
   return { ids: all.slice(0, APPLIED_LOG_IDS_CAP), capped: all.length > APPLIED_LOG_IDS_CAP }
 }
 
-// prompt <= 300 chars with a phrase as a whole word, not right after "nicht"/"not". The longest hit wins (ties: list order).
+// prompt <= 300 chars with a phrase as a whole word. A hit is blocked when the word before it is a negation
+// ("nicht falsch", "nichts falsch", "kein ... falsch", "never wrong") or "oder"/"or" ("richtig oder falsch"), or when it
+// closes a rhetorical question about the user ("sehe ich das falsch", "liege ich falsch"). The longest hit wins (ties: list order).
 export const REJECTION_PHRASES = ["falsch", "stimmt nicht", "geht nicht", "funktioniert nicht", "klappt nicht", "rückgängig",
   "mach das rückgängig", "immer noch kaputt", "immer noch nicht", "nicht das was ich wollte", "das war nicht gemeint", "doch nicht",
-  "das ist falsch", "kaputt gemacht", "wrong", "that's wrong", "doesn't work", "does not work", "not working", "still broken",
-  "still not", "not what i asked", "that broke", "you broke"]
+  "das ist falsch", "kaputt gemacht", "arbeit umsonst", "alles umsonst", "war umsonst", "das war mist", "scheisse aus", "scheiße aus",
+  "wrong", "that's wrong", "doesn't work", "does not work", "not working", "still broken", "still not", "not what i asked",
+  "that broke", "you broke"]
+export const REJECTION_MAX_CHARS = 300
 export const REJECTION_PREV_MAX_AGE_S = 6 * 3600
+const REJECTION_BLOCKERS = ['nicht', 'not', 'nichts', 'kein', 'keine', 'keinen', 'keiner', 'nie', 'never', 'oder', 'or']
 const isWordChar = (c: string) => /[\p{L}\p{N}_]/u.test(c)
-export function rejectionMatch(text: string | undefined): string | null {
+// {matched: the longest unblocked phrase, blocked: the longest phrase a guard dropped, tooLong: > 300 chars}
+export function rejectionProbe(text: string | undefined): { matched: string | null; blocked: string | null; tooLong: boolean } {
   const low = String(text ?? '').trim().toLowerCase().replace(/[\u2018\u2019]/g, "'")
-  if ([...low].length > 300) return null
-  let best: string | null = null
+  if ([...low].length > REJECTION_MAX_CHARS) return { matched: null, blocked: null, tooLong: true }
+  let best: string | null = null, blocked: string | null = null
   for (const phrase of REJECTION_PHRASES) {
     for (let i = low.indexOf(phrase); i >= 0; i = low.indexOf(phrase, i + 1)) {
       const j = i + phrase.length
       if ((i > 0 && isWordChar(low[i - 1]!)) || (j < low.length && isWordChar(low[j]!))) continue
-      const before = low.slice(0, i), words = before.split(/\s+/).filter(Boolean)
-      if (words.length && before !== before.trimEnd() && ['nicht', 'not'].includes(words[words.length - 1]!)) continue
+      const before = low.slice(0, i), words = before.split(/\s+/).filter(Boolean), spaced = before !== before.trimEnd()
+      const last = words[words.length - 1], prev = words[words.length - 2]
+      const rhetorical = phrase === 'falsch' || phrase === 'wrong'  // "sehe ich das falsch", "liege ich falsch"; "das wollte ich doch nicht" stays a rejection
+      const guard = spaced && last !== undefined && (REJECTION_BLOCKERS.includes(last) || (rhetorical && (last === 'ich' || (prev === 'ich' && (last === 'das' || last === 'es')))))
+      if (guard) { if (blocked === null || phrase.length > blocked.length) blocked = phrase; continue }
       if (best === null || phrase.length > best.length) best = phrase
       break
     }
   }
-  return best
+  return { matched: best, blocked: best === null ? blocked : null, tooLong: false }
 }
+export const rejectionMatch = (text: string | undefined): string | null => rejectionProbe(text).matched
