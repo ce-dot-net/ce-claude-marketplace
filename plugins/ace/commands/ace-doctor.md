@@ -668,8 +668,8 @@ System Information:
 Plugin Version: v7.0.0
 CLI Version: v4.4.4
 Architecture: Hook-based (v7.x)
-Project ID: prj_d3a244129d62c198
-Organization: org_34fYIlitYk4nyFuTvtsAzA6uUJF
+Project ID: prj_xxxxxxxxxxxxxxxx
+Organization: org_xxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 Registered Hooks:
 • SessionStart → ace_install_cli.sh

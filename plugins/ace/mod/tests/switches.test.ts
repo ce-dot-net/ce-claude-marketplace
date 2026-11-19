@@ -171,3 +171,56 @@ test('render keeps only retrieval_id and count at top level (cli 4.3.0 passes ev
     similar_patterns: [{ id: '11111111-2222-4333-8444-555555555555', content: 'x', domain: 'd' }] }
   expect(Object.keys(renderPatternsDict(resp).dict).sort()).toEqual(['count', 'retrieval_id', 'similar_patterns'])
 })
+
+// ---- 8.2.9: the per-prompt check row, the skipped-task record, the wider guards ----
+
+test('8.2.9 a skipped main task (no substantial work) becomes the record: a later rejection hits it, not the older task', async ($, on) => {
+  const { a } = st8a()
+  const h = host(on, { defaultArm: true, search: () => ({ stdout: S8 }), env: { ACE_FEEDBACK_DOWNVOTE: '1' } })
+  await mainTask($, h)
+  await done($, 'applied ' + a)
+  await mainTask($, h, [])  // no tools: learn_skipped no_substantial_work
+  await done($, 'just talking')
+  await submit($, 'falsch')
+  await mainTask($, h)
+  await done($, 'x')
+  expect(h.learns().length).toBe(2)
+  expect(h.trace(h.learns()[1]!).feedback).toBe(undefined)
+  expect(h.rows().find((x: any) => x.event === 'rejection_check' && x.matched === 'falsch')!.failed).toBe('empty_ids')
+})
+
+test('8.2.9 every human main prompt logs one text-free rejection_check row', async ($, on) => {
+  const { a } = st8a()
+  const h = host(on, { defaultArm: true, search: () => ({ stdout: S8 }), env: { ACE_FEEDBACK_DOWNVOTE: '1' } })
+  await mainTask($, h)
+  await done($, 'applied ' + a)
+  for (const t of ['mach weiter damit', 'oder sehe ich das falsch ?', 'das ist falsch']) await submit($, t)
+  const rows = h.rows().filter((x: any) => x.event === 'rejection_check')
+  expect(rows.slice(-3).map((x: any) => [x.matched, x.blocked, x.failed])).toEqual([[null, null, 'no_phrase'], [null, 'falsch', 'no_phrase'], ['das ist falsch', null, null]])
+  expect(rows.slice(-3).every((x: any) => x.prev_ids === 1 && Number.isInteger(x.chars))).toBe(true)
+  expect(JSON.stringify(rows).includes('mach weiter') || JSON.stringify(rows).includes('sehe ich')).toBe(false)
+})
+
+test('8.2.9 rejection_check failed conditions: prev_stale, too_long, switch_off', async ($, on) => {
+  const { a } = st8a()
+  const h = host(on, { defaultArm: true, search: () => ({ stdout: S8 }), env: { ACE_FEEDBACK_DOWNVOTE: '0' } })
+  await submit($, 'falsch')                                 // no previous record
+  await submit($, 'x '.repeat(200) + 'falsch')              // > 300 chars
+  await mainTask($, h)
+  await done($, 'applied ' + a)
+  await submit($, 'falsch')                                 // switch off
+  const mine = h.rows().filter((x: any) => x.event === 'rejection_check' && x.chars !== [...HUMAN].length)  // mainTask's own prompt logs a row too
+  expect(mine.map((x: any) => x.failed)).toEqual(['prev_stale', 'too_long', 'switch_off'])
+})
+
+test('8.2.9 a main Stop without task state (e.g. a task-notification turn) keeps the previous record: the rejection still downvotes it', async ($, on) => {
+  const { a, log } = st8a()
+  const h = host(on, { defaultArm: true, search: () => ({ stdout: S8 }), env: { ACE_FEEDBACK_DOWNVOTE: '1' } })
+  await mainTask($, h)
+  await done($, 'applied ' + a)
+  await done($, 'notified')  // the state is gone: no new record
+  await submit($, 'falsch')
+  await mainTask($, h)
+  await done($, 'x')
+  expect(h.trace(h.learns()[1]!).feedback).toEqual({ kind: 'downvote', applied_log_ids: [log] })
+})

@@ -28,11 +28,19 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
   if (key === 'main' && !recs.length && L.mainSeen > 0)  // item 4: a seen-once anomaly (Stop learned tools: 0 after Bash calls)
     await relLog($, s, { timestamp: await nowIso($), event: 'tools_mismatch', hook: 'Stop', recorded: 0, seen: L.mainSeen, source: 'mod' })
   const state = await readState($, s, key)
+  // 8.2.9: every main Stop with a task state first records it with [] ids (skipped tasks stay so; a turn without state, e.g. a
+  // task-notification, keeps the previous record): a rejection must hit the task it rejected, never an older one. The real
+  // record further down overwrites it once the evidenced ids are known (after the self-eval).
+  const noteMain = async () => {
+    if (key === 'main' && hook === 'Stop')
+      await writePrivate($, `${s.sdir}/last-main-applied.json`, JSON.stringify({ task_session_id: state?.task_session_id ?? null, applied_log_ids: [], at: await $.clock.now() / 1000 })).catch(() => {})
+  }
   if (!state) {
     await clearTools($, L, s, key)
     if (hook === 'Stop') await relLog($, s, { timestamp: await nowIso($), event: 'learn_skipped', hook, session_id: s.sessionId, reason: 'no_task_state', source: 'mod' })
     return false
   }
+  await noteMain()  // before the self-eval window: a quick rejection then finds [] (empty_ids), never an older task's ids
   const prompt: string = state.user_prompt ?? ''
   const agentType: string = agentId ? state.agent_type ?? 'unknown' : 'main'
   const skip = !prompt || isTrivialTask(prompt, s.extraPrefixes) ? 'trivial_task' : !hasSubstantialWork(recs) ? 'no_substantial_work' : null

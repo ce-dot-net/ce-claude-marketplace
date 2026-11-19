@@ -5,6 +5,19 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.2.9] - 2026-11-19
+
+### Added
+- New relevance-log event `rejection_check` {matched, blocked, chars, failed, prev_age_s, prev_ids, session_id, source}: one row per prompt, without text. `failed` order: too_long > prev_stale > empty_ids > switch_off > no_phrase (null = queued).
+- More rejection phrases: "arbeit umsonst", "alles umsonst", "war umsonst", "das war mist", "scheisse aus", "scheiße aus".
+
+### Changed
+- Blockers (nicht, not, nichts, kein..., oder, or) and the rhetorical guard apply only to falsch/wrong.
+- The main Stop always writes `last-main-applied.json`, also for skipped tasks (TS `noteMain` + Python `_note_main_skipped`; parity).
+
+### Security
+- Removed `TEST_ACE_LEARN.sh` (contained a bearer token) and replaced real project/org IDs and tokens in docs with placeholders. Rotate the exposed tokens if not done yet.
+
 ## [8.2.8] - 2026-11-17
 
 ### Changed
@@ -5549,9 +5562,9 @@ Fetch fresh projects from server:
 Update ~/.config/ace/config.json with fresh list
   ↓
 Show project selection:
-  • prj_913f898c709d9f89
-  • prj_3600aeeef46e10f4
-  • prj_185ba193e965e55c ← NEW project now visible!
+  • prj_xxxxxxxxxxxxxxxx
+  • prj_xxxxxxxxxxxxxxxx
+  • prj_xxxxxxxxxxxxxxxx ← NEW project now visible!
   • Enter new project ID
   ↓
 User selects or enters project
@@ -5565,24 +5578,24 @@ Save .claude/settings.json with:
 
 **Scenario 2: New Project ID → Ask Which Org**:
 ```
-User enters: prj_185ba193e965e55c (not in config)
+User enters: prj_xxxxxxxxxxxxxxxx (not in config)
   ↓
 Detect: Project not in any configured org
   ↓
 Ask: Which organization does this project belong to?
-  • XpertPulse (org_34geJJ3Xr3ZmNVF6FYHLMhpAv61)
-  • ce-dot-net (org_34fYIlitYk4nyFuTvtsAzA6uUJF)
+  • XpertPulse (org_xxxxxxxxxxxxxxxxxxxxxxxxxxx)
+  • ce-dot-net (org_xxxxxxxxxxxxxxxxxxxxxxxxxxx)
   ↓
 User selects: "XpertPulse"
   ↓
-Add prj_185ba193e965e55c to XpertPulse's projects array
+Add prj_xxxxxxxxxxxxxxxx to XpertPulse's projects array
   ↓
 Update ~/.config/ace/config.json:
-  orgs.org_34geJJ3Xr3ZmNVF6FYHLMhpAv61.projects += ["prj_185ba193e965e55c"]
+  orgs.org_xxxxxxxxxxxxxxxxxxxxxxxxxxx.projects += ["prj_xxxxxxxxxxxxxxxx"]
   ↓
 Save .claude/settings.json with:
-  ACE_PROJECT_ID=prj_185ba193e965e55c
-  ACE_ORG_ID=org_34geJJ3Xr3ZmNVF6FYHLMhpAv61 ✓
+  ACE_PROJECT_ID=prj_xxxxxxxxxxxxxxxx
+  ACE_ORG_ID=org_xxxxxxxxxxxxxxxxxxxxxxxxxxx ✓
 ```
 
 #### Implementation Details
@@ -6149,8 +6162,8 @@ When running `/ace-configure` in a project that belongs to a multi-org setup:
 ```json
 {
   "env": {
-    "ACE_PROJECT_ID": "prj_374e70fce04f703c",
-    "ACE_ORG_ID": "org_34fYIlitYk4nyFuTvtsAzA6uUJF"
+    "ACE_PROJECT_ID": "prj_xxxxxxxxxxxxxxxx",
+    "ACE_ORG_ID": "org_xxxxxxxxxxxxxxxxxxxxxxxxxxx"
   }
 }
 ```
@@ -6159,7 +6172,7 @@ When running `/ace-configure` in a project that belongs to a multi-org setup:
 ```json
 {
   "env": {
-    "ACE_PROJECT_ID": "prj_374e70fce04f703c"
+    "ACE_PROJECT_ID": "prj_xxxxxxxxxxxxxxxx"
   }
 }
 ```
