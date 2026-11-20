@@ -1,12 +1,13 @@
 // prompt.submit: the main search -> cohort render -> inject, the patterns-used state, the rejection downvote,
 // the status line and session title.
-import { readJson, rm, writePrivate } from '../io/fs'
+import { readJson, readText, rm, writePrivate } from '../io/fs'
 import { nowIso, relLog, searchRow } from '../io/log'
 import { SEARCH_MS, search } from '../io/spawn'
 import { type Load, type Sess, clearDeferred, clearTools, cohortEnv, deferredAnchor, disabled, downvoteEnabled, ensure, notePrompt, pendingFile, readState, searchOrigin, touchMarker, updateState, uuid, type HookArgs, refreshMarker } from '../io/state'
 import { type Cohort, renderCohort } from '../lib/cohort'
 import { REJECTION_PREV_MAX_AGE_S, evalStats, injectedContents, rejectionProbe } from '../lib/evidence'
 import { num, pyDumps } from '../lib/pyjson'
+import { type ModelVerdict, classifyRejection, rejectionCacheKey, rejectionMinConf } from '../lib/rejection'
 import { domainsSummary, renderBudget, renderCompact, renderFull, renderPatternsDict } from '../lib/render'
 import { type StateUpdate, mergeState } from '../lib/state'
 import { MACHINE_ORIGINS, domainNames, expandAbbreviations, isNoTaskCommand, skipReason } from '../lib/text'
@@ -16,7 +17,15 @@ import { searchErrorLine, searchSummary, sessionTitle, statusLine, topDomains } 
 // 8.2.9: every human main prompt also logs one text-free row `rejection_check` for the server team's detection measurement:
 // {matched phrase | null, blocked phrase (a guard dropped it) | null, chars, failed: the first failing condition in the cheap-first
 // order too_long, prev_stale (no record or >= 6 h), empty_ids, switch_off, no_phrase; null = the downvote was queued}.
-export async function onRejection($: any, s: Sess, text: string) {
+// 8.3.0: language-independent. All gates run first (so no model call when the result could never be queued); then a phrase hit
+// is the free fast-path (detect_source 'phrase'), else one haiku classification (detect_source 'model', failed model_no /
+// model_error / model_timeout, never a downvote on doubt). The model call runs from a $.clock.after timer (the prompt is never delayed; the
+// pending downvote is written when it answers; a late one is consumed by the following main learn). ACE_REJECTION_MODEL=0 = phrases only.
+// `source` stays 'mod' (the log origin on every row); the detector is `detect_source`.
+const inflight = new Set<Promise<void>>()  // ponytail: module-level (a reload drops them); the tests wait on it
+export const flushRejections = () => Promise.all([...inflight]).then(() => undefined)
+const classified = new Map<string, { reject: boolean; confidence: number; label: string | null }>()  // same prompt twice in a session: one call
+export async function onRejection($: any, s: Sess, text: string, L?: Load) {
   const { matched, blocked, tooLong } = rejectionProbe(text)
   const prev = tooLong ? undefined : await readJson($, `${s.sdir}/last-main-applied.json`)
   const prevAt = num(prev?.at)  // a seconds float reads back as a PyFloat: compare its value
@@ -24,11 +33,51 @@ export async function onRejection($: any, s: Sess, text: string) {
   const fresh = ageS !== undefined && ageS < REJECTION_PREV_MAX_AGE_S
   const ids: number[] = fresh && Array.isArray(prev.applied_log_ids) ? prev.applied_log_ids.filter((x: unknown) => Number.isInteger(x)) : []
   const on = tooLong ? undefined : await downvoteEnabled($, s)
-  const failed = tooLong ? 'too_long' : !fresh ? 'prev_stale' : !ids.length ? 'empty_ids' : !on ? 'switch_off' : !matched ? 'no_phrase' : null
-  const sent = failed === null
-  if (sent) await writePrivate($, `${s.sdir}/pending-downvote.json`, JSON.stringify({ applied_log_ids: ids, at: await $.clock.now() / 1000 }))
-  await relLog($, s, { timestamp: await nowIso($), event: 'rejection_check', matched, blocked, chars: [...String(text ?? '')].length, failed,
-    prev_age_s: ageS === undefined ? null : Math.round(ageS), prev_ids: ids.length, session_id: s.sessionId, source: 'mod' })
+  const gate = tooLong ? 'too_long' : !fresh ? 'prev_stale' : !ids.length ? 'empty_ids' : !on ? 'switch_off' : null
+  // S4: headless (-p / SDK, interactive === false) skips the model like the self-eval does; the phrase path is unchanged. Empty text: nothing to classify.
+  const useModel = gate === null && !matched && String(text ?? '').trim() !== '' && L?.interactive !== false && (await $.env.get('ACE_REJECTION_MODEL')) !== '0'
+  const row = (failed: string | null, extra: Record<string, unknown>, nowIsoStr: string) => ({ timestamp: nowIsoStr, event: 'rejection_check', matched, blocked,
+    chars: [...String(text ?? '')].length, failed, prev_age_s: ageS === undefined ? null : Math.round(ageS), prev_ids: ids.length, session_id: s.sessionId,
+    detect_source: matched ? 'phrase' : useModel ? 'model' : null, model_reject: null, model_conf: null, model_ms: null, model_label: null, ...extra, source: 'mod' })
+  const tsid: string | null = typeof prev?.task_session_id === 'string' && prev.task_session_id ? prev.task_session_id : null
+  const doneFile = `${s.sdir}/last-downvoted-task`
+  // S7: one downvote per task, and never into a session dir that is gone (session.end removed it while the model was answering).
+  // null = written, else why it was skipped.
+  const write = async (meta: { detect_source: 'phrase' | 'model'; model_conf?: number }): Promise<'session_gone' | 'task_downvoted' | null> => {
+    if (!(await $.fs.exists(s.sdir))) return 'session_gone'
+    if (tsid && (await readText($, doneFile))?.trim() === tsid) return 'task_downvoted'
+    await writePrivate($, `${s.sdir}/pending-downvote.json`, JSON.stringify({ applied_log_ids: ids, at: await $.clock.now() / 1000, task_session_id: tsid, ...meta }))
+    if (tsid) await writePrivate($, doneFile, tsid).catch(() => {})
+    return null
+  }
+  if (useModel) {
+    // $.clock.after: the native way to run work after the hook returned (the call is no part of this dispatch, so an
+    // abandoned dispatch cannot abort it); bounded by REJECTION_MODEL_MS, fails safe. A downvote written after the next
+    // Stop is not lost: takeDownvote consumes the file at the following main learn (within 6 h).
+    const work = async () => {
+      const key = rejectionCacheKey(s.sessionId, prev?.task_session_id, text)
+      const t0 = await $.clock.now()
+      const hit = classified.get(key)
+      const minConf = rejectionMinConf(await $.env.get('ACE_REJECTION_MIN_CONF'))
+      const v: ModelVerdict = hit ? { failed: hit.reject && hit.confidence >= minConf ? null : 'model_no', reject: hit.reject, conf: hit.confidence, label: hit.label }
+        : await classifyRejection($, text, String(prev?.answer_tail ?? ''), minConf)
+      if (!hit && v.reject !== null && v.conf !== null) { classified.set(key, { reject: v.reject, confidence: v.conf, label: v.label ?? null }); if (classified.size > 50) classified.delete(classified.keys().next().value!) }
+      const ms = hit ? 0 : Math.round(await $.clock.now() - t0)
+      let failed: string | null = v.failed
+      if (failed === null) failed = await write({ detect_source: 'model', model_conf: Math.round(v.conf! * 100) / 100 })
+      await relLog($, s, row(failed, { model_reject: v.reject, model_conf: v.conf, model_ms: ms, model_label: v.label ?? null }, await nowIso($)))
+      if (v.reject === true && v.conf !== null && v.conf >= minConf)
+        await relLog($, s, { timestamp: await nowIso($), event: 'rejection_detected', matched: null, downvote_sent: failed === null, detect_source: 'model',
+          prev_task: String(prev?.task_session_id ?? '').slice(0, 8) || null, session_id: s.sessionId, source: 'mod' })
+    }
+    try { $.clock.after(1, () => { const p: Promise<void> = work().catch(() => {}).finally(() => { inflight.delete(p) }); inflight.add(p) }) }
+    catch { await relLog($, s, row('model_error', {}, await nowIso($))) }
+    return
+  }
+  const failed = gate ?? (!matched ? 'no_phrase' : null)
+  const skipped = failed === null ? await write({ detect_source: 'phrase' }) : failed
+  const sent = skipped === null
+  await relLog($, s, row(skipped, {}, await nowIso($)))
   if (!matched) return
   await relLog($, s, { timestamp: await nowIso($), event: 'rejection_detected', matched, downvote_sent: sent,
     prev_task: String(prev?.task_session_id ?? '').slice(0, 8) || null, session_id: s.sessionId, source: 'mod' })
@@ -61,8 +110,9 @@ export async function onPrompt($: any, L: Load, e: any): Promise<any> {
   const reason = e.origin && MACHINE_ORIGINS.has(e.origin.kind) ? 'machine_prompt'
     : e.isMeta ? 'machine_prompt' : e.command && isNoTaskCommand(e.command.name) ? 'ace_command'
     : skipReason(text, s.minChars, s.extraPrefixes)
+  if (!midTurn && !e.command) L.humanPrompt = reason === null || reason === 'prompt_too_short'  // 8.3.0 (S1): the Stop of this turn moves the rejection record on
   if (!midTurn && !e.command && (reason === null || reason === 'prompt_too_short') && !(await disabled($, s)))
-    try { await onRejection($, s, text) } catch { /* never break the prompt */ }
+    try { await onRejection($, s, text, L) } catch { /* never break the prompt */ }
   if (reason) {
     // §16 P2: the <task-notification> of a deferred task continues that task (its turn's tools join its learn)
     if (!midTurn) L.pendingMain = reason === 'machine_prompt' ? await deferredAnchor($, L, s) : null

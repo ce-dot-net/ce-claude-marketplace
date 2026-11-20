@@ -576,6 +576,7 @@ export function buildTrace(a: {
   // per-source counters (Haiku, H2), 0 when none; 8.2.7: the ids themselves per source (ids only, injected order, <= 50)
   usedIds?: { used_ids_model: number; used_ids_tokens: number; used_ids_model_list?: string[]; used_ids_tokens_list?: string[] }
   downvote?: number[]  // the previous main task's evidenced ids after a user rejection
+  downvoteDetect?: { detect_source?: unknown; model_conf?: unknown }  // 8.3.0: how the rejection was found (read from the pending file; validated here)
   summaryCap?: number  // 2000 for the closing answer, 4000 for a SubagentHandback report (ace_after_task.handback_summary)
   pluginVersion?: string  // 8.1.4: the manifest x.y.z (the version in X-ACE-Client)
   interactive?: boolean; promptOrigin?: string; humanPromptCount?: number  // 8.2.2: conversation origin, each only when known
@@ -605,11 +606,20 @@ export function buildTrace(a: {
   trace.used_ids_tokens = a.usedIds?.used_ids_tokens ?? 0
   trace.used_ids_model_list = (a.usedIds?.used_ids_model_list ?? []).slice(0, USED_IDS_LIST_CAP)  // 8.2.7: [] when none, never omitted
   trace.used_ids_tokens_list = (a.usedIds?.used_ids_tokens_list ?? []).slice(0, USED_IDS_LIST_CAP)
-  if (a.downvote?.length) trace.feedback = { kind: 'downvote', applied_log_ids: a.downvote }  // never retrieval_id, never text
+  if (a.downvote?.length) trace.feedback = { kind: 'downvote', applied_log_ids: a.downvote, ...feedbackDetect(a.downvoteDetect) }  // never retrieval_id, never text
   trace.effort_level = a.effort
   trace.effort_weight = effortWeight(a.effort)
   if (a.git) trace.git = a.git
   return { trace: truncateTrace(trace), success, failed_steps }
+}
+
+// feedback.detect_source 'phrase'|'model'; feedback.model_conf (only with 'model') finite 0..1, 2 decimals; anything else is left out
+// (a legacy pending file from the Python path carries neither: the feedback stays {kind, applied_log_ids}).
+export function feedbackDetect(d: { detect_source?: unknown; model_conf?: unknown } | undefined): { detect_source?: 'phrase' | 'model'; model_conf?: number } {
+  const src = d?.detect_source
+  if (src !== 'phrase' && src !== 'model') return {}
+  const c = d?.model_conf
+  return src === 'model' && typeof c === 'number' && Number.isFinite(c) && c >= 0 && c <= 1 ? { detect_source: src, model_conf: Math.round(c * 100) / 100 } : { detect_source: src }
 }
 
 // git_utils.parse_diff_stat

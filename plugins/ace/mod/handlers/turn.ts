@@ -6,6 +6,7 @@ import { type Load, type Sess, clearTools, cohortEnv, readState, stateFile, take
 import { traceVariant } from '../lib/cohort'
 import { type ToolRec, appliedLogIds, parseAceReview, parseUsedIds, selfEvalPrompt, usedPatternIds } from '../lib/evidence'
 import { pyDumps, pyLoads } from '../lib/pyjson'
+import { answerTail } from '../lib/rejection'
 import { safeComponent as safe } from '../lib/state'
 import { FALLBACK_ON_3, OUTCOME_RULE, buildTrace, detachedLearnArgv, hasSubstantialWork, isTrivialTask, learnArgv, reclaimTrace } from '../lib/trace'
 import { learnLine } from '../ui/status'
@@ -33,7 +34,7 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
   // record further down overwrites it once the evidenced ids are known (after the self-eval).
   const noteMain = async () => {
     if (key === 'main' && hook === 'Stop')
-      await writePrivate($, `${s.sdir}/last-main-applied.json`, JSON.stringify({ task_session_id: state?.task_session_id ?? null, applied_log_ids: [], at: await $.clock.now() / 1000 })).catch(() => {})
+      await writePrivate($, `${s.sdir}/last-main-applied.json`, JSON.stringify({ task_session_id: state?.task_session_id ?? null, applied_log_ids: [], at: await $.clock.now() / 1000, answer_tail: answerTail(answer) })).catch(() => {})
   }
   if (!state) {
     await clearTools($, L, s, key)
@@ -69,10 +70,11 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
     const modelList = playbook.filter(id => m.has(id)), tokenList = playbook.filter(id => tk.has(id))
     const bySource = { used_ids_model: modelList.length, used_ids_tokens: tokenList.length }
     // §31: used only (this agent's own tools, report, self-eval); for the 20-cap Haiku ids first, then H2 ids, injected order
-    const downvote = key === 'main' ? await takeDownvote($, s) : undefined
+    const dv = key === 'main' ? await takeDownvote($, s) : undefined
+    const downvote = dv?.ids
     const { ids: applied, capped } = appliedLogIds([...used.filter(id => m.has(id)), ...used.filter(id => !m.has(id))], rlog)
     // the record a later rejection downvotes ([] too: rejecting a task without evidenced ids sends nothing)
-    if (key === 'main') await writePrivate($, `${s.sdir}/last-main-applied.json`, JSON.stringify({ task_session_id: tsid ?? null, applied_log_ids: applied, at: await $.clock.now() / 1000 })).catch(() => {})
+    if (key === 'main') await writePrivate($, `${s.sdir}/last-main-applied.json`, JSON.stringify({ task_session_id: tsid ?? null, applied_log_ids: applied, at: await $.clock.now() / 1000, answer_tail: answerTail(answer) })).catch(() => {})
     let git: any
     try {
       git = await gitContext($, s.cwd)
@@ -80,7 +82,7 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
       if (git && commits.length) git.session_commits = commits
     } catch { /* git context is optional */ }
     const { trace, success, failed_steps } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
-      tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied, usedIds: { ...bySource, used_ids_model_list: modelList, used_ids_tokens_list: tokenList }, downvote,
+      tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied, usedIds: { ...bySource, used_ids_model_list: modelList, used_ids_tokens_list: tokenList }, downvote, downvoteDetect: dv,
       nowIso: await nowIso($), renderVariant: variant, conversationId: s.sessionId, effort, git, summaryCap,
       pluginVersion: s.clientId.slice(s.clientId.lastIndexOf('/') + 1),
       interactive: L.interactive, ...await readOrigin($, s) })
@@ -227,6 +229,11 @@ export async function turnComplete($: HookArgs<'turn.complete'>[0], L: Load, e: 
       L.turnAnchor.delete(e.turnId)
       const effort = L.stopEffort; L.stopEffort = undefined
       const running = L.stopDefer; L.stopDefer = null
+      // 8.3.0 (S1): a main answer to a HUMAN prompt that made no task (a short "warum?") is what a following reply reacts to: it replaces the
+      // rejection record (no ids), so that reply cannot downvote the task before. A task-notification turn keeps the record (humanPrompt false).
+      const human = L.humanPrompt; L.humanPrompt = false
+      if (!anchor && human && e.reason === 'answer' && !e.isAborted)
+        await writePrivate($, `${s.sdir}/last-main-applied.json`, JSON.stringify({ task_session_id: null, applied_log_ids: [], at: await $.clock.now() / 1000, answer_tail: answerTail(e.answer) })).catch(() => {})
       if (!anchor || (state && state.task_session_id !== anchor)) await clearTools($, L, s, 'main')
       else if (e.reason !== 'answer' || e.isAborted) { await clearDeferred($, L, s); await abstain($, L, s, 'main', state, e.reason, 'Stop') }
       else if (running && state) {  // §16 P2: state, tools and F-080 ids stay for the Stop after the notification
