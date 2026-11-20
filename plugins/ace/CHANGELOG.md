@@ -5,6 +5,22 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [8.3.0] - 2026-11-20
+
+### Added
+- Model-based, language-independent rejection (downvote) detection in the mod: a small classifier call (`$.model.complete`, haiku) judges whether a prompt rejects the previous answer, in any language. It runs next to the existing phrase detector and only in interactive sessions (headless is excluded).
+- The trace feedback now is `{kind: 'downvote', applied_log_ids, detect_source?: 'phrase'|'model', model_conf?: 0..1}`. The new fields have no switch.
+- Knobs: `ACE_REJECTION_MIN_CONF` (default 0.8), `ACE_REJECTION_MODEL=0` (kill switch).
+- Tests: model-detector unit tests, a synthetic multilingual fixture, and an offline eval script.
+
+### Behavior
+- Fail-safe: a classifier error, timeout or unparsable answer never produces a downvote.
+- One downvote per task.
+
+### Known limits
+- Contentless complaints (for example a bare "this is garbage" without saying what) are not reliably detected.
+- Measured on one user's German prompts plus an author-written synthetic multilingual set: synthetic precision 100% at 0.8 with recall about 80%; on 400 real control prompts 2% were flagged at 0.8, about 1.0% judged false positives. Real quality is measured server-side per plugin_version.
+
 ## [8.2.9] - 2026-11-19
 
 ### Added

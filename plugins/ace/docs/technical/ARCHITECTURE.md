@@ -136,7 +136,7 @@ positional password of a tool not listed above) cannot be recognized and is sent
 Over-redaction loses the rest of the line after any keyword (`tokens:`, `api_key` in code, `pass:`).
 
 The execution row in `ace-relevance.jsonl` carries `failed_steps` and `outcome_rule: "8.1.3"`; `/ace:ace-doctor` shows
-the rule of the newest row (`pre-8.1.3` for older rows). The user-rejection downvote and `applied_log_ids` are
+the rule of the newest row (`pre-8.1.3` for older rows). The user-rejection downvote (phrase or, since 8.3.0, model-detected; `detect_source`, `model_conf`) and `applied_log_ids` are
 unchanged. Heuristics carry `ponytail:` comments (read-only list, MCP verb list, the tokenizer). The numbers behind the
 rule: `python3 tests/probe_success_rule.py --days 10` (local transcripts, counts only).
 

@@ -76,7 +76,7 @@ test('rejection + previous evidenced ids + gate on -> feedback downvote on the n
   const { a, log } = st8a()
   const h = host(on, { defaultArm: true, search: () => ({ stdout: S8 }), env: { ACE_FEEDBACK_DOWNVOTE: '1' } })
   const t2 = await rejectFlow($, h, 'applied ' + a, () => submit($, 'falsch'))
-  expect(t2.feedback).toEqual({ kind: 'downvote', applied_log_ids: [log] })
+  expect(t2.feedback).toEqual({ kind: 'downvote', applied_log_ids: [log], detect_source: 'phrase' })
   expect(h.trace(h.learns()[0]!).feedback).toBe(undefined)
   const row = h.rows().find((x: any) => x.event === 'rejection_detected')!
   expect([row.matched, row.downvote_sent, row.prev_task?.length]).toEqual(['falsch', true, 8])
@@ -91,7 +91,7 @@ test('rejection with a real (sub-second) clock: the stored seconds stamp is a fl
   const h = host(on, { defaultArm: true, search: () => ({ stdout: S8 }), env: { ACE_FEEDBACK_DOWNVOTE: '1' } })
   h.advance(1234)  // clock no longer on a whole second: `now / 1000` is a float, which pyLoads reads as a PyFloat
   const t2 = await rejectFlow($, h, 'applied ' + a, () => submit($, 'das ist falsch'))
-  expect(t2.feedback).toEqual({ kind: 'downvote', applied_log_ids: [log] })
+  expect(t2.feedback).toEqual({ kind: 'downvote', applied_log_ids: [log], detect_source: 'phrase' })
 })
 
 test('rejection: gate off (default) -> nothing; the server gate in a search response turns it on', async ($, on) => {
@@ -191,7 +191,7 @@ test('8.2.9 a skipped main task (no substantial work) becomes the record: a late
 
 test('8.2.9 every human main prompt logs one text-free rejection_check row', async ($, on) => {
   const { a } = st8a()
-  const h = host(on, { defaultArm: true, search: () => ({ stdout: S8 }), env: { ACE_FEEDBACK_DOWNVOTE: '1' } })
+  const h = host(on, { defaultArm: true, search: () => ({ stdout: S8 }), env: { ACE_FEEDBACK_DOWNVOTE: '1', ACE_REJECTION_MODEL: '0' } })  // 8.3.0: phrases only (the model path has its own suite)
   await mainTask($, h)
   await done($, 'applied ' + a)
   for (const t of ['mach weiter damit', 'oder sehe ich das falsch ?', 'das ist falsch']) await submit($, t)
@@ -222,5 +222,5 @@ test('8.2.9 a main Stop without task state (e.g. a task-notification turn) keeps
   await submit($, 'falsch')
   await mainTask($, h)
   await done($, 'x')
-  expect(h.trace(h.learns()[1]!).feedback).toEqual({ kind: 'downvote', applied_log_ids: [log] })
+  expect(h.trace(h.learns()[1]!).feedback).toEqual({ kind: 'downvote', applied_log_ids: [log], detect_source: 'phrase' })
 })

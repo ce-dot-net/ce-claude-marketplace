@@ -106,6 +106,7 @@ export type Load = {
   handback: Map<string, string>                 // agentId -> last SubagentHandback message (§16 P1)
   claims: Set<string>                           // ponytail: in-process; the marker silences the Python hook, so no second process races this one
   queues: Map<string, Promise<unknown>>         // per state file: parallel hooks read-merge-write in turn
+  humanPrompt: boolean                           // 8.3.0: the last main prompt was a human one (a Stop without task state then still moves the rejection record on)
   interactive: boolean | undefined              // item 1a: session.start isInteractive (false: -p / SDK, no Haiku wait); undefined = unknown
   pendingLearns: Set<{ ctl: AbortController; flush: () => Promise<boolean> }>  // item 1b: self-evals session.end must not lose
 }
@@ -238,13 +239,14 @@ export async function downvoteEnabled($: any, s: Sess): Promise<boolean> {
   if (env === '1' || env === '0') return env === '1'
   return storedDownvote(await readText($, `${s.root}/${FEEDBACK_DOWNVOTE_FILE}`), await $.clock.now())
 }
-// At the next main trace: the pending downvote's ids, consumed once.
-export async function takeDownvote($: any, s: Sess): Promise<number[] | undefined> {
+// At the next main trace: the pending downvote's ids (and how the rejection was found), consumed once.
+export async function takeDownvote($: any, s: Sess): Promise<{ ids: number[]; detect_source?: unknown; model_conf?: unknown } | undefined> {
   const f = `${s.sdir}/pending-downvote.json`, d = await readJson($, f)
   if (d === undefined) return undefined
   await rm($, f)
   const dAt = num(d?.at)
-  return Array.isArray(d?.applied_log_ids) && d.applied_log_ids.length && dAt !== undefined && await $.clock.now() / 1000 - dAt < REJECTION_PREV_MAX_AGE_S ? d.applied_log_ids : undefined
+  if (!(Array.isArray(d?.applied_log_ids) && d.applied_log_ids.length && dAt !== undefined && await $.clock.now() / 1000 - dAt < REJECTION_PREV_MAX_AGE_S)) return undefined
+  return { ids: d.applied_log_ids, detect_source: d.detect_source, model_conf: num(d.model_conf) }
 }
 // §16 P2: the deferral survives a mod reload on disk (tsid only).
 export const deferFile = (s: Sess) => `${s.sdir}/learn-deferred`
@@ -264,5 +266,5 @@ export function newLoad(): Load {
     turnAnchor: new Map(), tools: new Map(), spawnPrompts: new Map(), placeholders: new Set(), late: new Map(), agentTypes: new Map(),
     earlyStart: new Map(), agentEffort: new Map(), lastClaim: new Map(), markerAt: 0, claims: new Set(), queues: new Map(),
     stopDefer: null, deferred: undefined, handback: new Map(), reuseUsed: new Set(), compacted: false, mainSeen: 0,
-    interactive: undefined, pendingLearns: new Set() }
+    humanPrompt: false, interactive: undefined, pendingLearns: new Set() }
 }
