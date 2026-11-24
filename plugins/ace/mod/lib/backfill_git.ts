@@ -1,6 +1,6 @@
 // 8.2.0 git reader (pure, NOT wired): the text of `git log` (run GIT_LOG_ARGV, pass stdout) -> fix tasks for the bootstrap backfill.
 // No `$`, no I/O. Author/committer name and email are never requested by the format and never emitted; everything that leaves is redacted.
-import { redact } from './trace'
+import { redact } from './redact'
 import { sha256Hex } from './cohort'
 
 // Per commit: RS, then sha NUL date NUL subject NUL body NUL, then (git's --name-only) a blank line and the touched files.
@@ -53,7 +53,7 @@ const SEP = /[:=|>\u0080-\uffff]|%3[ad]/i  // also a pipe, '->' / '=>' and a URL
 const BEARER = /\bbearer/i  // to the end even with no space after it (a dropped zero-width char joins it to the value)
 // any userinfo, even with quotes in it (redact stops a userinfo at a quote)
 const USERINFO = /(\b[a-z][a-z0-9+.-]*:\/\/)[^\s\/]*@/gi
-// bare token shapes (no key word needed) that lib/trace.ts redact does not know; linear, no nested quantifiers
+// bare token shapes (no key word needed) that lib/redact.ts redact does not know; linear, no nested quantifiers
 const SHAPES = /\b(?:[sr]k_(?:live|test)_|glpat-|hf_|shpat_|shpca_|shpss_|dop_v1_|pypi-|hvs\.|SG\.|AIza|A[SKI]IA|ASIA)[A-Za-z0-9_.-]{8,}|hooks\.slack\.com\/services\/[A-Za-z0-9\/]+|\bdckr_pat_[A-Za-z0-9_-]{10,}/g
 const ECHO = /\b(?:echo|printf)\b/i  // any case: ECHO works on a case-insensitive filesystem
 const KEY_OR_ECHO = new RegExp(`${KEY_WORD.source}|${ECHO.source}`, 'i')

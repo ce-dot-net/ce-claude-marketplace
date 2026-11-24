@@ -92,4 +92,4 @@ Round 2 of 8.0.0 already ships `prompt_id` as the task anchor (PreToolUse `Agent
   bool / non-negative integer) to the core's plain-object request body, so no SDK change. The ace-cli fallback has no
   flag for them and sends neither (absent = unknown); the Python chain never sends them.
 - `parent_agent_id` is the server-declared name for the parent prompt id (the local state keeps `parent_task_id`).
-- `effort_level` / `effort_weight` are dropped server-side (not stored or persisted); they stay in the local relevance log only.
+- `effort_level` / `effort_weight` and the `used_ids_*` counters/lists stay in the trace: the server stores them (trace schema) but does not evaluate them yet.

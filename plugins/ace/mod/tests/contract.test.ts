@@ -202,16 +202,16 @@ test('§28 a subagent inherits the conversation arm and stores it', async ($, on
   expect(h.state('agent-1')!.task_session_id).not.toBe(h.state()!.task_session_id)
 })
 
-test('trace_truncate parity: > 50 steps → truncation marker first + metadata.trace_truncated', async ($, on) => {
+test('full steps: > 50 steps -> NO step-count truncation (the mod drops trace_truncate\'s 50-step rule; only the hard byte cap remains)', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }) })
   const tools: any[] = [{ tool: 'Edit', file_path: '/proj/x.py', old_string: 'a', new_string: 'b' }]
   for (let i = 0; i < 59; i++) tools.push({ tool: 'Bash', command: 'echo ' + i })
   await mainTask($, h, tools)
   await done($)
   const t = h.trace(h.learns()[0]!)
-  expect(t.trajectory[0]._truncation_marker).toBe(true)
-  expect(t.trajectory[0].original_length).toBe(60)
-  expect(t.metadata.trace_truncated).toBe(true)
+  expect(t.trajectory.length).toBe(60)
+  expect(t.trajectory[0]._truncation_marker).toBe(undefined)
+  expect(t.metadata).toBe(undefined)
 })
 
 test('learn launcher carries the execution metrics rows for both outcomes (learning_sent true/false)', async ($, on) => {

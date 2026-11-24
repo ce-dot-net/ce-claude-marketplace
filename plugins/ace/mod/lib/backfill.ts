@@ -1,5 +1,5 @@
 // 8.2.0 session reader (pure, NOT wired to any send path): a Claude Code transcript JSONL -> tasks, one per real user prompt, each
-// built through the SAME toolRec / taskOutcome / buildTrace / redact the live learn path uses (lib/trace.ts). No `$`, no I/O: the caller
+// built through the SAME toolRec / taskOutcome / buildTrace / redact the live learn path uses (lib/trace.ts; redact: lib/redact.ts). No `$`, no I/O: the caller
 // hands over the text (or any line iterator, to stream a big file). The trace carries no session_id, an empty playbook_used and no
 // field the live trace body does not have; `source: "bootstrap"` and the original date are the caller's to add (a later slice).
 import { buildTrace, hasSubstantialWork, isTrivialTask, taskOutcome, toolRec } from './trace'

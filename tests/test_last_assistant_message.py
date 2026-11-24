@@ -111,15 +111,19 @@ class TestLastAssistantMessage(unittest.TestCase):
         self.assertIn("summary", trace["result"], "trace.result should have 'summary' field")
         self.assertIsNone(trace["result"]["summary"], "summary should be None when field is missing")
 
-    def test_last_assistant_message_truncated(self):
-        """Message > 2000 chars is truncated to 2000."""
-        long_message = "A" * 3000
+    def test_last_assistant_message_complete_no_2000_cap(self):
+        """full steps: a 10000-char message arrives complete (was cut to 2000; mod parity lib/trace.ts capText)."""
+        long_message = "A" * 10000
         event = self._build_event(last_assistant_message=long_message)
         trace = self._run_main_and_capture_trace(event)
 
         self.assertIsNotNone(trace, "Trace should be sent to ace-cli")
-        self.assertEqual(len(trace["result"]["summary"]), 2000, "summary should be truncated to 2000 chars")
-        self.assertEqual(trace["result"]["summary"], "A" * 2000)
+        self.assertEqual(trace["result"]["summary"], "A" * 10000)
+
+    def test_last_assistant_message_redacted_over_the_whole_text(self):
+        tok = "ghp_" + "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+        trace = self._run_main_and_capture_trace(self._build_event(last_assistant_message="B" * 9000 + " " + tok))
+        self.assertEqual(trace["result"]["summary"], "B" * 9000 + " [redacted]")
 
     def test_last_assistant_message_empty_string(self):
         """Empty string results in None (falsy check)."""

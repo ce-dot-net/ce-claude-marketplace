@@ -11,7 +11,7 @@ import { renderPatternsDict } from '../lib/render.ts'
 import { traceVariant, renderCohort, serverFullPct, storedFullPct } from '../lib/cohort.ts'
 import { hasSubstantialWork, toolRec } from '../lib/trace.ts'
 import { rejectionMatch, evalStats, evalInjection, usedPatternIds, toolHaystack } from '../lib/evidence.ts'
-import { PRIVATE_WRITE_SH } from '../lib/sh.ts'
+import { PRIVATE_APPEND_SH, PRIVATE_WRITE_SH } from '../lib/sh.ts'
 import { statusLine, learnLine } from '../ui/status.ts'
 import { CWD, EVAL_REQ, FULL_PCT, HOME, HUMAN, LOCAL_CLI, LOCKED, MALFORMED, MIN, PDIR, PLACEHOLDER, PRJ, PROOT, REAL, REL, ROOT, SDIR, SECOND, SID, UUID4, bodyOf, cliOf, cmd, done, dsSearches, execRow, host, mainTask, ranked, rejectFlow, settle, shownOf, spawn, st8a, submit, withPct } from './helpers.ts'
 import type { Opts, Run, SearchAnswer } from './helpers.ts'
@@ -52,8 +52,11 @@ test('§24 state, tool records and the trace are written 0600 via umask 077 + at
   await mainTask($, h)
   await done($)
   const priv = h.runs.filter(r => r.argv[0] === '/bin/sh' && r.argv[2] === PRIVATE_WRITE_SH).map(r => r.argv[4])
-  for (const re of [/patterns-used-main\.json$/, /mod-tools-main\.json$/, /\/tmp\/ace-trace-.*\.json$/, /rendered-main\.txt$/])
+  for (const re of [/patterns-used-main\.json$/, /\/tmp\/ace-trace-.*\.json$/, /rendered-main\.txt$/])
     expect(priv.some(p => re.test(p))).toBe(true)
+  // tool records: the hot-path append, same umask 077 / 0700 dir, a symlinked target refused (never $.fs.write)
+  expect(h.runs.some(r => r.argv[0] === '/bin/sh' && r.argv[2] === PRIVATE_APPEND_SH && /mod-tools-main\.jsonl$/.test(r.argv[4]))).toBe(true)
+  expect(PRIVATE_APPEND_SH.startsWith('umask 077;') && PRIVATE_APPEND_SH.includes('[ ! -L "$1" ]') && PRIVATE_APPEND_SH.includes('chmod 700')).toBe(true)
 })
 
 test('§24 a symlinked .claude/data/logs: no eval request and no review result are written', async ($, on) => {

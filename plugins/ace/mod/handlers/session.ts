@@ -5,6 +5,7 @@ import { type HookArgs, type Load, ensure, resolveSession, touchMarker } from '.
 import { startContext } from './context'
 import { registerCommands } from '../commands/index'
 import { resumeBackfill } from '../io/backfill_io'
+import { autoUpdate } from '../io/update'
 
 export const LEARN_LOCK_MS = 600_000              // ace_session_end.py: learn timeout 300 s + margin
 
@@ -15,6 +16,7 @@ export async function sessionStart($: HookArgs<'session.start'>[0], L: Load, e: 
     L.sess = await resolveSession($, e.cwd, L)
     if (L.sess) await touchMarker($, L, L.sess, await $.clock.now())
   } catch { /* the Python chain takes over without a marker */ }
+  try { autoUpdate($, L) } catch { /* round 4: below client_policy min, non-interactive only; never blocks the start */ }
   await registerCommands($).catch(() => undefined)
   await resumeBackfill($).catch(() => undefined)  // 8.2.0: a fresh backfill run marker continues (its timers died with the reload)
   await startContext($, L, e.cwd)  // the status call itself runs in the background
@@ -39,7 +41,7 @@ export async function sessionEnd($: HookArgs<'session.end'>[0], L: Load, e: Hook
       if (!busy) await rm($, s.sdir)
     }
   } catch { /* never block the exit */ }
-  L.tools.clear(); L.turnAnchor.clear(); L.spawnPrompts.clear(); L.late.clear(); L.agentTypes.clear(); L.earlyStart.clear()
+  L.tools.clear(); L.toolBytes?.clear(); L.toolBudgetFull?.clear(); L.turnAnchor.clear(); L.spawnPrompts.clear(); L.late.clear(); L.agentTypes.clear(); L.earlyStart.clear()
   L.agentEffort.clear(); L.domains = null; L.sess = null; L.markerAt = 0
   L.reprobeGen++  // 8.2.4: stops a server_error re-probe chain
   return next(e)

@@ -152,7 +152,10 @@ def test_private_write_is_0600_and_atomic(pdd, tmp_path):
 
 
 def test_trace_tmp_dir_is_private(pdd, monkeypatch):
-    import ace_cli
+    import importlib
+    import ace_engine
+    importlib.reload(ace_engine)  # Round 12: this test's env, not module state another test left in the worker (ENGINE_DIR)
+    ace_cli = importlib.reload(importlib.import_module("ace_cli"))
     monkeypatch.setattr(ace_cli.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(FileNotFoundError("x")))
     ace_cli.run_learn({"task": "t"})
     assert _mode(pdd.data_root() / "tmp") == 0o700

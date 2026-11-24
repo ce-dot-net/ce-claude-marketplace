@@ -271,7 +271,7 @@ test('trace parity with ace_after_task.py: fields, effort from classic.Stop, git
   expect(t.effort_level).toBe('high')
   expect(t.effort_weight).toBe(1.5)
   expect(t.git.commit_hash).toBe('abc123')
-  expect(t.git.branch).toBe('main')
+  expect('branch' in t.git).toBe(false)  // git minimisation: no branch / author / author_email / commit_message in the trace
 })
 
 // ---------- trivial-task filter ----------
@@ -404,4 +404,14 @@ test('8.2.2: a subagent trace carries the conversation\'s origin fields', async 
   await done($, 'reviewed', 'agent-1')
   const t = h.trace(h.learns()[0]!)
   expect([t.agent_id, t.interactive, t.prompt_origin, t.human_prompt_count]).toEqual(['agent-1', true, 'composer', 1])
+})
+
+// ---- Round 10 / L2: a pending prompt written by an 8.3.0 session (old name, text format) is still taken over, then removed ----
+test('Round 10 / L2: an 8.3.0 mod-pending-main.json anchors the turn that runs its prompt', async ($, on) => {
+  const old = `${SDIR}/mod-pending-main.json`
+  const h = host(on, { files: { [old]: JSON.stringify({ text: HUMAN, state: JSON.stringify({ pattern_ids: [], retrieval_id: null, retrieval_log_ids: {}, task_session_id: 'tsid-830', user_prompt: HUMAN }) }) } })
+  await $.turn.start({ text: HUMAN, turnId: 't9' } as any)
+  await $.tool.call({ tool: 'Edit', file_path: '/proj/x.py', old_string: 'a', new_string: 'b' } as any)
+  await $.turn.complete({ answer: 'done', durationMs: 5, isAborted: false, turnId: 't9', reason: 'answer' } as any)
+  expect([h.learns().length, h.trace(h.learns()[0]!).session_id, h.files.has(old)]).toEqual([1, 'tsid-830', false])
 })

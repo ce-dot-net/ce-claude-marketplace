@@ -70,12 +70,12 @@ test('state: patterns-used-main.json is byte-identical to the Python writer (sha
   expect(text.split(tsid).join('__TSID__')).toBe(G.state_main_8)
 })
 
-test('state: user_prompt <= 4000, rendered_context <= 10000 and a complete envelope, F-080 ids of the injected set', async ($, on) => {
+test('state: user_prompt whole (full steps; was <= 4000), rendered_context <= 10000 and a complete envelope, F-080 ids of the injected set', async ($, on) => {
   const h = host(on)
   const long = HUMAN + ' ' + 'x'.repeat(5000)
   await submit($, long)
   const st = h.state()!
-  expect(st.user_prompt).toBe(long.slice(0, 4000))
+  expect(st.user_prompt).toBe(long)  // full steps: the task state keeps the whole request (USER_PROMPT_MAX 200000)
   expect(st.hook_event_name).toBe('UserPromptSubmit')
   expect(st.retrieval_id).toBe(JSON.parse(S100).retrieval_id)
   expect(st.task_session_id).toBe(h.pin(h.searches()[0]!))
@@ -356,4 +356,19 @@ test('8.1.0 audit: an engine stdout with a core log line before the JSON is stil
   await submit($)
   expect(h.searches().length).toBe(0)
   expect(h.rows().find((r: any) => r.event === 'search')?.engine).toBe('lib')
+})
+
+// round 6 item 7: the prompt that waits for its turn is kept as a prefix hash (only compared at turn.start), never as text
+test('a mid-turn prompt waits on disk as a prefix hash, not as text; its turn still finds it', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  await $.prompt.submit({ text: SECOND, wait: true, origin: { kind: 'composer' }, turnId: 't1' } as any)
+  expect(h.files.has(`${SDIR}/mod-pending-main.json`)).toBe(false)  // Round 10 / L2: the hash format has its own name (8.3.0 reads only the old one)
+  const pend = h.files.get(`${SDIR}/mod-pending-main.v2.json`)!
+  // no raw text field; the embedded task state keeps the request (redacted on write, F14): the deferred task needs it as its task
+  expect(['text' in JSON.parse(pend), typeof JSON.parse(pend).head, JSON.parse(JSON.parse(pend).state).user_prompt]).toEqual([false, 'string', SECOND])
+  const pin2 = h.pin(h.searches()[1]!)!
+  await done($)
+  await $.turn.start({ text: 'Earlier context.\n' + SECOND, turnId: 't2' } as any)   // the prompt not at the start of the turn text
+  expect(h.state()!.task_session_id).toBe(pin2)
 })

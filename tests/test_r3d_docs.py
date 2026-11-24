@@ -157,8 +157,11 @@ def test_adr_render_variant_reaches_the_server():
     assert re.search(r"render_variant[^\n]*(?:reaches|forwarded)", ADR.read_text())
 
 
-def test_adr_effort_is_not_persisted():
-    assert re.search(r"effort_(?:level|weight)[^\n]*(?:dropped|not (?:stored|persisted))", ADR.read_text())
+def test_adr_effort_is_stored_not_evaluated():
+    # round 6: server inventory (types.py:354): stored, not evaluated yet (the old "dropped server-side" was wrong)
+    t = ADR.read_text()
+    assert re.search(r"effort_(?:level|weight)[^\n]*stores them[^\n]*does not evaluate", t)
+    assert not re.search(r"effort_(?:level|weight)[^\n]*dropped server-side", t)
 
 
 def test_adr_states_ace_cli_4_1_2_flag_complete_and_section_23():

@@ -30,6 +30,23 @@ if (cmd === 'post') {
   endpoint += '/' + encodeURIComponent(job);
 }
 
+// round 8 I5: ACE_TRACE_SINK=file:<absolute dir> (as the learn, mod handlers/turn.ts / ace_cli._sink): nothing is sent. A post writes its
+// body to <dir>/ace-backfill-<time>-<pid>.json (0600; a missing dir is created 0700), a get polls nothing; exit 3 = nothing sent.
+// A set but invalid value sends nothing either (fail closed).
+const sinkEnv = String(process.env.ACE_TRACE_SINK || '').trim();
+if (sinkEnv) {
+  const m = /^file:(\/.+)$/.exec(sinkEnv);
+  if (m && cmd === 'post') {
+    const dir = m[1].replace(/\/+$/, '');
+    try {
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+      fs.writeFileSync(dir + '/ace-backfill-' + Date.now() + '-' + process.pid + '.json', JSON.stringify(body), { mode: 0o600, flag: 'wx' });
+    } catch (e) { process.stderr.write('trace sink: write failed: ' + String(e && e.message || e).slice(0, 200) + '\n'); }
+  }
+  process.stderr.write('trace sink set: nothing sent\n');
+  process.exit(3);
+}
+
 const { AceClient, createContext } = loadCoreOrExit(['request']);
 
 let last = null;  // the backfill answer as the server sent it

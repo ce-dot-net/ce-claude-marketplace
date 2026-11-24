@@ -2,7 +2,7 @@
 // example phrases of any language; the phrase list in lib/evidence.ts is only a free fast-path in front of it.
 // Mod-only: the Python path (shared-hooks/utils/ace_feedback.py) stays phrase-based.
 import { cpSlice, cps } from './text'
-import { redact } from './trace'
+import { redact } from './redact'
 
 export const REJECTION_MODEL_MS = 8000
 // 0.8 (round 3): haiku's confidences are coarse (0.5/0.6/0.7/0.8/0.9). The user's two real rejections reach 0.8-0.85 in 20/20 runs and 0.9 in 0/20, so 0.8 is the

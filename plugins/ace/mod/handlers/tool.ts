@@ -8,7 +8,7 @@ import { injectedContents } from '../lib/evidence'
 import { renderDomainShift } from '../lib/render'
 import { safeComponent as safe } from '../lib/state'
 import { basenameQuery, domainNames, matchDomainToPath } from '../lib/text'
-import { toolRec } from '../lib/trace'
+import { fullStepsOn, toolRec } from '../lib/trace'
 
 // The subagent report tool. CC 2.1.316's typed tool table (claude-code-tools) has no entry for it (only the Agent
 // result's internal `handback` fields mention it), but it exists at runtime as `SubagentHandback({ message })`
@@ -83,7 +83,12 @@ export async function toolCall($: HookArgs<'tool.call'>[0], L: Load, e: HookArgs
   let s: Sess | null = null
   try {
     s = await ensure($, L)
-    if (s) await recordTool($, L, s, key, toolRec(e.tool, e, r.result, !!r.isError, r.deny, t0, Date.now(), typeof r.text === 'string' ? r.text : undefined))
+    if (s) {
+      // opt-out: nothing full built or kept on disk either; round 8 I4: the env is read once per load
+      if (L.fullStepsEnv === undefined) L.fullStepsEnv = fullStepsOn(await $.env.get('ACE_TRACE_FULL_STEPS'))
+      const rec = toolRec(e.tool, e, r.result, !!r.isError, r.deny, t0, Date.now(), typeof r.text === 'string' ? r.text : undefined, L.fullStepsEnv)
+      await recordTool($, L, s, key, rec)
+    }
     if ((e.tool as string) === HANDBACK_TOOL && key !== 'main' && typeof (e as any).message === 'string') L.handback.set(key, (e as any).message)
   } catch { /* accumulation never breaks a tool call */ }
   const contexts: string[] = []

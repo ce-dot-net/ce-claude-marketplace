@@ -177,6 +177,16 @@ def _valid_pct(v) -> bool:
     return isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 100
 
 
+def feedback_upvote_file() -> Path:
+    """The server's upvote gate (search response `feedback_upvote`), {"on": bool, "at": <epoch>}; read by the mod (lib/cohort.ts)."""
+    return data_root() / "feedback-upvote.json"
+
+
+def full_steps_file() -> Path:
+    """Round 5: the server's full-steps kill switch (search response `full_steps`), {"on": bool, "at": <epoch>}."""
+    return data_root() / "full-steps.json"
+
+
 def feedback_downvote_file() -> Path:
     """The server's rejection-downvote gate (search response `feedback_downvote`), {"on": bool, "at": <epoch>}."""
     return data_root() / "feedback-downvote.json"
@@ -294,6 +304,20 @@ def store_server_switches(resp) -> None:
             private_write(feedback_downvote_file(), json.dumps({"on": r["feedback_downvote"], "at": int(time.time())}))
     except Exception:
         pass
+    try:  # round 6: the upvote gate too (same file name and shape as the mod's FEEDBACK_UPVOTE_FILE)
+        if isinstance(r.get("feedback_upvote"), bool):
+            private_write(feedback_upvote_file(), json.dumps({"on": r["feedback_upvote"], "at": int(time.time())}))
+    except Exception:
+        pass
+    if "full_steps" in r:  # round 5 kill switch: a bool is stored; anything else keeps the stored value, logged without it
+        try:
+            if isinstance(r["full_steps"], bool):
+                private_write(full_steps_file(), json.dumps({"on": r["full_steps"], "at": int(time.time())}))
+            else:
+                from ace_relevance_logger import log_event
+                log_event("full_steps_invalid", source="python")
+        except Exception:
+            pass
 
 
 def stored_feedback_downvote() -> bool:
@@ -305,6 +329,26 @@ def stored_feedback_downvote() -> bool:
         return d.get("on") is True and isinstance(at, (int, float)) and time.time() - at < RENDER_FULL_PCT_MAX_AGE
     except Exception:
         return False
+
+
+def stored_full_steps() -> bool:
+    """The server may only switch full steps OFF: False only for a stored {"on": false} younger than 7 days; a missing,
+    broken, stale or non-bool file keeps them on (mod lib/cohort.ts storedFullSteps, same rule)."""
+    try:
+        import json, time
+        d = json.loads(full_steps_file().read_text())
+        at = d.get("at")
+        return not (d.get("on") is False and isinstance(at, (int, float)) and time.time() - at < RENDER_FULL_PCT_MAX_AGE)
+    except Exception:
+        return True
+
+
+def full_steps_enabled() -> bool:
+    """Full steps unless ACE_TRACE_FULL_STEPS is 0/false/off/no (any case; mod lib/switches.ts switchOff, always wins) or the
+    server's full_steps:false is stored (stored_full_steps). One reading for the learn and the queue replay."""
+    if str(os.environ.get("ACE_TRACE_FULL_STEPS", "")).strip().lower() in ("0", "false", "off", "no"):
+        return False
+    return stored_full_steps()
 
 
 def stored_render_full_pct() -> Optional[int]:

@@ -2,6 +2,67 @@
 
 **Agentic Context Engineering** - Self-improving Claude Code plugin using automatic pattern learning.
 
+## Privacy: what a learned trace contains (unreleased)
+
+From this version a learned trace (`POST /traces` to the ACE server) carries more than before:
+
+- **Every step in full (mod chain).** With the mod active (Claude Code with mod support), each tool call is a step with its
+  complete input (`tool_input`) and output (`tool_response`), no 50-step limit and no per-step cut. The Python hooks
+  (fallback chain) still send one short action/result summary per step. Only the tool's own input keys are kept (an allowlist for the built-in tools;
+  for MCP and unknown tools their arguments without Claude Code's event and request fields).
+- **Whole texts.** `task` (your request), `result.summary` (the closing answer or a subagent's handback report) are
+  no longer cut to 2,000 / 4,000 characters. Both chains (mod and Python hooks) do this.
+- **A denied tool call sends none of its input or output and not the deny reason**: the step says `Denied <tool>` /
+  `Error: denied` (mod). The Python permission-denied trace names the tool and at most the command family
+  (`git push`; `unknown` when a word of it would carry a secret).
+- **Redaction before anything leaves the machine**, in both chains with the same rules: secret-named keys, known
+  token prefixes (AWS, Google, GitLab, Stripe, Hugging Face, GitHub, Slack, npm, `sk-` keys, JWTs), PEM private
+  keys, `.env`-style lines (also behind a `grep -n`, `cat -n` or YAML `- ` prefix), `user:password@host`, `.netrc`,
+  `.pgpass`, docker `auth`, Netscape cookie-jar lines, PHP `define('..._KEY', ...)` and long high-entropy strings.
+  Your prompt is also stored redacted in the local task state.
+- **Personal data** (both chains, also inside structured tool input/output): e-mail addresses (`[redacted:email]`; addresses
+  at the reserved example domains `example.com/.org/.net`, `.test`, `.example`, `.invalid`, `.localhost` stay; an `ssh user@host`
+  target without a path counts as an address, the SCP form `git@github.com:org/repo.git` and URL userinfo do not), phone numbers
+  (`[redacted:phone]`: `+` with a valid ITU country code and 8-15 digits; a national number only after a keyword such as `Tel.`,
+  `phone`, `Handy`, `fax`, `call`), IBANs (`[redacted:iban]`: country length and mod-97 check), and the value behind an `email`,
+  `mail`, `iban`, `phone`, `tel`, `mobile`, `telephone`, `handy` or `fax` key (`key=value`, `key: value`, JSON) when it looks like one.
+- **Hard limits.** One trace is at most `ACE_TRACE_HARD_CAP_BYTES` (default 4 MiB); over it the longest payloads become
+  `<truncated: N bytes>`, then the oldest steps that did not fail are dropped. `task` and `summary` are at most
+  `ACE_TEXT_HARD_CAP_CHARS` (default 200,000). While a task runs, its tool records (in memory and on disk) are held
+  to twice the trace limit, at most 3 MiB, the same way.
+
+- **Git context (both chains).** The trace's `git` object carries only `commit_hash`, `timestamp`, `files_changed`,
+  `insertions`, `deletions`, `commit_is_fix` (true when the HEAD commit's subject matches revert/fix/fixes/fixed/hotfix/bugfix as a
+  whole word; the subject itself is not sent) and `session_commits` (commit hashes of this session). No author, author e-mail,
+  branch or commit message. (The bootstrap backfill is a separate flow: there the redacted commit subjects are the content.)
+
+**Known limits of the redaction.** It cannot recognize a secret without a key name, a known prefix or a known file
+format: short tokens (under 20 characters), all-lowercase or all-hex tokens, a password typed as plain prose or
+command argument without a keyword, a `.netrc` entry spread over several lines (`machine`, `login` and `password`
+on lines of their own), a `name:` / `value:` pair with a blank line between the two lines (`- name: DB_PASSWORD`, an empty
+line, then `value: x`: only directly adjacent lines count), a YAML flow-style pair on one line (`{name: DB_PASSWORD,
+value: x}`), a JSON name/value value that is never closed (broken JSON such as `{"name": "API_KEY", "value": "abc\"`, where
+the last quote is escaped), and encoded or exotic separators: a fullwidth `：` or `＝`
+between key and value, or a secret that only appears percent- or JSON-escaped (`%3D`, `\u003d`) is not recognized by the
+key rules. Do not paste secrets into prompts or commands.
+Personal data it does not recognize: names and postal addresses, internationalized domains (`xn--…` or non-ASCII) and quoted
+local parts outside an `email` key, a national phone number without a keyword or key, and it redacts a `+` followed by 11-15
+digits with a valid country code and no separator even when it is a constant in a diff (`+491701234567`).
+
+**Switches.**
+
+- `ACE_TRACE_FULL_STEPS=0` (also `false`, `off`, `no`): no full steps. The trace is built as in 8.3.0 (action/result
+  summaries only, task 2,000 and summary 2,000 / handback 4,000 characters). The ACE server can switch full steps off
+  for everyone (`full_steps: false` in a search answer, kept 7 days); it can never switch them on against this setting.
+- `ACE_TRACE_SINK=file:<absolute dir>`: nothing is sent. The finished trace (the exact request body) is written to
+  `<dir>/ace-trace-<id>.json` (mode 0600; a missing dir is created 0700, an existing one keeps its mode) so you can
+  inspect it. An invalid value sends nothing either. Search is not affected.
+- Upvotes: a positive reply is recognized only by a phrase (German or English, the whole reply), never by a model; a
+  bare "ok" or "thanks" is no upvote.
+- Automatic update: only when the server says this plugin is below its minimum version, only in non-interactive
+  sessions, at most once per target and per day, with the fixed command `claude plugin update ace@ce-dot-net-marketplace`.
+  `ACE_AUTO_UPDATE=0` turns it off. Interactive sessions get an "Aktualisieren" button instead.
+
 ## 8.1.4: no silent trace loss
 
 A learned trace that could not be sent is no longer lost without a trace of its own. When the server did not store

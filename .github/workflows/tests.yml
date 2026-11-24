@@ -27,6 +27,10 @@ jobs:
           node-version: "22"  # the mod test harness needs --experimental-strip-types (node >= 22.6)
       - name: Install pytest + rstest (the plugin itself is stdlib-only; rstest is the pinned parallel runner)
         run: python -m pip install --upgrade pip pytest rstest==0.10.0
+      # Round 10 / T1: the cross-chain tests (TS vs Python redact / replay / watchdog) run the mod's TypeScript through bun;
+      # without it they would skip. tests/test_secret_filter_py.py::test_round10_t1_bun_present_in_ci fails when it is missing.
+      - name: Install bun (cross-chain parity tests)
+        run: npm i -g bun@1.2.2
       - name: The hook code compiles on the floor (3.10 job)
         if: matrix.python == '3.10'
         run: python -m py_compile $(find plugins/ace/shared-hooks plugins/ace/utils -name '*.py')

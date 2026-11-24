@@ -116,3 +116,24 @@ def test_learn_and_search_gate_unchanged_without_request(tmp_path):
     r = subprocess.run([E.node_bin(), str(E.ENGINE / "search.js")], input=json.dumps({"query": "q", "org": "o", "project": "p"}),
                        capture_output=True, text=True, env=e, timeout=30)
     assert r.returncode == 0, r.stderr
+
+
+# ---- round 8 I5: ACE_TRACE_SINK also holds for the backfill: the POST body goes to a file, nothing is sent (exit 3) ----
+def test_round8_sink_writes_the_backfill_body_and_sends_nothing(tmp_path):
+    sink = tmp_path / "sink"
+    r, core, fetch = _run(tmp_path, POST, json.dumps(BODY), ACE_TRACE_SINK="file:%s" % sink)
+    assert r.returncode == 3 and r.stdout == "" and fetch == [] and not [x for x in core if x["op"] == "backfill"]
+    (f,) = list(sink.iterdir())
+    assert f.name.startswith("ace-backfill-") and json.loads(f.read_text()) == BODY
+    assert oct(f.stat().st_mode & 0o777) == "0o600"
+
+
+@pytest.mark.parametrize("sink", ["http://evil", "file:relative"])
+def test_round8_invalid_sink_sends_nothing(tmp_path, sink):
+    r, core, fetch = _run(tmp_path, POST, json.dumps(BODY), ACE_TRACE_SINK=sink)
+    assert r.returncode == 3 and fetch == [] and not [x for x in core if x["op"] == "backfill"]
+
+
+def test_round8_sink_get_polls_nothing(tmp_path):
+    r, core, fetch = _run(tmp_path, ["get", "--org", "o", "--project", "p", "--job", "j1"], ACE_TRACE_SINK="file:%s" % (tmp_path / "s"))
+    assert r.returncode == 3 and fetch == []

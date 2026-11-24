@@ -11,6 +11,9 @@ import { installer } from '../io/installer'
 import { execExport, execPending } from '../io/pending'
 import { type Load } from '../io/state'
 import { CLIENT_POLICY_FILE, clientPolicyBand } from '../lib/cohort'
+import { updateBandLine } from '../lib/update'
+import { switchOff } from '../lib/switches'
+import { clickUpdate } from '../io/update'
 import { readText } from '../io/fs'
 
 const BAND = { plugin: 'ace', key: 'band' } as const
@@ -171,13 +174,18 @@ export async function renderBand($: any, L: Load, e: any, next: any) {
       h(Button, { key: 'rm-shadow', label: 'Entfernen', onPress: () => removeShadow($, L) }), dismiss(() => $.state.set(SHADOW, null)))
   }
   if (!band || band.dismissed || !band.state || band.state === 'ok' || band.state === 'server_error') {
-    // 8.1.4 client_policy below min (dormant until the server sends it): ONE line, one action (dismiss). Never an
-    // update, never code fetched; ACE stays on and keeps learning.
+    // 8.1.4 client_policy below min (dormant until the server sends it): ONE line. Round 4: ONE action 'Aktualisieren' (the fixed
+    // update command, io/update.ts clickUpdate); ACE_AUTO_UPDATE=0 keeps the 8.1.4 line (dismiss only). ACE stays on meanwhile.
     const s = L.sess
     const text = s ? await readText($, `${s.root}/${CLIENT_POLICY_FILE}`) : undefined
-    const pline = s && text ? clientPolicyBand(text, s.clientId.slice(s.clientId.lastIndexOf('/') + 1), await $.clock.now()) : undefined
+    const version = s ? s.clientId.slice(s.clientId.lastIndexOf('/') + 1) : ''
+    const optOut = switchOff(await $.env.get('ACE_AUTO_UPDATE'))
+    const now = await $.clock.now()
+    const pline = s && text ? (optOut ? clientPolicyBand(text, version, now) : updateBandLine(text, version, now)) : undefined
     if (pline && (await $.state.get(POLICY)).value !== pline)
-      return h(Box, null, h(Text, null, `${pline} `), dismiss(() => $.state.set(POLICY, pline)))
+      return optOut ? h(Box, null, h(Text, null, `${pline} `), dismiss(() => $.state.set(POLICY, pline)))
+        : h(Box, null, h(Text, null, `${pline} `), h(Button, { key: 'update', variant: 'primary', label: 'Aktualisieren', onPress: () => clickUpdate($, L) }),
+          dismiss(() => $.state.set(POLICY, pline)))
     return next(e)
   }
   const close = dismiss(() => $.state.set(BAND, { ...band, dismissed: true }))

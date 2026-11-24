@@ -402,6 +402,8 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
     The engine sends the queue id as Idempotency-Key, so a replay of the same trace is the same request."""
     import uuid
     qid = uuid.uuid4().hex
+    if _sink(trace, retrieval_id, applied_log_ids, hook_event_name, qid):  # round 5 C5: nothing sent, no queue, no replay
+        return None, 0
     parsed, ms, code, out, keyed = _learn(trace, retrieval_id=retrieval_id, applied_log_ids=applied_log_ids, org=org,
                                           project=project, verbosity=verbosity, timeout=timeout,
                                           hook_event_name=hook_event_name, idempotency_key=qid)
@@ -423,9 +425,56 @@ def run_learn(trace: Dict[str, Any], *, retrieval_id: str = None, applied_log_id
     return parsed, ms
 
 
+APPLIED_CAP = 20  # = engine/learn.js APPLIED_CAP
+
+
+def _sink(trace, retrieval_id, applied_log_ids, hook_event_name, qid) -> bool:
+    """Round 5 C5, the mod's ACE_TRACE_SINK (handlers/turn.ts) for the Python chain. Unset: False (send as usual).
+    Set: the body engine/learn.js would POST (trace + retrieval_id + applied_log_ids[:20]) goes to <dir>/ace-trace-<key>.json
+    (0600; the dir is created 0700 only when missing, an existing one keeps its mode: F9) and nothing is sent. A set but
+    invalid value (not file:<absolute dir>) fails closed: nothing written, nothing sent. One text-free trace_sinked row."""
+    env = (os.environ.get('ACE_TRACE_SINK') or '').strip()
+    if not env:
+        return False
+    m = re.match(r'^file:(/.+)$', env)
+    d = m.group(1).rstrip('/') if m else ''
+    body = dict(trace) if isinstance(trace, dict) else {}
+    if retrieval_id:
+        body['retrieval_id'] = retrieval_id
+    ids = [i for i in (applied_log_ids or []) if isinstance(i, int)] or (body.get('applied_log_ids') if isinstance(body.get('applied_log_ids'), list) else [])
+    body['applied_log_ids'] = ids[:APPLIED_CAP]
+    text = json.dumps(body, default=str)
+    path, error = None, None if d else 'invalid_sink'
+    if d:
+        path = '%s/ace-trace-%s.json' % (d, qid)
+        try:
+            if not os.path.isdir(d):  # round 6: every dir it creates 0700 (makedirs' mode covers only the leaf)
+                old = os.umask(0o077)
+                try:
+                    os.makedirs(d, mode=0o700, exist_ok=True)
+                finally:
+                    os.umask(old)
+            fd, tmp = tempfile.mkstemp(dir=d, prefix='.w-', suffix='.tmp')  # 0600, atomic rename
+            with os.fdopen(fd, 'w') as f:
+                f.write(text)
+            os.replace(tmp, path)
+        except Exception:
+            error = 'write_failed'
+    try:
+        from ace_relevance_logger import log_event
+        conv = body.get('conversation_id')
+        log_event('trace_sinked', hook=hook_event_name, session_id=conv, task_session_id=body.get('session_id'), trace_id=qid,
+                  path=path, bytes=len(text.encode('utf-8')), steps=len(body.get('trajectory') or []), error=error, source='python')
+    except Exception:
+        pass
+    return True
+
+
 def learn_once(trace, *, retrieval_id=None, applied_log_ids=None, org=None, project=None, verbosity='detailed',
                timeout=60, hook_event_name="replay", idempotency_key=None):
     """One send for the queue replay, no queueing of its own: (exit_code_or_None, output, keyed)."""
+    if (os.environ.get('ACE_TRACE_SINK') or '').strip():  # C5: a sink never sends (ace_trace_queue --replay skips anyway)
+        return None, 'nothing sent: trace sink', False
     _p, _ms, code, out, keyed = _learn(trace, retrieval_id=retrieval_id, applied_log_ids=applied_log_ids, org=org,
                                 project=project, verbosity=verbosity, timeout=timeout,
                                 hook_event_name=hook_event_name, idempotency_key=idempotency_key)

@@ -93,6 +93,21 @@ export const serverDownvote = (resp: any): boolean | undefined => typeof resp?.f
 export function storedDownvote(text: string | undefined, nowMs: number): boolean {
   try { const d = JSON.parse(text as string); return d?.on === true && typeof d.at === 'number' && nowMs / 1000 - d.at < RENDER_FULL_PCT_MAX_AGE_S } catch { return false }
 }
+// Round 5 kill switch: search response full_steps (bool), persisted {on, at}, < 7 days. The server can only switch full steps
+// OFF: a missing, broken, stale or non-bool file keeps them on (plugin_data_dir.stored_full_steps, same rule).
+export const FULL_STEPS_FILE = 'full-steps.json'
+export const serverFullSteps = (resp: any): boolean | 'invalid' | undefined =>
+  !resp || typeof resp !== 'object' || !('full_steps' in resp) ? undefined : typeof resp.full_steps === 'boolean' ? resp.full_steps : 'invalid'
+export function storedFullSteps(text: string | undefined, nowMs: number): boolean {
+  try { const d = JSON.parse(text as string); return !(d?.on === false && typeof d.at === 'number' && nowMs / 1000 - d.at < RENDER_FULL_PCT_MAX_AGE_S) } catch { return true }
+}
+// Upvote gate: search response feedback_upvote (bool) when the server sends one, persisted {on, at}, < 7 days. undefined = the
+// server never sent it (or it is stale): no switch of its own, the upvote then follows the downvote gate (io/state.ts upvoteEnabled).
+export const FEEDBACK_UPVOTE_FILE = 'feedback-upvote.json'
+export const serverUpvote = (resp: any): boolean | undefined => typeof resp?.feedback_upvote === 'boolean' ? resp.feedback_upvote : undefined
+export function storedUpvote(text: string | undefined, nowMs: number): boolean | undefined {
+  try { const d = JSON.parse(text as string); return typeof d?.on === 'boolean' && typeof d.at === 'number' && nowMs / 1000 - d.at < RENDER_FULL_PCT_MAX_AGE_S ? d.on : undefined } catch { return undefined }
+}
 
 // 8.1.4 client_policy (DORMANT until the server sends it): plugin_data_dir.valid_client_policy / client_policy_state,
 // same rules (shared cases: tests-fixtures/client-policy). A search response MAY carry a top-level object

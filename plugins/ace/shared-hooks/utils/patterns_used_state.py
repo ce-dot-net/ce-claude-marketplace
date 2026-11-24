@@ -35,7 +35,7 @@ from validation import is_valid_pattern_id  # noqa: E402
 
 import plugin_data_dir  # noqa: E402
 
-USER_PROMPT_MAX = 4000
+USER_PROMPT_MAX = 200_000  # full steps: the whole request (= ace_after_task.TEXT_HARD_CAP_CHARS; mod lib/state.ts USER_PROMPT_MAX); was 4000
 RENDERED_CONTEXT_MAX = 10000
 RENDERED_SIDECAR = 'rendered-main.txt'
 
@@ -345,6 +345,20 @@ def eval_stats(injected, returned):
     return {"avg_relevance": max(0, min(100, rel)), "domains": len(doms)}
 
 
+def _redact_prompt(text):
+    """F14: the prompt goes to disk redacted with the trace's rules (utils/redact.py, mod parity: lib/state.ts mergeState).
+    redact not importable: the 8.3.0 store (first 4000 chars), never the whole raw request."""
+    try:
+        import sys as _sys
+        utils = str(Path(__file__).resolve().parent)
+        if utils not in _sys.path:
+            _sys.path.append(utils)
+        from redact import redact
+        return redact(text)
+    except Exception:
+        return text[:4000]
+
+
 def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
                          retrieval_id=None, retrieval_log_ids=None,
                          task_session_id=None, project_id=None,
@@ -414,6 +428,8 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
                               ('query_source', query_source, None)):
             # None = not supplied (keep prior); '' is an explicit "set" (control arm clears
             # a stale rendered_context so WP-D never re-injects it).
+            if key == 'user_prompt' and val:  # round 5 F14: a NEW prompt is redacted on write (the stored one already is)
+                val = _redact_prompt(val[:cap])
             val = val if val is not None else prior.get(key)
             if val is not None and (val or key == 'rendered_context'):
                 state[key] = val[:cap] if cap else val

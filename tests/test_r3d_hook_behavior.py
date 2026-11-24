@@ -76,9 +76,72 @@ def test_subagent_summary_without_handback_is_last_assistant_message(box):
     assert t["result"]["summary"] == "Refactor done."
 
 
-def test_subagent_summary_cap_is_4000(box):
+def test_subagent_summary_handback_is_complete_no_4000_cap(box):
+    # full steps: the whole report (was cut to 4000; mod parity: lib/trace.ts capText)
     t = _subagent_trace(box, "a4", _handback_transcript(box, "a4", "x" * 30000))
-    assert len(t["result"]["summary"]) == 4000
+    assert t["result"]["summary"] == "x" * 30000
+
+
+def test_subagent_summary_handback_over_the_hard_cap_is_marked_and_counted(box):
+    sid, aid = "s-a4c", "a4c"
+    box.write_state(sid, aid, task_session_id="own-uuid", user_prompt="refactor the parser module")
+    box.seed_tools(sid, WORK, agent_id=aid)
+    ev = box.subagent_event(sid, aid, agent_type="Explore", last_assistant_message="x")
+    ev["agent_transcript_path"] = _handback_transcript(box, aid, "y" * 8000)()
+    p = box.run_after_task(ev, ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID, ACE_TEXT_HARD_CAP_CHARS="5000")
+    assert p.returncode == 0, p.stderr
+    (learn,) = box.cli_calls("learn")
+    assert learn["trace"]["result"]["summary"] == "y" * 5000 + "<truncated: 8000 chars>"
+    (row,) = [r for r in box.relevance_rows("text_cap_hit") if r.get("field") == "summary"]
+    assert (row["chars_before"], row["chars_after"]) == (8000, 5000 + len("<truncated: 8000 chars>"))
+    assert "yyyy" not in json.dumps(row)
+
+
+def test_handback_summary_reads_the_whole_message(box, tmp_path):
+    p = tmp_path / "t.jsonl"
+    p.write_text(json.dumps({"message": {"content": [{"type": "tool_use", "name": "SubagentHandback", "input": {"message": "z" * 60000}}]}}) + "\n")
+    at = importlib.import_module("ace_after_task")
+    assert at.handback_summary(str(p)) == "z" * 60000
+
+
+def _own_prompt_event(box, sid, aid, prompt):
+    ev = box.subagent_event(sid, aid, agent_type="Explore", last_assistant_message="done")
+    path = ev["agent_transcript_path"]  # the subagent's own first prompt is its task: swap it in, keep the tool lines
+    with open(path) as f:
+        lines = [json.loads(x) for x in f.read().splitlines() if x.strip()]
+    lines[0]["message"]["content"] = prompt
+    with open(path, "w") as f:
+        f.write("\n".join(json.dumps(x) for x in lines) + "\n")
+    return ev
+
+
+def test_task_is_the_whole_redacted_request_no_2000_cap(box):
+    tok = "ghp_" + "a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6"
+    prompt = "refactor the parser module " + "w" * 9000 + " " + tok
+    sid, aid = "s-a6", "a6"
+    box.write_state(sid, aid, task_session_id="own-uuid", user_prompt=prompt)
+    box.seed_tools(sid, WORK, agent_id=aid)
+    p = box.run_after_task(_own_prompt_event(box, sid, aid, prompt), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID)
+    assert p.returncode == 0, p.stderr
+    (learn,) = box.cli_calls("learn")
+    assert learn["trace"]["task"] == "User request: refactor the parser module " + "w" * 9000 + " [redacted]"
+
+
+def test_task_over_the_hard_cap_is_marked_and_counted(box):
+    prompt = "refactor the parser module " + "w" * 7000
+    sid, aid = "s-a7", "a7"
+    box.write_state(sid, aid, task_session_id="own-uuid", user_prompt=prompt)
+    box.seed_tools(sid, WORK, agent_id=aid)
+    p = box.run_after_task(_own_prompt_event(box, sid, aid, prompt), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID, ACE_TEXT_HARD_CAP_CHARS="5000")
+    assert p.returncode == 0, p.stderr
+    (learn,) = box.cli_calls("learn")
+    assert learn["trace"]["task"] == "User request: " + prompt[:5000] + "<truncated: %d chars>" % len(prompt)
+    assert [r["chars_before"] for r in box.relevance_rows("text_cap_hit") if r.get("field") == "task"] == [len(prompt)]
+
+
+def test_state_keeps_the_whole_user_prompt():
+    import patterns_used_state as pus
+    assert pus.USER_PROMPT_MAX == 200_000  # mod parity: lib/state.ts USER_PROMPT_MAX (was 4000)
 
 
 def test_subagent_summary_non_string_handback_falls_back(box):

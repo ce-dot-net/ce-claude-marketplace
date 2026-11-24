@@ -134,20 +134,99 @@ test('§16 P7 fork: own uuid4 pin + state (parent_task_id), no search / inject, 
   expect(UUID4.test(st.task_session_id)).toBe(true)
   expect(st.task_session_id).not.toBe(main)
   expect(st.parent_task_id).toBe(main)
-  expect('search_project' in st || 'search_org' in st).toBe(false)  // 8.2.6: no search answered, no binding
+  expect('search_project' in st || 'search_org' in st).toBe(false)  // 8.2.6: no search answered, no binding (ACE_FORK_RETRIEVAL_ID off = 8.3.0)
   expect(h.rows().some((x: any) => x.event === 'search_skipped' && x.reason === 'fork_inherits_context')).toBe(true)
   await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
   await done($, 'fork done', 'agent-1')
   expect(h.trace(h.learns()[0]!).session_id).toBe(st.task_session_id)
 })
 
+// Assumption (server contract): a fork's trace carrying the PARENT's retrieval_id is correlation only. Credit flows through
+// applied_log_ids, and the fork's are [] (it searched nothing, injected nothing: playbook_used []), so the server credits nothing
+// again for that retrieval; the parent's own trace keeps its applied_log_ids. Nothing is omitted: [] is sent, never left out.
+test('ACE_FORK_RETRIEVAL_ID=1: fork carries the parent retrieval_id (no own search); applied_log_ids [] and playbook_used [] -> no double credit', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_FORK_RETRIEVAL_ID: '1' } })
+  await submit($)
+  const parentRid = h.state()!.retrieval_id
+  expect(typeof parentRid).toBe('string')
+  await spawn($, 'fork this context and fix the parser module now', { fork: true, subagentType: 'fork' })
+  expect(h.searches().length).toBe(1)                                   // the fork never searches
+  expect(h.state('agent-1')!.retrieval_id).toBe(parentRid)
+  expect(h.state('agent-1')!.pattern_ids).toEqual([])
+  await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+  await done($, 'fork done', 'agent-1')
+  const l = h.learns()[0]!, t = h.trace(l)
+  expect([t.retrieval_id, t.applied_log_ids, t.playbook_used]).toEqual([parentRid, [], []])
+  expect(t.fork_of).toEqual({ parent_retrieval_id: parentRid })   // server: the marker that keeps a fork from being booked twice
+  expect(h.flag(l.argv, '--retrieval-id')).toBe(parentRid)
+  expect(l.argv.includes('--applied-log-ids')).toBe(false)
+})
+test('ACE_FORK_RETRIEVAL_ID=1: fork without a parent retrieval_id (parent search failed / none) carries none', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_FORK_RETRIEVAL_ID: '1' } })
+  await spawn($, 'fork this context and fix the parser module now', { fork: true, subagentType: 'fork' })
+  expect(h.state('agent-1')!.retrieval_id).toBe(null)
+  await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+  await done($, 'fork done', 'agent-1')
+  const t = h.trace(h.learns()[0]!)
+  expect(['retrieval_id' in t, t.applied_log_ids, 'fork_of' in t]).toEqual([false, [], false])
+})
+
+// Fork credit is unconfirmed server-side: the parent retrieval_id on a fork trace is opt-in (ACE_FORK_RETRIEVAL_ID=1), default off.
+for (const env of [{}, { ACE_FORK_RETRIEVAL_ID: '0' }, { ACE_FORK_RETRIEVAL_ID: 'maybe' }])
+  test('fork retrieval_id default OFF (8.3.0 semantics) with env ' + JSON.stringify(env), async ($, on) => {
+    const h = host(on, { search: () => ({ stdout: S8 }), env })
+    await submit($)
+    await spawn($, 'fork this context and fix the parser module now', { fork: true, subagentType: 'fork' })
+    const st = h.state('agent-1')!
+    expect([st.retrieval_id, 'search_org' in st]).toEqual([null, false])
+    await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+    await done($, 'fork done', 'agent-1')
+    const l = h.learns()[0]!, t = h.trace(l)
+    expect(['retrieval_id' in t, t.applied_log_ids, l.argv.includes('--retrieval-id'), 'fork_of' in t]).toEqual([false, [], false, false])
+  })
+test('ACE_FORK_RETRIEVAL_ID=1: the parent binding comes with the parent retrieval_id (8.2.6)', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_FORK_RETRIEVAL_ID: '1' } })
+  await submit($)
+  await spawn($, 'fork this context and fix the parser module now', { fork: true, subagentType: 'fork' })
+  const st = h.state('agent-1')!
+  expect([st.search_org, st.search_project]).toEqual([h.state()!.search_org, h.state()!.search_project])
+})
+test('ACE_FORK_RETRIEVAL_ID=1: the MAIN trace never carries fork_of; a non-fork subagent neither', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_FORK_RETRIEVAL_ID: '1' } })
+  await mainTask($, h)
+  await spawn($, 'review the domain shift python port for parity bugs')
+  await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+  await done($, 'sub done', 'agent-1')
+  await done($)
+  expect(h.learns().map((l: any) => 'fork_of' in h.trace(l))).toEqual([false, false])
+})
+// feedback (up- and downvote) lives ONLY in the main trace: a fork / subagent trace never carries it and never consumes the pending marker
+for (const kind of ['downvote', 'upvote'])
+  test(`ACE_FORK_RETRIEVAL_ID=1: a fork trace with a pending ${kind} has no feedback and leaves the marker for the main trace; fork_of is exactly {parent_retrieval_id}`, async ($, on) => {
+    const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_FORK_RETRIEVAL_ID: '1' } })
+    await submit($)
+    const rid = h.state()!.retrieval_id
+    const f = `${SDIR}/pending-${kind}.json`
+    h.put(f, JSON.stringify({ applied_log_ids: [4242], at: h.now() / 1000, detect_source: 'phrase' }))
+    await spawn($, 'fork this context and fix the parser module now', { fork: true, subagentType: 'fork' })
+    await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+    await done($, 'fork done', 'agent-1')
+    const t = h.trace(h.learns()[0]!)
+    expect(['feedback' in t, h.files.has(f)]).toEqual([false, true])
+    expect(Object.keys(t.fork_of)).toEqual(['parent_retrieval_id'])
+    expect(t.fork_of.parent_retrieval_id).toBe(rid)
+    await $.turn.start({ text: HUMAN, turnId: 't1' } as any)
+    await $.tool.call({ tool: 'Edit', file_path: '/proj/x.py', old_string: 'a', new_string: 'b' } as any)
+    await done($)
+    expect(h.trace(h.learns()[1]!).feedback).toEqual({ kind, applied_log_ids: [4242], detect_source: 'phrase' })
+  })
 test('§16 P7 ACE_SUBAGENT_INJECT_FORKS=1 restores the fork search', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_SUBAGENT_INJECT_FORKS: '1' } })
   await spawn($, 'fork this context and fix the parser module now', { fork: true, subagentType: 'fork' })
   expect(h.searches().length).toBe(1)
 })
 
-test('§16 P1 subagent summary = the LAST SubagentHandback message (cap 4000), else the closing answer', async ($, on) => {
+test('§16 P1 subagent summary = the LAST SubagentHandback message (complete, no 4000 cut), else the closing answer', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }) })
   await spawn($, 'review the domain shift python port for parity bugs')
   await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
@@ -156,7 +235,7 @@ test('§16 P1 subagent summary = the LAST SubagentHandback message (cap 4000), e
   await done($, 'Now qdrant_search.', 'agent-1')
   const sum = h.trace(h.learns()[0]!).result.summary
   expect(sum.startsWith('## Findings')).toBe(true)
-  expect(sum.length).toBe(4000)
+  expect(sum.length).toBe('## Findings\n'.length + 6000)  // full steps: no handback cap any more
 })
 
 test('§16 P2 main Stop with a running subagent/workflow defers the learn; the task-notification turn then learns it', async ($, on) => {
@@ -336,4 +415,18 @@ test('8.2.6 mergeState: the search binding only with a retrieval_id, and only as
   expect([st.search_org, st.search_project]).toEqual(['o', 'p'])
   const half = mergeState(st, { searchOrg: 'z' })
   expect([half.search_org, half.search_project]).toEqual(['o', 'p'])
+})
+
+// ---- Round 10 / T3: a fork's fork_of survives a later state merge (a domain shift inside the fork, then its end) ----
+test('Round 10 / T3: fork_of stays after a domain-shift merge in the fork', async ($, on) => {
+  const h = host(on, { search: () => ({ stdout: S8 }), env: { ACE_FORK_RETRIEVAL_ID: '1' } })
+  await submit($)
+  const parentRid = h.state()!.retrieval_id
+  await spawn($, 'fork this context and fix the parser module now', { fork: true, subagentType: 'fork' })
+  await $.tool.call({ tool: 'Read', file_path: '/proj/ace-cli/notes.md', agentId: 'agent-1' } as any)   // domain shift -> state merge
+  expect(dsSearches(h).length).toBe(1)
+  await $.tool.call({ tool: 'Write', file_path: '/proj/y.py', content: 'z', agentId: 'agent-1' } as any)
+  await done($, 'fork done', 'agent-1')
+  const t = h.trace(h.learns()[0]!)
+  expect([t.fork_of, t.retrieval_id]).toEqual([{ parent_retrieval_id: parentRid }, parentRid])
 })

@@ -6,7 +6,7 @@
   .claude/data/logs/ace-patterns-used-<session>-<agent>.json
 - project_id: explicit kwarg, else ace_context.get_context()['project'], else "default"
 - explicit state_dir= stands for the session dir (tests / tooling)
-- optional keys: user_prompt (<= 4000 chars), rendered_context (<= 10000 chars),
+- optional keys: user_prompt (<= USER_PROMPT_MAX = 200000 chars; was 4000), rendered_context (<= 10000 chars),
   hook_event_name -- written by UPS/SubagentStart/domain-shift, read back by
   Stop/SubagentStop and SessionStart(compact)
 - CLI flags unchanged
@@ -96,7 +96,7 @@ def test_optional_keys_are_truncated(env):
     pus.append_patterns_used(SESSION, None, [PID_A], project_id="prj_1",
                              user_prompt="p" * 9000, rendered_context="c" * 25000)
     raw = json.loads(pus.state_file_path(SESSION, None, project_id="prj_1").read_text())
-    assert len(raw["user_prompt"]) == 4000
+    assert len(raw["user_prompt"]) == 9000  # full steps: the whole request is kept (USER_PROMPT_MAX 200000, was 4000)
     assert len(raw["rendered_context"]) <= 10000
 
 

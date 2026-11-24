@@ -7,6 +7,7 @@ import { type Load, type Sess, readState, searchOrigin, updateState, uuid, type 
 import { injectedContents } from '../lib/evidence'
 import { type StateUpdate } from '../lib/state'
 import { skipReason, subagentQuery } from '../lib/text'
+import { switchOn } from '../lib/switches'
 
 export async function logSubagentError($: any, s: Sess, sr: any) { return relLog($, s, { timestamp: await nowIso($), event: 'error', hook: 'SubagentStart', location: 'mod.search', error: sr.error ?? null, stderr_sample: sr.stderr, pin_failed: sr.pinFailed || undefined, pin_ms: sr.pinMs, session_id: s.sessionId, source: 'mod' }) }
 export async function subagentRender($: any, s: Sess, sr: any, query: string, agentType: string, tsid: string, t0: number, parent: string | undefined, extra: any) {
@@ -71,8 +72,13 @@ export async function agentSpawn($: HookArgs<'agent.spawn'>[0], L: Load, e: Hook
     if (s && (!e.fork || !e.resume) && !(await disabled($, s))) {
       if (e.fork && !forkSearch) {  // §16 P7: a fork inherits the parent context incl. the injected block
         const parent = await readState($, s, e.parentAgentId ?? 'main')
+        // Opt-in (ACE_FORK_RETRIEVAL_ID=1, default off: fork credit is unconfirmed server-side): its trace names the parent's retrieval
+        // (correlation only, no own search). No ids: applied_log_ids and playbook_used stay [] -> nothing is credited a second time.
+        const forkRid = switchOn(await $.env.get('ACE_FORK_RETRIEVAL_ID'))  // round 5 C4: 1 / true / on / yes
         pending = { out: e, state: { tsid: uuid(), userPrompt: subagentQuery(e.prompt), hook: 'SubagentStart',
-          parentTaskId: parent?.task_session_id ?? undefined, agentType: e.subagentType || 'fork' } }
+          parentTaskId: parent?.task_session_id ?? undefined, agentType: e.subagentType || 'fork',
+          ...(forkRid && typeof parent?.retrieval_id === 'string' && parent.retrieval_id ? { retrievalId: parent.retrieval_id, forkOf: parent.retrieval_id,
+            ...(parent.search_org && parent.search_project ? { searchOrg: parent.search_org, searchProject: parent.search_project } : {}) } : {}) } }  // 8.2.6: and its binding
         await relLog($, s, { timestamp: await nowIso($), event: 'search_skipped', hook: 'SubagentStart', reason: 'fork_inherits_context', session_id: s.sessionId, project_id: s.project, source: 'mod' })
       } else if (e.resume) {  // a rewrite of a resume is not applied. Same run with state: same task (§12). Reaped: a new one.
         const key = e.resume.agentId

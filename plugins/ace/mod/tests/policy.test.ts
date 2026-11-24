@@ -44,8 +44,8 @@ test('an invalid client_policy is dropped and logged (reason only)', async ($, o
   expect(JSON.stringify(bad[0]).includes('javascript')).toBe(false)
 })
 
-test('below min: ONE band line with one action; ACE keeps searching and learning', async ($, on) => {
-  const h = host(on, { files: { ...MANIFEST, [`${ROOT}/${CLIENT_POLICY_FILE}`]: JSON.stringify({ policy: { min_plugin_version: '8.1.5' }, at: 1_800_000_000 }) } })
+test('below min with ACE_AUTO_UPDATE=0: the 8.1.4 band line with one action (dismiss); ACE keeps searching and learning', async ($, on) => {
+  const h = host(on, { env: { ACE_AUTO_UPDATE: '0' }, files: { ...MANIFEST, [`${ROOT}/${CLIENT_POLICY_FILE}`]: JSON.stringify({ policy: { min_plugin_version: '8.1.5' }, at: 1_800_000_000 }) } })
   await start($)
   await tick()
   const ui = await $.ui.mount(BAND)

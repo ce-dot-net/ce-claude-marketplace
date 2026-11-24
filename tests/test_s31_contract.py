@@ -202,7 +202,7 @@ def test_pattern_named_after_char_4000_of_a_long_handback_is_credited(box):
     assert p.returncode == 0, p.stderr
     (learn,) = box.cli_calls("learn")
     assert learn["trace"]["applied_log_ids"] == [7]
-    assert len(learn["trace"]["result"]["summary"]) == 4000
+    assert learn["trace"]["result"]["summary"] == report  # full steps: the whole report (was cut to 4000)
 
 
 def test_more_than_20_used_ids_are_capped_at_20(box):

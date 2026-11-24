@@ -642,6 +642,8 @@ def sweep_orphans(data_root, now=None, stale=HANDOVER_STALE):
     """Async SessionStart: leftovers of a learn child that was killed. A signed Python job file (the child never
     started: nothing was sent) is queued; mod trace files (`.owned`: the child may have sent) and anything unsigned are
     a learn_lost row (reason child_killed). Files younger than `stale` belong to a live child and stay."""
+    if (os.environ.get("ACE_TRACE_SINK") or "").strip():  # round 6: with a sink nothing is queued (and so never sent)
+        return []
     now = time.time() if now is None else now
     root = str(data_root)
     qdir = os.path.join(root, "trace-queue")
@@ -780,12 +782,39 @@ def _enqueue(path, job_text):
             f.write(text)
 
 
+def strip_full_steps(trace):
+    """Round 8 W1 / round 9 N1: a queued trace replayed while full steps are OFF goes out in the live 8.3.0 form: no tool_input /
+    tool_response, task 'User request: ' + 2000, result.summary 2000, then the 8.3.0 truncation (trace_truncate.legacy_truncate_trace
+    = mod legacyTruncate). Byte-identical to the live trace for main tasks. Deliberate deviation: a SubagentHandback report is cut
+    to 2000 here (live 4000): the queue entry carries no extra meta field, because an older plugin sharing the data dir (8.3.0
+    _valid_meta) would move any entry with an unknown meta key to dead/."""
+    if not isinstance(trace, dict):
+        return trace
+    t = dict(trace)
+    if isinstance(t.get("trajectory"), list):
+        t["trajectory"] = [{k: v for k, v in st.items() if k not in ("tool_input", "tool_response")}
+                           if isinstance(st, dict) else st for st in t["trajectory"]]
+    pre = "User request: "
+    if isinstance(t.get("task"), str) and t["task"].startswith(pre):
+        t["task"] = pre + t["task"][len(pre):][:2000]
+    if isinstance(t.get("result"), dict) and isinstance(t["result"].get("summary"), str):
+        t["result"] = dict(t["result"], summary=t["result"]["summary"][:2000])
+    try:
+        from trace_truncate import legacy_truncate_trace
+        t = legacy_truncate_trace(t)
+    except Exception:
+        pass
+    return t
+
+
 def _main(argv):
     if argv[:1] == ["--enqueue"] and len(argv) == 3:
         _enqueue(argv[1], argv[2])
         return
     if "--replay" not in argv:
         sys.exit("usage: ace_trace_queue.py --replay [--cwd DIR] | --enqueue FILE JOB")
+    if (os.environ.get("ACE_TRACE_SINK") or "").strip():  # round 5 C5: with a sink nothing is sent, the queue stays untouched
+        return
     if "--cwd" in argv:
         try:
             os.chdir(argv[argv.index("--cwd") + 1])
@@ -796,9 +825,12 @@ def _main(argv):
     import ace_cli
     from ace_relevance_logger import log_event
 
+    full = plugin_data_dir.full_steps_enabled()
+
     def send(e):
         m = e["meta"]
-        return ace_cli.learn_once(e["trace"], retrieval_id=m.get("retrieval_id"), applied_log_ids=m.get("applied_log_ids"),
+        trace = e["trace"] if full else strip_full_steps(e["trace"])  # round 6: a queued trace obeys today's opt-out / kill switch
+        return ace_cli.learn_once(trace, retrieval_id=m.get("retrieval_id"), applied_log_ids=m.get("applied_log_ids"),
                                   org=m.get("org"), project=m.get("project"), timeout=REPLAY_TIMEOUT,
                                   hook_event_name="replay", idempotency_key=e["key"])
 
