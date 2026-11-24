@@ -10,7 +10,6 @@ build/
 
 # ACE configuration with credentials and project settings
 .ace/*
-!.ace/config.json
 
 # Claude Code data and logs
 .claude/data/
@@ -76,3 +75,6 @@ CLAUDE.md.ace-backup-*
 .codex/
 .cursor/
 .playwright-cli/
+
+# Local ACE binding (org/project IDs), never tracked
+.claude/settings.json
