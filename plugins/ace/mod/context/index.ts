@@ -11,8 +11,6 @@ export type Ctx = Result & { root: string, mainRoot: string | null, gitRoot: str
 export type Env = { HOME?: string, ACE_ORG_ID?: string, ACE_PROJECT_ID?: string, ACE_CONTEXT?: string, ACE_CONFIG_PATH?: string,
   XDG_CONFIG_HOME?: string, ACE_AUTO_ADOPT?: string, ACE_CONTEXT_ENGINE?: string, ACE_BIND_ROOT?: string }
 export { LINES, ADOPT_LINE, WARN_LINES }
-export const PROBLEM_STATES: State[] = ['unbound', 'not_logged_in', 'expired', 'project_not_found', 'no_access', 'server_error',
-  'cli_missing', 'config_refused', 'config_invalid']
 export const FILE_SOURCES = ['repo_file', 'settings_file'], ADOPT_SOURCES = ['settings_file', 'remote_map']
 const ORG_ID = /^org_[A-Za-z0-9_-]+$/, PRJ_ID = /^prj_[A-Za-z0-9_-]+$/
 

@@ -1,6 +1,6 @@
 // F-080 evidence: self-eval prompt + review parse, used-pattern ids (H1/H2), applied log ids, eval stats/injection,
 // user-rejection match (ace_feedback). Pure: no `$`, no I/O.
-import { PyFloat, num, pyFloatRepr } from './pyjson'
+import { num } from './pyjson'
 import { cps, cpSlice, normWs } from './text'
 
 export type ToolRec = { tool: string; action: string; result: string; failed: boolean; start_ms: number; end_ms: number; commit?: string
@@ -61,24 +61,6 @@ export function parseUsedIds(text: string, injected: string[]): string[] {
   return injected.filter(id => named.has(id))
 }
 
-// ace_before_task.check_eval_request_and_review text. §24: the file is repo-controlled and reaches the model's
-// context, so every field is a number (finite int/float; anything else 0), never text.
-export function evalInjection(d: any): string {
-  const g = (k: string) => {
-    const v = d?.[k]
-    if (v instanceof PyFloat) return Number.isFinite(v.v) ? pyFloatRepr(v.v) : '0'
-    return typeof v === 'number' && Number.isFinite(v) ? String(v) : '0'
-  }
-  // never "0% relevance" / "0 domains": an unknown number is left out
-  const stats = (g('avg_relevance') !== '0' ? `${g('avg_relevance')}% relevance, ` : '') + (g('domains') !== '0' ? `${g('domains')} domains, ` : '')
-  return `<!-- ACE Self-Eval Request: Previous task used ${g('patterns_injected')} patterns ` +
-    `(${stats}${g('tools_executed')} tools). ` +
-    `As a human developer, how much time did these patterns save? ` +
-    `Without ACE, a developer would search docs, explore codebases, ask colleagues, or trial-and-error. ` +
-    `Rate from a HUMAN DEVELOPER perspective, not AI perspective. ` +
-    `Include in your response: ACE_REVIEW: N% | Xm saved | one-line reason -->`
-}
-
 // §31 / item H2 "actually used" (patterns_used_state.used_pattern_ids): evidence in what the task DID. Its id in the
 // final message / report or the tool inputs, or its evidence tokens as whole tokens in the tool-call inputs: >= 3, or
 // >= 2 with one strong (a path / identifier / multi-word span), or one multi-word span whose command is not universal
@@ -137,7 +119,6 @@ export function evidenceTokens(content: unknown): Map<string, boolean> {
   }
   return toks
 }
-export const distinctiveTokens = (content: unknown): Set<string> => new Set(evidenceTokens(content).keys())
 // t in hay as a whole token: a word character at an edge of t must not continue into hay (regex \b)
 const isWord = (c: string | undefined) => !!c && /^[A-Za-z0-9_]$/.test(c)
 function hasToken(hay: string, t: string): boolean {
@@ -247,4 +228,3 @@ export function upvoteProbe(text: string | undefined): { matched: string | null;
   const clean = !low.includes('?') && words(rest).every(x => UPVOTE_FILLER.has(x))
   return { matched: clean ? best : null, blocked: clean ? null : best, tooLong: false, bareAck }
 }
-export const rejectionMatch = (text: string | undefined): string | null => rejectionProbe(text).matched

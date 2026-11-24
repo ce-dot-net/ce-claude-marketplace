@@ -538,11 +538,6 @@ def _step_status(tool, tin, resp):
     return 'failed' if isinstance(resp, dict) and resp.get('error') else 'ok'
 
 
-def tool_failed(resp) -> bool:
-    """A failed step (8.1.3: stderr alone is not one). Parity: mod/lib/trace.ts toolRec."""
-    return _step_status('Bash', {}, resp) == 'failed'
-
-
 def task_outcome(tools):
     """(success, failed_steps, aborted) from the 8-tuples (name, input_json, response_json, ...). docs/technical/ARCHITECTURE.md "Task outcome":
     a failed step is recovered by a LATER ok step with the same key (Bash: command family; file tools: the path;

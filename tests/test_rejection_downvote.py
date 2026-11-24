@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from test_stop_v8 import Box, ORG_ID, PROJECT_ID, WORK, box  # noqa: F401  (puts shared-hooks on sys.path)
-from ace_feedback import REJECTION_PHRASES, rejection_match  # noqa: E402
+from ace_feedback import REJECTION_PHRASES, rejection_probe  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 MOD = REPO / "plugins" / "ace" / "mod"
@@ -29,7 +29,7 @@ A = "11c8834e-fcca-5c36-9897-000000000001"
 
 @pytest.mark.parametrize("case", CASES, ids=[c["text"][:40] for c in CASES])
 def test_rejection_cases(case):
-    assert rejection_match(case["text"]) == case["match"]
+    assert rejection_probe(case["text"])["matched"] == case["match"]
 
 
 def test_phrase_list_parity_with_the_mod():

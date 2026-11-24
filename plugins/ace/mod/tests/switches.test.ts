@@ -11,7 +11,7 @@ import { pyLoads } from '../lib/pyjson.ts'
 import { renderPatternsDict } from '../lib/render.ts'
 import { traceVariant, renderCohort, serverFullPct, storedFullPct } from '../lib/cohort.ts'
 import { hasSubstantialWork, toolRec } from '../lib/trace.ts'
-import { rejectionMatch, evalStats, evalInjection, usedPatternIds, toolHaystack } from '../lib/evidence.ts'
+import { rejectionProbe, evalStats, usedPatternIds, toolHaystack } from '../lib/evidence.ts'
 import { PRIVATE_WRITE_SH } from '../lib/sh.ts'
 import { statusLine, learnLine } from '../ui/status.ts'
 import { CWD, EVAL_REQ, FULL_PCT, HOME, HUMAN, LOCAL_CLI, LOCKED, MALFORMED, MIN, PDIR, PLACEHOLDER, PRJ, PROOT, REAL, REL, ROOT, SDIR, SECOND, SID, UUID4, bodyOf, cliOf, cmd, done, dsSearches, execRow, host, mainTask, ranked, rejectFlow, settle, shownOf, spawn, st8a, submit, withPct } from './helpers.ts'
@@ -69,8 +69,8 @@ test('render_full_pct: a stale (> 7 days) server file falls back to the default 
 
 // ---------- user rejection -> downvote on the next main trace (ace_feedback.py parity) ----------
 
-test('rejection phrases: the shared fixture cases (parity with ace_feedback.rejection_match)', async () => {
-  for (const c of REJECTION_CASES as any[]) expect([c.text, rejectionMatch(c.text)]).toEqual([c.text, c.match])
+test('rejection phrases: the shared fixture cases (parity with ace_feedback.rejection_probe)', async () => {
+  for (const c of REJECTION_CASES as any[]) expect([c.text, rejectionProbe(c.text).matched]).toEqual([c.text, c.match])
 })
 
 test('rejection + previous evidenced ids + gate on -> feedback downvote on the next main trace, once', async ($, on) => {

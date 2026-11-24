@@ -20,8 +20,6 @@ const BAND = { plugin: 'ace', key: 'band' } as const
 const PENDING = { plugin: 'ace', key: 'pending' } as const
 const SHADOW = { plugin: 'ace', key: 'shadow' } as const  // a worktree-local .ace/config.json that overrides main's
 const POLICY = { plugin: 'ace', key: 'policy' } as const  // 8.1.4: the dismissed client_policy line
-export const ACTION: Record<string, string | undefined> = { unbound: 'Verbinden', not_logged_in: 'Anmelden', expired: 'Anmelden',
-  project_not_found: 'Anderes wählen', no_access: 'Anderes wählen', config_refused: 'Bereinigt neu schreiben', cli_missing: 'ace-cli installieren' }
 
 async function rebind($: any, L: Load, cwd: string) {
   L.ctx = undefined; L.sess = null; L.ctxLogged = false

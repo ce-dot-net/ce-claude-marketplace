@@ -188,7 +188,7 @@ export function clientPolicyLine(text: string | undefined, version: string, nowM
 }
 
 // 8.2.0 bootstrap backfill capability (DORMANT until the server sends it): a search response with top-level boolean
-// `bootstrap_backfill: true` switches the backfill on for the project; stored {on, at (epoch s)}, < 7 days, else off.
+// `bootstrap_backfill: true` switches the backfill on for the installation (global, the last search wins); stored {on, at (epoch s)}, < 7 days, else off.
 export const BACKFILL_FLAG_FILE = 'bootstrap-backfill.json'
 export const serverBackfill = (resp: any): boolean | undefined => typeof resp?.bootstrap_backfill === 'boolean' ? resp.bootstrap_backfill : undefined
 export function storedBackfill(text: string | undefined, nowMs: number): boolean {

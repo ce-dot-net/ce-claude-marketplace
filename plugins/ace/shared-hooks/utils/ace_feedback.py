@@ -58,11 +58,6 @@ def rejection_probe(text):
     return {"matched": best, "blocked": blocked if best is None else None, "too_long": False}
 
 
-def rejection_match(text):
-    """The matched phrase (the longest non-blocked whole-word hit; ties: list order), else None."""
-    return rejection_probe(text)["matched"]
-
-
 def downvote_enabled() -> bool:
     env = os.environ.get("ACE_FEEDBACK_DOWNVOTE")
     if env in ("1", "0"):

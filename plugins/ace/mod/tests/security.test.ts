@@ -11,7 +11,7 @@ import { pyLoads } from '../lib/pyjson.ts'
 import { renderPatternsDict } from '../lib/render.ts'
 import { traceVariant, renderCohort, serverFullPct, storedFullPct } from '../lib/cohort.ts'
 import { hasSubstantialWork, toolRec } from '../lib/trace.ts'
-import { rejectionMatch, evalStats, evalInjection, usedPatternIds, toolHaystack } from '../lib/evidence.ts'
+import { rejectionProbe, evalStats, usedPatternIds, toolHaystack } from '../lib/evidence.ts'
 import { PRIVATE_APPEND_SH, PRIVATE_WRITE_SH } from '../lib/sh.ts'
 import { statusLine, learnLine } from '../ui/status.ts'
 import { CWD, EVAL_REQ, FULL_PCT, HOME, HUMAN, LOCAL_CLI, LOCKED, MALFORMED, MIN, PDIR, PLACEHOLDER, PRJ, PROOT, REAL, REL, ROOT, SDIR, SECOND, SID, UUID4, bodyOf, cliOf, cmd, done, dsSearches, execRow, host, mainTask, ranked, rejectFlow, settle, shownOf, spawn, st8a, submit, withPct } from './helpers.ts'
@@ -26,11 +26,6 @@ test('item 1: evalStats = mean confidence of the injected x100 (0..100) + distin
   expect(evalStats([{ confidence: 'x' }, { confidence: true }, {}], [])).toEqual({ avg_relevance: 0, domains: 0 })
   expect(evalStats([{ confidence: 1.5e300 }], [{ domain: 7 }])).toEqual({ avg_relevance: 100, domains: 1 })
   expect(evalStats([], [])).toEqual({ avg_relevance: 0, domains: 0 })
-})
-
-test('item 1: the eval text never claims 0% relevance; real values are shown (Python golden)', async () => {
-  expect(evalInjection({ patterns_injected: 100, avg_relevance: 0, domains: 0, tools_executed: 2 })).toBe(G.eval_injection)
-  expect(evalInjection({ patterns_injected: 8, avg_relevance: 61, domains: 3, tools_executed: 2 })).toBe(G.eval_injection_stats)
 })
 
 test('item 1: the task state carries the search eval_stats (the Python Stop writes them into its eval request)', async ($, on) => {

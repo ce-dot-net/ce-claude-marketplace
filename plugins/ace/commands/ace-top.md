@@ -34,7 +34,7 @@ if [ -z "$ORG_ID" ] || [ -z "$PROJECT_ID" ]; then
 fi
 
 if [ -z "$PROJECT_ID" ]; then
-  echo "❌ Run /ace:configure first"
+  echo "❌ Run /ace:ace-configure first"
   exit 1
 fi
 

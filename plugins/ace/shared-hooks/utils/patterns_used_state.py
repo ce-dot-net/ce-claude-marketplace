@@ -275,11 +275,6 @@ def evidence_tokens(content):
     return toks
 
 
-def distinctive_tokens(content):
-    """Lowercased evidence tokens of a pattern (evidence_tokens keys). Mod parity."""
-    return set(evidence_tokens(content))
-
-
 def _is_word(c):
     return c.isascii() and (c.isalnum() or c == "_")
 

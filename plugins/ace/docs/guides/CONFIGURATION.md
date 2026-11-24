@@ -95,6 +95,23 @@ The Python fallback chain shows the same words once per session as a single line
 - `ACE_PIN_BACKOFF_MIN`: minutes to back off pinning a task session after a pin failure (default 5).
 - `ACE_RENDER_FULL_PCT`, `ACE_ENGINE=cli`: see the README.
 
+### More switches the code reads
+
+Each row was taken from the code (the Where column). All are read from the environment of the Claude Code process.
+
+| Variable | Default | Effect | Where |
+|---|---|---|---|
+| `ACE_AB_CONTROL_PCT`, `ACE_AB_COMPACT_PCT` | 0 / 0 (dormant, local only) | Percent of conversations that render no patterns (control) or all patterns compact. Each 0..100, sum <= 100, else both 0; the rest splits into full/budget by `ACE_RENDER_FULL_PCT`. Bucket = sha256(`render:` + conversation id) % 100. Nothing is sent to a server; the arm is only stamped on the trace and the relevance log. | `mod/lib/cohort.ts` `renderCohort`, `shared-hooks/utils/ace_pattern_render.py` |
+| `ACE_FEEDBACK_DOWNVOTE` | unset: the server's stored switch (`feedback-downvote.json` in the data root, global: the last search of any project wins; valid < 7 days, else off) | `1` forces the rejection downvote on, `0` forces it off. | `mod/io/state.ts` `downvoteEnabled`, `utils/ace_feedback.py` `downvote_enabled` |
+| `ACE_LOCAL_REUSE` | `domain,subagent` | Comma list of the searches that may reuse a local cached result (same project and query, < 15 min). Kinds: `domain`, `subagent`; the main prompt search never reuses. Empty string = none. | `mod/lib/state.ts` `reuseEnabled`, `utils/ace_search_cache.py` |
+| `ACE_MACHINE_PROMPT_PREFIXES` | empty | Comma list of extra prompt prefixes (lower-cased) treated as machine prompts from local daemons, so they skip pattern search; added to the built-in list. | `mod/io/state.ts`, `utils/machine_prompts.py` |
+| `ACE_SUBAGENT_INJECT_FORKS` | unset (forks get no second search) | `1` makes a forked subagent search and inject its own patterns although it inherits the parent's context. | `mod/handlers/agent.ts`, `ace_subagent_start.py` |
+| `ACE_SELF_EVAL` | on | `0` skips the Haiku self-review before the learn; the used ids then come from the token evidence only. | `mod/handlers/turn.ts` |
+| `ACE_REJECTION_MODEL` | on | `0` turns off the model that classifies a rejecting prompt; only the phrase list can queue a downvote. | `mod/handlers/prompt.ts` |
+| `ACE_REJECTION_MIN_CONF` | 0.8 | Minimum model confidence (0..1) to accept a rejection; a value outside 0..1 or not a number falls back to 0.8. | `mod/handlers/prompt.ts`, `mod/lib/rejection.ts` |
+| `ACE_VERBOSITY` | `detailed` | Passed as `--verbosity` to `ace-cli learn`. It acts only on the CLI fallback: the engine (`engine/learn.js`) accepts it and ignores it. | `mod/handlers/turn.ts`, `shared-hooks/ace_after_task.py` |
+| `ACE_LEARN_INLINE` | unset | FOR TESTS ONLY: any non-empty value runs the learn inline instead of the detached child. Never set it in normal use. | `shared-hooks/ace_after_task.py` `dispatch_learn` |
+
 ## Timeout settings
 
 `timeout` values in `hooks.json` are **seconds** (not milliseconds). To adjust, edit `plugins/ace/hooks/hooks.json`:

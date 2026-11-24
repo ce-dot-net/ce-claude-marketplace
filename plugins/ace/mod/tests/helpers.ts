@@ -11,7 +11,7 @@ import { pyLoads } from '../lib/pyjson.ts'
 import { renderPatternsDict } from '../lib/render.ts'
 import { traceVariant, renderCohort, serverFullPct, storedFullPct } from '../lib/cohort.ts'
 import { hasSubstantialWork, toolRec } from '../lib/trace.ts'
-import { rejectionMatch, evalStats, evalInjection, usedPatternIds, toolHaystack } from '../lib/evidence.ts'
+import { rejectionProbe, evalStats, usedPatternIds, toolHaystack } from '../lib/evidence.ts'
 import { IS_EXEC_SH, PRIVATE_APPEND_SH, PRIVATE_WRITE_SH, REALPATH_SH, REMOVE_SHADOW_SH, REPO_WRITE_SH, SINK_WRITE_SH, UPDATE_LOCK_SH } from '../lib/sh.ts'
 import { statusLine, learnLine } from '../ui/status.ts'
 

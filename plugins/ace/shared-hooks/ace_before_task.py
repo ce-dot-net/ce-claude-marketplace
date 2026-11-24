@@ -277,32 +277,6 @@ USEFUL_FIELDS = {
 }
 
 
-def _apply_quality_gate(patterns):
-    """Dual-format quality gate (issue #27, ACE 1.5 native).
-
-    v15 path  (cumulative_v15_reward present):
-        keep if NOT isAtRisk AND reward >= 0
-        (@ace-sdk/core 3.2.2: isAtRisk means reward<0; reward==0 = neutral/uncredited,
-        kept. Only reward<0 / at-risk patterns are dropped. Fix A: also guard reward >= 0
-        so stale/mixed server data with reward<0 + isAtRisk=False is still dropped.
-        Mirrors patterns_used_state _quality_gate — keep both in sync.)
-    Legacy path (no cumulative_v15_reward field):
-        keep if confidence >= 0.5 OR helpful >= 2
-        (restore original OR-condition: high-confidence new patterns pass
-        even before accumulating helpful votes)
-    """
-    result = []
-    for p in patterns:
-        reward = p.get('cumulative_v15_reward')
-        if reward is not None:
-            if not p.get('isAtRisk', False) and reward >= 0:
-                result.append(p)
-        else:
-            if p.get('confidence', 0) >= 0.5 or p.get('helpful', 0) >= 2:
-                result.append(p)
-    return result
-
-
 def _format_bullet_token(pattern):
     """Return display token for a pattern bullet (issue #27 / Fix 2).
 

@@ -190,18 +190,13 @@ def test_agent_prompt_file_sanitizes_plugin_scoped_type(pdd, tmp_path):
     assert f == pdd.agent_prompt_file("prj_1", "s1", "../p", "my-plugin:reviewer")
 
 
-def test_project_disabled_flag_path(pdd, tmp_path):
-    """DESIGN §10 P-26: <project>/disabled.flag disables ACE for every session of the project."""
-    assert pdd.project_disabled_flag("prj_1") == tmp_path / "ace-pd" / "projects" / "prj_1" / "disabled.flag"
-
-
 def test_is_disabled_checks_session_and_project_flags(pdd):
     """DESIGN §10 P-26: one predicate every hook uses."""
     assert pdd.is_disabled("prj_d", "s1") is False
     pdd.disabled_flag("prj_d", "s1").write_text("x")
     assert pdd.is_disabled("prj_d", "s1") is True
     assert pdd.is_disabled("prj_d", "s2") is False
-    f = pdd.project_disabled_flag("prj_d")
+    f = pdd.project_dir("prj_d", create=False) / "disabled.flag"
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text("x")
     assert pdd.is_disabled("prj_d", "s2") is True

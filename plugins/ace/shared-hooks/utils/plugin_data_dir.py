@@ -440,10 +440,6 @@ def agent_prompt_file(project_id, session_id, prompt_id, agent_type) -> Path:
     return agent_prompts_dir(project_id, session_id) / name
 
 
-def project_disabled_flag(project_id: Optional[str]) -> Path:
-    return _file(project_dir(project_id, create=False) / "disabled.flag")
-
-
 def is_disabled(project_id: Optional[str], session_id: Optional[str]) -> bool:
     """P-26: session flag OR project flag. Never creates directories."""
     try:
@@ -500,20 +496,6 @@ def mod_handled_compact(project_id: Optional[str], session_id: Optional[str], ma
 
 def learn_lock(project_id: Optional[str], session_id: Optional[str], agent: Optional[str]) -> Path:
     name = "learn-inflight-%s.lock" % _safe(agent or "main")
-    return _file(session_dir(project_id, session_id, create=False) / name)
-
-
-def domain_last_file(project_id, session_id, agent) -> Path:
-    name = "domain-last-%s.txt" % _safe(agent or "main")
-    return _file(session_dir(project_id, session_id, create=False) / name)
-
-
-def tools_db(project_id, session_id) -> Path:
-    return _file(session_dir(project_id, session_id, create=False) / "tools.db")
-
-
-def patterns_used_file(project_id, session_id, agent) -> Path:
-    name = "patterns-used-%s.json" % _safe(agent or "main")
     return _file(session_dir(project_id, session_id, create=False) / name)
 
 
