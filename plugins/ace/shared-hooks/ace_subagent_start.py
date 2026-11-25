@@ -68,6 +68,7 @@ from patterns_used_state import append_patterns_used, injected_contents, load_st
 import plugin_data_dir                                           # noqa: E402
 from ace_relevance_logger import log_search, log_error, log_search_skipped           # noqa: E402
 from ace_pattern_render import render_patterns, render_cohort, render_compact_all  # noqa: E402
+from ace_pattern_render import render_layout_a, layout_a_member, layout_a_value, layout_a_label  # noqa: E402
 
 # ── constants ────────────────────────────────────────────────────────────────
 # Maximum query length passed to ACE search (leading semantically-dense portion)
@@ -409,6 +410,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
 
         # ── A/B cohort (§28): the conversation's arm (CC session_id, shared with the main agent), never the pin.
         _cohort = render_cohort(session_id)
+        _layout = False  # layout-a arm: set by the budget branch only when it rendered
 
         retrieval_id = patterns_response.get('retrieval_id') or None
         agent_id_attr = f'agent-type="{agent_type}" agent-id="{agent_id}"' if agent_id else f'agent-type="{agent_type}"'
@@ -423,7 +425,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
             try:
                 append_patterns_used(session_id, agent_id, [],
                                      retrieval_id=retrieval_id,
-                                     task_session_id=task_session_id, project_id=project, render_variant=_cohort, binding=context)
+                                     task_session_id=task_session_id, project_id=project, render_variant=_cohort, render_layout='', binding=context)
             except Exception as e:
                 log_error('SubagentStart', 'ace_subagent_start.control', session_id, project, e)
 
@@ -441,19 +443,27 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                         retrieval_id=retrieval_id,
                         retrieval_log_ids=retrieval_log_map,
                         task_session_id=task_session_id,
-                        project_id=project, rendered_context=ace_context, render_variant=_cohort, binding=context,
+                        project_id=project, rendered_context=ace_context, render_variant=_cohort, render_layout='', binding=context,
                         pattern_contents=injected_contents(patterns_response.get('similar_patterns'), pattern_ids),
                     )
                 except Exception as e:
                     log_error('SubagentStart', 'ace_subagent_start.state', session_id, project, e)
 
         else:
-            # Budget arm (default): existing budget-verbatim render (unchanged).
-            ace_context, pattern_ids, _, retrieval_log_map = render_patterns(
-                patterns_response,
-                tag='ace-patterns-subagent',
-                attrs=agent_id_attr,
-            )
+            # Budget arm (default): existing budget-verbatim render (unchanged); the layout-a cohort renders layout (a).
+            _layout = layout_a_member(session_id)
+            if _layout:
+                ace_context, pattern_ids, _, retrieval_log_map = render_layout_a(
+                    patterns_response,
+                    tag='ace-patterns-subagent',
+                    attrs=agent_id_attr,
+                )
+            else:
+                ace_context, pattern_ids, _, retrieval_log_map = render_patterns(
+                    patterns_response,
+                    tag='ace-patterns-subagent',
+                    attrs=agent_id_attr,
+                )
             if pattern_ids:
                 try:
                     append_patterns_used(
@@ -461,7 +471,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                         retrieval_id=retrieval_id,
                         retrieval_log_ids=retrieval_log_map,
                         task_session_id=task_session_id,
-                        project_id=project, rendered_context=ace_context, render_variant=_cohort, binding=context,
+                        project_id=project, rendered_context=ace_context, render_variant=_cohort, render_layout=layout_a_value() if _layout else '', binding=context,
                         pattern_contents=injected_contents(patterns_response.get('similar_patterns'), pattern_ids),
                     )
                 except Exception as e:
@@ -475,7 +485,7 @@ def main(event: Optional[Dict[str, Any]] = None) -> None:
                    domains=list(dict.fromkeys(_by_id[i].get('domain') for i in pattern_ids or [] if i in _by_id and _by_id[i].get('domain'))),
                    hook_ms=int((time.monotonic() - t_start) * 1000),
                    project_id=context['project'], org_id=context['org'],
-                   agent_type=agent_type, render_cohort=_cohort, parent_task_id=parent_task_id,
+                   agent_type=agent_type, render_cohort=_cohort + layout_a_label(layout_a_value()) if _layout else _cohort, parent_task_id=parent_task_id,
                    query_source=query_source, cache_hit=cache_hit, task_session_id=task_session_id)
 
         if ace_context is not None:

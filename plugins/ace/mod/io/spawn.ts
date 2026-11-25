@@ -2,6 +2,7 @@
 import { run, writePrivate } from './fs'
 import { type Load, type SearchOrigin, type Sess, storeFullPct } from './state'
 import { pyDumps, pyLoads, sanitize } from '../lib/pyjson'
+import { sha256Hex } from '../lib/cohort'
 import { REUSE_TTL_MS, reuseEnabled, reuseKey } from '../lib/state'
 import { parseDiffStat } from '../lib/trace'
 import { serverReachable } from '../handlers/context'
@@ -16,7 +17,19 @@ export function aceEnv(s: Sess): Record<string, string> {
 }
 // 8.1.0: --org/--project on every CLI spawn, after the subcommand: the CLI never picks its own binding (4.3.4 reads settings.json).
 export const ids = (s: Sess): string[] => [...(s.org ? ['--org', s.org] : []), '--project', s.project]
-export const isAuthFailure = (t: string) => /unauthorized|401|not logged in|no api token|token_expired/i.test(t)
+export const isAuthFailure = (t: string) => /unauthorized|401|not logged in|no api token|token_expired|session expired|log in again|ace-cli login/i.test(t)
+// 8.4.0: after an auth failure no engine / ace-cli call (each is a GET /config on the server) until the global token file
+// changes. <root>/auth-rejected = sha256 of that file (never the token). Python twin: ace_cli._auth_held / _hold_auth.
+async function authFp($: any): Promise<string> {
+  const x = await $.env.get('XDG_CONFIG_HOME')
+  const p = await $.env.get('ACE_CONFIG_PATH') || `${x || `${await $.env.get('HOME') ?? ''}/.config`}/ace/config.json`
+  try { return sha256Hex(String(await $.fs.read(p))) } catch { return 'none' }
+}
+export async function authHeld($: any, s: Sess): Promise<boolean> {
+  try { return String(await $.fs.read(`${s.root}/auth-rejected`)).trim() === await authFp($) } catch { return false }
+}
+async function holdAuth($: any, s: Sess) { try { await $.fs.write(`${s.root}/auth-rejected`, await authFp($)) } catch { /* the guard is an optimisation */ } }
+const AUTH_HELD_RESULT = { resp: null, error: 'not_authenticated', ms: 0, pinFailed: false, pinSkipped: undefined, pinMs: undefined, stderr: '', engine: 'guard', engineWhy: 'auth_held' }
 // §17/§23: the same order as ace_cli.cli_argv: the plugin-local pinned CLI, else the global `ace-cli` on PATH.
 export async function cliHead($: any): Promise<string[]> {
   const js = `${$.plugin.root}/node_modules/@ace-sdk/cli/dist/cli.js`
@@ -54,6 +67,7 @@ export async function engineSearch($: any, s: Sess, script: string, query: strin
 // 8.2.4: `L` given, a server answer (engine or CLI, never a cache hit) clears a server_error band (handlers/context.ts).
 export async function search($: any, s: Sess, query: string, pin: string | undefined, topK: number | undefined, budgetMs: number, sid: string | undefined = pin, origin: SearchOrigin = {}, L?: Load) {
   const t0 = await $.clock.now()
+  if (await authHeld($, s)) return AUTH_HELD_RESULT
   let engineWhy: string | undefined = 'no engine'
   const eng = await engineScript($, 'search.js')
   if (eng) {
@@ -98,6 +112,7 @@ export async function search($: any, s: Sess, query: string, pin: string | undef
   if (r.threw) error = /ENOENT|not found/i.test(r.threw) ? 'cli_not_found' : 'timeout'
   else if (r.exitCode !== 0) error = isAuthFailure(r.stderr + r.stdout) ? 'not_authenticated' : /timed? ?out/i.test(r.stderr) ? 'timeout' : 'nonzero_exit'
   else { try { resp = sanitize(pyLoads(r.stdout)) } catch { error = 'json_parse_failed' } }
+  if (error === 'not_authenticated') await holdAuth($, s)
   if (resp && resp.error) { error = String(resp.error); resp = null }
   if (resp) { await storeFullPct($, s, resp); if (L) await serverReachable($, L).catch(() => undefined) }
   // A kill alone may be a slow server. Only a re-run that then answers in less time than the pin was given points
@@ -131,13 +146,16 @@ export async function reuseStore($: any, L: Load, s: Sess, kind: string, query: 
   } catch { /* the cache is an optimisation */ }
 }
 export const hitResult = (resp: any) => ({ resp, error: undefined, ms: 0, pinFailed: false, pinSkipped: undefined, pinMs: undefined, stderr: '', engine: 'cache', engineWhy: 'cache_hit' })
+// git minimisation (DSGVO): commit_hash (required by the server), timestamp, files_changed, insertions, deletions and commit_is_fix;
+// no author, author_email, branch or commit message. Python twin: git_utils.get_git_context (same FIX_RE, ASCII \b).
+export const FIX_RE = /\b(revert|fix|fixes|fixed|hotfix|bugfix)\b/i
+export const commitIsFix = (subject: string): boolean => FIX_RE.test(subject ?? '')
 export async function gitContext($: any, cwd: string) {
   const git = async (...a: string[]) => run($, ['git', ...a], { cwd })
   const inside = await git('rev-parse', '--is-inside-work-tree')
   if (!inside || inside.exitCode !== 0) return undefined
-  const [hash, msg, name, mail, ts, branch, stat] = await Promise.all([git('rev-parse', 'HEAD'), git('log', '-1', '--format=%s'),
-    git('log', '-1', '--format=%an'), git('log', '-1', '--format=%ae'), git('log', '-1', '--format=%aI'),
-    git('rev-parse', '--abbrev-ref', 'HEAD'), git('diff', '--stat', 'HEAD~1..HEAD')])
+  const [hash, msg, ts, stat] = await Promise.all([git('rev-parse', 'HEAD'), git('log', '-1', '--format=%s'),
+    git('log', '-1', '--format=%aI'), git('diff', '--stat', 'HEAD~1..HEAD')])
   const out = (r: any) => (r && r.exitCode === 0 ? String(r.stdout).trim() : undefined)
   const commit = out(hash)
   if (!commit) return undefined
@@ -145,7 +163,8 @@ export async function gitContext($: any, cwd: string) {
   if (!names || names.exitCode !== 0) names = await git('show', '--name-only', '--format=', commit)
   const ctx: any = { commit_hash: commit }
   const set = (k: string, v: string | undefined) => { if (v !== undefined) ctx[k] = v }
-  set('commit_message', out(msg)); set('author', out(name)); set('author_email', out(mail)); set('timestamp', out(ts)); set('branch', out(branch))
+  ctx.commit_is_fix = commitIsFix((out(msg) ?? '').split('\n')[0]!)  // the subject itself is never sent
+  set('timestamp', out(ts))
   Object.assign(ctx, parseDiffStat(out(stat) ?? ''))
   ctx.files_changed = (out(names) ?? '').split('\n').filter(Boolean)
   return ctx

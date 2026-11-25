@@ -1,6 +1,7 @@
 // 8.2.0 /ace:ace-bootstrap: both argument forms, validated passthrough, a short facts preview (argv-only git), the honest warning about
 // what leaves the machine, and ONE readable result line after the CLI run (report formatter chosen by name).
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { parseBootstrapArgs } from '../lib/bootstrap_args.ts'
 import { bootstrapReport, reportLine } from '../lib/reports.ts'
 import { CWD, PRJ, cliOf, host } from './helpers.ts'

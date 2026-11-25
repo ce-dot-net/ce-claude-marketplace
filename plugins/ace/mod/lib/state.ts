@@ -1,7 +1,8 @@
 // Pure state shapes: data-root derivation (plugin_data_dir), patterns-used merge (append_patterns_used),
 // reuse-cache keys (ace_search_cache). No `$`, no I/O.
-import { sha256Hex } from './cohort'
+import { LAYOUT_A_VALUES, sha256Hex } from './cohort'
 import { cpSlice } from './text'
+import { redact } from './redact'
 import { isValidPatternId, STATE_CAP } from './render'
 import { CONTENT_CAP } from './evidence'
 
@@ -19,10 +20,12 @@ export function dataRootFromPluginRoot(home: string, root: string, name: string,
 }
 
 // ---------- patterns_used_state.append_patterns_used: same merge, same key order, same bytes ----------
+export const USER_PROMPT_MAX = 200_000  // = TEXT_HARD_CAP_CHARS: the trace's task cap decides, never this store (was 4000)
 export type StateUpdate = { ids?: string[]; retrievalId?: string | null; rlog?: Record<string, number>; tsid?: string | null
-  userPrompt?: string; rendered?: string; hook?: string; parentTaskId?: string; agentType?: string; renderVariant?: string
+  userPrompt?: string; rendered?: string; hook?: string; parentTaskId?: string; agentType?: string; renderVariant?: string; renderLayout?: string | null
   contents?: Record<string, string>; evalStats?: { avg_relevance: number; domains: number }
-  searchOrg?: string; searchProject?: string }  // 8.2.6: the binding the search ran with = where the learn goes
+  searchOrg?: string; searchProject?: string
+  forkOf?: string }  // mod-only: a fork's parent retrieval_id (ACE_FORK_RETRIEVAL_ID=1) -> trace.fork_of  // 8.2.6: the binding the search ran with = where the learn goes
 export function mergeState(prior: any, u: StateUpdate): any {
   const p = prior && typeof prior === 'object' && !Array.isArray(prior) ? prior : {}
   const ids: string[] = Array.isArray(p.pattern_ids) ? [...p.pattern_ids] : Array.isArray(prior) ? [...prior] : []
@@ -33,8 +36,9 @@ export function mergeState(prior: any, u: StateUpdate): any {
     retrieval_log_ids: { ...(p.retrieval_log_ids ?? {}), ...(u.rlog ?? {}) },
     task_session_id: u.tsid ?? p.task_session_id ?? null,
   }
-  const up = u.userPrompt ?? p.user_prompt
-  if (up) state.user_prompt = cpSlice(up, 4000)
+  // full steps: the whole request (patterns_used_state.USER_PROMPT_MAX, same value); round 5 F14: a NEW prompt is redacted on write
+  const up = u.userPrompt ? redact(cpSlice(u.userPrompt, USER_PROMPT_MAX)) : p.user_prompt
+  if (up) state.user_prompt = up
   const rc = u.rendered ?? p.rendered_context
   if (rc !== undefined && rc !== null) state.rendered_context = cpSlice(rc, STATE_CAP)
   const he = u.hook ?? p.hook_event_name
@@ -43,6 +47,8 @@ export function mergeState(prior: any, u: StateUpdate): any {
   if (pt) state.parent_task_id = pt
   const rv = u.renderVariant ?? p.render_variant // §28: the variant ACTUALLY rendered, read back at learn
   if (rv) state.render_variant = rv
+  const rl = u.renderLayout === undefined ? p.render_layout : u.renderLayout  // layout-a arm: set only when it ACTUALLY rendered; null = rendered without it (clears), undefined = keep
+  if (typeof rl === 'string' && LAYOUT_A_VALUES.includes(rl)) state.render_layout = rl
   const pc: Record<string, string> = { ...(p.pattern_contents && typeof p.pattern_contents === 'object' ? p.pattern_contents : {}) }
   for (const [id, t] of Object.entries(u.contents ?? {})) if (isValidPatternId(id) && typeof t === 'string' && t) pc[id] = cpSlice(t, CONTENT_CAP)
   if (Object.keys(pc).length) state.pattern_contents = pc  // §31 (Python writes it after its optional keys too)
@@ -52,6 +58,8 @@ export function mergeState(prior: any, u: StateUpdate): any {
     const [so, sp] = u.searchOrg && u.searchProject ? [u.searchOrg, u.searchProject] : [p.search_org, p.search_project]
     if (so && sp) { state.search_org = so; state.search_project = sp }  // a pair or none
   }
+  const fo = u.forkOf ?? p.fork_of_retrieval_id  // mod-only (after the Python keys): the fork marker's parent retrieval
+  if (fo) state.fork_of_retrieval_id = fo
   const at = u.agentType ?? p.agent_type // mod-only: its turn.complete carries no agent type; Python ignores the key
   if (at) state.agent_type = at
   return state

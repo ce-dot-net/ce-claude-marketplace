@@ -35,7 +35,7 @@ from validation import is_valid_pattern_id  # noqa: E402
 
 import plugin_data_dir  # noqa: E402
 
-USER_PROMPT_MAX = 4000
+USER_PROMPT_MAX = 200_000  # full steps: the whole request (= ace_after_task.TEXT_HARD_CAP_CHARS; mod lib/state.ts USER_PROMPT_MAX); was 4000
 RENDERED_CONTEXT_MAX = 10000
 RENDERED_SIDECAR = 'rendered-main.txt'
 
@@ -275,11 +275,6 @@ def evidence_tokens(content):
     return toks
 
 
-def distinctive_tokens(content):
-    """Lowercased evidence tokens of a pattern (evidence_tokens keys). Mod parity."""
-    return set(evidence_tokens(content))
-
-
 def _is_word(c):
     return c.isascii() and (c.isalnum() or c == "_")
 
@@ -345,12 +340,26 @@ def eval_stats(injected, returned):
     return {"avg_relevance": max(0, min(100, rel)), "domains": len(doms)}
 
 
+def _redact_prompt(text):
+    """F14: the prompt goes to disk redacted with the trace's rules (utils/redact.py, mod parity: lib/state.ts mergeState).
+    redact not importable: the 8.3.0 store (first 4000 chars), never the whole raw request."""
+    try:
+        import sys as _sys
+        utils = str(Path(__file__).resolve().parent)
+        if utils not in _sys.path:
+            _sys.path.append(utils)
+        from redact import redact
+        return redact(text)
+    except Exception:
+        return text[:4000]
+
+
 def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
                          retrieval_id=None, retrieval_log_ids=None,
                          task_session_id=None, project_id=None,
                          user_prompt=None, rendered_context=None,
                          hook_event_name=None, reset=False, parent_task_id=None, query_source=None,
-                         render_variant=None, pattern_contents=None, eval_stats=None, binding=None):
+                         render_variant=None, pattern_contents=None, eval_stats=None, binding=None, render_layout=None):
     """Append+dedupe valid pattern IDs to the per-agent file; return the full list.
 
     F-080: optional params retrieval_id (str|None) and retrieval_log_ids (dict|None).
@@ -375,7 +384,7 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
     has_retrieval = retrieval_id is not None or bool(retrieval_log_ids)
     has_task_session = task_session_id is not None
     has_extra = bool(user_prompt or rendered_context or hook_event_name or parent_task_id or query_source
-                     or render_variant or pattern_contents or eval_stats or binding)
+                     or render_variant or render_layout or pattern_contents or eval_stats or binding)
     if not ids and not has_retrieval and not has_task_session and not has_extra:
         return []
     sf = state_file_path(session_id, agent_id, state_dir, project_id)
@@ -411,9 +420,12 @@ def append_patterns_used(session_id, agent_id, pattern_ids, state_dir=None,
                               ('hook_event_name', hook_event_name, None),
                               ('parent_task_id', parent_task_id, None),
                               ('render_variant', render_variant, None),  # §28: what was actually rendered
+                              ('render_layout', render_layout, None),  # layout-a arm: 'a' only when it rendered
                               ('query_source', query_source, None)):
             # None = not supplied (keep prior); '' is an explicit "set" (control arm clears
             # a stale rendered_context so WP-D never re-injects it).
+            if key == 'user_prompt' and val:  # round 5 F14: a NEW prompt is redacted on write (the stored one already is)
+                val = _redact_prompt(val[:cap])
             val = val if val is not None else prior.get(key)
             if val is not None and (val or key == 'rendered_context'):
                 state[key] = val[:cap] if cap else val

@@ -1,5 +1,6 @@
 // ACE mod suite, §31 final client contract (render_variant, conversation_id, used-only applied ids, dedupe). Harness: ./helpers.ts.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import S100 from './fixtures/search_100.ts'
 import S8 from './fixtures/search_8.ts'
 import SEDGE from './fixtures/search_edge.ts'
@@ -10,7 +11,7 @@ import { pyLoads } from '../lib/pyjson.ts'
 import { renderPatternsDict } from '../lib/render.ts'
 import { traceVariant, renderCohort, serverFullPct, storedFullPct } from '../lib/cohort.ts'
 import { hasSubstantialWork, toolRec } from '../lib/trace.ts'
-import { rejectionMatch, evalStats, evalInjection, usedPatternIds, toolHaystack } from '../lib/evidence.ts'
+import { rejectionProbe, evalStats, usedPatternIds, toolHaystack } from '../lib/evidence.ts'
 import { PRIVATE_WRITE_SH } from '../lib/sh.ts'
 import { statusLine, learnLine } from '../ui/status.ts'
 import { CWD, EVAL_REQ, FULL_PCT, HOME, HUMAN, LOCAL_CLI, LOCKED, MALFORMED, MIN, PDIR, PLACEHOLDER, PRJ, PROOT, REAL, REL, ROOT, SDIR, SECOND, SID, UUID4, bodyOf, cliOf, cmd, done, dsSearches, execRow, host, mainTask, ranked, rejectFlow, settle, shownOf, spawn, st8a, submit, withPct } from './helpers.ts'
@@ -202,16 +203,16 @@ test('§28 a subagent inherits the conversation arm and stores it', async ($, on
   expect(h.state('agent-1')!.task_session_id).not.toBe(h.state()!.task_session_id)
 })
 
-test('trace_truncate parity: > 50 steps → truncation marker first + metadata.trace_truncated', async ($, on) => {
+test('full steps: > 50 steps -> NO step-count truncation (the mod drops trace_truncate\'s 50-step rule; only the hard byte cap remains)', async ($, on) => {
   const h = host(on, { search: () => ({ stdout: S8 }) })
   const tools: any[] = [{ tool: 'Edit', file_path: '/proj/x.py', old_string: 'a', new_string: 'b' }]
   for (let i = 0; i < 59; i++) tools.push({ tool: 'Bash', command: 'echo ' + i })
   await mainTask($, h, tools)
   await done($)
   const t = h.trace(h.learns()[0]!)
-  expect(t.trajectory[0]._truncation_marker).toBe(true)
-  expect(t.trajectory[0].original_length).toBe(60)
-  expect(t.metadata.trace_truncated).toBe(true)
+  expect(t.trajectory.length).toBe(60)
+  expect(t.trajectory[0]._truncation_marker).toBe(undefined)
+  expect(t.metadata).toBe(undefined)
 })
 
 test('learn launcher carries the execution metrics rows for both outcomes (learning_sent true/false)', async ($, on) => {

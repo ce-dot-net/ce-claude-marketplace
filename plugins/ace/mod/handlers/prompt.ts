@@ -1,14 +1,15 @@
 // prompt.submit: the main search -> cohort render -> inject, the patterns-used state, the rejection downvote,
 // the status line and session title.
+import { python } from '../commands/py'
 import { readJson, readText, rm, writePrivate } from '../io/fs'
 import { nowIso, relLog, searchRow } from '../io/log'
 import { SEARCH_MS, search } from '../io/spawn'
-import { type Load, type Sess, clearDeferred, clearTools, cohortEnv, deferredAnchor, disabled, downvoteEnabled, ensure, notePrompt, pendingFile, readState, searchOrigin, touchMarker, updateState, uuid, type HookArgs, refreshMarker } from '../io/state'
-import { type Cohort, renderCohort } from '../lib/cohort'
-import { REJECTION_PREV_MAX_AGE_S, evalStats, injectedContents, rejectionProbe } from '../lib/evidence'
+import { type Load, type Sess, clearDeferred, dataRoot, clearTools, cohortEnv, deferredAnchor, disabled, downvoteEnabled, ensure, notePrompt, pendingFile, pendingFile830, pendingHead, pendingVoteFile, readState, searchOrigin, touchMarker, updateState, upvoteEnabled, uuid, type HookArgs, refreshMarker } from '../io/state'
+import { type Cohort, layoutA, layoutLabel, layoutValue, renderCohort } from '../lib/cohort'
+import { REJECTION_PREV_MAX_AGE_S, evalStats, injectedContents, rejectionProbe, upvoteProbe } from '../lib/evidence'
 import { num, pyDumps } from '../lib/pyjson'
 import { type ModelVerdict, classifyRejection, rejectionCacheKey, rejectionMinConf } from '../lib/rejection'
-import { domainsSummary, renderBudget, renderCompact, renderFull, renderPatternsDict } from '../lib/render'
+import { domainsSummary, renderBudget, renderCompact, renderFull, renderLayoutBudget, renderLayoutFull, renderPatternsDict } from '../lib/render'
 import { type StateUpdate, mergeState } from '../lib/state'
 import { MACHINE_ORIGINS, domainNames, expandAbbreviations, isNoTaskCommand, skipReason } from '../lib/text'
 import { searchErrorLine, searchSummary, sessionTitle, statusLine, topDomains } from '../ui/status'
@@ -25,8 +26,15 @@ import { searchErrorLine, searchSummary, sessionTitle, statusLine, topDomains } 
 const inflight = new Set<Promise<void>>()  // ponytail: module-level (a reload drops them); the tests wait on it
 export const flushRejections = () => Promise.all([...inflight]).then(() => undefined)
 const classified = new Map<string, { reject: boolean; confidence: number; label: string | null }>()  // same prompt twice in a session: one call
+// Upvote (mod-only), PHRASE ONLY: the same gates (<= 300 chars, previous task < 6 h with ids), its own switch (upvoteEnabled) and
+// evidence.upvoteProbe (the message is nothing but an approval). No model upvote: real haiku found no real approval the phrase missed,
+// and a shared prompt cost downvote precision, so the classifier stays the 8.3.0 one. A rejection phrase, a bare acknowledgement
+// (also emoji-only) or a phrase hit blocked by other words never upvotes; an upvote phrase hit skips the downvote model
+// (rejection_check failed 'upvote_phrase'). last-downvoted-task locks BOTH directions: one feedback per task. One text-free
+// `upvote_check` row whenever an upvote phrase was seen.
 export async function onRejection($: any, s: Sess, text: string, L?: Load) {
   const { matched, blocked, tooLong } = rejectionProbe(text)
+  const up = upvoteProbe(text)
   const prev = tooLong ? undefined : await readJson($, `${s.sdir}/last-main-applied.json`)
   const prevAt = num(prev?.at)  // a seconds float reads back as a PyFloat: compare its value
   const ageS = prevAt !== undefined ? await $.clock.now() / 1000 - prevAt : undefined
@@ -34,70 +42,111 @@ export async function onRejection($: any, s: Sess, text: string, L?: Load) {
   const ids: number[] = fresh && Array.isArray(prev.applied_log_ids) ? prev.applied_log_ids.filter((x: unknown) => Number.isInteger(x)) : []
   const on = tooLong ? undefined : await downvoteEnabled($, s)
   const gate = tooLong ? 'too_long' : !fresh ? 'prev_stale' : !ids.length ? 'empty_ids' : !on ? 'switch_off' : null
+  const upOn = gate === null || gate === 'switch_off' ? await upvoteEnabled($, s) : false
+  const upGate = tooLong ? 'too_long' : !fresh ? 'prev_stale' : !ids.length ? 'empty_ids' : !upOn ? 'switch_off' : matched ? 'reject_phrase' : up.bareAck ? 'bare_ack' : null
+  const upPhrase = upGate === null && up.matched !== null
+  const modelOk = async () => String(text ?? '').trim() !== '' && L?.interactive !== false && (await $.env.get('ACE_REJECTION_MODEL')) !== '0'
   // S4: headless (-p / SDK, interactive === false) skips the model like the self-eval does; the phrase path is unchanged. Empty text: nothing to classify.
-  const useModel = gate === null && !matched && String(text ?? '').trim() !== '' && L?.interactive !== false && (await $.env.get('ACE_REJECTION_MODEL')) !== '0'
+  const useModel = gate === null && !matched && !upPhrase && await modelOk()
   const row = (failed: string | null, extra: Record<string, unknown>, nowIsoStr: string) => ({ timestamp: nowIsoStr, event: 'rejection_check', matched, blocked,
     chars: [...String(text ?? '')].length, failed, prev_age_s: ageS === undefined ? null : Math.round(ageS), prev_ids: ids.length, session_id: s.sessionId,
     detect_source: matched ? 'phrase' : useModel ? 'model' : null, model_reject: null, model_conf: null, model_ms: null, model_label: null, ...extra, source: 'mod' })
+  const upRow = async (failed: string | null, extra: Record<string, unknown> = {}) => relLog($, s, { timestamp: await nowIso($), event: 'upvote_check',
+    matched: up.matched, blocked: up.blocked, chars: [...String(text ?? '')].length, failed, prev_age_s: ageS === undefined ? null : Math.round(ageS),
+    prev_ids: ids.length, session_id: s.sessionId, detect_source: upPhrase ? 'phrase' : null, ...extra, source: 'mod' })
   const tsid: string | null = typeof prev?.task_session_id === 'string' && prev.task_session_id ? prev.task_session_id : null
-  const doneFile = `${s.sdir}/last-downvoted-task`
-  // S7: one downvote per task, and never into a session dir that is gone (session.end removed it while the model was answering).
+  const doneFile = `${s.sdir}/last-downvoted-task`  // name kept (8.3.0); it now locks up- and downvote alike
+  // S7: one feedback per task, and never into a session dir that is gone (session.end removed it while the model was answering).
   // null = written, else why it was skipped.
-  const write = async (meta: { detect_source: 'phrase' | 'model'; model_conf?: number }): Promise<'session_gone' | 'task_downvoted' | null> => {
+  const write = async (kind: 'downvote' | 'upvote', meta: { detect_source: 'phrase' | 'model'; model_conf?: number }): Promise<'session_gone' | 'task_downvoted' | 'task_voted' | null> => {
     if (!(await $.fs.exists(s.sdir))) return 'session_gone'
-    if (tsid && (await readText($, doneFile))?.trim() === tsid) return 'task_downvoted'
-    await writePrivate($, `${s.sdir}/pending-downvote.json`, JSON.stringify({ applied_log_ids: ids, at: await $.clock.now() / 1000, task_session_id: tsid, ...meta }))
+    if (tsid && (await readText($, doneFile))?.trim() === tsid) return kind === 'downvote' ? 'task_downvoted' : 'task_voted'
+    await writePrivate($, pendingVoteFile(s, kind), JSON.stringify({ applied_log_ids: ids, at: await $.clock.now() / 1000, task_session_id: tsid, ...meta }))
     if (tsid) await writePrivate($, doneFile, tsid).catch(() => {})
     return null
   }
-  if (useModel) {
-    // $.clock.after: the native way to run work after the hook returned (the call is no part of this dispatch, so an
-    // abandoned dispatch cannot abort it); bounded by REJECTION_MODEL_MS, fails safe. A downvote written after the next
-    // Stop is not lost: takeDownvote consumes the file at the following main learn (within 6 h).
-    const work = async () => {
-      const key = rejectionCacheKey(s.sessionId, prev?.task_session_id, text)
-      const t0 = await $.clock.now()
-      const hit = classified.get(key)
-      const minConf = rejectionMinConf(await $.env.get('ACE_REJECTION_MIN_CONF'))
-      const v: ModelVerdict = hit ? { failed: hit.reject && hit.confidence >= minConf ? null : 'model_no', reject: hit.reject, conf: hit.confidence, label: hit.label }
-        : await classifyRejection($, text, String(prev?.answer_tail ?? ''), minConf)
-      if (!hit && v.reject !== null && v.conf !== null) { classified.set(key, { reject: v.reject, confidence: v.conf, label: v.label ?? null }); if (classified.size > 50) classified.delete(classified.keys().next().value!) }
-      const ms = hit ? 0 : Math.round(await $.clock.now() - t0)
-      let failed: string | null = v.failed
-      if (failed === null) failed = await write({ detect_source: 'model', model_conf: Math.round(v.conf! * 100) / 100 })
-      await relLog($, s, row(failed, { model_reject: v.reject, model_conf: v.conf, model_ms: ms, model_label: v.label ?? null }, await nowIso($)))
-      if (v.reject === true && v.conf !== null && v.conf >= minConf)
-        await relLog($, s, { timestamp: await nowIso($), event: 'rejection_detected', matched: null, downvote_sent: failed === null, detect_source: 'model',
-          prev_task: String(prev?.task_session_id ?? '').slice(0, 8) || null, session_id: s.sessionId, source: 'mod' })
-    }
-    try { $.clock.after(1, () => { const p: Promise<void> = work().catch(() => {}).finally(() => { inflight.delete(p) }); inflight.add(p) }) }
-    catch { await relLog($, s, row('model_error', {}, await nowIso($))) }
-    return
+  if (!useModel) {
+    const failed = gate ?? (matched ? null : upPhrase ? 'upvote_phrase' : 'no_phrase')
+    const skipped = failed === null ? await write('downvote', { detect_source: 'phrase' }) : failed
+    await relLog($, s, row(skipped, {}, await nowIso($)))
+    if (matched) await relLog($, s, { timestamp: await nowIso($), event: 'rejection_detected', matched, downvote_sent: skipped === null,
+      prev_task: String(prev?.task_session_id ?? '').slice(0, 8) || null, session_id: s.sessionId, source: 'mod' })
   }
-  const failed = gate ?? (!matched ? 'no_phrase' : null)
-  const skipped = failed === null ? await write({ detect_source: 'phrase' }) : failed
-  const sent = skipped === null
-  await relLog($, s, row(skipped, {}, await nowIso($)))
-  if (!matched) return
-  await relLog($, s, { timestamp: await nowIso($), event: 'rejection_detected', matched, downvote_sent: sent,
-    prev_task: String(prev?.task_session_id ?? '').slice(0, 8) || null, session_id: s.sessionId, source: 'mod' })
+  if (upPhrase) await upRow(await write('upvote', { detect_source: 'phrase' }))
+  else if (up.matched || up.blocked) await upRow(upGate ?? 'no_phrase')
+  if (!useModel) return
+  // $.clock.after: the native way to run work after the hook returned (the call is no part of this dispatch, so an
+  // abandoned dispatch cannot abort it); bounded by REJECTION_MODEL_MS, fails safe. A vote written after the next
+  // Stop is not lost: takeDownvote consumes the file at the following main learn (within 6 h).
+  const work = async () => {
+    const key = rejectionCacheKey(s.sessionId, prev?.task_session_id, text)
+    const t0 = await $.clock.now()
+    const hit = classified.get(key)
+    const minConf = rejectionMinConf(await $.env.get('ACE_REJECTION_MIN_CONF'))
+    const v: ModelVerdict = hit ? { failed: hit.reject && hit.confidence >= minConf ? null : 'model_no', reject: hit.reject, conf: hit.confidence, label: hit.label }
+      : await classifyRejection($, text, String(prev?.answer_tail ?? ''), minConf)
+    if (!hit && v.reject !== null && v.conf !== null) { classified.set(key, { reject: v.reject, confidence: v.conf, label: v.label ?? null }); if (classified.size > 50) classified.delete(classified.keys().next().value!) }
+    const ms = hit ? 0 : Math.round(await $.clock.now() - t0)
+    let failed: string | null = v.failed
+    if (failed === null) failed = await write('downvote', { detect_source: 'model', model_conf: Math.round(v.conf! * 100) / 100 })
+    await relLog($, s, row(failed, { model_reject: v.reject, model_conf: v.conf, model_ms: ms, model_label: v.label ?? null }, await nowIso($)))
+    if (v.reject === true && v.conf !== null && v.conf >= minConf)
+      await relLog($, s, { timestamp: await nowIso($), event: 'rejection_detected', matched: null, downvote_sent: failed === null, detect_source: 'model',
+        prev_task: String(prev?.task_session_id ?? '').slice(0, 8) || null, session_id: s.sessionId, source: 'mod' })
+  }
+  try { $.clock.after(1, () => { const p: Promise<void> = work().catch(() => {}).finally(() => { inflight.delete(p) }); inflight.add(p) }) }
+  catch { await relLog($, s, row('model_error', {}, await nowIso($))) }
 }
 // §13.1 cohort arms; `rendered` = the ≤ 10K re-inject copy (C1). control: search + anchor, nothing injected.
 // §28: bucket on the STABLE CC session id (one arm per conversation; subagents share it), never the per-task pin.
 // §31 dedupe (main prompts only): under full, ids already injected in this conversation since the last compaction
 // (`seen`) are left out; nothing new -> nothing injected.
 export async function renderArm($: any, resp: any, tag: string, attrs: string, s: Sess, seen?: Set<string>) {
-  const cohort: Cohort = renderCohort(s.sessionId, await cohortEnv($, s))
+  const env = await cohortEnv($, s)
+  const cohort: Cohort = renderCohort(s.sessionId, env)
+  // layout (a): a second, orthogonal arm (own salt) on the budget and full renders; control/compact stay as they are
+  const inLayout = layoutA(s.sessionId, env), hint = env.ACE_RENDER_LAYOUT_A_HINT === '1'
+  const budgetRender = (r: any) => inLayout ? renderLayoutBudget(r, tag, attrs, hint) : renderBudget(r, tag, attrs)
   // item 3: the full arm's re-inject copy is the budget render (<= 9,500) of the WHOLE response, never the deduped subset
-  const reinject = cohort === 'full' ? renderBudget(resp, tag, attrs).context as string : ''
+  const reinject = cohort === 'full' ? budgetRender(resp).context as string : ''
   if (cohort === 'full' && seen?.size) {
     resp = { ...resp, similar_patterns: (resp.similar_patterns || []).filter((p: any) => !seen.has(p?.id)) }
-    if (!resp.similar_patterns.length) return { cohort, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: reinject, truncated: false }
+    if (!resp.similar_patterns.length) return { cohort, layout: undefined as string | null | undefined, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: reinject, truncated: false }
   }
-  if (cohort === 'control') return { cohort, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: '', truncated: false }
-  const r = cohort === 'compact' ? renderCompact(resp, tag, attrs) : cohort === 'budget' ? renderBudget(resp, tag, attrs) : renderFull(resp, tag, attrs)
+  if (cohort === 'control') return { cohort, layout: null as string | null | undefined, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: '', truncated: false }
+  const r = cohort === 'compact' ? renderCompact(resp, tag, attrs) : cohort === 'budget' ? budgetRender(resp)
+    : inLayout ? renderLayoutFull(resp, tag, attrs, hint) : renderFull(resp, tag, attrs)
   const rendered = cohort === 'full' ? reinject : r.context
-  return { cohort, context: r.context as string | null, ids: r.ids, rlog: r.rlog, patterns: r.patterns, rendered, truncated: cohort === 'full' && r.shown < r.total }
+  // layout: the render_layout to store; null = rendered without layout (clears an earlier value), undefined = nothing rendered (keeps it)
+  return { cohort, layout: (inLayout ? layoutValue(env) : null) as string | null | undefined, context: r.context as string | null, ids: r.ids, rlog: r.rlog, patterns: r.patterns, rendered, truncated: cohort === 'full' && r.shown < r.total }
+}
+// relevance-log label of a render: the arm, '+layout_a' when the layout arm rendered it (render_variant itself stays budget|full)
+export const cohortLabel = (r: { cohort: string; layout?: string | null }) => r.cohort + layoutLabel(r.layout)
+// 8.4.0: a rejected token (dead/ entries with last_error 'auth' < 30 min old) is shown ONCE per conversation, from the queue state
+// (not the search). The ONE implementation is the Python one (`ace_trace_queue.py --auth-held` prints the line or nothing), so both chains
+// say the same words at the same threshold. ponytail: one python spawn per prompt until it has been shown (~30 ms), then none.
+export const AUTH_HELD_PREFIX = 'ACE: nicht angemeldet, Traces werden NICHT gesendet'
+export async function authHeldNotice($: any, s: Sess): Promise<string | null> {
+  try {
+    const marker = `${s.sdir}/auth_held_notified`
+    if (await $.fs.exists(marker)) return null
+    const out = await python($, 'utils/ace_trace_queue.py', ['--auth-held', '--data-root', await dataRoot($)], $.plugin.root, 15_000)
+    if (!out.startsWith(AUTH_HELD_PREFIX)) return null
+    await writePrivate($, marker, '1')
+    return out.split('\n')[0] ?? null
+  } catch { return null }
+}
+// 8.4.0: ACE_TRACE_SINK set (not blank) = the traces go to a file and NOTHING is sent: shown once per conversation (marker sink_notified).
+// Same text as ace_trace_queue.SINK_LINE (tests/test_auth_held_notice.py guards the parity).
+export const SINK_LINE = "ACE: Traces gehen in die lokale Senke (ACE_TRACE_SINK), es wird NICHTS gesendet."
+export async function sinkNotice($: any, s: Sess): Promise<string | null> {
+  try {
+    if (!(await $.env.get('ACE_TRACE_SINK'))?.trim()) return null
+    const marker = `${s.sdir}/sink_notified`
+    if (await $.fs.exists(marker)) return null
+    await writePrivate($, marker, '1')
+    return SINK_LINE
+  } catch { return null }
 }
 export async function onPrompt($: any, L: Load, e: any): Promise<any> {
   const s = await ensure($, L)
@@ -120,6 +169,10 @@ export async function onPrompt($: any, L: Load, e: any): Promise<any> {
     return e
   }
   if (await disabled($, s)) { if (!midTurn) L.pendingMain = null; return e }
+  const authHeld = await authHeldNotice($, s)
+  if (authHeld) $.ui.log(authHeld)
+  const sink = await sinkNotice($, s)
+  if (sink) $.ui.log(sink)
   const tsid = uuid()
   // A running task keeps its anchor, tools and state. The new prompt waits on disk: if a turn starts with its text it
   // is its own task (turn.start). If it was delivered into the running turn its work lands in that task's learn, its
@@ -128,14 +181,15 @@ export async function onPrompt($: any, L: Load, e: any): Promise<any> {
   const running = !midTurn ? undefined : L.turnAnchor.has(e.turnId) ? L.turnAnchor.get(e.turnId) : mainState?.task_session_id
   const defer = !!running && mainState?.task_session_id === running
   const save = (u: StateUpdate) => defer
-    ? writePrivate($, pendingFile(s), JSON.stringify({ text, state: pyDumps(mergeState(undefined, u)) })) // ponytail: one slot; of two queued prompts the first is not learned
+    // round 6: a prefix hash, not the prompt (turn.start only compares); ponytail: one slot, of two queued prompts the first is not learned
+    ? writePrivate($, pendingFile(s), JSON.stringify(pendingHead(text, pyDumps(mergeState(undefined, u)))))
     : updateState($, L, s, 'main', u, true)
   if (!defer) {
     L.pendingMain = tsid
     L.mainSeen = 0
     await clearDeferred($, L, s)  // accepted edge (CHANGELOG): a new human prompt before the notification drops the deferred learn
     await clearTools($, L, s, 'main')
-    if (await $.fs.exists(pendingFile(s))) await rm($, pendingFile(s))
+    for (const f of [pendingFile(s), pendingFile830(s)]) if (await $.fs.exists(f)) await rm($, f)
   }
 
   // item D: no HTML-comment self-eval request in the conversation while the mod runs (its Haiku self-eval replaces it);
@@ -161,7 +215,7 @@ export async function onPrompt($: any, L: Load, e: any): Promise<any> {
   const r = await renderArm($, sr.resp, 'ace-patterns', 'agent-type="main"', s, new Set(seen))
   if (r.cohort === 'full' && r.ids.length) await writePrivate($, seenFile, JSON.stringify([...new Set([...seen, ...r.ids])]))
   await save({ ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, tsid, userPrompt: e.text, rendered: r.rendered, hook: 'UserPromptSubmit',
-    renderVariant: r.cohort, contents: injectedContents(r.patterns, r.ids), evalStats: evalStats(r.patterns, sr.resp.similar_patterns || []) })
+    renderVariant: r.cohort, renderLayout: r.layout, contents: injectedContents(r.patterns, r.ids), evalStats: evalStats(r.patterns, sr.resp.similar_patterns || []) })
   const ds = domainsSummary(sr.resp)
   if (Object.keys(ds).length) {
     L.domains = domainNames(ds)
@@ -169,7 +223,7 @@ export async function onPrompt($: any, L: Load, e: any): Promise<any> {
   }
   const returned = sr.resp.similar_patterns || []
   await relLog($, s, searchRow({ hook: 'UserPromptSubmit', sessionId: s.sessionId, userPrompt: e.text, query, returned, injected: r.patterns,
-    projectId: s.project, orgId: s.org, agentType: 'main', cohort: r.cohort, hookMs: await $.clock.now() - t0, nowIso: await nowIso($),
+    projectId: s.project, orgId: s.org, agentType: 'main', cohort: cohortLabel(r), hookMs: await $.clock.now() - t0, nowIso: await nowIso($),
     extra: { search_ms: sr.ms, pin_ms: sr.pinMs, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, truncated_for_cap: r.truncated || undefined,
       context_chars: r.context?.length ?? 0, task_session_id: tsid, mid_turn: defer || undefined, engine: sr.engine, engine_reason: sr.engineWhy, source: 'mod' } }))
   const processed = renderPatternsDict(sr.resp).dict.similar_patterns

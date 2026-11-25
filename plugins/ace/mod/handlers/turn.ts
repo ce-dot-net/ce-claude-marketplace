@@ -1,14 +1,15 @@
 // turn.start / turn.complete: task anchors, the learn (Haiku self-eval, F-080 credit, detached launcher), abstain/reap.
 import { readText, rm, run, writePrivate, readJson } from '../io/fs'
+import { SINK_WRITE_SH } from '../lib/sh'
 import { logsSafe, nowIso, relLog } from '../io/log'
 import { LAUNCHER_MS, aceEnv, cliHead, engineScript, gitContext, ids } from '../io/spawn'
-import { type Load, type Sess, clearTools, cohortEnv, readState, stateFile, takeDownvote, takeTools, uuid, type HookArgs, classicFresh, clearDeferred, deferFile, disabled, enqueue, ensure, pendingFile, readOrigin, refreshMarker } from '../io/state'
-import { traceVariant } from '../lib/cohort'
+import { type Load, type Sess, clearTools, cohortEnv, fullStepsEnabled, readState, stateFile, takeDownvote, takeTools, takeUpvote, uuid, type HookArgs, classicFresh, clearDeferred, deferFile, disabled, enqueue, ensure, pendingFile, pendingFile830, pendingMatches, readOrigin, refreshMarker } from '../io/state'
+import { appliedControlPct, layoutLabel, traceVariant } from '../lib/cohort'
 import { type ToolRec, appliedLogIds, parseAceReview, parseUsedIds, selfEvalPrompt, usedPatternIds } from '../lib/evidence'
 import { pyDumps, pyLoads } from '../lib/pyjson'
 import { answerTail } from '../lib/rejection'
 import { safeComponent as safe } from '../lib/state'
-import { FALLBACK_ON_3, OUTCOME_RULE, buildTrace, detachedLearnArgv, hasSubstantialWork, isTrivialTask, learnArgv, reclaimTrace } from '../lib/trace'
+import { FALLBACK_ON_3, OUTCOME_RULE, buildTrace, detachedLearnArgv, hardCapBytes, hasSubstantialWork, textCapChars, isTrivialTask, learnArgv, reclaimTrace } from '../lib/trace'
 import { learnLine } from '../ui/status'
 import { anchorRun, checkPlaceholder } from './agent'
 
@@ -21,8 +22,8 @@ export async function reap($: any, L: Load, s: Sess, key: string, state: any) {
   L.late.delete(key)
 }
 // true = a learn was dispatched (the detached launcher started); 'later' = it goes out after the self-eval, which logs the line
-export async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook: 'Stop' | 'SubagentStop', effortEvent: string | undefined, summaryCap = 2000,
-  usedText = answer): Promise<boolean | 'later'> {
+export async function learn($: any, L: Load, s: Sess, key: string, answer: string, hook: 'Stop' | 'SubagentStop', effortEvent: string | undefined,
+  legacySummaryCap = 2000, usedText = answer): Promise<boolean | 'later'> {
   const t0 = await $.clock.now()
   const agentId = key === 'main' ? undefined : key
   const recs = await takeTools($, L, s, key)
@@ -52,7 +53,8 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
   }
   const playbook: string[] = state.pattern_ids ?? []
   const rlog: Record<string, number> = state.retrieval_log_ids ?? {}
-  const variant = traceVariant(state.render_variant, s.sessionId, await cohortEnv($, s))  // §31: stored label, else the conversation arm
+  const cenv = await cohortEnv($, s)
+  const variant = traceVariant(state.render_variant, s.sessionId, cenv), controlPct = appliedControlPct(cenv)  // §31: stored label, else the conversation arm
   const tokenUsed = usedPatternIds(playbook, state.pattern_contents ?? {}, usedText, recs.map(r => r.hay).filter(Boolean).join('\n'))
   const tsid: string | undefined = state.task_session_id ?? undefined
   const effort = effortEvent || await $.env.get('CLAUDE_EFFORT') || 'normal'
@@ -72,6 +74,8 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
     // §31: used only (this agent's own tools, report, self-eval); for the 20-cap Haiku ids first, then H2 ids, injected order
     const dv = key === 'main' ? await takeDownvote($, s) : undefined
     const downvote = dv?.ids
+    // one feedback per trace: a pending downvote wins; a pending upvote then waits for the next main trace (within 6 h)
+    const uv = key === 'main' && !downvote?.length ? await takeUpvote($, s) : undefined
     const { ids: applied, capped } = appliedLogIds([...used.filter(id => m.has(id)), ...used.filter(id => !m.has(id))], rlog)
     // the record a later rejection downvotes ([] too: rejecting a task without evidenced ids sends nothing)
     if (key === 'main') await writePrivate($, `${s.sdir}/last-main-applied.json`, JSON.stringify({ task_session_id: tsid ?? null, applied_log_ids: applied, at: await $.clock.now() / 1000, answer_tail: answerTail(answer) })).catch(() => {})
@@ -81,12 +85,32 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
       const commits = recs.filter(r => r.commit).map(r => r.commit)
       if (git && commits.length) git.session_commits = commits
     } catch { /* git context is optional */ }
-    const { trace, success, failed_steps } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
-      tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, appliedLogIds: applied, usedIds: { ...bySource, used_ids_model_list: modelList, used_ids_tokens_list: tokenList }, downvote, downvoteDetect: dv,
-      nowIso: await nowIso($), renderVariant: variant, conversationId: s.sessionId, effort, git, summaryCap,
+    const { trace, success, failed_steps, cap, textCaps } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
+      tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, forkOf: agentId ? state.fork_of_retrieval_id ?? undefined : undefined, appliedLogIds: applied, usedIds: { ...bySource, used_ids_model_list: modelList, used_ids_tokens_list: tokenList }, downvote, downvoteDetect: dv, upvote: uv?.ids, upvoteDetect: uv,
+      nowIso: await nowIso($), renderVariant: variant, renderControlPct: controlPct, renderLayout: state.render_layout, conversationId: s.sessionId, effort, git, textCap: textCapChars(await $.env.get('ACE_TEXT_HARD_CAP_CHARS')),
       pluginVersion: s.clientId.slice(s.clientId.lastIndexOf('/') + 1),
-      interactive: L.interactive, ...await readOrigin($, s) })
+      interactive: L.interactive, ...await readOrigin($, s), hardCap: hardCapBytes(await $.env.get('ACE_TRACE_HARD_CAP_BYTES')), fullSteps: await fullStepsEnabled($, s), legacySummaryCap })
+    // full steps: how often the hard cap bites (sizes only, never content)
+    for (const c of textCaps) await relLog($, s, { timestamp: await nowIso($), event: 'text_cap_hit', hook, session_id: s.sessionId, agent_id: agentId ?? null, task_session_id: tsid ?? null, ...c, source: 'mod' })
+    if (cap) await relLog($, s, { timestamp: await nowIso($), event: 'trace_cap_hit', hook, session_id: s.sessionId, agent_id: agentId ?? null, task_session_id: tsid ?? null, ...cap, source: 'mod' })
     const qid = uuid()  // 8.1.4: the trace queue id = the engine's Idempotency-Key = the temp file name
+    // ACE_TRACE_SINK=file:<absolute dir>: the finished trace (what engine/learn.js POSTs to /traces: retrieval_id and applied_log_ids
+    // are already in it) goes to <dir>/ace-trace-<Idempotency-Key>.json and NOTHING is sent: no launcher, no engine, no ace-cli
+    // fallback, no queue. A set but invalid value fails closed (nothing sent, logged). Search is untouched.
+    const sinkEnv = (await $.env.get('ACE_TRACE_SINK'))?.trim()
+    if (sinkEnv) {
+      const dir = /^file:(\/.+)$/.exec(sinkEnv)?.[1]?.replace(/\/+$/, '')
+      const body = pyDumps(trace), path = dir ? `${dir}/ace-trace-${qid}.json` : null
+      let error: string | null = dir ? null : 'invalid_sink'
+      if (path) {  // F9: SINK_WRITE_SH never chmods an existing dir
+        const r = await run($, ['/bin/sh', '-c', SINK_WRITE_SH, 'sh', path], { stdin: body })
+        if (!r || r.exitCode !== 0) error = 'write_failed'
+      }
+      await rm($, lock).catch(() => {})
+      await relLog($, s, { timestamp: await nowIso($), event: 'trace_sinked', hook, session_id: s.sessionId, agent_id: agentId ?? null, task_session_id: tsid ?? null,
+        trace_id: qid, path, bytes: body.length, steps: trace.trajectory.length, error, source: 'mod' })
+      return false
+    }
     const traceFile = `${s.root}/tmp/ace-trace-${qid}.json`
     await writePrivate($, traceFile, pyDumps(trace))
     const row = async (sent: boolean) => ({ timestamp: await nowIso($), event: 'execution', hook, session_id: s.sessionId,
@@ -94,7 +118,7 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
       tools_executed: recs.length, state_changing_tools: recs.filter(r => ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit'].some(x => r.tool.includes(x))).length,
       success, failed_steps, outcome_rule: OUTCOME_RULE, execution_time_seconds: Math.round((await $.clock.now() - t0) / 10) / 100, learning_sent: sent,
       used_ids_count: used.length, used_source: source, ...bySource, ...(capped ? { used_ids_capped: true } : {}),
-      source: 'mod', agent_id: agentId ?? null, task_session_id: tsid ?? null, render_cohort: variant ?? null })  // 8.1.0 audit
+      source: 'mod', agent_id: agentId ?? null, task_session_id: tsid ?? null, render_cohort: variant ? variant + layoutLabel(state.render_layout) : null })  // 8.1.0 audit
     const log = `${s.logs}/ace-relevance.jsonl`
     const python = (await readText($, `${s.root}/python_path`))?.trim()
     const verbosity = await $.env.get('ACE_VERBOSITY') || 'detailed'
@@ -180,10 +204,10 @@ export async function turnStart($: HookArgs<'turn.start'>[0], L: Load, e: HookAr
       let anchor: string | null | undefined = L.pendingMain
       if (anchor === undefined) { // no prompt.submit bound: a prompt that waited for this turn, else what is on disk (hot reload)
         const s = await ensure($, L)
-        const pend = s && await readJson($, pendingFile(s))
-        if (s && pend?.text && e.text.includes(String(pend.text).slice(0, 200))) {
+        const pend = s && (await readJson($, pendingFile(s)) ?? await readJson($, pendingFile830(s)))  // Round 10 / L2: an 8.3.0 file too
+        if (s && pend && pendingMatches(pend, e.text)) {
           await enqueue(L, stateFile(s, 'main'), () => writePrivate($, stateFile(s, 'main'), pend.state))
-          await rm($, pendingFile(s))
+          await rm($, pendingFile(s), pendingFile830(s))
           await clearTools($, L, s, 'main')
           L.mainSeen = 0
           const tsid = pyLoads(pend.state)?.task_session_id
@@ -251,7 +275,7 @@ export async function turnComplete($: HookArgs<'turn.complete'>[0], L: Load, e: 
       const handback = L.handback.get(agentId)  // §16 P1: the delivered report, not the closing line
       L.agentEffort.delete(agentId); L.earlyStart.delete(agentId); L.handback.delete(agentId)
       if (e.reason !== 'answer' || e.isAborted) await abstain($, L, s, agentId, await readState($, s, agentId), e.reason, 'SubagentStop')
-      else await learn($, L, s, agentId, handback || e.answer, 'SubagentStop', effort, handback ? 4000 : 2000,
+      else await learn($, L, s, agentId, handback || e.answer, 'SubagentStop', effort, handback ? 4000 : 2000,  // the cap only when full steps are off
         [handback, e.answer].filter(Boolean).join('\n'))  // §31: handback report + closing message, as ace_after_task
     }
   } catch (err) {

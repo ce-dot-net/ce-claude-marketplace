@@ -1,6 +1,7 @@
 // ACE mod suite, 8.2.3: interactive / human_prompt_count on the engine search stdin (POST /patterns/search body).
 // Same source and rules as the 8.2.2 trace fields: each only when known, never defaulted. Harness: ./helpers.ts.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import S8 from './fixtures/search_8.ts'
 import { CWD, HUMAN, PDIR, PLACEHOLDER, PROOT, REAL, SDIR, SID, cliOf, done, host, mainTask, spawn, submit } from './helpers.ts'
 

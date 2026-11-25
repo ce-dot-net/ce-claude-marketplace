@@ -165,8 +165,4 @@ export async function logOnce($: any, L: Load, c: Ctx, state: State) {
   L.ctxLogged = true
   await contextLog($, c, contextRow(c, state, await nowIso($), 'session.start', await $.session.id()), state)
 }
-// The marker refresh re-exports ACE_CONTEXT so the Python chain keeps trusting it (MOD_FRESH_S 900 s).
-export async function reexport($: any, L: Load) {
-  if (L.ctx?.bound) await exportEnv($, L.ctx, await $.clock.now()).catch(() => undefined)
-}
 export { cliIds }

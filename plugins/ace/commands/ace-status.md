@@ -195,11 +195,11 @@ ACE v3.0 stores playbooks in:
   - Or start coding - ACE will learn automatically!
 
 - **If not configured yet:**
-  - Run `/ace:configure` to set up ACE server connection
+  - Run `/ace:ace-configure` to set up ACE server connection
 
 ## See Also
 
-- `/ace:configure` - Configure ACE server connection
+- `/ace:ace-configure` - Configure ACE server connection
 - `/ace:ace-bootstrap` - Bootstrap playbook from git/docs/code
-- `/ace:patterns` - View learned patterns
-- `/ace:clear` - Clear playbook and start fresh
+- `/ace:ace-patterns` - View learned patterns
+- `/ace:ace-clear` - Clear playbook and start fresh

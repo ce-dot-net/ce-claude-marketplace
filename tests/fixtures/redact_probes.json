@@ -1,0 +1,2500 @@
+{
+ "_doc": "Redact probe cases (Opus reviews of rounds 14-16; synthetic: placeholder numbers, official example IBANs, invented addresses). Input for tests/test_redact_differential.py (base 36159e0 vs now). '@@GHP@@' is a token prefix spelled as a recipe (the loader writes 'gh' + 'p_'). No real data: add only fakes, official example IBANs and recipes.",
+ "texts": [
+  "Telefonnummer: 030 1234567",
+  "Handynummer: 0151 12345678",
+  "Mobilnummer: 0151 12345678",
+  "Telephone: 030 1234567",
+  "phoneNumber: 030 1234567",
+  "phone_number: 030 1234567",
+  "phone_number=030 1234567",
+  "\"phone_number\": \"030 1234567\"",
+  "telNr: 030 1234567",
+  "Tel.-Nr.: 030 1234567",
+  "Handynr. 0151 12345678",
+  "Faxnummer 030 1234568",
+  "Rufnummer 030 1234567",
+  "Mobiltelefon: 0151 12345678",
+  "Mobilfunknummer: 0151 12345678",
+  "Diensthandy: 0151 12345678",
+  "Firmenhandy 0151 12345678",
+  "Festnetz: 030 1234567",
+  "Telefon-Nr.: 030 1234567",
+  "Kontakt: 030 1234567",
+  "Cell: 555 123 4567",
+  "cellphone: 555 123 4567",
+  "Mobile Phone: 0151 12345678",
+  "Phone No. 030 1234567",
+  "bitte anrufen unter 030 1234567",
+  "call us at 030 1234567",
+  "Call me: 0151 12345678",
+  "iban: de89 3704 0044 0532 0130 00",
+  "iban: DE89 3704 0044 0532 0130 00",
+  "IBAN: de89 3704 0044 0532 0130 00 BIC x",
+  "iban=de89 3704 0044 0532 0130 00",
+  "iban: de 89 3704 0044 0532 0130 00",
+  "meine iban ist de89 3704 0044 0532 0130 00",
+  "iban: mt84 malt 0110 0001 2345 mtlc ast0 01s",
+  "iban: MT84 MALT 0110 0001 2345 MTLC AST0 01S",
+  "iban: ru02 0445 2560 0407 0281 0412 3456 7890 1",
+  "iban_no: de89 3704 0044 0532 0130 00",
+  "phone: 0 3 0 1 2 3 4 5 6 7 8",
+  "phone_number: 0 3 0 1 2 3 4 5 6 7 8",
+  "logo@2x.png icon@3x.webp img@1.5x.jpg backup@2026.tar.gz",
+  "bundle@1.2.3.js main@abc.map style@v2.css",
+  "user@site.zip jane@corp.mov",
+  "+2026-11-24 10:00:00 deployed",
+  "+192.168.1.100 myhost",
+  "+192.168.1.100 8080",
+  "+3.14159265358979",
+  "+1,5",
+  "+49.30.1234567",
+  "+44.20.794.609",
+  "+353.1.234.567",
+  "+4930-12-34 5678",
+  "+1.415.555.0123",
+  "+33 1 23 45 67 89",
+  "tool call took 1234567 ns",
+  "API call 20261124 ok",
+  "call(123456)",
+  "function call used 1234567 bytes",
+  "q@k.transpose(-2, -1)",
+  "x@a.b.cd(",
+  "jane@corp.io(work)",
+  "jane@corp.io[1]",
+  "[jane@corp.io](mailto:jane@corp.io)",
+  "+49 30 1234567",
+  "Tel.: 030 1234567",
+  "+49 30 1234567",
+  "Tel.: 030 123 4567",
+  "phone: 030 123 4567 2024",
+  "Tel 030 123 4567 2024 Umsatz",
+  "Telefon 030 1234567, Bestellung 2024 12345",
+  "mobile app build 20261124",
+  "mobile version 1234567 released",
+  "Hotel 1234567",
+  "telnet 10.0.0.1 2323",
+  "iPhone 15 Pro 123456",
+  "next@14.0.0-canary.abc",
+  "pkg@1.0.0-rc.beta",
+  "\"e-mail_number\": \"x@corp.de\"",
+  "mailNr: jane@corp.de",
+  "Telefon: +49 (0)30 1234567",
+  "Tel: (030) 123 45 67",
+  "fax: 030-123 456-78",
+  "iban: gb82 west 1234 5698 7654 32",
+  "iban: nl91 abna 0417 1643 00",
+  "iban: ie29 aibk 9311 5212 3456 78",
+  "iban: bg80 bnbg 9661 1020 3456 78",
+  "iban: GB82 west 1234 5698 7654 32",
+  "\"iban\": \"gb82 west 1234 5698 7654 32\"",
+  "iban: gb82west12345698765432",
+  "{\"telefon\": \"030 1234567\", \"handynummer\": \"0151 12345678\"}",
+  "telefon=0301234567",
+  "handynummer=0151 12345678",
+  "Mobiltelefonnummer: 0151 12345678",
+  "Tel. privat 030 1234567",
+  "Telefon (mobil) 0151 12345678",
+  "+24.11.2026 10:00:00 Uhr",
+  "+2026/11/24 10:00",
+  "+11/24/2026 10:00",
+  "+2026.11.24 build",
+  "+192.168.100.200/24",
+  "+10.20.30.40:8080",
+  "+2026-11-24T10:00:00Z",
+  "git@gitlab.com:group/sub/repo.git",
+  "git remote add origin git@github.com:ce-dot-net/ace.git",
+  "npm i @babel/core@7.24.0 @types/node@20.11.5 react@18.3.1",
+  "FROM node@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+  "@Component({selector: 'x'})\n@media screen and (min-width: 768px)\n@import url(x.css)",
+  "550e8400-e29b-41d4-a716-446655440000 3f786850e387550fdab836ed7e6dc881de23001b 10.0.0.1 ::1 fe80::1",
+  "2026-11-24T10:00:00.123+01:00 2026-11-24 10:00:00 +0000",
+  "@@ -1,5 +1,6 @@ def foo():\n+    return 12345678901",
+  "1.0.0-beta+exp.sha.5114f85 v2.1.0+build.42",
+  "sprite@2x.PNG?v=3 avatar@3x.png",
+  "pip install requests==2.31.0 numpy@1.26",
+  "Phone tests: 1 passed",
+  "telemetry 123456 events",
+  "tel: 12345",
+  "mobile=false; mobile_count=1234567",
+  "IBAN: GB82 WEST 1234 5698 7654 32 BIC NWBKGB2L",
+  "iban=nl91 abna 0417 1643 00; bic=ABNANL2A",
+  "gb82 west 1234 5698 7654 32",
+  "Konto nl91abna0417164300 bitte",
+  "IBAN GB82WEST12345698765432.",
+  "iban: GB82-WEST-1234-5698-7654-32",
+  "iban: DE89 3704 0044 0532 0130 00",
+  "IBAN DE89 3704 0044 0532 0130 00",
+  "IBAN DE89\t3704\t0044\t0532\t0130\t00",
+  "iban: DE89 3704 0044 0532 0130 00 seit 2020",
+  "iban: DE89370400440532013000XXXXXXXXXXXXXXXX tail",
+  "iban: GB82 WEST 1234 5698 7654 3",
+  "iban_nr: de89 3704 0044 0532 0130 00",
+  "Mobilfunknummer 0151 12345678",
+  "Diensthandy: 0151/12345678",
+  "Firmenhandy 0151-12345678",
+  "Cell: 415 555 0123",
+  "cellphone: 415-555-0123",
+  "Handy-Nr. 0151 12345678",
+  "MobilePhone: 0151 12345678",
+  "HomePhone: 030 1234567",
+  "mobilephone=0151 12345678",
+  "\"mobilephone\": \"0151 12345678\"",
+  "\"phoneNumbers\": \"030 1234567\"",
+  "\"home_phone\": \"030 1234567\"",
+  "\"phone2\": \"030 1234567\"",
+  "Mobilphone 0151 12345678",
+  "telefonisch unter 0151 12345678",
+  "Tel/089.1234.5678",
+  "Telefon/Mobil/0151.1234.5678",
+  "WhatsApp/0151.1234.5678",
+  "WhatsApp/2.23.20.0 Android",
+  "cell size 1000000 bytes",
+  "Cell execution took 1234567 ns",
+  "Shandy 1234567",
+  "Automobil 1234567",
+  "iPhone 1234567",
+  "telemetry 123456",
+  "smartphone 1234567",
+  "+49 151 12345678",
+  "+1234/-567 lines",
+  " 12 files changed, +123456/-78901",
+  "+24.11. 10:00 Termin",
+  "+31.12. Silvester",
+  "+31.6.12.34.56.78",
+  "+33.1.42.68.53.00",
+  "+41.44.123.45",
+  "+49.30.123.45",
+  "+20.1.2034 5678",
+  "+49.15112345678",
+  "+192.168.1.1/33",
+  "+300.1.1.1",
+  "+24.11.2026",
+  "+29.02.2026 x",
+  "logo@2x.png",
+  "img@1.5x.jpg",
+  "q@k.transpose(-1)",
+  "a@b.transpose",
+  "jane@corp.io(",
+  "see [jane@corp.io](mailto:jane@corp.io)",
+  "jane@corp.io[0]",
+  "user@host.zip",
+  "ssh deploy@prod.acme.io",
+  "git@github.com:org/repo.git",
+  "telNo: 030 1234567",
+  "mobile-no=0151 12345678",
+  "faxnummer: 030 1234567",
+  "mailno: x@corp.de",
+  "\"festnetz\": \"030 1234567\"",
+  "\"cell\": \"415 555 0123\"",
+  "Tel/415.555.0123",
+  "Phone/415.555.0123",
+  "Fax/030.123.4567",
+  "Kontakt: jane.doe@firma.de(Vertrieb)",
+  "siehe jane.doe@firma.de[1]",
+  "iban: GB82 WEST 1234 5698 7654 321",
+  "iban='gb82 west 1234 5698 7654 32'",
+  "iban: gb82 west 1234 5698 7654 32, bic: x",
+  "span_id=be12a3f4c5d6e7f8",
+  "trace be47e1a9c0d2f3b4 done",
+  "Bitte überweisen an AT61 1904 3002 3457 3201 bis Freitag",
+  "IBAN AT61 1904 3002 3457 3201 BIC BKAUATWW",
+  "IBAN AT611904300234573201 und BIC",
+  "my IBAN is ES91 2100 0418 4502 0005 1332 and the BIC is CAIXESBBXXX",
+  "BE68 5390 0754 7034 ok",
+  "BE68539007547034 ok",
+  "PL61 1090 1014 0000 0712 1981 2874 von Max",
+  "SE45 5000 0000 0583 9825 7466 to pay",
+  "AT61 1904 3002 3457 3201 bank",
+  "AT61 1904 3002 3457 3201 BANK",
+  "AT61 1904 3002 3457 3201.",
+  "AT61 1904 3002 3457 3201 1",
+  "DE89 3704 0044 0532 0130 00 bis Freitag",
+  "iban: AT61 1904 3002 3457 3201 bis Freitag",
+  "CH93 0076 2011 6238 5295 7 an",
+  "Bitte auf AT61 1904 3002 3457 3201 oder DE89 3704 0044 0532 0130 00 überweisen",
+  "IBAN AT61 1904 3002 3457 3201 IBAN DE89 3704 0044 0532 0130 00",
+  "IBAN alt AT61 1904 3002 3457 3201 neue DE89 3704 0044 0532 0130 00",
+  "AT611904300234573201\tDE89370400440532013000",
+  "Max\tAT61 1904 3002 3457 3201\tDE89 3704 0044 0532 0130 00\tBerlin",
+  "AT61 1904 3002 3457 3201 DE89 3704 0044 0532 0130 00",
+  "Zahlung KW47 DE89 3704 0044 0532 0130 00",
+  "KW47 DE89370400440532013000",
+  "Re24 AT61 1904 3002 3457 3201",
+  "iban: AT61 1904 3002 3457 3201 oder DE89 3704 0044 0532 0130 00",
+  "AT61 1904 3002 3457 3201 oder 12345",
+  "Telefax: 089 1234567",
+  "Telefax 089/1234567",
+  "Fon: 089 1234567",
+  "Fon 089 1234567",
+  "Durchwahl: 089 1234-567",
+  "Tel.-Nr. 089 1234567",
+  "Mobilnr.: 0151 12345678",
+  "Handy-Nr.: 0151 12345678",
+  "Mobil-Nr.: 0151 12345678",
+  "Ruf: 089 1234567",
+  "Telefonnr: 089 1234567",
+  "T: 089 1234567",
+  "Tel/123.45.67",
+  "Tel/089.123.4",
+  "Telefon/12.34.56",
+  "Tel/0891.234",
+  "WhatsApp/2.23.20.0",
+  "WhatsApp/2.24.1.78",
+  "WhatsApp/12.34.567.8901",
+  "const phone2 = 123456",
+  "phones: 3",
+  "iphone_build: 20261124",
+  "iPhone: 20261124",
+  "iphone: 15",
+  "microphone: 192000",
+  "saxophone=1234567",
+  "headphones = 2",
+  "homephone_id: 1234567",
+  "phone_model: X200",
+  "phoneme: 123456",
+  "telemetry: 1234567",
+  "cellular: 1234567",
+  "cell: 1000000",
+  "cells: 1000000",
+  "cell_count = 1234567",
+  "cell #1234567",
+  "cell no 1234567",
+  "cell nr 1234567",
+  "cell no. 1234567",
+  "x@obj.attr[0]",
+  "x@obj.ab[0]",
+  "self@obj.get(1)",
+  "res = a@b.foo(x)",
+  "user@host.local(1)",
+  "@app.route('/x')",
+  "m@w.shape[0]",
+  "Kontakt: anna@kanzlei.berlin(Vertrieb)",
+  "Mail: max@firma.info(privat)",
+  "siehe anna@kanzlei.berlin[1]",
+  "Mail max@firma.gmbh[2]",
+  "[Anna](mailto:anna@firma.berlin)",
+  "anna@firma.de(Vertrieb)",
+  "iban: GB82 WEST 1234 5698 7654 3 seit 2020",
+  "iban: DE89 3704 0044 0532 0130 01 bitte",
+  "iban: DE8937040044053201300 Freitag",
+  "iban: DE89 3704 0044 0532 0130 0X1 Freitag",
+  "iban: XX89 3704 0044 0532 0130 00 Freitag",
+  "iban: DE89 ABCD EFGH IJKL MNOP QR seit",
+  "IBAN: AT61 1904 3002 3457 3202",
+  "iban: AT61-1904-3002-3457-3201",
+  "Telefon: 030 1234567",
+  "Tel: 030 123 4567",
+  "IBAN DE89 3704 0044 0532 0130 00",
+  "IBAN DE89  3704  0044  0532  0130  00",
+  "IBAN DE89-3704-0044-0532-0130-00",
+  "IBAN DE89.3704.0044.0532.0130.00",
+  "IBAN DE89 370 400 440 532 013 000",
+  "phones: [\"030 1234567\"]",
+  "Phone2: 030 1234567",
+  "phone_2: 030 1234567",
+  "phone12: 030 1234567",
+  "workPhone: 030 1234567",
+  "businessPhoneNumber: 030 1234567",
+  "Mobile_Phone_Number: 0151 12345678",
+  "contactPhone: 030 1234567",
+  "supportphone: 030 1234567",
+  "telefonnummer2: 030 1234567",
+  "Telefon2: 030 1234567",
+  "Fax2: 030 1234567"
+ ],
+ "objects": [
+  {
+   "__proto__": "0301234567",
+   "constructor": "v1.2",
+   "Constructor": 3,
+   "toString": "a1",
+   "valueOf": "b2",
+   "hasOwnProperty": "c3"
+  },
+  {
+   "phone": 12345.0,
+   "tel": 1e+21,
+   "fax": 1234567.0
+  },
+  {
+   "phone": 1.234e-05
+  },
+  {
+   "phone": 1e-06
+  },
+  {
+   "tel": 1.5e-07
+  },
+  {
+   "mobile": 0.0001234
+  },
+  {
+   "phone": 123456.789
+  },
+  {
+   "phone": 1.2345678901234566e+17
+  },
+  {
+   "phone": -1234567
+  },
+  {
+   "phone": 12345678901234567890
+  },
+  {
+   "phone_number": "030 1234567",
+   "phoneNumber": 301234567,
+   "telNr": "x",
+   "mobile_no": "0151 1234 5678"
+  },
+  {
+   "iban": "de89 3704 0044 0532 0130 00",
+   "iban_nr": "nl91 abna 0417 1643 00"
+  },
+  {
+   "email": "a@example.com",
+   "mail": "p@corp.de",
+   "E-Mail": "q@corp.de"
+  },
+  {
+   "phone": true,
+   "tel": null,
+   "mobile": [
+    1234567
+   ],
+   "fax": {
+    "n": "0301234567"
+   }
+  },
+  {
+   "name": "phone",
+   "value": "0301234567"
+  },
+  {
+   "telephone_number": "030 1234567",
+   "TELEFON": "030 1234567",
+   "handy-nr": "0151 1234567"
+  },
+  {
+   "telefon": "030 1234567"
+  },
+  {
+   "Telefonnummer": "030 1234567"
+  },
+  {
+   "handynummer": "0151 12345678"
+  },
+  {
+   "mobil": "0151 12345678"
+  },
+  {
+   "rufnummer": "030 1234567"
+  },
+  {
+   "whatsapp": "0151 12345678"
+  },
+  {
+   "mobilnummer": "0151 12345678"
+  },
+  {
+   "phone": [
+    "030 1234567",
+    "0151 2345678"
+   ]
+  },
+  {
+   "iban": [
+    "de89 3704 0044 0532 0130 00"
+   ]
+  },
+  {
+   "contact": {
+    "tel": "030 1234567"
+   }
+  },
+  {
+   "telefon": "030 1234567",
+   "Telefonnummer": "030 1234567",
+   "handynummer": "0151 12345678",
+   "mobil": "0151 12345678",
+   "mobilnummer": "0151 12345678",
+   "rufnummer": "030 1234567",
+   "whatsapp": "0151 12345678"
+  },
+  {
+   "phone": [
+    "030 1234567",
+    {
+     "home": "030 1234567",
+     "n": 1234567
+    },
+    [
+     [
+      "0151 12345678"
+     ]
+    ]
+   ]
+  },
+  {
+   "email": [
+    "jane@corp.io",
+    {
+     "work": "j@corp.io"
+    }
+   ],
+   "iban": [
+    {
+     "value": "DE89 3704 0044 0532 0130 00"
+    }
+   ]
+  },
+  {
+   "phone": {
+    "id": 1234567,
+    "label": "work",
+    "password": "hunter2",
+    "token": "x",
+    "name": "API_KEY",
+    "value": "abc"
+   }
+  },
+  {
+   "phone": [
+    {
+     "name": "password",
+     "value": "secret123"
+    }
+   ]
+  },
+  {
+   "phoneNumbers": [
+    "030 1234567"
+   ],
+   "mobilephone": "0151 12345678",
+   "home_phone": "030 1234567",
+   "phone2": "030 1234567",
+   "phones": [
+    {
+     "value": "030 1234567"
+    }
+   ]
+  },
+  {
+   "phone": 1.23456e-05,
+   "tel": 1.5e-05,
+   "fax": 1e-07,
+   "mobile": 123456.7,
+   "handy": -1.2345e-05,
+   "mail": 1.5,
+   "telefon": 1e+21
+  },
+  {
+   "phone": 12345678901234567890,
+   "tel": 1000000000000000000000
+  },
+  {
+   "email": {
+    "verified": true,
+    "count": 123456,
+    "addr": null
+   }
+  },
+  {
+   "iban": {
+    "bank": "Sparkasse 2",
+    "note": "@@GHP@@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+   }
+  },
+  {
+   "constructor": "030 1234567",
+   "__proto__": "030 1234567",
+   "toString": 1234567
+  },
+  [
+   [
+    [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            [
+             [
+              [
+               [
+                [
+                 [
+                  [
+                   [
+                    [
+                     [
+                      [
+                       [
+                        [
+                         [
+                          [
+                           [
+                            [
+                             [
+                              [
+                               [
+                                [
+                                 [
+                                  [
+                                   [
+                                    [
+                                     [
+                                      [
+                                       [
+                                        [
+                                         [
+                                          [
+                                           [
+                                            [
+                                             [
+                                              [
+                                               [
+                                                [
+                                                 [
+                                                  [
+                                                   5
+                                                  ]
+                                                 ]
+                                                ]
+                                               ]
+                                              ]
+                                             ]
+                                            ]
+                                           ]
+                                          ]
+                                         ]
+                                        ]
+                                       ]
+                                      ]
+                                     ]
+                                    ]
+                                   ]
+                                  ]
+                                 ]
+                                ]
+                               ]
+                              ]
+                             ]
+                            ]
+                           ]
+                          ]
+                         ]
+                        ]
+                       ]
+                      ]
+                     ]
+                    ]
+                   ]
+                  ]
+                 ]
+                ]
+               ]
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  [
+   [
+    [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            [
+             [
+              [
+               [
+                [
+                 [
+                  [
+                   [
+                    [
+                     [
+                      [
+                       [
+                        [
+                         [
+                          [
+                           [
+                            [
+                             [
+                              [
+                               [
+                                [
+                                 [
+                                  [
+                                   [
+                                    [
+                                     [
+                                      [
+                                       [
+                                        [
+                                         [
+                                          [
+                                           [
+                                            [
+                                             [
+                                              [
+                                               [
+                                                [
+                                                 [
+                                                  [
+                                                   [
+                                                    5
+                                                   ]
+                                                  ]
+                                                 ]
+                                                ]
+                                               ]
+                                              ]
+                                             ]
+                                            ]
+                                           ]
+                                          ]
+                                         ]
+                                        ]
+                                       ]
+                                      ]
+                                     ]
+                                    ]
+                                   ]
+                                  ]
+                                 ]
+                                ]
+                               ]
+                              ]
+                             ]
+                            ]
+                           ]
+                          ]
+                         ]
+                        ]
+                       ]
+                      ]
+                     ]
+                    ]
+                   ]
+                  ]
+                 ]
+                ]
+               ]
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  [
+   [
+    [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            [
+             [
+              [
+               [
+                [
+                 [
+                  [
+                   [
+                    [
+                     [
+                      [
+                       [
+                        [
+                         [
+                          [
+                           [
+                            [
+                             [
+                              [
+                               [
+                                [
+                                 [
+                                  [
+                                   [
+                                    [
+                                     [
+                                      [
+                                       [
+                                        [
+                                         [
+                                          [
+                                           [
+                                            [
+                                             [
+                                              [
+                                               [
+                                                [
+                                                 [
+                                                  [
+                                                   [
+                                                    [
+                                                     5
+                                                    ]
+                                                   ]
+                                                  ]
+                                                 ]
+                                                ]
+                                               ]
+                                              ]
+                                             ]
+                                            ]
+                                           ]
+                                          ]
+                                         ]
+                                        ]
+                                       ]
+                                      ]
+                                     ]
+                                    ]
+                                   ]
+                                  ]
+                                 ]
+                                ]
+                               ]
+                              ]
+                             ]
+                            ]
+                           ]
+                          ]
+                         ]
+                        ]
+                       ]
+                      ]
+                     ]
+                    ]
+                   ]
+                  ]
+                 ]
+                ]
+               ]
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  [
+   [
+    [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            [
+             [
+              [
+               [
+                [
+                 [
+                  [
+                   [
+                    [
+                     [
+                      [
+                       [
+                        [
+                         [
+                          [
+                           [
+                            [
+                             [
+                              [
+                               [
+                                [
+                                 [
+                                  [
+                                   [
+                                    [
+                                     [
+                                      [
+                                       [
+                                        [
+                                         [
+                                          [
+                                           [
+                                            [
+                                             [
+                                              [
+                                               [
+                                                [
+                                                 [
+                                                  [
+                                                   [
+                                                    [
+                                                     [
+                                                      5
+                                                     ]
+                                                    ]
+                                                   ]
+                                                  ]
+                                                 ]
+                                                ]
+                                               ]
+                                              ]
+                                             ]
+                                            ]
+                                           ]
+                                          ]
+                                         ]
+                                        ]
+                                       ]
+                                      ]
+                                     ]
+                                    ]
+                                   ]
+                                  ]
+                                 ]
+                                ]
+                               ]
+                              ]
+                             ]
+                            ]
+                           ]
+                          ]
+                         ]
+                        ]
+                       ]
+                      ]
+                     ]
+                    ]
+                   ]
+                  ]
+                 ]
+                ]
+               ]
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  [
+   [
+    [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            [
+             [
+              [
+               [
+                [
+                 [
+                  [
+                   [
+                    [
+                     [
+                      [
+                       [
+                        [
+                         [
+                          [
+                           [
+                            [
+                             [
+                              [
+                               [
+                                [
+                                 [
+                                  [
+                                   [
+                                    [
+                                     [
+                                      [
+                                       [
+                                        [
+                                         [
+                                          [
+                                           [
+                                            [
+                                             [
+                                              [
+                                               [
+                                                [
+                                                 [
+                                                  [
+                                                   [
+                                                    [
+                                                     [
+                                                      [
+                                                       "x"
+                                                      ]
+                                                     ]
+                                                    ]
+                                                   ]
+                                                  ]
+                                                 ]
+                                                ]
+                                               ]
+                                              ]
+                                             ]
+                                            ]
+                                           ]
+                                          ]
+                                         ]
+                                        ]
+                                       ]
+                                      ]
+                                     ]
+                                    ]
+                                   ]
+                                  ]
+                                 ]
+                                ]
+                               ]
+                              ]
+                             ]
+                            ]
+                           ]
+                          ]
+                         ]
+                        ]
+                       ]
+                      ]
+                     ]
+                    ]
+                   ]
+                  ]
+                 ]
+                ]
+               ]
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  [
+   [
+    [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            [
+             [
+              [
+               [
+                [
+                 [
+                  [
+                   [
+                    [
+                     [
+                      [
+                       [
+                        [
+                         [
+                          [
+                           [
+                            [
+                             [
+                              [
+                               [
+                                [
+                                 [
+                                  [
+                                   [
+                                    [
+                                     [
+                                      [
+                                       [
+                                        [
+                                         [
+                                          [
+                                           [
+                                            [
+                                             [
+                                              [
+                                               [
+                                                [
+                                                 [
+                                                  [
+                                                   [
+                                                    [
+                                                     [
+                                                      true
+                                                     ]
+                                                    ]
+                                                   ]
+                                                  ]
+                                                 ]
+                                                ]
+                                               ]
+                                              ]
+                                             ]
+                                            ]
+                                           ]
+                                          ]
+                                         ]
+                                        ]
+                                       ]
+                                      ]
+                                     ]
+                                    ]
+                                   ]
+                                  ]
+                                 ]
+                                ]
+                               ]
+                              ]
+                             ]
+                            ]
+                           ]
+                          ]
+                         ]
+                        ]
+                       ]
+                      ]
+                     ]
+                    ]
+                   ]
+                  ]
+                 ]
+                ]
+               ]
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  [
+   [
+    [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            [
+             [
+              [
+               [
+                [
+                 [
+                  [
+                   [
+                    [
+                     [
+                      [
+                       [
+                        [
+                         [
+                          [
+                           [
+                            [
+                             [
+                              [
+                               [
+                                [
+                                 [
+                                  [
+                                   [
+                                    [
+                                     [
+                                      [
+                                       [
+                                        [
+                                         [
+                                          [
+                                           [
+                                            [
+                                             [
+                                              [
+                                               [
+                                                [
+                                                 [
+                                                  [
+                                                   [
+                                                    [
+                                                     [
+                                                      null
+                                                     ]
+                                                    ]
+                                                   ]
+                                                  ]
+                                                 ]
+                                                ]
+                                               ]
+                                              ]
+                                             ]
+                                            ]
+                                           ]
+                                          ]
+                                         ]
+                                        ]
+                                       ]
+                                      ]
+                                     ]
+                                    ]
+                                   ]
+                                  ]
+                                 ]
+                                ]
+                               ]
+                              ]
+                             ]
+                            ]
+                           ]
+                          ]
+                         ]
+                        ]
+                       ]
+                      ]
+                     ]
+                    ]
+                   ]
+                  ]
+                 ]
+                ]
+               ]
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  ],
+  {
+   "phone": [
+    [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            [
+             [
+              [
+               [
+                [
+                 [
+                  [
+                   [
+                    [
+                     [
+                      [
+                       [
+                        [
+                         [
+                          [
+                           [
+                            [
+                             [
+                              [
+                               [
+                                [
+                                 [
+                                  [
+                                   [
+                                    [
+                                     [
+                                      [
+                                       [
+                                        [
+                                         [
+                                          [
+                                           [
+                                            [
+                                             [
+                                              [
+                                               [
+                                                [
+                                                 [
+                                                  [
+                                                   1234567
+                                                  ]
+                                                 ]
+                                                ]
+                                               ]
+                                              ]
+                                             ]
+                                            ]
+                                           ]
+                                          ]
+                                         ]
+                                        ]
+                                       ]
+                                      ]
+                                     ]
+                                    ]
+                                   ]
+                                  ]
+                                 ]
+                                ]
+                               ]
+                              ]
+                             ]
+                            ]
+                           ]
+                          ]
+                         ]
+                        ]
+                       ]
+                      ]
+                     ]
+                    ]
+                   ]
+                  ]
+                 ]
+                ]
+               ]
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "phone": [
+    [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            [
+             [
+              [
+               [
+                [
+                 [
+                  [
+                   [
+                    [
+                     [
+                      [
+                       [
+                        [
+                         [
+                          [
+                           [
+                            [
+                             [
+                              [
+                               [
+                                [
+                                 [
+                                  [
+                                   [
+                                    [
+                                     [
+                                      [
+                                       [
+                                        [
+                                         [
+                                          [
+                                           [
+                                            [
+                                             [
+                                              [
+                                               [
+                                                [
+                                                 [
+                                                  [
+                                                   [
+                                                    1234567
+                                                   ]
+                                                  ]
+                                                 ]
+                                                ]
+                                               ]
+                                              ]
+                                             ]
+                                            ]
+                                           ]
+                                          ]
+                                         ]
+                                        ]
+                                       ]
+                                      ]
+                                     ]
+                                    ]
+                                   ]
+                                  ]
+                                 ]
+                                ]
+                               ]
+                              ]
+                             ]
+                            ]
+                           ]
+                          ]
+                         ]
+                        ]
+                       ]
+                      ]
+                     ]
+                    ]
+                   ]
+                  ]
+                 ]
+                ]
+               ]
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "phone": [
+    [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            [
+             [
+              [
+               [
+                [
+                 [
+                  [
+                   [
+                    [
+                     [
+                      [
+                       [
+                        [
+                         [
+                          [
+                           [
+                            [
+                             [
+                              [
+                               [
+                                [
+                                 [
+                                  [
+                                   [
+                                    [
+                                     [
+                                      [
+                                       [
+                                        [
+                                         [
+                                          [
+                                           [
+                                            [
+                                             [
+                                              [
+                                               [
+                                                [
+                                                 [
+                                                  [
+                                                   [
+                                                    [
+                                                     1234567
+                                                    ]
+                                                   ]
+                                                  ]
+                                                 ]
+                                                ]
+                                               ]
+                                              ]
+                                             ]
+                                            ]
+                                           ]
+                                          ]
+                                         ]
+                                        ]
+                                       ]
+                                      ]
+                                     ]
+                                    ]
+                                   ]
+                                  ]
+                                 ]
+                                ]
+                               ]
+                              ]
+                             ]
+                            ]
+                           ]
+                          ]
+                         ]
+                        ]
+                       ]
+                      ]
+                     ]
+                    ]
+                   ]
+                  ]
+                 ]
+                ]
+               ]
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "phone": [
+    [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            [
+             [
+              [
+               [
+                [
+                 [
+                  [
+                   [
+                    [
+                     [
+                      [
+                       [
+                        [
+                         [
+                          [
+                           [
+                            [
+                             [
+                              [
+                               [
+                                [
+                                 [
+                                  [
+                                   [
+                                    [
+                                     [
+                                      [
+                                       [
+                                        [
+                                         [
+                                          [
+                                           [
+                                            [
+                                             [
+                                              [
+                                               [
+                                                [
+                                                 [
+                                                  [
+                                                   [
+                                                    [
+                                                     [
+                                                      7
+                                                     ]
+                                                    ]
+                                                   ]
+                                                  ]
+                                                 ]
+                                                ]
+                                               ]
+                                              ]
+                                             ]
+                                            ]
+                                           ]
+                                          ]
+                                         ]
+                                        ]
+                                       ]
+                                      ]
+                                     ]
+                                    ]
+                                   ]
+                                  ]
+                                 ]
+                                ]
+                               ]
+                              ]
+                             ]
+                            ]
+                           ]
+                          ]
+                         ]
+                        ]
+                       ]
+                      ]
+                     ]
+                    ]
+                   ]
+                  ]
+                 ]
+                ]
+               ]
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "phone": [
+    [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            [
+             [
+              [
+               [
+                [
+                 [
+                  [
+                   [
+                    [
+                     [
+                      [
+                       [
+                        [
+                         [
+                          [
+                           [
+                            [
+                             [
+                              [
+                               [
+                                [
+                                 [
+                                  [
+                                   [
+                                    [
+                                     [
+                                      [
+                                       [
+                                        [
+                                         [
+                                          [
+                                           [
+                                            [
+                                             [
+                                              [
+                                               [
+                                                [
+                                                 [
+                                                  [
+                                                   [
+                                                    [
+                                                     [
+                                                      [
+                                                       7
+                                                      ]
+                                                     ]
+                                                    ]
+                                                   ]
+                                                  ]
+                                                 ]
+                                                ]
+                                               ]
+                                              ]
+                                             ]
+                                            ]
+                                           ]
+                                          ]
+                                         ]
+                                        ]
+                                       ]
+                                      ]
+                                     ]
+                                    ]
+                                   ]
+                                  ]
+                                 ]
+                                ]
+                               ]
+                              ]
+                             ]
+                            ]
+                           ]
+                          ]
+                         ]
+                        ]
+                       ]
+                      ]
+                     ]
+                    ]
+                   ]
+                  ]
+                 ]
+                ]
+               ]
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "phone": [
+    [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            [
+             [
+              [
+               [
+                [
+                 [
+                  [
+                   [
+                    [
+                     [
+                      [
+                       [
+                        [
+                         [
+                          [
+                           [
+                            [
+                             [
+                              [
+                               [
+                                [
+                                 [
+                                  [
+                                   [
+                                    [
+                                     [
+                                      [
+                                       [
+                                        [
+                                         [
+                                          [
+                                           [
+                                            [
+                                             [
+                                              [
+                                               [
+                                                [
+                                                 [
+                                                  [
+                                                   [
+                                                    [
+                                                     [
+                                                      [
+                                                       "030 1234567"
+                                                      ]
+                                                     ]
+                                                    ]
+                                                   ]
+                                                  ]
+                                                 ]
+                                                ]
+                                               ]
+                                              ]
+                                             ]
+                                            ]
+                                           ]
+                                          ]
+                                         ]
+                                        ]
+                                       ]
+                                      ]
+                                     ]
+                                    ]
+                                   ]
+                                  ]
+                                 ]
+                                ]
+                               ]
+                              ]
+                             ]
+                            ]
+                           ]
+                          ]
+                         ]
+                        ]
+                       ]
+                      ]
+                     ]
+                    ]
+                   ]
+                  ]
+                 ]
+                ]
+               ]
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "phone": [
+    [
+     [
+      [
+       [
+        [
+         [
+          [
+           [
+            [
+             [
+              [
+               [
+                [
+                 [
+                  [
+                   [
+                    [
+                     [
+                      [
+                       [
+                        [
+                         [
+                          [
+                           [
+                            [
+                             [
+                              [
+                               [
+                                [
+                                 [
+                                  [
+                                   [
+                                    [
+                                     [
+                                      [
+                                       [
+                                        [
+                                         [
+                                          [
+                                           [
+                                            [
+                                             [
+                                              [
+                                               [
+                                                [
+                                                 [
+                                                  [
+                                                   [
+                                                    [
+                                                     [
+                                                      [
+                                                       "abc"
+                                                      ]
+                                                     ]
+                                                    ]
+                                                   ]
+                                                  ]
+                                                 ]
+                                                ]
+                                               ]
+                                              ]
+                                             ]
+                                            ]
+                                           ]
+                                          ]
+                                         ]
+                                        ]
+                                       ]
+                                      ]
+                                     ]
+                                    ]
+                                   ]
+                                  ]
+                                 ]
+                                ]
+                               ]
+                              ]
+                             ]
+                            ]
+                           ]
+                          ]
+                         ]
+                        ]
+                       ]
+                      ]
+                     ]
+                    ]
+                   ]
+                  ]
+                 ]
+                ]
+               ]
+              ]
+             ]
+            ]
+           ]
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "a": {
+    "a": {
+     "a": {
+      "a": {
+       "a": {
+        "a": {
+         "a": {
+          "a": {
+           "a": {
+            "a": {
+             "a": {
+              "a": {
+               "a": {
+                "a": {
+                 "a": {
+                  "a": {
+                   "a": {
+                    "a": {
+                     "a": {
+                      "a": {
+                       "a": {
+                        "a": {
+                         "a": {
+                          "a": {
+                           "a": {
+                            "a": {
+                             "a": {
+                              "a": {
+                               "a": {
+                                "a": {
+                                 "a": {
+                                  "a": {
+                                   "a": {
+                                    "a": {
+                                     "a": {
+                                      "a": {
+                                       "a": {
+                                        "a": {
+                                         "a": {
+                                          "a": {
+                                           "a": {
+                                            "a": {
+                                             "a": {
+                                              "a": {
+                                               "a": {
+                                                "a": {
+                                                 "a": {
+                                                  "a": {
+                                                   "a": {
+                                                    "a": {
+                                                     "a": {
+                                                      "a": 7
+                                                     }
+                                                    }
+                                                   }
+                                                  }
+                                                 }
+                                                }
+                                               }
+                                              }
+                                             }
+                                            }
+                                           }
+                                          }
+                                         }
+                                        }
+                                       }
+                                      }
+                                     }
+                                    }
+                                   }
+                                  }
+                                 }
+                                }
+                               }
+                              }
+                             }
+                            }
+                           }
+                          }
+                         }
+                        }
+                       }
+                      }
+                     }
+                    }
+                   }
+                  }
+                 }
+                }
+               }
+              }
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "phone": {
+    "phone": {
+     "phone": {
+      "phone": {
+       "phone": {
+        "phone": {
+         "phone": {
+          "phone": {
+           "phone": {
+            "phone": {
+             "phone": {
+              "phone": {
+               "phone": {
+                "phone": {
+                 "phone": {
+                  "phone": {
+                   "phone": {
+                    "phone": {
+                     "phone": {
+                      "phone": {
+                       "phone": {
+                        "phone": {
+                         "phone": {
+                          "phone": {
+                           "phone": {
+                            "phone": {
+                             "phone": {
+                              "phone": {
+                               "phone": {
+                                "phone": {
+                                 "phone": {
+                                  "phone": {
+                                   "phone": {
+                                    "phone": {
+                                     "phone": {
+                                      "phone": {
+                                       "phone": {
+                                        "phone": {
+                                         "phone": {
+                                          "phone": {
+                                           "phone": {
+                                            "phone": {
+                                             "phone": {
+                                              "phone": {
+                                               "phone": {
+                                                "phone": {
+                                                 "phone": {
+                                                  "phone": {
+                                                   "phone": {
+                                                    "phone": {
+                                                     "phone": {
+                                                      "phone": 7
+                                                     }
+                                                    }
+                                                   }
+                                                  }
+                                                 }
+                                                }
+                                               }
+                                              }
+                                             }
+                                            }
+                                           }
+                                          }
+                                         }
+                                        }
+                                       }
+                                      }
+                                     }
+                                    }
+                                   }
+                                  }
+                                 }
+                                }
+                               }
+                              }
+                             }
+                            }
+                           }
+                          }
+                         }
+                        }
+                       }
+                      }
+                     }
+                    }
+                   }
+                  }
+                 }
+                }
+               }
+              }
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "phone": {
+    "a": {
+     "a": {
+      "a": {
+       "a": {
+        "a": {
+         "a": {
+          "a": {
+           "a": {
+            "a": {
+             "a": {
+              "a": {
+               "a": {
+                "a": {
+                 "a": {
+                  "a": {
+                   "a": {
+                    "a": {
+                     "a": {
+                      "a": {
+                       "a": {
+                        "a": {
+                         "a": {
+                          "a": {
+                           "a": {
+                            "a": {
+                             "a": {
+                              "a": {
+                               "a": {
+                                "a": {
+                                 "a": {
+                                  "a": {
+                                   "a": {
+                                    "a": {
+                                     "a": {
+                                      "a": {
+                                       "a": {
+                                        "a": {
+                                         "a": {
+                                          "a": {
+                                           "a": {
+                                            "a": {
+                                             "a": {
+                                              "a": {
+                                               "a": {
+                                                "a": {
+                                                 "a": {
+                                                  "a": {
+                                                   "a": {
+                                                    "a": {
+                                                     "a": {
+                                                      "a": 12
+                                                     }
+                                                    }
+                                                   }
+                                                  }
+                                                 }
+                                                }
+                                               }
+                                              }
+                                             }
+                                            }
+                                           }
+                                          }
+                                         }
+                                        }
+                                       }
+                                      }
+                                     }
+                                    }
+                                   }
+                                  }
+                                 }
+                                }
+                               }
+                              }
+                             }
+                            }
+                           }
+                          }
+                         }
+                        }
+                       }
+                      }
+                     }
+                    }
+                   }
+                  }
+                 }
+                }
+               }
+              }
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "phone": {
+    "a": {
+     "a": {
+      "a": {
+       "a": {
+        "a": {
+         "a": {
+          "a": {
+           "a": {
+            "a": {
+             "a": {
+              "a": {
+               "a": {
+                "a": {
+                 "a": {
+                  "a": {
+                   "a": {
+                    "a": {
+                     "a": {
+                      "a": {
+                       "a": {
+                        "a": {
+                         "a": {
+                          "a": {
+                           "a": {
+                            "a": {
+                             "a": {
+                              "a": {
+                               "a": {
+                                "a": {
+                                 "a": {
+                                  "a": {
+                                   "a": {
+                                    "a": {
+                                     "a": {
+                                      "a": {
+                                       "a": {
+                                        "a": {
+                                         "a": {
+                                          "a": {
+                                           "a": {
+                                            "a": {
+                                             "a": {
+                                              "a": {
+                                               "a": {
+                                                "a": {
+                                                 "a": {
+                                                  "a": {
+                                                   "a": {
+                                                    "a": {
+                                                     "a": {
+                                                      "a": null
+                                                     }
+                                                    }
+                                                   }
+                                                  }
+                                                 }
+                                                }
+                                               }
+                                              }
+                                             }
+                                            }
+                                           }
+                                          }
+                                         }
+                                        }
+                                       }
+                                      }
+                                     }
+                                    }
+                                   }
+                                  }
+                                 }
+                                }
+                               }
+                              }
+                             }
+                            }
+                           }
+                          }
+                         }
+                        }
+                       }
+                      }
+                     }
+                    }
+                   }
+                  }
+                 }
+                }
+               }
+              }
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  {
+   "festnetz": "030 1234567",
+   "Mobiltelefon": "0151 12345678",
+   "Diensthandy": "0151 12345678",
+   "Firmenhandy": "0151 12345678",
+   "Mobilfunknummer": "0151 12345678",
+   "cell": "415 555 0123",
+   "cellphone": "415 555 0123",
+   "telephoneNumber": "030 1234567",
+   "Handynr": "0151 12345678",
+   "tel_nr": "030 1234567"
+  },
+  {
+   "contact": {
+    "festnetz": "030 1234567"
+   }
+  },
+  [
+   {
+    "cell": "415 555 0123"
+   }
+  ],
+  {
+   "Mobiltelefon": "0151 12345678",
+   "festnetz": "030 1234567",
+   "Diensthandy": "0151 1234567",
+   "Firmenhandy": 15112345678,
+   "Mobilfunknummer": "0151 1234567"
+  },
+  {
+   "cell": "415 555 0123",
+   "cellphone": "415-555-0123",
+   "Cell_No": "415 555 0123",
+   "Telefonnummer": "030 1234567",
+   "Faxnummer": "030 1234568"
+  },
+  {
+   "MobilePhone": "0151 12345678",
+   "HomePhone": "030 1234567",
+   "mobilephone": "0151 12345678",
+   "phoneNumbers": [
+    "030 1234567",
+    "0151 1234567"
+   ],
+   "home_phone": "030 1234567",
+   "phone2": "030 1234567"
+  },
+  {
+   "phones": [
+    {
+     "type": "mobile",
+     "number": "0151 12345678"
+    },
+    {
+     "type": "home",
+     "value": "030 1234567"
+    }
+   ]
+  },
+  {
+   "Telefax": "089 1234567",
+   "Fon": "089 1234567",
+   "Durchwahl": "089 1234-567",
+   "phone_2": "030 1234567",
+   "Telefon2": "030 1234567",
+   "Fax2": "030 1234567"
+  },
+  {
+   "iphone_build": 20261124,
+   "iPhone": 20261124,
+   "phones": 3,
+   "microphone": 192000,
+   "headphones": 2,
+   "phone_model": "X200",
+   "phoneme": 123456
+  },
+  {
+   "cell_count": 1234567,
+   "cells": 1000000,
+   "cellular": 1234567,
+   "telemetry": 1234567,
+   "hotel": "1234567",
+   "automobil": 1234567
+  },
+  {
+   "phone": {
+    "updated_at": "2026-11-24T10:00:00Z",
+    "verified": true,
+    "api_key": "x"
+   }
+  },
+  {
+   "iban": "AT61 1904 3002 3457 3201 oder DE89 3704 0044 0532 0130 00"
+  },
+  {
+   "note": "Bitte auf AT61 1904 3002 3457 3201 oder DE89 3704 0044 0532 0130 00"
+  },
+  {
+   "row": "Max\tAT61 1904 3002 3457 3201\tDE89 3704 0044 0532 0130 00"
+  },
+  {
+   "workPhone": "030 1234567",
+   "businessPhoneNumber": "030 1234567",
+   "Mobile_Phone_Number": "0151 12345678",
+   "supportPhone": 301234567
+  },
+  {
+   "Phone": 4930123456.0,
+   "phone": 1.5e-07,
+   "tel": 1e+21,
+   "fax": 123456789012345680000
+  }
+ ]
+}

@@ -521,7 +521,7 @@ class TestBuildGraphHtmlProjectName:
                 "total_edges": 0,
                 "rendered_edges": 0,
                 "truncated": False,
-                "project": "prj_d3a244129d62c198",
+                "project": "prj_0000000000000000",
                 "org": "org_test",
             },
         }
@@ -530,7 +530,7 @@ class TestBuildGraphHtmlProjectName:
         """
         build_graph_html(graph, project_name='ce-claude-marketplace')
         must include 'ce-claude-marketplace' in the rendered <h1> title
-        and must NOT include the raw meta project ID 'prj_d3a244129d62c198' in the <h1>.
+        and must NOT include the raw meta project ID 'prj_0000000000000000' in the <h1>.
         """
         g = self._minimal_graph()
         html = build_graph_html(g, project_name="ce-claude-marketplace")
@@ -541,7 +541,7 @@ class TestBuildGraphHtmlProjectName:
         assert "ce-claude-marketplace" in h1_text, (
             f"project_name not found in <h1>: {h1_text!r}"
         )
-        assert "prj_d3a244129d62c198" not in h1_text, (
+        assert "prj_0000000000000000" not in h1_text, (
             f"Raw project ID leaked into <h1> when project_name was provided: {h1_text!r}"
         )
 
@@ -555,7 +555,7 @@ class TestBuildGraphHtmlProjectName:
         h1_match = re.search(r'<h1[^>]*>(.*?)</h1>', html, re.DOTALL | re.IGNORECASE)
         assert h1_match is not None, "No <h1> found in HTML"
         h1_text = h1_match.group(1)
-        assert "prj_d3a244129d62c198" in h1_text, (
+        assert "prj_0000000000000000" in h1_text, (
             f"meta project ID not used as fallback when project_name=None: {h1_text!r}"
         )
 
@@ -585,7 +585,7 @@ class TestBuildGraphHtmlProjectName:
         h1_match = re.search(r'<h1[^>]*>(.*?)</h1>', html, re.DOTALL | re.IGNORECASE)
         assert h1_match is not None, "No <h1> found in HTML"
         h1_text = h1_match.group(1)
-        assert "prj_d3a244129d62c198" in h1_text, (
+        assert "prj_0000000000000000" in h1_text, (
             "Default (no project_name) must fall back to meta project ID"
         )
 

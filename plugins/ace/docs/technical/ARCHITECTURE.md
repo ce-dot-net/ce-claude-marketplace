@@ -156,7 +156,7 @@ rows and releases the lock); if the parent has it, no child sent anything, so th
 `subprocess.run` returned). SessionEnd and the 7-day sweep touch only session dirs; the trace temp files are swept
 only as orphans (below).
 
-**What the SDK does (ace-cli 4.4.4 / core 3.10.0, read-only).** `POST /traces` is tried 4 times (waits about 2, 8, 20 s,
+**What the SDK does (ace-cli 4.4.5 / core 3.11.0, read-only).** `POST /traces` is tried 4 times (waits about 2, 8, 20 s,
 ±20 %, `Retry-After` honoured) on 502/503/504 and on connection errors; never on 4xx, 500 or a timeout/abort. When the
 attempts are exhausted the core writes ONE stderr line `{"event":"ace_trace_dead_letter",...}`, nothing on disk.
 Every attempt carries the same `Idempotency-Key`; the core draws it at random per call unless the caller passes one.
@@ -240,8 +240,11 @@ invalid, unsigned, replay_error, child_killed), `error_class`, `attempts`, `trac
 is hit, it is older than 23 h, or the ace-cli fallback (no engine) got a 5xx or a timeout. A child killed during the
 send is logged (`child_killed`), not replayed. A DB error in the server's dedup can still store a rare duplicate.
 
-**`result.plugin_version` and `result.outcome_rule`.** The server keeps only task, trajectory, result, playbook_used,
-timestamp, git of a trace, so both fields live inside `result`, in every automatic trace (Stop, SubagentStop, mod
+**`result.plugin_version` and `result.outcome_rule`.** Last confirmed with the server: it keeps task, trajectory, result,
+playbook_used, timestamp, git of a trace. The plugin sends more top-level fields (`mod/lib/trace.ts` `buildTrace`:
+agent_type, session_id, render_variant, render_path, conversation_id, interactive, prompt_origin, human_prompt_count,
+agent_id, parent_agent_id, retrieval_id, applied_log_ids, used_ids_*, feedback, effort_level, effort_weight); for several
+of them the server's use is unconfirmed, so do not rely on them being stored. Both fields therefore live inside `result`, in every automatic trace (Stop, SubagentStop, mod
 turn.complete, PermissionDenied). `plugin_version` = the manifest version (x.y.z, the same as in
 `X-ACE-Client: claude-code-plugin/<version>`). `outcome_rule` is one value of a fixed list
 (`ace_trace_meta.OUTCOME_RULES` = `mod/lib/trace.ts OUTCOME_RULES`, parity test):
@@ -286,6 +289,13 @@ rendered context in the session state and the SessionStart `compact` hook re-inj
 See `ADR-001-language.md` for why the implementation stays Python.
 
 ---
+
+> **HISTORICAL (v3.x), do not use as documentation of the current plugin.** Everything below this line
+> describes the v3.x architecture (MCP client, model-invoked skills, `ace-orchestration`, Reflector/Curator on the
+> server, `plugin.json` MCP config). It is kept only for history and is no longer true for 8.x. In particular the
+> variables `ACE_CONFIDENCE_THRESHOLD`, `ACE_SIMILARITY_THRESHOLD`, `ACE_CURATOR_MODEL`, `ACE_REFLECTOR_MODEL` and
+> `ACE_REFINEMENT_MODE` shown below are not read by the plugin; the current switches are in
+> `docs/guides/CONFIGURATION.md`.
 
 ## 📊 Implementation Status
 

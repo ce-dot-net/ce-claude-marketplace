@@ -8,7 +8,7 @@ allowed-tools: Bash(${CLAUDE_PLUGIN_ROOT}/scripts/ace-context:*), Bash(${CLAUDE_
 
 # List Available Domains
 
-Shows all pattern domains with counts. Use these domain names with `/ace-search --allowed-domains`.
+Shows all pattern domains with counts. Domains are informational: `/ace-search` has no domain filter (it sends its arguments as search text).
 
 ```bash
 #!/usr/bin/env bash
@@ -88,9 +88,6 @@ echo ""
 printf '%s' "$DOMAINS_OUTPUT" | "${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --rows domains name,count | sort -t'|' -k2,2nr \
   | while IFS='|' read -r name count; do echo "  $name: $count patterns"; done
 
-echo ""
-echo "Use with /ace-search:"
-echo "  /ace-search \"query\" --allowed-domains <domain-name>"
 ```
 
 ## What You'll See
@@ -107,42 +104,4 @@ Total: 21 domains, 558 patterns
   strategies-and-hard-rules: 70 patterns
   ace-platform-task-detection-and-hooks: 48 patterns
   ...
-
-Use with /ace-search:
-  /ace-search "query" --allowed-domains <domain-name>
 ```
-
-## Use With Filtering
-
-After discovering domains, use them with `/ace-search`:
-
-```bash
-# Search only in specific domain
-/ace-search "authentication" --allowed-domains strategies-and-hard-rules
-
-# Search excluding certain domains
-/ace-search "patterns" --blocked-domains troubleshooting-and-pitfalls
-```
-
-## Why This Matters
-
-Without knowing domain names, `--allowed-domains` is unusable:
-
-```
-# Before: guessing domain names
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" "auth" --allowed-domains "typescript"
-Result: 0 patterns (wrong domain name!)
-
-# After: using discovered domain names
-/ace-domains
-→ "typescript-development-practices"
-
-${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" "auth" --allowed-domains "typescript-development-practices"
-Result: Filtered patterns! ✓
-```
-
-## See Also
-
-- `/ace-search` - Search patterns with optional domain filtering
-- `/ace-status` - Playbook statistics
-- `/ace-patterns` - View full playbook by section

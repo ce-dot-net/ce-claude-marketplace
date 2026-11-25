@@ -51,6 +51,11 @@ def _wait(pred, secs=8.0):
     return pred()
 
 
+# the learn sleeps long enough that a hook that waited for it is unmistakable even on a host at load 100+ (spawn cost: seconds),
+# and long enough that it is still in flight when the next hook runs
+LEARN_SLEEP = 6
+
+
 def test_hook_returns_fast_while_detached_learn_runs(box):
     """A3: learn sleeps 2 s; hook returns < 0.5 s with empty stdout; lock exists while the
     child learns, learn + execution row land afterwards, lock and job file are gone."""
@@ -58,14 +63,14 @@ def test_hook_returns_fast_while_detached_learn_runs(box):
     box.seed_tools(sid, WORK)
     box.write_state(sid, user_prompt="implement the detached learn hardening")
     t0 = time.monotonic()
-    p = box.run_after_task(box.stop_event(sid, last_assistant_message="Applied ctx-1."), **_env(FAKE_LEARN_SLEEP="2"))  # §31: used
+    p = box.run_after_task(box.stop_event(sid, last_assistant_message="Applied ctx-1."), **_env(FAKE_LEARN_SLEEP=str(LEARN_SLEEP)))  # §31: used
     took = time.monotonic() - t0
     assert p.returncode == 0 and json.loads(p.stdout) == {"systemMessage": "ACE · learning sent"}, p.stderr  # item 2: the one learn line
-    assert took < 1.2, "hook must not wait for the learn (took %.2fs)" % took
+    assert took < 0.8 * LEARN_SLEEP, "hook must not wait for the learn (took %.2fs)" % took  # relative to the learn, not an absolute wall bound
     lock = box.session_dir(sid) / "learn-inflight-main.lock"
     assert lock.exists(), "lock must be held while the detached learn runs"
-    assert _wait(lambda: box.cli_calls("learn"), 6), "detached learn never ran"
-    assert _wait(lambda: not lock.exists(), 3), "lock must be removed after the learn"
+    assert _wait(lambda: box.cli_calls("learn"), 3 * LEARN_SLEEP), "detached learn never ran"
+    assert _wait(lambda: not lock.exists(), 2 * LEARN_SLEEP), "lock must be removed after the learn"
     ex = box.relevance_rows("execution")
     assert ex, "execution metrics row must be written by the child"
     # 8.1.0 audit: the same correlation fields as the mod's row
@@ -170,14 +175,14 @@ def test_sessionend_during_detached_learn_keeps_dir_then_learn_completes(box):
     box.seed_tools(sid, WORK)
     box.write_state(sid, user_prompt="implement the race-safe session end",
                     pattern_ids=["ctx-1"], retrieval_id="ret-9", retrieval_log_ids={"ctx-1": 41})
-    p = box.run_after_task(box.stop_event(sid, last_assistant_message="Applied ctx-1."), **_env(FAKE_LEARN_SLEEP="2"))  # §31: used
+    p = box.run_after_task(box.stop_event(sid, last_assistant_message="Applied ctx-1."), **_env(FAKE_LEARN_SLEEP=str(LEARN_SLEEP)))  # §31: used
     assert p.returncode == 0
     end = box.run_shim("ace_sessionend_wrapper.sh",
                        {"session_id": sid, "hook_event_name": "SessionEnd", "reason": "other",
                         "cwd": str(box.project), "transcript_path": ""})
     assert end.returncode == 0
     assert box.session_dir(sid).exists(), "SessionEnd must not delete the dir while learn is in flight"
-    assert _wait(lambda: box.cli_calls("learn"), 6)
+    assert _wait(lambda: box.cli_calls("learn"), 3 * LEARN_SLEEP)
     trace = box.cli_calls("learn")[0]["trace"]
     assert trace.get("retrieval_id") == "ret-9" and trace.get("applied_log_ids") == [41]
 

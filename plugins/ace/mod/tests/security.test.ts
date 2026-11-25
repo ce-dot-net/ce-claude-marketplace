@@ -1,5 +1,6 @@
 // ACE mod suite, §24 file safety, and the plugin-local CLI/engine resolution. Harness: ./helpers.ts.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import S100 from './fixtures/search_100.ts'
 import S8 from './fixtures/search_8.ts'
 import SEDGE from './fixtures/search_edge.ts'
@@ -10,8 +11,8 @@ import { pyLoads } from '../lib/pyjson.ts'
 import { renderPatternsDict } from '../lib/render.ts'
 import { traceVariant, renderCohort, serverFullPct, storedFullPct } from '../lib/cohort.ts'
 import { hasSubstantialWork, toolRec } from '../lib/trace.ts'
-import { rejectionMatch, evalStats, evalInjection, usedPatternIds, toolHaystack } from '../lib/evidence.ts'
-import { PRIVATE_WRITE_SH } from '../lib/sh.ts'
+import { rejectionProbe, evalStats, usedPatternIds, toolHaystack } from '../lib/evidence.ts'
+import { PRIVATE_APPEND_SH, PRIVATE_WRITE_SH } from '../lib/sh.ts'
 import { statusLine, learnLine } from '../ui/status.ts'
 import { CWD, EVAL_REQ, FULL_PCT, HOME, HUMAN, LOCAL_CLI, LOCKED, MALFORMED, MIN, PDIR, PLACEHOLDER, PRJ, PROOT, REAL, REL, ROOT, SDIR, SECOND, SID, UUID4, bodyOf, cliOf, cmd, done, dsSearches, execRow, host, mainTask, ranked, rejectFlow, settle, shownOf, spawn, st8a, submit, withPct } from './helpers.ts'
 import type { Opts, Run, SearchAnswer } from './helpers.ts'
@@ -25,11 +26,6 @@ test('item 1: evalStats = mean confidence of the injected x100 (0..100) + distin
   expect(evalStats([{ confidence: 'x' }, { confidence: true }, {}], [])).toEqual({ avg_relevance: 0, domains: 0 })
   expect(evalStats([{ confidence: 1.5e300 }], [{ domain: 7 }])).toEqual({ avg_relevance: 100, domains: 1 })
   expect(evalStats([], [])).toEqual({ avg_relevance: 0, domains: 0 })
-})
-
-test('item 1: the eval text never claims 0% relevance; real values are shown (Python golden)', async () => {
-  expect(evalInjection({ patterns_injected: 100, avg_relevance: 0, domains: 0, tools_executed: 2 })).toBe(G.eval_injection)
-  expect(evalInjection({ patterns_injected: 8, avg_relevance: 61, domains: 3, tools_executed: 2 })).toBe(G.eval_injection_stats)
 })
 
 test('item 1: the task state carries the search eval_stats (the Python Stop writes them into its eval request)', async ($, on) => {
@@ -52,8 +48,11 @@ test('§24 state, tool records and the trace are written 0600 via umask 077 + at
   await mainTask($, h)
   await done($)
   const priv = h.runs.filter(r => r.argv[0] === '/bin/sh' && r.argv[2] === PRIVATE_WRITE_SH).map(r => r.argv[4])
-  for (const re of [/patterns-used-main\.json$/, /mod-tools-main\.json$/, /\/tmp\/ace-trace-.*\.json$/, /rendered-main\.txt$/])
+  for (const re of [/patterns-used-main\.json$/, /\/tmp\/ace-trace-.*\.json$/, /rendered-main\.txt$/])
     expect(priv.some(p => re.test(p))).toBe(true)
+  // tool records: the hot-path append, same umask 077 / 0700 dir, a symlinked target refused (never $.fs.write)
+  expect(h.runs.some(r => r.argv[0] === '/bin/sh' && r.argv[2] === PRIVATE_APPEND_SH && /mod-tools-main\.jsonl$/.test(r.argv[4]))).toBe(true)
+  expect(PRIVATE_APPEND_SH.startsWith('umask 077;') && PRIVATE_APPEND_SH.includes('[ ! -L "$1" ]') && PRIVATE_APPEND_SH.includes('chmod 700')).toBe(true)
 })
 
 test('§24 a symlinked .claude/data/logs: no eval request and no review result are written', async ($, on) => {

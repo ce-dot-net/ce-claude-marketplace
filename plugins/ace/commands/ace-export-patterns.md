@@ -11,7 +11,7 @@ Export your ACE playbook to JSON for backup or cross-project sharing.
 
 ## Instructions for Claude
 
-When the user runs `/ace:export-patterns`, use ace-cli to export the playbook:
+When the user runs `/ace:ace-export-patterns`, use ace-cli to export the playbook:
 
 ```bash
 #!/usr/bin/env bash
@@ -27,7 +27,7 @@ CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1
 eval "$CTX"; ORG_ID="$ACE_ORG_ID"; PROJECT_ID="$ACE_PROJECT_ID"
 
 if [ -z "$PROJECT_ID" ]; then
-  echo "❌ Run /ace:configure first"
+  echo "❌ Run /ace:ace-configure first"
   exit 1
 fi
 
@@ -75,12 +75,12 @@ The exported JSON contains:
 
 **Backup**:
 ```
-/ace:export-patterns ace-backup-2025-01-20.json
+/ace:ace-export-patterns ace-backup-2025-01-20.json
 ```
 
 **Cross-project sharing**:
-1. Export from project A: `/ace:export-patterns project-a-patterns.json`
-2. Import to project B: `/ace:import-patterns project-a-patterns.json`
+1. Export from project A: `/ace:ace-export-patterns project-a-patterns.json`
+2. Import to project B: `/ace:ace-import-patterns project-a-patterns.json`
 
 **Version control** (optional):
 - Export periodically to track playbook evolution
@@ -88,6 +88,6 @@ The exported JSON contains:
 
 ## See Also
 
-- `/ace:import-patterns` - Import playbook from JSON
-- `/ace:status` - View current playbook stats
-- `/ace:clear` - Clear playbook before importing
+- `/ace:ace-import-patterns` - Import playbook from JSON
+- `/ace:ace-status` - View current playbook stats
+- `/ace:ace-clear` - Clear playbook before importing

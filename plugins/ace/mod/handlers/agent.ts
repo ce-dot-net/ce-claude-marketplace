@@ -1,19 +1,20 @@
 // agent.spawn: the subagent search + inject (fork, resume and workflow-placeholder rules), and the anchors a run
 // gets when no hook can rewrite its prompt.
-import { renderArm } from './prompt'
+import { cohortLabel, renderArm } from './prompt'
 import { nowIso, relLog, searchRow } from '../io/log'
 import { SEARCH_MS, hitResult, reuseGet, reuseStore, search } from '../io/spawn'
 import { type Load, type Sess, readState, searchOrigin, updateState, uuid, type HookArgs, disabled, ensure, refreshMarker } from '../io/state'
 import { injectedContents } from '../lib/evidence'
 import { type StateUpdate } from '../lib/state'
 import { skipReason, subagentQuery } from '../lib/text'
+import { switchOn } from '../lib/switches'
 
 export async function logSubagentError($: any, s: Sess, sr: any) { return relLog($, s, { timestamp: await nowIso($), event: 'error', hook: 'SubagentStart', location: 'mod.search', error: sr.error ?? null, stderr_sample: sr.stderr, pin_failed: sr.pinFailed || undefined, pin_ms: sr.pinMs, session_id: s.sessionId, source: 'mod' }) }
 export async function subagentRender($: any, s: Sess, sr: any, query: string, agentType: string, tsid: string, t0: number, parent: string | undefined, extra: any) {
   const attr = `agent-type="${String(agentType).replace(/"/g, '&quot;')}"`
   const r = await renderArm($, sr.resp, 'ace-patterns-subagent', attr, s)
   await relLog($, s, searchRow({ hook: 'SubagentStart', sessionId: s.sessionId, userPrompt: query, query, returned: sr.resp.similar_patterns || [], injected: r.patterns,
-    projectId: s.project, orgId: s.org, agentType, cohort: r.cohort, hookMs: await $.clock.now() - t0, nowIso: await nowIso($),
+    projectId: s.project, orgId: s.org, agentType, cohort: cohortLabel(r), hookMs: await $.clock.now() - t0, nowIso: await nowIso($),
     extra: { search_ms: sr.ms, pin_ms: sr.pinMs, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, truncated_for_cap: r.truncated || undefined, context_chars: r.context?.length ?? 0,
       task_session_id: tsid, parent_task_id: parent ?? null, engine: sr.engine, engine_reason: sr.engineWhy, source: 'mod', ...extra } }))
   return r
@@ -58,7 +59,7 @@ export async function beforeSpawn($: any, L: Load, s: Sess, e: any) {
   }
   const r = await subagentRender($, s, sr, query, e.subagentType, tsid, t0, state.parentTaskId, { workflow: e.workflow?.runId, cache_hit: !!cached })
   return { out: r.context ? { ...e, prompt: `${e.prompt}\n\n${r.context}` } : e,
-    state: { ...state, ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort,
+    state: { ...state, ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort, renderLayout: r.layout,
       contents: injectedContents(r.patterns, r.ids) } }
 }
 
@@ -71,8 +72,13 @@ export async function agentSpawn($: HookArgs<'agent.spawn'>[0], L: Load, e: Hook
     if (s && (!e.fork || !e.resume) && !(await disabled($, s))) {
       if (e.fork && !forkSearch) {  // §16 P7: a fork inherits the parent context incl. the injected block
         const parent = await readState($, s, e.parentAgentId ?? 'main')
+        // Opt-in (ACE_FORK_RETRIEVAL_ID=1, default off: fork credit is unconfirmed server-side): its trace names the parent's retrieval
+        // (correlation only, no own search). No ids: applied_log_ids and playbook_used stay [] -> nothing is credited a second time.
+        const forkRid = switchOn(await $.env.get('ACE_FORK_RETRIEVAL_ID'))  // round 5 C4: 1 / true / on / yes
         pending = { out: e, state: { tsid: uuid(), userPrompt: subagentQuery(e.prompt), hook: 'SubagentStart',
-          parentTaskId: parent?.task_session_id ?? undefined, agentType: e.subagentType || 'fork' } }
+          parentTaskId: parent?.task_session_id ?? undefined, agentType: e.subagentType || 'fork',
+          ...(forkRid && typeof parent?.retrieval_id === 'string' && parent.retrieval_id ? { retrievalId: parent.retrieval_id, forkOf: parent.retrieval_id,
+            ...(parent.search_org && parent.search_project ? { searchOrg: parent.search_org, searchProject: parent.search_project } : {}) } : {}) } }  // 8.2.6: and its binding
         await relLog($, s, { timestamp: await nowIso($), event: 'search_skipped', hook: 'SubagentStart', reason: 'fork_inherits_context', session_id: s.sessionId, project_id: s.project, source: 'mod' })
       } else if (e.resume) {  // a rewrite of a resume is not applied. Same run with state: same task (§12). Reaped: a new one.
         const key = e.resume.agentId

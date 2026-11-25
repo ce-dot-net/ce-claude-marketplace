@@ -15,7 +15,23 @@ MOD_HOOKS = ["session.start", "prompt.submit", "agent.spawn", "tool.call", "turn
 
 
 def _run(*args):
-    return subprocess.run([CLAUDE, "plugin", *args], capture_output=True, text=True, timeout=300, cwd=str(R.REPO))
+    # the 300 s limit tore down a green-but-slow suite on a host at load 100+ (the suite takes ~1 min idle): it is no assertion about
+    # speed, only a hang guard, so it is generous
+    return subprocess.run([CLAUDE, "plugin", *args], capture_output=True, text=True, timeout=1800, cwd=str(R.REPO))
+
+
+def _failures(out):
+    """NAME and message of every failed mod test, complete (the tail of ~1300 test lines cut them off: a red run was unreadable)."""
+    keep, on = [], False
+    for l in out.splitlines():
+        if l.startswith("(fail)"):
+            keep.append(l)
+            on = True
+        elif l.startswith("(pass)") or (l and not l[0].isspace() and not l.startswith("(")):
+            on = False
+        elif on and l.strip():
+            keep.append(l)
+    return "\n".join(keep)
 
 
 def test_validate_strict_is_clean_and_lists_the_mod_hooks():
@@ -33,5 +49,5 @@ def test_validate_strict_is_clean_and_lists_the_mod_hooks():
 def test_claude_plugin_test_suite_is_green():
     p = _run("test", str(R.PLUGIN))
     out = p.stdout + p.stderr
-    assert p.returncode == 0, out[-4000:]
-    assert " 0 fail" in out and "Ran " in out, out[-4000:]
+    assert p.returncode == 0, "failed mod tests:\n%s\n--- tail ---\n%s" % (_failures(out) or "(none parsed)", out[-1500:])
+    assert " 0 fail" in out and "Ran " in out, "failed mod tests:\n%s\n--- tail ---\n%s" % (_failures(out) or "(none parsed)", out[-1500:])

@@ -39,3 +39,18 @@ export const REMOVE_SHADOW_SH = 'f="$1"; r="$2"; case "$f" in */.ace/config.json
 // dir does not exist. $1 = an absolute path.
 export const REALPATH_SH = 'p="$1"; n=0; while [ -L "$p" ] && [ $n -lt 40 ]; do l=$(readlink "$p"); case "$l" in /*) p="$l";; *) p="${p%/*}/$l";; esac; n=$((n+1)); done; '
   + 'if [ -d "$p" ]; then cd "$p" && pwd -P; else cd "$(dirname "$p")" 2>/dev/null && printf "%s/%s" "$(pwd -P)" "$(basename "$p")"; fi'
+
+// Round 5 F9: the ACE_TRACE_SINK write. Like PRIVATE_WRITE_SH (file 0600, atomic create+rename) but the dir is created 0700 only when
+// it is missing: an existing (user-chosen) sink dir keeps its mode. $1 = target path, stdin = content.
+// round 6: mktemp (O_EXCL, random name) for the temp file, never a predictable .w$$.tmp in a dir the user may share
+export const SINK_WRITE_SH = 'umask 077; d=$(dirname "$1"); { [ -d "$d" ] || mkdir -p "$d"; } && t=$(mktemp "$d/.ace-w-XXXXXXXX") && { cat > "$t" && mv -f "$t" "$1" || { rm -f "$t"; exit 1; }; }'
+
+// The tool-record append (hot path, one line per tool call): same 0600/0700 guarantees as PRIVATE_WRITE_SH, O_APPEND instead of a
+// full rewrite (no rename: the file grows by one line; a symlinked target is refused). $1 = target path, stdin = the line(s).
+export const PRIVATE_APPEND_SH = 'umask 077; d=$(dirname "$1"); mkdir -p "$d" && chmod 700 "$d" && [ ! -L "$1" ] && cat >> "$1"'
+
+// Round 4 update lock: an atomic mkdir (exit 0 = this session holds it, else another one does). $1 = the lock path.
+export const UPDATE_LOCK_SH = 'umask 077; mkdir "$1" 2>/dev/null'
+
+// Round 4b: is $1 an executable regular file (symlinks followed)? exit 0 = yes. $.fs.stat has no mode bits.
+export const IS_EXEC_SH = '[ -f "$1" ] && [ -x "$1" ]'

@@ -1,7 +1,8 @@
 // ACE mod suite, 8.1.4: client_policy (dormant until the server sends it) and the /ace:ace-doctor delivery line.
 // Cases: ../../tests-fixtures/client-policy/cases.json via ./fixtures/client_policy_cases.ts (shared with
 // tests/test_client_policy.py). Harness: ./helpers.ts.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { CASES } from './fixtures/client_policy_cases.ts'
 import S8 from './fixtures/search_8.ts'
 import { CLIENT_POLICY_FILE, clientPolicyBand, clientPolicyState, validClientPolicy } from '../lib/cohort.ts'
@@ -44,8 +45,8 @@ test('an invalid client_policy is dropped and logged (reason only)', async ($, o
   expect(JSON.stringify(bad[0]).includes('javascript')).toBe(false)
 })
 
-test('below min: ONE band line with one action; ACE keeps searching and learning', async ($, on) => {
-  const h = host(on, { files: { ...MANIFEST, [`${ROOT}/${CLIENT_POLICY_FILE}`]: JSON.stringify({ policy: { min_plugin_version: '8.1.5' }, at: 1_800_000_000 }) } })
+test('below min with ACE_AUTO_UPDATE=0: the 8.1.4 band line with one action (dismiss); ACE keeps searching and learning', async ($, on) => {
+  const h = host(on, { env: { ACE_AUTO_UPDATE: '0' }, files: { ...MANIFEST, [`${ROOT}/${CLIENT_POLICY_FILE}`]: JSON.stringify({ policy: { min_plugin_version: '8.1.5' }, at: 1_800_000_000 }) } })
   await start($)
   await tick()
   const ui = await $.ui.mount(BAND)

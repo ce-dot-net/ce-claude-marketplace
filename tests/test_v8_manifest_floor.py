@@ -1,6 +1,6 @@
 """WP-E (v8.0.0) — manifest `Requires:` floor text.
 
-§16 P6 + §23: floor is Claude Code >= 2.1.311; the ace-cli floor is the pin in plugins/ace/package.json; @ace-sdk/core >= the core the pinned cli locks (3.10.0 since cli 4.4.4).
+§16 P6 + §23: floor is Claude Code >= 2.1.311; the ace-cli floor is the pin in plugins/ace/package.json; @ace-sdk/core >= the core the pinned cli locks (3.11.0 since cli 4.4.5).
 WP-E updates ONLY the floor text/description, NOT the version number (release-manager does).
 Supersedes tests/test_v712_features.py::TestFloorBump::test_plugin_json_description_cc_floor_2_1_163
 (merge agent: that 2.1.163 pin must be rewritten/removed).
@@ -73,11 +73,10 @@ def test_pin_is_at_least_4_3_4():
     assert tuple(map(int, pin.split("."))) >= (4, 3, 4)
 
 
-def test_pin_is_exactly_4_4_4_with_core_3_10_0():
-    """8.2.8: SDK 4.4.4 / core 3.10.0 (`learn --no-stream` exits 1 on stored:false / quota_exceeded; SSE no longer
-    invents stored:true). Exact pin, lock to npmjs."""
+def test_pin_is_exactly_4_4_5_with_core_3_11_0():
+    """8.4.0: SDK 4.4.5 / core 3.11.0 (negative cache after a dead refresh token; 4.4.4 learn exit codes persist). Exact pin, lock to npmjs."""
     pin = json.loads((REPO / "plugins" / "ace" / "package.json").read_text())["dependencies"]["@ace-sdk/cli"]
-    assert pin == "4.4.4"
+    assert pin == "4.4.5"
     lock = json.loads((REPO / "plugins" / "ace" / "package-lock.json").read_text())["packages"]
-    assert lock["node_modules/@ace-sdk/cli"]["version"] == "4.4.4" and lock["node_modules/@ace-sdk/core"]["version"] == "3.10.0"
+    assert lock["node_modules/@ace-sdk/cli"]["version"] == "4.4.5" and lock["node_modules/@ace-sdk/core"]["version"] == "3.11.0"
     assert all(v.get("resolved", "https://registry.npmjs.org/").startswith("https://registry.npmjs.org/") for v in lock.values() if v.get("resolved"))

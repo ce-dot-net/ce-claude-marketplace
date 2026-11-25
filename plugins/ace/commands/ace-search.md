@@ -98,21 +98,10 @@ Show the user this list as is (one block per pattern; `root cause` only appears 
 
 ### Parameters
 
-- **query** (required): Natural language description passed as command argument
+- **query** (required): Natural language description; everything after the command name is sent as the search text
   - Examples: "authentication patterns", "async debugging tips", "database connection pooling best practices"
-- **--threshold**: Similarity threshold (optional, overrides server config)
-  - Default: Uses server config from `ace-cli tune show`
-  - Range: 0.0 - 1.0 (higher = stricter matching)
-  - Only specify if you want to override project's default
-- **--allowed-domains**: Whitelist domains (comma-separated, v5.3.0+)
-  - Example: `--allowed-domains auth,security` returns only patterns from those domains
-  - Use when entering a new domain to get targeted patterns
-- **--blocked-domains**: Blacklist domains (comma-separated, v5.3.0+)
-  - Example: `--blocked-domains test,debug` excludes patterns from those domains
-  - Cannot use with `--allowed-domains` (mutually exclusive)
+- There are no flags: `--threshold`, `--allowed-domains` and `--blocked-domains` are not parsed (they would become part of the search text). The server decides threshold and result count (see `/ace:ace-tune`); domains no longer filter a search (mix domain words into the query text if you want to steer it).
 - The search always runs with `--json` (Step 3 renders it); a raw `--json` dump is only for scripting
-
-**Note**: The `--limit` flag is not supported by ace-cli. Use `--top-k` via server config (`/ace-tune`) instead.
 
 ### Example Usage
 
@@ -123,17 +112,6 @@ Show the user this list as is (one block per pattern; `root cause` only appears 
 
 /ace-search async test failures debugging
 → Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" "async test failures debugging" --json
-
-# Override threshold if needed:
-/ace-search "JWT auth" --threshold 0.7
-→ Calls: ${CLAUDE_PLUGIN_ROOT}/scripts/ace-cli search --org "$ACE_ORG_ID" --project "$ACE_PROJECT_ID" "JWT auth" --threshold 0.7 --json
-
-# Domain filtering (v5.3.0+):
-/ace-search caching patterns --allowed-domains cache,performance
-→ Returns ONLY patterns from cache or performance domains
-
-/ace-search patterns --blocked-domains test,debug
-→ Excludes test and debug patterns
 ```
 
 ### When to Use This
@@ -143,7 +121,6 @@ Show the user this list as is (one block per pattern; `root cause` only appears 
 - You're debugging a specific type of problem
 - You know what domain/topic you need help with
 - You want to minimize context usage
-- **After domain shift reminder**: When you see "💡 [ACE] Domain shift: X → Y", use `--allowed-domains Y` to get targeted patterns
 
 ❌ **Don't use when**:
 - You need comprehensive architectural overview

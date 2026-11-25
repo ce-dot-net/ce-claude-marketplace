@@ -2,7 +2,8 @@
 // detached child, the queue job the child gets, the Idempotency-Key, result.plugin_version / result.outcome_rule.
 // The queue itself is ONE Python module (shared-hooks/utils/ace_trace_queue.py) for both chains; the real child and
 // queue run in tests/e2e/test_e2e_trace_delivery.py. Harness: ./helpers.ts.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import S8 from './fixtures/search_8.ts'
 import { OUTCOME_RULES } from '../lib/trace.ts'
 import { CWD, PROOT, REL, ROOT, SDIR, SID, done, host, mainTask } from './helpers.ts'
@@ -83,7 +84,7 @@ test('the child already owns the trace: the parent leaves it, queues nothing and
   const h = host(on, { search: () => ({ stdout: S8 }), learnExit: 1, claimed: true })
   await mainTask($, h)
   await done($)
-  expect(h.runs.some(r => r.argv.some(a => a.endsWith('/ace_trace_queue.py')))).toBe(false)
+  expect(h.runs.some(r => r.argv.some(a => a.endsWith('/ace_trace_queue.py')) && !r.argv.includes('--auth-held'))).toBe(false)  // the 8.4.0 notice check is no enqueue
   expect(h.rows().filter((x: any) => x.event === 'execution')).toEqual([])
   expect(h.files.has(`${SDIR}/learn-inflight-main.lock`)).toBe(true)  // the child releases its own lock
 })

@@ -11,7 +11,7 @@ Import an ACE playbook from a JSON file to restore backup or share patterns acro
 
 ## Instructions for Claude
 
-When the user runs `/ace:import-patterns <file>`, use ace-cli to import the playbook:
+When the user runs `/ace:ace-import-patterns <file>`, use ace-cli to import the playbook:
 
 ```bash
 #!/usr/bin/env bash
@@ -27,7 +27,7 @@ CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1
 eval "$CTX"; ORG_ID="$ACE_ORG_ID"; PROJECT_ID="$ACE_PROJECT_ID"
 
 if [ -z "$PROJECT_ID" ]; then
-  echo "❌ Run /ace:configure first"
+  echo "❌ Run /ace:ace-configure first"
   exit 1
 fi
 
@@ -56,7 +56,7 @@ fi
 
 if [ $? -eq 0 ]; then
   echo "✅ Playbook imported successfully!"
-  echo "   Run /ace:status to verify"
+  echo "   Run /ace:ace-status to verify"
 else
   echo "❌ Import failed"
   exit 1
@@ -65,6 +65,6 @@ fi
 
 ## See Also
 
-- `/ace:export-patterns` - Export current playbook
-- `/ace:clear` - Clear playbook before importing
-- `/ace:status` - Verify import results
+- `/ace:ace-export-patterns` - Export current playbook
+- `/ace:ace-clear` - Clear playbook before importing
+- `/ace:ace-status` - Verify import results

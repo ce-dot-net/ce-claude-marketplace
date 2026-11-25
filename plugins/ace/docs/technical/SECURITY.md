@@ -1,5 +1,9 @@
 # Security Configuration - ACE Plugin
 
+> **HISTORICAL (v3.x).** This page describes the old MCP setup (`plugin.json` with an `ace-pattern-learning` MCP server and the
+> `ACE_API_TOKEN` environment variable). The 8.x plugin does not read `ACE_API_TOKEN`: it signs in with `/ace:ace-login`
+> (ace-cli keeps the credentials). Treat everything below as history.
+
 **Date**: 2025-01-21
 **Version**: 3.0.0
 

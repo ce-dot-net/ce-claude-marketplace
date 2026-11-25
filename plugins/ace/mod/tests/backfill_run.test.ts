@@ -1,5 +1,6 @@
 // 8.2.0 backfill orchestration with every I/O faked (post, get, sleep, now, ledger store): flow, stops, polling, ledger writes.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { buildItems, DEFAULT_LIMIT, DEFAULT_SOURCES, MAX_LIMIT, POLL_MS, POLL_RETRY_MS, previewLines, runBackfill, parseLimit, parseBackfillFlags, stepBackfill, newRun, runActive, startLine, RUN_TTL_MS, type Deps } from '../lib/backfill_run.ts'
 import { emptyLedger, add, parse, serialize, statusOf, type Ledger } from '../lib/ledger.ts'
 

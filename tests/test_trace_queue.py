@@ -81,7 +81,7 @@ def ok_send(log):
     (4, '{"error":{"code":"token_expired","status":401,"message":"expired"}}', False, "dead", "auth"),
     (3, "", False, "dead", "auth"),                          # ace-cli exit 3 = not_logged_in
     (4, "", False, "dead", "auth"),                          # ace-cli exit 4 = token_expired
-    (1, '{"error":{"code":"no_access","status":403,"message":"x"}}', False, "dead", "auth"),
+    (1, '{"error":{"code":"no_access","status":403,"message":"x"}}', False, "requeue", "forbidden"),  # 8.4.0: a transient project check, retried
     (5, "ace_trace_quota_exceeded", True, "requeue", "quota"),
     (1, '{"error":{"code":"server_error","status":500,"message":"Server error (500): boom"}}', True, "requeue", "server_5xx"),
     (1, '{"error":{"code":"server_error","status":500,"message":"Server error (500): boom"}}', False, "lost", "server_5xx"),
@@ -673,3 +673,10 @@ def test_cli_not_stored_parser_is_bounded_on_many_brace_lines():
     assert time.time() - t0 < 2.0
     real = '{\n  "success": false,\n  "stored": false,\n  "message": "x"\n}\n'
     assert Q._cli_not_stored(real)["stored"] is False
+
+
+def test_deeply_nested_output_line_is_ignored_not_a_crash():
+    # Python 3.10 (the floor) raises RecursionError, not ValueError, on a deeply nested JSON line: the parser must skip it
+    text = "x " + '{"k":' * 100000 + "\n" + "ace_trace_response " + '{"k":' * 100000 + "\n"
+    assert Q._lines(text) == (None, None, None)
+    assert Q._cli_not_stored(text) is None

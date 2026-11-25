@@ -29,6 +29,20 @@ def box(tmp_path):
     return Box(tmp_path)
 
 
+@pytest.fixture
+def fresh_cli():
+    """Round 12: plugin_data_dir / ace_engine / ace_cli reloaded under THIS test's env. Other tests reload them under their own env
+    (ace_engine keeps ENGINE_DIR / PLUGIN_LOCAL_CORES from import time), so a worker that ran one of them first could take a
+    stale engine path (a run_learn without the fake ace-cli, seen once under -n 4)."""
+    import importlib
+    import ace_cli
+    import ace_engine
+    import plugin_data_dir
+    importlib.reload(plugin_data_dir)
+    importlib.reload(ace_engine)
+    return importlib.reload(ace_cli)
+
+
 REMINDER = ("<system-reminder>\nCodebase and user instructions are shown below. Be sure to adhere "
             "to these instructions.\n\nContents of /Users/x/.claude/CLAUDE.md:\n# notes\n</system-reminder>")
 REAL_PROMPT = "Read the file ace-cli/notes.md, then use Bash to run: echo sub-done > sub_out.txt"
@@ -36,7 +50,7 @@ REAL_PROMPT = "Read the file ace-cli/notes.md, then use Bash to run: echo sub-do
 
 # ── §13.2 run_learn --no-stream (m3: stream mode exits 0 on server 401/500) ────────────────
 
-def test_run_learn_passes_no_stream(fake_cli_calls):
+def test_run_learn_passes_no_stream(fake_cli_calls, fresh_cli):
     """`ace-cli learn --help` (4.2.2): `--no-stream  Disable SSE streaming (use sync POST)`.
     run_learn must pass it so a server 401/500 becomes a non-zero exit that reaches the error log."""
     import ace_cli
@@ -48,7 +62,7 @@ def test_run_learn_passes_no_stream(fake_cli_calls):
     assert learns[0][learns[0].index("--timeout") + 1] == "300000"
 
 
-def test_run_learn_skips_instead_of_writing_the_trace_to_system_tmp(fake_cli_calls, monkeypatch):
+def test_run_learn_skips_instead_of_writing_the_trace_to_system_tmp(fake_cli_calls, monkeypatch, fresh_cli):
     """final review: no private plugin-data tmp -> no learn; the trace (it holds the prompt) never hits /tmp."""
     import ace_cli
     import plugin_data_dir

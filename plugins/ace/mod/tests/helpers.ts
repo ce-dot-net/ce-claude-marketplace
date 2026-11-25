@@ -11,8 +11,8 @@ import { pyLoads } from '../lib/pyjson.ts'
 import { renderPatternsDict } from '../lib/render.ts'
 import { traceVariant, renderCohort, serverFullPct, storedFullPct } from '../lib/cohort.ts'
 import { hasSubstantialWork, toolRec } from '../lib/trace.ts'
-import { rejectionMatch, evalStats, evalInjection, usedPatternIds, toolHaystack } from '../lib/evidence.ts'
-import { PRIVATE_WRITE_SH, REALPATH_SH, REMOVE_SHADOW_SH, REPO_WRITE_SH } from '../lib/sh.ts'
+import { rejectionProbe, evalStats, usedPatternIds, toolHaystack } from '../lib/evidence.ts'
+import { IS_EXEC_SH, PRIVATE_APPEND_SH, PRIVATE_WRITE_SH, REALPATH_SH, REMOVE_SHADOW_SH, REPO_WRITE_SH, SINK_WRITE_SH, UPDATE_LOCK_SH } from '../lib/sh.ts'
 import { statusLine, learnLine } from '../ui/status.ts'
 
 // ACE v8.0.0 production mod - `claude plugin test plugins/ace` suite (DESIGN §13.1, §12, §9 G9, §4/C1).
@@ -50,12 +50,19 @@ export type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; 
   learnExit?: number; early?: (agentId: string) => Promise<unknown>; beforeWrite?: (path: string) => Promise<unknown>; sid?: () => string
   selfEval?: boolean; model?: (req: any) => any; compact?: (files: Map<string, string>) => any
   cli?: (args: string[], stdin?: string) => SearchAnswer | undefined; noSettings?: boolean; ignored?: boolean; root?: string; cwd?: string; noPython?: boolean
+  authHeld?: (args: string[]) => string  // 8.4.0: `ace_trace_queue.py --auth-held` answers (the notice line, or '' = nothing); default ''
   installer?: (args: string[]) => { state: string, detail?: string }  // ace_cli_installer.py answers (8.1.1)
   git?: (argv: string[]) => string | undefined  // 8.2.0: git answers (full argv); undefined = the default stub
   realpaths?: Record<string, string>  // REALPATH_SH answers (a symlinked path); default: the path as given
   backfill?: (cmd: string, argv: string[], stdin?: string) => { exit?: number, status?: number, body?: any } | undefined  // 8.2.0: engine/backfill.js answers
   mockClock?: boolean  // 8.2.0: $.clock timers held on mock.clock (h.clock.advance moves them); clock.now follows it
   claimed?: boolean  // 8.1.4: the detached learn child already claimed the trace (the parent's `mv` finds nothing)
+  update?: (argv: string[]) => { exitCode?: number; killed?: boolean } | undefined | Promise<{ exitCode?: number; killed?: boolean } | undefined>  // round 4: `<claude> plugin update ...` answers (never really run); round 5: may resolve later
+  sinkFail?: boolean  // Round 10 / T4: the ACE_TRACE_SINK write fails (SINK_WRITE_SH exit 1)
+  onLock?: (lockPath: string) => void  // round 8 L1: runs right after this session took the update lock
+  version?: (argv: string[]) => string | null  // round 5 F12: `<path> --version` stdout (null = the call fails); default '2.1.319 (Claude Code)'
+  readText?: (path: string) => string  // round 5: the Read tool's model-facing (line-numbered) text
+  notExec?: string[]  // round 4b: files that exist but are not executable (IS_EXEC_SH answers 1)
   spawn?: (argv: string[]) => AsyncGenerator<{ stream: 'stdout' | 'stderr', text: string }, { code: number | null, signal: string | null }> }  // $.process.spawn (the streamed device login)
 export type Run = { argv: string[]; stdin?: string; env?: Record<string, string>; timeoutMs?: number; files: Set<string> }
 
@@ -129,11 +136,18 @@ export function host(on: any, o: Opts = {}) {
     }
     if (argv[0] === 'sleep') { now += Number(argv[1]) * 1000; return res(0, '') }
     if (o.cli && cliOf(argv)) { const a = o.cli(cliOf(argv)!, init.stdin); if (a) { now += a.advanceMs ?? 0; if (a.killed) throw new Error('ace: $.process.run aborted: still running after timeoutMs'); return res(a.exitCode ?? 0, a.stdout ?? '', a.stderr ?? '') } }
+    if (argv.some(a => a.endsWith('/ace_trace_queue.py')) && argv.includes('--auth-held')) return res(0, o.authHeld?.(argv) ?? '')
     if (o.installer && argv.some(a => a.endsWith('/ace_cli_installer.py'))) return res(0, JSON.stringify(o.installer(argv.slice(argv.findIndex(a => a.endsWith('/ace_cli_installer.py')) + 1))) + '\n')
     if (argv[0].endsWith('/scripts/ace-python')) return o.noPython ? res(1, '') : res(0, '/usr/bin/python3.13\n')
     if (argv[0] === '/bin/sh' && argv[2] === REALPATH_SH) return res(0, o.realpaths?.[argv[4]] ?? argv[4])
     if (argv[0] === '/bin/sh' && argv[2] === REPO_WRITE_SH) { const t = `${argv[4]}/${argv[5]}`; if ((o.links ?? []).some(l => t === l || t.startsWith(l + '/'))) return res(3, ''); put(t, init.stdin ?? ''); if (argv[5] === '.gitignore') put(`${argv[4]}/.gitignore-fixed`, ''); return res(0, '') }
     if (argv[0] === '/bin/sh' && argv[2] === REMOVE_SHADOW_SH) { if ((o.links ?? []).some(l => argv[4] === l || argv[4].startsWith(l + '/'))) return res(3, ''); if (!files.has(argv[4])) return res(5, ''); files.delete(argv[4]); return res(0, '') }  // real sh: tests/test_mod_repo_write_sh.py
+    if (argv[0] === '/bin/sh' && argv[2] === UPDATE_LOCK_SH) { if (files.has(argv[4])) return res(1, ''); put(argv[4], ''); o.onLock?.(argv[4]); return res(0, '') }  // atomic mkdir lock; round 8: onLock = another session acts right after
+    if (argv[0] === '/bin/sh' && argv[2] === IS_EXEC_SH) return res(files.has(argv[4]) && !(o.notExec ?? []).includes(argv[4]) ? 0 : 1, '')
+    if (argv[1] === 'plugin' && argv[2] === 'update') return Promise.resolve(o.update?.(argv)).then((a: any = {}) => { if (a?.killed) throw new Error('ace: $.process.run aborted: still running after timeoutMs'); return res(a?.exitCode ?? 0, 'updated', '') })
+    if (argv.length === 2 && argv[1] === '--version') { const v = o.version ? o.version(argv) : '2.1.319 (Claude Code)'; return v === null ? res(1, '') : res(0, v + '\n') }  // round 5 F12
+    if (argv[0] === '/bin/sh' && argv[2] === SINK_WRITE_SH) { if (o.sinkFail) return res(1, ''); put(argv[4], init.stdin ?? ''); return res(0, '') }  // F9 (real sh: tests/test_python_sink_round5.py)
+    if (argv[0] === '/bin/sh' && argv[2] === PRIVATE_APPEND_SH) { put(argv[4], (files.get(argv[4]) ?? '') + (init.stdin ?? '')); return res(0, '') }  // umask 077 + O_APPEND (real sh: scratchpad check)
     if (argv[0] === '/bin/sh' && argv[2] === PRIVATE_WRITE_SH) { if (o.beforeWrite) return Promise.resolve(o.beforeWrite(argv[4])).then(() => { put(argv[4], init.stdin ?? ''); return res(0, '') }); put(argv[4], init.stdin ?? ''); return res(0, '') }  // umask 077 + rename
     if (o.git && (argv[0] === 'git' || argv[0].endsWith('/git'))) { const a = o.git(argv); if (a !== undefined) return res(0, a) }  // 8.2.0: answers for the bootstrap facts (throws = a spawn failure)
     if ((argv[0] === 'git' || argv[0].endsWith('/git')) && argv.includes('check-ignore')) return res(o.ignored && !files.has(`${argv[2]}/.gitignore-fixed`) ? 0 : 1, '')
@@ -164,9 +178,9 @@ export function host(on: any, o: Opts = {}) {
     if (o.early) await o.early(agentId)
     return { model: 'claude-haiku-4-5', agentId, seenPrompt: e.prompt }
   })
-  on('tool.call', (_$: any, e: any) => e.tool === 'Bash' ? ({ result: { stdout: e.command === 'big' ? 'y'.repeat(30000) : 'ok', stderr: '', interrupted: false } })
+  on('tool.call', (_$: any, e: any) => e.tool === 'Bash' ? ({ result: { stdout: e.command === 'big' ? 'y'.repeat(30000) : String(e.command).startsWith('git commit') ? '[main abc1234f] msg\n 1 file changed' : 'ok', stderr: '', interrupted: false } })
     : e.tool === 'Edit' || e.tool === 'Write' ? ({ result: { filePath: e.file_path } })
-    : ({ result: { type: 'text', file: { content: 'a\nb', filePath: e.file_path } } }))
+    : ({ result: { type: 'text', file: { content: 'a\nb', filePath: e.file_path } }, ...(e.tool === 'Read' ? { text: o.readText?.(e.file_path) ?? '     1\ta\n     2\tb' } : {}) }))  // round 5 C3: the model-facing text, line-numbered like Read
   on('turn.start', (_$: any, e: any) => ({ turnId: e.turnId }))
   on('turn.complete', (_$: any, e: any) => ({ text: e.answer }))
   on('prompt.compose', () => ({ sections: [{ id: 'intro', text: 'engine intro', scope: 'shared' }] }))

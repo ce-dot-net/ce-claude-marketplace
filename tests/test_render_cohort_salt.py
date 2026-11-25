@@ -308,5 +308,6 @@ class TestRenderVariantTraceDirectUnit:
     def test_everything_else_is_unknown(self, monkeypatch):
         monkeypatch.setenv("ACE_AB_CONTROL_PCT", "20")
         from ace_pattern_render import trace_render_variant
-        for v in (None, "bogus", "control", "compact"):
-            assert trace_render_variant(v, "sid") is None
+        for v in (None, "bogus", "compact"):
+            assert trace_render_variant(v, None) is None  # no conversation: nothing to fall back to
+        assert trace_render_variant("control", "sid") == "control"  # control is a label now (render_control_pct)

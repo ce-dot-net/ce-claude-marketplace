@@ -1,0 +1,3910 @@
+{
+ "_doc": "secret-filter fixture (mod lib/redact.ts redact, shared-hooks/utils/redact.py redact): RECIPES, not values. A part is a literal string or {g, n}: r62/r64/rUP/rlow/rhex/rHEX n chars, uuid, b36s, rdig (n decimal digits), drawn from one xorshift32 stream (seed 2463534242) in this order: SECRETS first, then NORMAL, then pii.secrets, then pii.normal. secrets: text = pre + secret + post, the secret part must be gone after redact; normal: must stay byte-identical. pii (Round 13): secrets must be gone and labelled [redacted:<email|phone|iban>]; pii.normal must carry no PII label. Fake domains: random labels or reserved ones only; the only IBAN is the official example DE89 3704 0044 0532 0130 00.",
+ "secrets": [
+  {
+   "kind": "prefix:openai",
+   "pre": [
+    "key in use: "
+   ],
+   "secret": [
+    "sk",
+    "-",
+    {
+     "g": "r62",
+     "n": 40
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:github",
+   "pre": [
+    "token "
+   ],
+   "secret": [
+    "gh",
+    "p_",
+    {
+     "g": "r62",
+     "n": 36
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:github",
+   "pre": [
+    "oauth "
+   ],
+   "secret": [
+    "gh",
+    "o_",
+    {
+     "g": "r62",
+     "n": 36
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:github",
+   "pre": [
+    "server "
+   ],
+   "secret": [
+    "gh",
+    "s_",
+    {
+     "g": "r62",
+     "n": 36
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:github",
+   "pre": [
+    "pat "
+   ],
+   "secret": [
+    "github",
+    "_pat_",
+    {
+     "g": "r62",
+     "n": 22
+    },
+    "_",
+    {
+     "g": "r62",
+     "n": 59
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:slack",
+   "pre": [
+    "bot "
+   ],
+   "secret": [
+    "xo",
+    "xb-",
+    "1234567890-",
+    {
+     "g": "r62",
+     "n": 24
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:slack",
+   "pre": [
+    "user "
+   ],
+   "secret": [
+    "xo",
+    "xp-",
+    "1234567890-",
+    {
+     "g": "r62",
+     "n": 24
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:aws",
+   "pre": [
+    "id "
+   ],
+   "secret": [
+    "AK",
+    "IA",
+    {
+     "g": "rUP",
+     "n": 16
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:aws",
+   "pre": [
+    "session id "
+   ],
+   "secret": [
+    "AS",
+    "IA",
+    {
+     "g": "rUP",
+     "n": 16
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:google",
+   "pre": [
+    "maps "
+   ],
+   "secret": [
+    "AI",
+    "za",
+    {
+     "g": "r62",
+     "n": 35
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:gitlab",
+   "pre": [
+    "ci "
+   ],
+   "secret": [
+    "gl",
+    "pat-",
+    {
+     "g": "r62",
+     "n": 20
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:npm",
+   "pre": [
+    "publish "
+   ],
+   "secret": [
+    "np",
+    "m_",
+    {
+     "g": "r62",
+     "n": 36
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:stripe",
+   "pre": [
+    "charge "
+   ],
+   "secret": [
+    "sk",
+    "_live_",
+    {
+     "g": "r62",
+     "n": 24
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:stripe",
+   "pre": [
+    "restricted "
+   ],
+   "secret": [
+    "rk",
+    "_test_",
+    {
+     "g": "r62",
+     "n": 24
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:huggingface",
+   "pre": [
+    "hub "
+   ],
+   "secret": [
+    "h",
+    "f_",
+    {
+     "g": "r62",
+     "n": 34
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:jwt",
+   "pre": [
+    "session "
+   ],
+   "secret": [
+    "ey",
+    "J",
+    {
+     "g": "r62",
+     "n": 20
+    },
+    ".",
+    {
+     "g": "r62",
+     "n": 30
+    },
+    ".",
+    {
+     "g": "r62",
+     "n": 43
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:private-key",
+   "pre": [
+    "cert:\n"
+   ],
+   "secret": [
+    "-----BEGIN ",
+    "RSA PRIVATE KEY-----\n",
+    {
+     "g": "r64",
+     "n": 64
+    },
+    "\n",
+    {
+     "g": "r64",
+     "n": 64
+    },
+    "\n-----END RSA ",
+    "PRIVATE KEY-----"
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:private-key",
+   "pre": [],
+   "secret": [
+    "-----BEGIN ",
+    "OPENSSH PRIVATE KEY-----\n",
+    {
+     "g": "r64",
+     "n": 70
+    },
+    "\n-----END OPENSSH ",
+    "PRIVATE KEY-----"
+   ],
+   "post": [
+    "\nnext line"
+   ]
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "AUTH_SALT="
+   ],
+   "secret": [
+    {
+     "g": "r62",
+     "n": 32
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "export SESSION_SIGNING="
+   ],
+   "secret": [
+    {
+     "g": "r62",
+     "n": 28
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "DATABASE_DSN="
+   ],
+   "secret": [
+    "mysqlx-host-",
+    {
+     "g": "r62",
+     "n": 12
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "WEBHOOK_SIG="
+   ],
+   "secret": [
+    "w",
+    {
+     "g": "r62",
+     "n": 18
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "     3\tAUTH_SALT="
+   ],
+   "secret": [
+    {
+     "g": "r62",
+     "n": 30
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "    12→SESSION_SIGNING="
+   ],
+   "secret": [
+    {
+     "g": "r62",
+     "n": 26
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "config/.env:7:WEBHOOK_SIG="
+   ],
+   "secret": [
+    "w",
+    {
+     "g": "r62",
+     "n": 20
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "  - DATABASE_DSN="
+   ],
+   "secret": [
+    "mysqlx-host-",
+    {
+     "g": "r62",
+     "n": 12
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "DB_PASSWORD="
+   ],
+   "secret": [
+    "hunter2-not-real"
+   ],
+   "post": []
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "STRIPE_API_KEY="
+   ],
+   "secret": [
+    {
+     "g": "r62",
+     "n": 30
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "header",
+   "pre": [
+    "Authorization: Basic "
+   ],
+   "secret": [
+    {
+     "g": "r64",
+     "n": 24
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "header",
+   "pre": [
+    "Cookie: session="
+   ],
+   "secret": [
+    {
+     "g": "r62",
+     "n": 26
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "header",
+   "pre": [
+    "Set-Cookie: sid="
+   ],
+   "secret": [
+    {
+     "g": "r62",
+     "n": 26
+    }
+   ],
+   "post": [
+    "; Path=/; HttpOnly"
+   ]
+  },
+  {
+   "kind": "header",
+   "pre": [
+    "X-Api-Key: "
+   ],
+   "secret": [
+    {
+     "g": "r62",
+     "n": 32
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "url-cred",
+   "pre": [
+    "clone https://deploy:"
+   ],
+   "secret": [
+    {
+     "g": "r62",
+     "n": 16
+    }
+   ],
+   "post": [
+    "@git.example.com/o/r.git"
+   ]
+  },
+  {
+   "kind": "url-cred",
+   "pre": [
+    "redis cache at admin:"
+   ],
+   "secret": [
+    "pw",
+    {
+     "g": "r62",
+     "n": 10
+    }
+   ],
+   "post": [
+    "@cache.internal.example"
+   ]
+  },
+  {
+   "kind": "entropy",
+   "pre": [
+    "const key = \""
+   ],
+   "secret": [
+    {
+     "g": "r62",
+     "n": 32
+    }
+   ],
+   "post": [
+    "\";"
+   ]
+  },
+  {
+   "kind": "entropy",
+   "pre": [
+    "blob "
+   ],
+   "secret": [
+    {
+     "g": "r64",
+     "n": 44
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "entropy",
+   "pre": [
+    "AccountName=dev;AccountKey="
+   ],
+   "secret": [
+    {
+     "g": "r64",
+     "n": 64
+    },
+    "=="
+   ],
+   "post": [
+    ";EndpointSuffix=core.windows.net"
+   ]
+  },
+  {
+   "kind": "entropy",
+   "pre": [
+    "hook https://hooks.example.com/services/T0001/B0001/"
+   ],
+   "secret": [
+    {
+     "g": "r62",
+     "n": 24
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "header",
+   "pre": [
+    "curl -H \"Authorization: Bearer "
+   ],
+   "secret": [
+    {
+     "g": "r62",
+     "n": 30
+    }
+   ],
+   "post": [
+    "\" https://api.example.com"
+   ]
+  },
+  {
+   "kind": "netrc",
+   "pre": [
+    "machine api.example.com login deploy password "
+   ],
+   "secret": [
+    "nrc",
+    {
+     "g": "rlow",
+     "n": 9
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "netrc",
+   "pre": [
+    "    login bot password "
+   ],
+   "secret": [
+    "pw",
+    {
+     "g": "rlow",
+     "n": 8
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "pgpass",
+   "pre": [
+    "db.example.com:5432:app:appuser:"
+   ],
+   "secret": [
+    "pg",
+    {
+     "g": "rlow",
+     "n": 10
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "docker-auth",
+   "pre": [
+    "{\"auths\": {\"ghcr.io\": {\"auth\": \""
+   ],
+   "secret": [
+    {
+     "g": "r64",
+     "n": 28
+    }
+   ],
+   "post": [
+    "\"}}}"
+   ]
+  },
+  {
+   "kind": "cookie-jar",
+   "pre": [
+    ".example.com\tTRUE\t/\tTRUE\t1893456000\tsession\t"
+   ],
+   "secret": [
+    "ck",
+    {
+     "g": "rlow",
+     "n": 12
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "cookie-jar",
+   "pre": [
+    "#HttpOnly_.example.org\tFALSE\t/app\tFALSE\t0\tsid\t"
+   ],
+   "secret": [
+    "ck",
+    {
+     "g": "rlow",
+     "n": 10
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "php-define",
+   "pre": [
+    "define('AUTH_KEY', '"
+   ],
+   "secret": [
+    "pk",
+    {
+     "g": "rlow",
+     "n": 14
+    }
+   ],
+   "post": [
+    "');"
+   ]
+  },
+  {
+   "kind": "php-define",
+   "pre": [
+    "define( \"DB_PASSWORD\" , \""
+   ],
+   "secret": [
+    "dbpw",
+    {
+     "g": "rlow",
+     "n": 6
+    }
+   ],
+   "post": [
+    "\" );"
+   ]
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "+AUTH_SALT="
+   ],
+   "secret": [
+    "saltvalue-",
+    {
+     "g": "rhex",
+     "n": 8
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "-AUTH_SALT="
+   ],
+   "secret": [
+    "saltvalue-",
+    {
+     "g": "rhex",
+     "n": 8
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "3:AUTH_SALT="
+   ],
+   "secret": [
+    "saltvalue-",
+    {
+     "g": "rhex",
+     "n": 8
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "src/.env-3-AUTH_SALT="
+   ],
+   "secret": [
+    "saltvalue-",
+    {
+     "g": "rhex",
+     "n": 8
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "3-AUTH_SALT="
+   ],
+   "secret": [
+    "saltvalue-",
+    {
+     "g": "rhex",
+     "n": 8
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "NODE_ENV=production\r\nAUTH_SALT="
+   ],
+   "secret": [
+    "saltvalue-",
+    {
+     "g": "rhex",
+     "n": 8
+    }
+   ],
+   "post": [
+    "\r\nLOG_LEVEL=debug\r\n"
+   ]
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "AUTH_SALT="
+   ],
+   "secret": [
+    "geheimnis-äöü-東京-",
+    {
+     "g": "rhex",
+     "n": 8
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:shopify",
+   "pre": [
+    "token in use: "
+   ],
+   "secret": [
+    "shp",
+    "at_",
+    {
+     "g": "rhex",
+     "n": 32
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:shopify",
+   "pre": [
+    "token in use: "
+   ],
+   "secret": [
+    "shp",
+    "ca_",
+    {
+     "g": "rhex",
+     "n": 32
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:shopify",
+   "pre": [
+    "token in use: "
+   ],
+   "secret": [
+    "shp",
+    "pa_",
+    {
+     "g": "rhex",
+     "n": 32
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:shopify",
+   "pre": [
+    "token in use: "
+   ],
+   "secret": [
+    "shp",
+    "ss_",
+    {
+     "g": "rhex",
+     "n": 32
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:shopify",
+   "pre": [
+    "{\"access_token_shop\": \""
+   ],
+   "secret": [
+    "shp",
+    "at_",
+    {
+     "g": "rhex",
+     "n": 32
+    }
+   ],
+   "post": [
+    "\"}"
+   ]
+  },
+  {
+   "kind": "prefix:shopify",
+   "pre": [
+    "curl -H \"X-Shopify-Access-Token: "
+   ],
+   "secret": [
+    "shp",
+    "at_",
+    {
+     "g": "rhex",
+     "n": 32
+    }
+   ],
+   "post": [
+    "\" https://shop.example/admin"
+   ]
+  },
+  {
+   "kind": "prefix:shopify",
+   "pre": [
+    "shop key "
+   ],
+   "secret": [
+    "shp",
+    "ss_",
+    {
+     "g": "rHEX",
+     "n": 32
+    }
+   ],
+   "post": [
+    " set"
+   ]
+  },
+  {
+   "kind": "prefix:shopify",
+   "pre": [
+    "long one "
+   ],
+   "secret": [
+    "shp",
+    "at_",
+    {
+     "g": "rhex",
+     "n": 33
+    }
+   ],
+   "post": [
+    " end"
+   ]
+  },
+  {
+   "kind": "prefix:gitlab",
+   "pre": [
+    "Schlüssel:ä"
+   ],
+   "secret": [
+    "gl",
+    "pat-",
+    {
+     "g": "r62",
+     "n": 24
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:google",
+   "pre": [
+    "Key: ä"
+   ],
+   "secret": [
+    "AI",
+    "za",
+    {
+     "g": "r62",
+     "n": 35
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "prefix:shopify",
+   "pre": [
+    "ä"
+   ],
+   "secret": [
+    "shp",
+    "at_",
+    {
+     "g": "rhex",
+     "n": 32
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "php-define",
+   "pre": [
+    "ädefine('DB_PASSWORD', '"
+   ],
+   "secret": [
+    {
+     "g": "rlow",
+     "n": 12
+    }
+   ],
+   "post": [
+    "');"
+   ]
+  },
+  {
+   "kind": "env",
+   "pre": [
+    "x\rAUTH_SALT="
+   ],
+   "secret": [
+    "saltvalue-",
+    {
+     "g": "rhex",
+     "n": 8
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "pgpass",
+   "pre": [
+    "db.example:5432:app:svc:"
+   ],
+   "secret": [
+    {
+     "g": "rlow",
+     "n": 12
+    }
+   ],
+   "post": [
+    "\r\nnext line"
+   ]
+  },
+  {
+   "kind": "pgpass",
+   "pre": [
+    "first\rdb.example:5432:app:svc:"
+   ],
+   "secret": [
+    {
+     "g": "rlow",
+     "n": 12
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "name-value",
+   "pre": [
+    "env:\n  - name: DB_PASSWORD\n    value: "
+   ],
+   "secret": [
+    "hunter2-",
+    {
+     "g": "rlow",
+     "n": 10
+    }
+   ],
+   "post": [
+    "\n"
+   ]
+  },
+  {
+   "kind": "name-value",
+   "pre": [
+    "  - name: \"API_TOKEN\"\n    value: "
+   ],
+   "secret": [
+    "tok-",
+    {
+     "g": "rlow",
+     "n": 12
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "name-value",
+   "pre": [
+    "{\"name\": \"Authorization\", \"value\": \""
+   ],
+   "secret": [
+    "Basic ",
+    {
+     "g": "rlow",
+     "n": 16
+    }
+   ],
+   "post": [
+    "\"}"
+   ]
+  },
+  {
+   "kind": "name-value",
+   "pre": [
+    "[{\"key\": \"client_secret\", \"value\": \""
+   ],
+   "secret": [
+    "cs-",
+    {
+     "g": "rlow",
+     "n": 14
+    }
+   ],
+   "post": [
+    "\"}]"
+   ]
+  },
+  {
+   "kind": "name-value",
+   "pre": [
+    "- name: STRIPE_SECRET\n  value: "
+   ],
+   "secret": [
+    "sv-",
+    {
+     "g": "rlow",
+     "n": 12
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "name-value",
+   "pre": [
+    "{\"name\":\"API_KEY\",\"value\":\""
+   ],
+   "secret": [
+    "ak-",
+    {
+     "g": "rlow",
+     "n": 12
+    }
+   ],
+   "post": [
+    "\"}"
+   ]
+  },
+  {
+   "kind": "name-value",
+   "pre": [
+    "- name: DB_PASSWORD\r\n  value: "
+   ],
+   "secret": [
+    "crlf-",
+    {
+     "g": "rlow",
+     "n": 10
+    }
+   ],
+   "post": [
+    "\r\n"
+   ]
+  },
+  {
+   "kind": "name-value",
+   "pre": [
+    "- name: DB_PASSWORD\n  - value: "
+   ],
+   "secret": [
+    "dash-",
+    {
+     "g": "rlow",
+     "n": 10
+    }
+   ],
+   "post": []
+  },
+  {
+   "kind": "name-value",
+   "pre": [
+    "{\"name\": \"API_KEY\", \"value\": \"ab\\\""
+   ],
+   "secret": [
+    "cd-",
+    {
+     "g": "rlow",
+     "n": 12
+    }
+   ],
+   "post": [
+    "\"}"
+   ]
+  }
+ ],
+ "normal": [
+  [
+   "commit ",
+   {
+    "g": "rhex",
+    "n": 40
+   }
+  ],
+  [
+   "[main ",
+   {
+    "g": "rhex",
+    "n": 7
+   },
+   "] fix(8.3.0): model-based rejection detector"
+  ],
+  [
+   "retrieval_id: ",
+   {
+    "g": "uuid",
+    "n": 0
+   }
+  ],
+  [
+   "\"id\": \"",
+   {
+    "g": "uuid",
+    "n": 0
+   },
+   "\""
+  ],
+  [
+   "pattern ctx-1916239599-9c56 applied"
+  ],
+  [
+   "sha256 ",
+   {
+    "g": "rhex",
+    "n": 64
+   }
+  ],
+  [
+   "docker pull ghcr.io/o/app@sha256:",
+   {
+    "g": "rhex",
+    "n": 64
+   }
+  ],
+  [
+   "/home/dev/repos/github_com/ce-dot-net/ce-claude-marketplace/plugins/ace/mod/lib/trace.ts"
+  ],
+  [
+   "data:image/png;base64,",
+   {
+    "g": "r64",
+    "n": 120
+   }
+  ],
+  [
+   "\"integrity\": \"sha512-",
+   {
+    "g": "r64",
+    "n": 86
+   },
+   "==\""
+  ],
+  [
+   "getUserPromptFromTranscript(transcriptPath)"
+  ],
+  [
+   "REJECTION_PREV_MAX_AGE_S = 6 * 3600"
+  ],
+  [
+   "npm i @anthropic-ai/claude-code@2.1.300"
+  ],
+  [
+   "2026-11-24T10:00:00.000Z learn_dispatched hook=Stop"
+  ],
+  [
+   "https://github.com/ce-dot-net/ce-claude-marketplace/pull/53"
+  ],
+  [
+   "git@github.com:ce-dot-net/ce-claude-marketplace.git"
+  ],
+  [
+   "mail dev@example.com about it"
+  ],
+  [
+   "Math.round(x * 100) / 100"
+  ],
+  [
+   "const v = await $.env.get('ACE_TRACE_FULL_STEPS')"
+  ],
+  [
+   "def handback_summary(path, cap=None):"
+  ],
+  [
+   "grep -rn \"retrieval_id\" plugins/ace/mod"
+  ],
+  [
+   "node_modules/.bin/tsc --noEmit"
+  ],
+  [
+   "{\"event\": \"trace_cap_hit\", \"bytes_before\": 123456, \"steps\": 12}"
+  ],
+  [
+   "export PATH=/usr/local/bin:$PATH"
+  ],
+  [
+   "NODE_ENV=production"
+  ],
+  [
+   "LOG_LEVEL=debug"
+  ],
+  [
+   "AUTHOR=dev team"
+  ],
+  [
+   "SESSION_TIMEOUT_MINUTES=30"
+  ],
+  [
+   "tokenizer.encode(text)"
+  ],
+  [
+   "password policy requires 12 chars"
+  ],
+  [
+   "ace-trace-",
+   {
+    "g": "uuid",
+    "n": 0
+   },
+   ".json"
+  ],
+  [
+   "feat/full-steps-upvote"
+  ],
+  [
+   "aGVsbG8gd29ybGQ="
+  ],
+  [
+   "color: #1a2b3c;"
+  ],
+  [
+   "claude-opus-5-5 claude-haiku-4-5"
+  ],
+  [
+   "tests/fixtures/rejection_multilingual.ts:42"
+  ],
+  [
+   "ERR_MODULE_NOT_FOUND: Cannot find package"
+  ],
+  [
+   "v8.3.0 -> 8.4.0"
+  ],
+  [
+   "TextDecoderStreamPolyfill2Instance"
+  ],
+  [
+   "\"tool_use_id\": \"toolu_01",
+   {
+    "g": "r62",
+    "n": 22
+   },
+   "\""
+  ],
+  [
+   "msg_01",
+   {
+    "g": "r62",
+    "n": 22
+   }
+  ],
+  [
+   "request-id: req_011",
+   {
+    "g": "r62",
+    "n": 21
+   }
+  ],
+  [
+   "https://claude.ai/code/session_01",
+   {
+    "g": "r62",
+    "n": 22
+   }
+  ],
+  [
+   "org_",
+   {
+    "g": "r62",
+    "n": 24
+   },
+   " / prj_",
+   {
+    "g": "r62",
+    "n": 24
+   }
+  ],
+  [
+   "cus_",
+   {
+    "g": "r62",
+    "n": 20
+   },
+   " pi_",
+   {
+    "g": "r62",
+    "n": 24
+   }
+  ],
+  [
+   "deployment ",
+   {
+    "g": "b36s",
+    "n": 0
+   },
+   " ready"
+  ],
+  [
+   "sessions/sess-1/patterns-used-main.json"
+  ],
+  [
+   "https://example.com/a/b?page=2&sort=desc"
+  ],
+  [
+   "useEffect(() => setCount(c => c + 1), [])"
+  ],
+  [
+   "src/app.ts:42: login(user, password) // see docs"
+  ],
+  [
+   "the user can login with a password reset link"
+  ],
+  [
+   "define('APP_NAME', 'ace');"
+  ],
+  [
+   "host\tport\tdb\tuser"
+  ],
+  [
+   "docs/auth.md:12: \"auth\" section explains the flow"
+  ],
+  [
+   ".example.com\tTRUE\t/"
+  ],
+  [
+   "a:b:c"
+  ],
+  [
+   "LOG_LEVEL=debug\r\nNODE_ENV=production\r\n"
+  ],
+  [
+   "Grüße aus Köln — 東京 ✓ fertig\r\n"
+  ],
+  [
+   "+NODE_ENV=production"
+  ],
+  [
+   "src/app.py-3-def main():"
+  ],
+  [
+   "12:LOG_LEVEL=debug"
+  ],
+  [
+   "shp",
+   "at_",
+   {
+    "g": "rhex",
+    "n": 31
+   }
+  ],
+  [
+   "shp",
+   "xx_",
+   {
+    "g": "rhex",
+    "n": 32
+   }
+  ],
+  [
+   "xshp",
+   "at_",
+   {
+    "g": "rhex",
+    "n": 32
+   }
+  ],
+  [
+   "def fetch_shp",
+   "at_config(store):"
+  ],
+  [
+   "src/shp",
+   "at_client/handler.py"
+  ],
+  [
+   "env:\n  - name: LOG_LEVEL\n    value: debug\n"
+  ],
+  [
+   "{\"name\": \"Accept\", \"value\": \"application/json\"}"
+  ],
+  [
+   "- name: build\n  value: true"
+  ],
+  [
+   "- name: username\n  value: bob"
+  ],
+  [
+   "- name: COMMIT\n  value: ",
+   {
+    "g": "rhex",
+    "n": 40
+   }
+  ],
+  [
+   "- name: REQUEST_ID\n  value: ",
+   {
+    "g": "uuid",
+    "n": 0
+   }
+  ],
+  [
+   "value: plainvalue123"
+  ],
+  [
+   "- name: DB_PASSWORD\n\n  value: blankline-gap-kept"
+  ]
+ ],
+ "pii": {
+  "secrets": [
+   {
+    "kind": "pii:email",
+    "pre": [
+     "contact "
+    ],
+    "secret": [
+     {
+      "g": "rlow",
+      "n": 8
+     },
+     "@",
+     {
+      "g": "rlow",
+      "n": 7
+     },
+     ".com"
+    ],
+    "post": [
+     " for access"
+    ]
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "cc: "
+    ],
+    "secret": [
+     {
+      "g": "rlow",
+      "n": 5
+     },
+     "+",
+     {
+      "g": "rlow",
+      "n": 4
+     },
+     "@",
+     {
+      "g": "rlow",
+      "n": 7
+     },
+     ".io"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "from "
+    ],
+    "secret": [
+     "First.Last@mail.",
+     {
+      "g": "rlow",
+      "n": 7
+     },
+     ".co.uk"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "Reply-To: "
+    ],
+    "secret": [
+     "Ops.Team@",
+     {
+      "g": "rlow",
+      "n": 6
+     },
+     ".ORG"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "{\"author\": \""
+    ],
+    "secret": [
+     {
+      "g": "rlow",
+      "n": 8
+     },
+     "@",
+     {
+      "g": "rlow",
+      "n": 7
+     },
+     ".com"
+    ],
+    "post": [
+     "\", \"x\": 1}"
+    ]
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "<a href=\"mailto:"
+    ],
+    "secret": [
+     {
+      "g": "rlow",
+      "n": 8
+     },
+     "@",
+     {
+      "g": "rlow",
+      "n": 7
+     },
+     ".com"
+    ],
+    "post": [
+     "\">mail</a>"
+    ]
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "Author: Dev One <"
+    ],
+    "secret": [
+     {
+      "g": "rlow",
+      "n": 8
+     },
+     "@",
+     {
+      "g": "rlow",
+      "n": 7
+     },
+     ".com"
+    ],
+    "post": [
+     ">"
+    ]
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "to: x1@",
+     {
+      "g": "rlow",
+      "n": 6
+     },
+     ".de, "
+    ],
+    "secret": [
+     {
+      "g": "rlow",
+      "n": 8
+     },
+     "@",
+     {
+      "g": "rlow",
+      "n": 7
+     },
+     ".com"
+    ],
+    "post": [
+     ", y2@",
+     {
+      "g": "rlow",
+      "n": 6
+     },
+     ".de"
+    ]
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "ssh "
+    ],
+    "secret": [
+     "ubuntu@ec2-",
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     "-",
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     "-",
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     "-",
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     ".compute.",
+     {
+      "g": "rlow",
+      "n": 6
+     },
+     ".com"
+    ],
+    "post": [
+     " uptime"
+    ]
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "Co-authored-by: bot <"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 7
+     },
+     "+",
+     {
+      "g": "rlow",
+      "n": 6
+     },
+     "@users.noreply.github.com"
+    ],
+    "post": [
+     ">"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call center +49 "
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "US office: +1 ("
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     ") ",
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     "-",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "London: +44 20 "
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 4
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "+33 "
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 1
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 2
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "+49"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 10
+     }
+    ],
+    "post": [
+     "  (diff-style, 12 digits, no separator)"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Tel.: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Handy: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     "/",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "please call me at 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     "-",
+     {
+      "g": "rdig",
+      "n": 6
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "WhatsApp (0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     ") ",
+     {
+      "g": "rdig",
+      "n": 6
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "{\"phone\": \""
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 10
+     }
+    ],
+    "post": [
+     "\"}"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "mobile: "
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 11
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "FAX="
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 4
+     },
+     "-",
+     {
+      "g": "rdig",
+      "n": 6
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "{'tel': '"
+    ],
+    "secret": [
+     "0",
+     {
+      "g": "rdig",
+      "n": 9
+     }
+    ],
+    "post": [
+     "'}"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "IBAN: "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "pay to "
+    ],
+    "secret": [
+     "DE89370400440532013000"
+    ],
+    "post": [
+     " today"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "{\"iban\": \""
+    ],
+    "secret": [
+     "XX",
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": [
+     "\"}"
+    ]
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "email = "
+    ],
+    "secret": [
+     {
+      "g": "rlow",
+      "n": 6
+     },
+     "@",
+     {
+      "g": "rlow",
+      "n": 5
+     },
+     ".xn--p1ai"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "\"mail\": \""
+    ],
+    "secret": [
+     {
+      "g": "rlow",
+      "n": 6
+     },
+     "@intranet"
+    ],
+    "post": [
+     "\""
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Telefonnummer: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Handynummer 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Mobilnummer: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     "-",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Telephone: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Tel.-Nr.: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "{\"phoneNumber\":\"0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": [
+     "\"}"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "{\"phone_number\": \"0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     "/",
+     {
+      "g": "rdig",
+      "n": 6
+     }
+    ],
+    "post": [
+     "\"}"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "mobile_no: "
+    ],
+    "secret": [
+     "0",
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "bitte anrufen unter 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 6
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: "
+    ],
+    "secret": [
+     "de89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "IBAN: "
+    ],
+    "secret": [
+     "DE00 ",
+     {
+      "g": "rdig",
+      "n": 4
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 2
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "{\"iban\": \""
+    ],
+    "secret": [
+     "de89 3704 0044 0532 0130 00"
+    ],
+    "post": [
+     "\"}"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "phone: "
+    ],
+    "secret": [
+     "0",
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": [
+     " (office)"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Telephone 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: "
+    ],
+    "secret": [
+     "gb82 west 1234 5698 7654 32"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: "
+    ],
+    "secret": [
+     "nl91 abna 0417 1643 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: "
+    ],
+    "secret": [
+     "GB82 west 1234 5698 7654 32"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "\"iban\": \""
+    ],
+    "secret": [
+     "gb82 west 1234 5698 7654 32"
+    ],
+    "post": [
+     "\""
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "meine iban ist "
+    ],
+    "secret": [
+     "de89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "transfer to "
+    ],
+    "secret": [
+     "gb82west12345698765432"
+    ],
+    "post": [
+     " now"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: "
+    ],
+    "secret": [
+     "gb00 west 1234 5698 7654 32"
+    ],
+    "post": [
+     " and more"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Mobiltelefon: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Mobiltelefonnummer: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Mobilfunknummer: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Diensthandy: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Firmenhandy 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Festnetz: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Cell: "
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "cellphone: "
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Tel. privat 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Telefon (mobil) 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "{\"telefon\": \"0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": [
+     "\"}"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "handynummer=0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "+49 30 "
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Tel.: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call center "
+    ],
+    "secret": [
+     "+44.20.794.609"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "Bitte ueberweisen an "
+    ],
+    "secret": [
+     "AT61 1904 3002 3457 3201"
+    ],
+    "post": [
+     " bis Freitag"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "IBAN "
+    ],
+    "secret": [
+     "AT61 1904 3002 3457 3201"
+    ],
+    "post": [
+     " BIC x"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "IBAN "
+    ],
+    "secret": [
+     "AT611904300234573201"
+    ],
+    "post": [
+     " und BIC"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "my IBAN is "
+    ],
+    "secret": [
+     "ES91 2100 0418 4502 0005 1332"
+    ],
+    "post": [
+     " and the BIC"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [],
+    "secret": [
+     "BE68 5390 0754 7034"
+    ],
+    "post": [
+     " ok"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [],
+    "secret": [
+     "BE68539007547034"
+    ],
+    "post": [
+     " ok"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [],
+    "secret": [
+     "PL61 1090 1014 0000 0712 1981 2874"
+    ],
+    "post": [
+     " von Max"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [],
+    "secret": [
+     "SE45 5000 0000 0583 9825 7466"
+    ],
+    "post": [
+     " to pay"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [],
+    "secret": [
+     "AT61 1904 3002 3457 3201"
+    ],
+    "post": [
+     " BANK"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [],
+    "secret": [
+     "AT61 1904 3002 3457 3201"
+    ],
+    "post": [
+     " 1"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [],
+    "secret": [
+     "CH93 0076 2011 6238 5295 7"
+    ],
+    "post": [
+     " an"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "IBAN "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "IBAN "
+    ],
+    "secret": [
+     "DE89\t3704\t0044\t0532\t0130\t00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: "
+    ],
+    "secret": [
+     "GB82 WEST 1234 5698 7654 3"
+    ],
+    "post": [
+     " and more"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "MobilePhone: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "HomePhone: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "mobilephone=0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "\"phoneNumbers\": \"0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": [
+     "\""
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "\"home_phone\": \"0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": [
+     "\""
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "\"phone2\": \"0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": [
+     "\""
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "\"cell\": \""
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": [
+     "\""
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Tel/0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     ".",
+     {
+      "g": "rdig",
+      "n": 4
+     },
+     ".",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "WhatsApp/0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     ".",
+     {
+      "g": "rdig",
+      "n": 4
+     },
+     ".",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "Kontakt: "
+    ],
+    "secret": [
+     {
+      "g": "rlow",
+      "n": 4
+     },
+     ".",
+     {
+      "g": "rlow",
+      "n": 3
+     },
+     "@",
+     {
+      "g": "rlow",
+      "n": 6
+     },
+     ".de"
+    ],
+    "post": [
+     "(Vertrieb)"
+    ]
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "siehe "
+    ],
+    "secret": [
+     {
+      "g": "rlow",
+      "n": 4
+     },
+     "@",
+     {
+      "g": "rlow",
+      "n": 6
+     },
+     ".io"
+    ],
+    "post": [
+     "[1]"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "Bitte auf AT61 1904 3002 3457 3201 oder "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": [
+     " überweisen"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "Bitte auf "
+    ],
+    "secret": [
+     "AT61 1904 3002 3457 3201"
+    ],
+    "post": [
+     " oder DE89 3704 0044 0532 0130 00 überweisen"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "IBAN AT61 1904 3002 3457 3201 IBAN "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "IBAN alt AT61 1904 3002 3457 3201 neue "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "Max\tAT61 1904 3002 3457 3201\t"
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": [
+     "\tBerlin"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "AT61 1904 3002 3457 3201 "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "AT611904300234573201\t"
+    ],
+    "secret": [
+     "DE89370400440532013000"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "Zahlung KW47 "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "KW47 "
+    ],
+    "secret": [
+     "DE89370400440532013000"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "Re24 "
+    ],
+    "secret": [
+     "AT61 1904 3002 3457 3201"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: AT61 1904 3002 3457 3201 oder "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: "
+    ],
+    "secret": [
+     "AT61 1904 3002 3457 3201"
+    ],
+    "post": [
+     " oder DE89 3704 0044 0532 0130 00"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Telefax: "
+    ],
+    "secret": [
+     "089 1234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Telefax "
+    ],
+    "secret": [
+     "089/1234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Fon: "
+    ],
+    "secret": [
+     "089 1234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Fon "
+    ],
+    "secret": [
+     "089 1234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Durchwahl: "
+    ],
+    "secret": [
+     "089 1234-567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "phone_2: "
+    ],
+    "secret": [
+     "0151 12345678"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "phone12: "
+    ],
+    "secret": [
+     "0151 12345678"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "telefon2: "
+    ],
+    "secret": [
+     "0151 12345678"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "fax2: "
+    ],
+    "secret": [
+     "089 1234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Please call "
+    ],
+    "secret": [
+     "030 1234567"
+    ],
+    "post": [
+     " tomorrow"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Call: ("
+    ],
+    "secret": [
+     "415) 555-0123"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call our hotline "
+    ],
+    "secret": [
+     "0800 1234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call the customer at "
+    ],
+    "secret": [
+     "0151 23456789"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call "
+    ],
+    "secret": [
+     "015112345678"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call "
+    ],
+    "secret": [
+     "1-800-555-0123"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban2: "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "email2: "
+    ],
+    "secret": [
+     "max.mustermann@firma.de"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: "
+    ],
+    "secret": [
+     "DE893704.0044.0532.0130.00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Call or WhatsApp "
+    ],
+    "secret": [
+     "91234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call or fax "
+    ],
+    "secret": [
+     "5550123"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Call (mobil): "
+    ],
+    "secret": [
+     "299839"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call Tel.Nr:"
+    ],
+    "secret": [
+     "0301234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call me "
+    ],
+    "secret": [
+     "5550123"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call  me "
+    ],
+    "secret": [
+     "5550123"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Call:"
+    ],
+    "secret": [
+     "555-0123"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call "
+    ],
+    "secret": [
+     "0123456"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call "
+    ],
+    "secret": [
+     "123456789"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call("
+    ],
+    "secret": [
+     "0301234567"
+    ],
+    "post": [
+     ")"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban_2="
+    ],
+    "secret": [
+     "XX12 3456 7890"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call timeout "
+    ],
+    "secret": [
+     "0301234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call "
+    ],
+    "secret": [
+     "030.1234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Call ("
+    ],
+    "secret": [
+     "030.1234567"
+    ],
+    "post": [
+     ")"
+    ]
+   }
+  ],
+  "normal": [
+   [
+    "git@github.com:org/repo.git"
+   ],
+   [
+    "git clone ssh://git@github.com/org/repo.git"
+   ],
+   [
+    "scp dist.tgz deploy@build.",
+    {
+     "g": "rlow",
+     "n": 6
+    },
+    ".com:/srv/app/"
+   ],
+   [
+    "@Override"
+   ],
+   [
+    "@decorator(x)"
+   ],
+   [
+    "npm i @types/node @scope/pkg"
+   ],
+   [
+    "pkg@1.2.3"
+   ],
+   [
+    "pkg@latest left-pad@next"
+   ],
+   [
+    "docker pull image@sha256:",
+    {
+     "g": "rhex",
+     "n": 64
+    }
+   ],
+   [
+    "foo@bar"
+   ],
+   [
+    "@media screen and (max-width: 600px)"
+   ],
+   [
+    "redis user:pw",
+    {
+     "g": "rlow",
+     "n": 6
+    },
+    "@cache.",
+    {
+     "g": "rlow",
+     "n": 6
+    },
+    ".com"
+   ],
+   [
+    "dev@example.com"
+   ],
+   [
+    "ops@mail.example.org"
+   ],
+   [
+    "a@b.test"
+   ],
+   [
+    "x@y.invalid"
+   ],
+   [
+    "root@box.localhost"
+   ],
+   [
+    "u@host.example"
+   ],
+   [
+    "ts ",
+    {
+     "g": "rdig",
+     "n": 10
+    }
+   ],
+   [
+    "ts_ms ",
+    {
+     "g": "rdig",
+     "n": 13
+    }
+   ],
+   [
+    "sha ",
+    {
+     "g": "rhex",
+     "n": 40
+    }
+   ],
+   [
+    "id ",
+    {
+     "g": "uuid",
+     "n": 0
+    }
+   ],
+   [
+    "192.168.0.1"
+   ],
+   [
+    "version 1.2.3"
+   ],
+   [
+    "listening on :8080"
+   ],
+   [
+    "line 12345, byte 678901"
+   ],
+   [
+    "ace-trace-",
+    {
+     "g": "uuid",
+     "n": 0
+    },
+    ".json"
+   ],
+   [
+    "2026-11-24T19:07:01Z"
+   ],
+   [
+    "030 ",
+    {
+     "g": "rdig",
+     "n": 7
+    }
+   ],
+   [
+    "+12345678"
+   ],
+   [
+    "+",
+    {
+     "g": "rdig",
+     "n": 7
+    }
+   ],
+   [
+    "DE88 3704 0044 0532 0130 00"
+   ],
+   [
+    "DE89 3704"
+   ],
+   [
+    "KEY ",
+    {
+     "g": "rUP",
+     "n": 32
+    }
+   ],
+   [
+    "blob ",
+    {
+     "g": "r64",
+     "n": 44
+    }
+   ],
+   [
+    "mail = sendmail(msg)"
+   ],
+   [
+    "phone_number = row[0]"
+   ],
+   [
+    "email: true"
+   ],
+   [
+    "if mail == other: pass"
+   ],
+   [
+    "logo@2x.png"
+   ],
+   [
+    "src=\"icon@3x.webp\""
+   ],
+   [
+    "backup@2026.tar.gz"
+   ],
+   [
+    "img@1.5x.jpg"
+   ],
+   [
+    "+2026-11-24 10:00:00 deploy"
+   ],
+   [
+    "+192.168.1.100"
+   ],
+   [
+    "+3.14159265358979"
+   ],
+   [
+    "tool call took 1",
+    {
+     "g": "rdig",
+     "n": 7
+    },
+    " ns"
+   ],
+   [
+    "call(1",
+    {
+     "g": "rdig",
+     "n": 6
+    },
+    ")"
+   ],
+   [
+    "q@k.transpose(x)"
+   ],
+   [
+    "m@k.items[0]"
+   ],
+   [
+    "iban: none yet"
+   ],
+   [
+    "phone: n/a, see below"
+   ],
+   [
+    "sprite@2x.avif"
+   ],
+   [
+    "hero@1.5x.heic"
+   ],
+   [
+    "+24.11.2026 10:00:00 Uhr"
+   ],
+   [
+    "+2026/11/24 10:00"
+   ],
+   [
+    "+11/24/2026 10:00"
+   ],
+   [
+    "+2026.11.24 build"
+   ],
+   [
+    "+192.168.100.200/24"
+   ],
+   [
+    "Hotel ",
+    {
+     "g": "rdig",
+     "n": 7
+    }
+   ],
+   [
+    "telemetry ",
+    {
+     "g": "rdig",
+     "n": 6
+    },
+    " events"
+   ],
+   [
+    "Automobil ",
+    {
+     "g": "rdig",
+     "n": 7
+    }
+   ],
+   [
+    "iPhone 15 Pro ",
+    {
+     "g": "rdig",
+     "n": 6
+    }
+   ],
+   [
+    "mobile=false; mobile_count=",
+    {
+     "g": "rdig",
+     "n": 7
+    }
+   ],
+   [
+    "3 files changed, +1",
+    {
+     "g": "rdig",
+     "n": 4
+    },
+    "/-",
+    {
+     "g": "rdig",
+     "n": 4
+    }
+   ],
+   [
+    "+24.11. 9.8.7 10/30"
+   ],
+   [
+    "User-Agent: WhatsApp/2.23.20.0 A"
+   ],
+   [
+    "cell size ",
+    {
+     "g": "rdig",
+     "n": 7
+    },
+    " bytes"
+   ],
+   [
+    "Cell execution took ",
+    {
+     "g": "rdig",
+     "n": 7
+    },
+    " ns"
+   ],
+   [
+    "WhatsApp/2.23.20.0 Android"
+   ],
+   [
+    "x@y.name(arg)"
+   ],
+   [
+    "smartphone ",
+    {
+     "g": "rdig",
+     "n": 7
+    }
+   ],
+   [
+    "iPhone ",
+    {
+     "g": "rdig",
+     "n": 7
+    }
+   ],
+   [
+    "Fonds 1234567"
+   ],
+   [
+    "Fondue fuer 1234567 Leute"
+   ],
+   [
+    "cell_2 = 1234567"
+   ],
+   [
+    "cell2: 1234567"
+   ],
+   [
+    "KW47 Re24 AB12 1234567"
+   ],
+   [
+    "call(123456)"
+   ],
+   [
+    "call timeout 123456"
+   ],
+   [
+    "tool call took 1234567 ns"
+   ],
+   [
+    "API call 1234567 ok"
+   ],
+   [
+    "call used 1234567 bytes"
+   ],
+   [
+    "call ratio 123/456"
+   ],
+   [
+    "tool call: redact.py:1234-5678"
+   ],
+   [
+    "mail1=0301234567"
+   ],
+   [
+    "email2: \"max\""
+   ],
+   [
+    "per call (2026-11-24)"
+   ],
+   [
+    "call on 24.11.2026"
+   ],
+   [
+    "first call 2026-11-24T10:00"
+   ],
+   [
+    "call settled in 12.5 ms"
+   ],
+   [
+    "call timeout 123456789"
+   ],
+   [
+    "call 0.5"
+   ],
+   [
+    "call 09.30 am"
+   ],
+   [
+    "+49.301234567"
+   ],
+   [
+    "+4930.1234567"
+   ]
+  ]
+ }
+}

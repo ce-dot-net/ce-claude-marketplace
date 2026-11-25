@@ -3,7 +3,7 @@
 
 Per ACE-SDK-team guidance (Q2 answers):
 - agent_type: "permission_gate" (filterable in searchPatterns + listTraces, requires ace-cli >= 2.16)
-- domain: "permission-boundary" (client-side tag, NOT anti-pattern)
+- no `domains` field (round 6: not a field of the trace request schema)
 - result.success: false (boundary signal, no explicit harmful_delta — Curator decides)
 - Client-side debounce: max 1 trace per (tool_name) per 60s
 
@@ -271,9 +271,14 @@ def _structural_fingerprint(tool_name: str, tool_input) -> str:
         return "input=non-dict"
 
     if tool_name == "Bash":
-        # Leading verb only — strips arguments which may contain secrets
+        # round 6: the command family as the main trace shows it (ace_after_task.visible_family: env assignments such as
+        # API_KEY=... are no family, every word must survive redaction, else 'unknown'); never the raw first token
         cmd = str(tool_input.get("command", ""))
-        verb = cmd.split(None, 1)[0] if cmd else ""
+        try:
+            from ace_after_task import visible_family
+            verb = visible_family(cmd) if cmd else ""
+        except Exception:
+            verb = "unknown"
         return f"verb={verb!r}"
 
     # For Edit/Write/etc., expose only the *keys* present (file_path, new_string, …)
@@ -298,11 +303,22 @@ def _render_variant(session_id, with_path=False):
     return (variant, path) if with_path else variant
 
 
+def _render_layout(session_id):
+    """The layout-a value ('a' | 'a+hint') the task's state carries, else None."""
+    try:
+        from patterns_used_state import load_state
+        from ace_pattern_render import LAYOUT_A_VALUES
+        v = load_state(session_id, None, 'Stop', project_id=_PROJECT_ID).get('render_layout')
+        return v if v in LAYOUT_A_VALUES else None
+    except Exception:
+        return None
+
+
 def _build_trace(event: dict) -> dict:
     """Build ExecutionTrace shape per SDK-team guidance."""
     tool_name = event.get("tool_name", "unknown")
     tool_input = event.get("tool_input", {})
-    reason = event.get("reason") or event.get("denial_reason") or "auto-mode classifier denial"
+    # round 6: the deny reason is never sent (hook / policy reasons echo the denied command); 'denied' only
     session_id = event.get("session_id", "")
 
     # Compact task line — server filters trivial tasks (<learningMinTokens=100),
@@ -316,7 +332,7 @@ def _build_trace(event: dict) -> dict:
         "step": 1,
         "tool": tool_name,
         "action": f"Attempt {tool_name} ({_structural_fingerprint(tool_name, tool_input)})",
-        "result": f"denied: {reason}",
+        "result": "denied",
     }]
 
     trace = {
@@ -325,14 +341,13 @@ def _build_trace(event: dict) -> dict:
         "result": {
             "success": False,
             "failed_steps": 1,  # 8.1.3 contract: always present; the denied call is the one failed step
-            "output": f"denied: {reason}",
+            "output": "denied",
         },
         "playbook_used": [],
         "timestamp": datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%fZ'),
         "agent_type": "permission_gate",
+        "chain": "python",  # round 5 C5: as ace_after_task, never omitted
         # no session_id: the CC conversation id must never be sent as one (see ace_after_task); conversation_id below
-        # Domain tag — client-side classification; server respects this for searchPatterns
-        "domains": ["permission-boundary"],
     }
     from ace_trace_meta import RULE_PERMISSION, stamp
     stamp(trace, RULE_PERMISSION)  # 8.1.4: result.plugin_version + result.outcome_rule
@@ -342,6 +357,14 @@ def _build_trace(event: dict) -> dict:
     if variant:  # §31: omitted when unknown; 8.2.1: render_path only next to it
         trace["render_variant"] = variant
         trace["render_path"] = path
+        try:
+            from ace_pattern_render import render_control_pct
+            trace["render_control_pct"] = render_control_pct()
+        except Exception:
+            trace["render_control_pct"] = 0
+    layout = _render_layout(session_id)
+    if layout:  # layout-a arm: only when the stored state carries it
+        trace["render_layout"] = layout
     return trace
 
 

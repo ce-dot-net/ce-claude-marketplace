@@ -212,7 +212,10 @@ def test_batch_string_response_is_a_success():
 
 
 def test_tool_failed_stderr_alone_is_not_a_failure():
-    from ace_after_task import tool_failed
+    from ace_after_task import _step_status
+
+    def tool_failed(resp):
+        return _step_status('Bash', {}, resp) == 'failed'
     assert tool_failed({'stdout': 'ok', 'stderr': 'warn', 'exit_code': 0}) is False
     assert tool_failed({'stderr': 'warn'}) is False
     assert tool_failed({'error': 'boom'}) is True

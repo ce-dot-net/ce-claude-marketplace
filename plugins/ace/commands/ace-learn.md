@@ -9,7 +9,7 @@ Manually capture patterns and lessons learned from your recent work using Claude
 
 ## Instructions for Claude
 
-When the user runs `/ace:learn`, follow these steps:
+When the user runs `/ace:ace-learn`, follow these steps:
 
 ### Step 1: Gather Information with AskUserQuestion
 
@@ -140,7 +140,7 @@ CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1
 eval "$CTX"; ORG_ID="$ACE_ORG_ID"; PROJECT_ID="$ACE_PROJECT_ID"
 
 if [ -z "$PROJECT_ID" ]; then
-  echo "❌ Run /ace:configure first"
+  echo "❌ Run /ace:ace-configure first"
   exit 1
 fi
 
@@ -168,7 +168,7 @@ ORG_ARGS=(); [ -n "$ORG_ID" ] && ORG_ARGS=(--org "$ORG_ID")
 
 if [ $? -eq 0 ]; then
   echo "✅ Patterns captured successfully!"
-  echo "   Run /ace:status to see updated playbook"
+  echo "   Run /ace:ace-status to see updated playbook"
 else
   echo "❌ Failed to capture patterns"
   exit 1
@@ -204,7 +204,7 @@ The `ace-cli learn` subcommand accepts the following flags for enriched trace co
 3. **Extract task description** from user's "Other" input or category selection
 4. **Extract lessons learned** from "Other" text input
 5. **Handle both org formats**: Direct (`orgId`) and env wrapper (`env.ACE_ORG_ID`)
-6. **Enriched trace flags** (`--retrieval-id`, `--applied-log-ids`): pass these through when available in the session context (hooks supply them automatically; for manual `/ace:learn`, they are optional)
+6. **Enriched trace flags** (`--retrieval-id`, `--applied-log-ids`): pass these through when available in the session context (hooks supply them automatically; for manual `/ace:ace-learn`, they are optional)
 
 **Error Handling:**
 - Check ace-cli is installed
@@ -214,7 +214,7 @@ The `ace-cli learn` subcommand accepts the following flags for enriched trace co
 
 ## When to Use
 
-✅ **Use /ace:learn after**:
+✅ **Use /ace:ace-learn after**:
 - Implementing new features
 - Debugging and fixing issues
 - Discovering edge cases or gotchas
@@ -231,7 +231,7 @@ The `ace-cli learn` subcommand accepts the following flags for enriched trace co
 ## Example Workflow
 
 ```
-User: /ace:learn
+User: /ace:ace-learn
 
 Claude: [Shows AskUserQuestion UI]
   Question 1: What task did you just complete?
@@ -253,7 +253,7 @@ Claude runs:
     --output "Root cause was missing await on database.close() causing connection pool exhaustion. Intermittent failures in async code often indicate missing await statements. Always check async cleanup functions."
 
 ✅ Patterns captured successfully!
-   Run /ace:status to see updated playbook
+   Run /ace:ace-status to see updated playbook
 ```
 
 ## What Gets Captured
@@ -274,7 +274,7 @@ The ACE server's Reflector analyzes this and the Curator updates the playbook wi
 
 ## See Also
 
-- `/ace:status` - View playbook statistics
-- `/ace:patterns` - Browse learned patterns
-- `/ace:search <query>` - Find relevant patterns
+- `/ace:ace-status` - View playbook statistics
+- `/ace:ace-patterns` - Browse learned patterns
+- `/ace:ace-search <query>` - Find relevant patterns
 - `/ace:ace-bootstrap` - Initialize from codebase

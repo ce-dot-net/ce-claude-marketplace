@@ -1,9 +1,17 @@
 name: tests
 
+# CI cost: a PR runs ONE job (ubuntu, latest Python) and only when plugin code, tests or this workflow change; the full
+# 2 OS x 2 Python matrix (macOS runners cost ~10x per minute) runs on push to main / release branches only.
 on:
   push:
-    branches: [main, v8-modernize]
+    branches: [main, v8-modernize, "release/**"]
+    paths: ["plugins/ace/**", "tests/**", ".github/workflows/tests.yml"]
   pull_request:
+    paths: ["plugins/ace/**", "tests/**", ".github/workflows/tests.yml"]
+
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -12,10 +20,9 @@ jobs:
   pytest:
     strategy:
       fail-fast: false
-      matrix:
-        # 8.1.0: the Python hook chain supports >= 3.10 (the floor) up to the latest stable (3.15).
-        os: [ubuntu-latest, macos-latest]
-        python: ["3.10", "3.15"]
+      # 8.1.0: the Python hook chain supports >= 3.10 (the floor) up to the latest stable (3.15).
+      # PR: ubuntu x 3.15 (1 job). push (main / release): ubuntu + macOS x 3.10 + 3.15 (4 jobs).
+      matrix: ${{ fromJSON(github.event_name == 'pull_request' && '{"include":[{"os":"ubuntu-latest","python":"3.15"}]}' || '{"include":[{"os":"ubuntu-latest","python":"3.10"},{"os":"ubuntu-latest","python":"3.15"},{"os":"macos-latest","python":"3.10"},{"os":"macos-latest","python":"3.15"}]}') }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
@@ -27,6 +34,10 @@ jobs:
           node-version: "22"  # the mod test harness needs --experimental-strip-types (node >= 22.6)
       - name: Install pytest + rstest (the plugin itself is stdlib-only; rstest is the pinned parallel runner)
         run: python -m pip install --upgrade pip pytest rstest==0.10.0
+      # Round 10 / T1: the cross-chain tests (TS vs Python redact / replay / watchdog) run the mod's TypeScript through bun;
+      # without it they would skip. tests/test_secret_filter_py.py::test_round10_t1_bun_present_in_ci fails when it is missing.
+      - name: Install bun (cross-chain parity tests)
+        run: npm i -g bun@1.2.2
       - name: The hook code compiles on the floor (3.10 job)
         if: matrix.python == '3.10'
         run: python -m py_compile $(find plugins/ace/shared-hooks plugins/ace/utils -name '*.py')

@@ -315,7 +315,7 @@ def test_state_has_user_prompt_rendered_context_and_event(project, fake_cli, mon
     out = _run(monkeypatch, capsys, long_prompt, project)
     state = _main_state()
     assert state, "main state file not written"
-    assert state.get("user_prompt") == long_prompt[:4000]
+    assert state.get("user_prompt") == long_prompt  # full steps: whole request (was [:4000])
     assert state.get("rendered_context") == _additional_context(out)
     assert state.get("hook_event_name") == "UserPromptSubmit"
 

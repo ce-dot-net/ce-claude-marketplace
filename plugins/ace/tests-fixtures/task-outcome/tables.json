@@ -605,7 +605,7 @@
   ],
   [
    "git clone git@github.com:o/r.git; mail me@x.com",
-   "git clone git@github.com:o/r.git; mail me@x.com"
+   "git clone git@github.com:o/r.git; mail [redacted:email]"
   ],
   [
    "git clone https://user:p@CANARY@host/r",

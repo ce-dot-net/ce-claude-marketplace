@@ -24,6 +24,7 @@ from ace_cli import run_search                            # noqa: E402
 import ace_search_cache                                  # noqa: E402
 from ace_project_context import get_context                       # noqa: E402
 from ace_relevance_logger import log_domain_shift, log_error  # noqa: E402
+from ace_pattern_render import layout_a_applies, layout_a_value, render_layout_a_domain_shift  # noqa: E402
 from patterns_used_state import (append_patterns_used, injected_contents, load_task_session_id,  # noqa: E402
                                  strip_and_gate, task_session_id_for)
 
@@ -177,7 +178,13 @@ def _search_and_inject(event, ctx, project, org, sid, agent_id, last_file, last,
     patterns = result.get('similar_patterns') if ok else None
     stripped = strip_and_gate(result) if patterns else None
     returned = len((stripped or {}).get('similar_patterns') or [])
-    additional = _context(matched, stripped) if returned else None  # trims `stripped` to the injected set
+    _la = bool(returned and layout_a_applies(sid))  # layout-a cohort (own salt), arms budget/full only
+    if _la:  # trims `stripped` to the injected set too
+        additional = render_layout_a_domain_shift(stripped, matched)
+        if not stripped.get('similar_patterns'):  # nothing fit the cap: no header-only block, nothing stamped (as _context / the mod)
+            additional, _la = None, False
+    else:
+        additional = _context(matched, stripped) if returned else None  # trims `stripped` to the injected set
     kept = (stripped or {}).get('similar_patterns') or []
     kept_ids = [p.get('id') for p in kept if isinstance(p, dict) and p.get('id')]
     # search_succeeded = the search itself worked (0 patterns is still a success); hook=PostToolUse (C5)
@@ -207,7 +214,8 @@ def _search_and_inject(event, ctx, project, org, sid, agent_id, last_file, last,
                          retrieval_id=None if has_rid else (result.get('retrieval_id') or None),
                          retrieval_log_ids=rlog, task_session_id=tsid, project_id=project,
                          binding=None if has_rid else ctx,  # 8.2.6: the project goes with the retrieval_id
-                         pattern_contents=injected_contents(kept, kept_ids))
+                         pattern_contents=injected_contents(kept, kept_ids),
+                         render_layout=layout_a_value() if _la else None)  # None keeps what the task's main render set
     print(json.dumps({"hookSpecificOutput": {
         "hookEventName": "PostToolUse", "additionalContext": additional}}))
 

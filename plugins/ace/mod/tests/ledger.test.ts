@@ -1,5 +1,7 @@
 // 8.2.0 backfill ledger (pure, unwired): which bootstrap task keys were already sent. Strings in, strings out; no I/O.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
+import { expectLinear } from './timing.ts'
 import { add, emptyLedger, has, MAX_ATTEMPTS, MAX_KEYS, parse, pending, serialize, statusOf } from '../lib/ledger.ts'
 
 const K = (n: number) => 'bootstrap:' + n.toString(16).padStart(32, '0')
@@ -117,17 +119,18 @@ test('size cap: new keys beyond it are refused, existing keys still update', () 
   expect(l.entries.size).toBe(MAX_KEYS)
 })
 
-test('huge input stays bounded and fast', () => {
+test('huge input stays bounded and fast', { timeoutMs: 120_000 }, () => {
   const l = emptyLedger()
   for (let i = 0; i < 1000; i++) add(l, K(i), 'sent', i)
   const good = serialize(l, S)
   // far more lines than the line bound allows: parse stops there, never grows without limit; cheap shape checks run before any hash
-  const junk = ('v1\t' + K(1) + '\tbogus\t1\t0\tsig\n').repeat(MAX_KEYS * 3)
-  const t0 = Date.now()
-  const p = parse(good + junk, S)
+  const junk = (frac = 1) => ('v1\t' + K(1) + '\tbogus\t1\t0\tsig\n').repeat(Math.floor(MAX_KEYS * 3 * frac))
+  const p = parse(good + junk(), S)
   expect(p.entries.size).toBe(1000)
   expect(p.entries.size <= MAX_KEYS).toBe(true)
   expect(p.dropped > 0).toBe(true)
   expect(parse('a'.repeat(5_000_000), S).entries.size).toBe(0)
-  expect(Date.now() - t0 < 4000).toBe(true)
+  // load-proof: scaling at equal work, see timing.ts
+  expectLinear(f => good + junk(f), x => parse(x, S), 'junk lines')
+  expectLinear(f => 'a'.repeat(Math.floor(5_000_000 * f)), x => parse(x, S), 'one 5 MB line')
 })

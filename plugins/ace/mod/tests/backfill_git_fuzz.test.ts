@@ -2,8 +2,10 @@
 // failure prints its seed and case and reproduces. Invariant: a canary secret value never appears in any output field.
 // Accepted limits (not generated): a value with no key word, no separator and no token shape; a key word followed by
 // whitespace only ("refresh token expiry" must stay readable); homoglyph LETTERS inside a key word (Cyrillic "p\u0430ssword").
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { readGitLog, readMergeLog } from '../lib/backfill_git.ts'
+import { bestMs } from './timing.ts'
 
 const RS = '\x1e', NUL = '\x00', DATE = '2026-03-02T10:00:00Z'
 const MARK = 'zq9xk7'  // lowercased prefix of every canary
@@ -83,24 +85,27 @@ function gen(r: () => number, n: number): Case {
 
 function run(seed: number, n: number) {
   const r = mulberry32(seed)
-  let emitted = 0, slowest = 0
+  let emitted = 0, slowest = 0, worst = ''
   for (let i = 0; i < n; i++) {
     const c = gen(r, seed * 100000 + i)
     const t0 = performance.now()
     const out = [readGitLog(c.text, { projectId: 'prj' }), readMergeLog(c.text, { projectId: 'prj' })]
-    slowest = Math.max(slowest, performance.now() - t0)
+    const dt = performance.now() - t0
+    if (dt > slowest) { slowest = dt; worst = c.text }
     emitted += out[0].length + out[1].length
     if (leaks(out)) throw new Error(`leak seed=${seed} case=${i} kind=${c.kind}\nin=${JSON.stringify(c.text)}\nout=${JSON.stringify(out)}`)
   }
+  // a spike under host load is not repeatable, a regex blow-up is: the slowest case is timed again (best of 5) before it counts
+  if (slowest > 50) slowest = bestMs(() => { readGitLog(worst, { projectId: 'prj' }); readMergeLog(worst, { projectId: 'prj' }) })
   return { emitted, slowest }
 }
 
-// four seeds x 5000 cases = 20000 cases, one test per seed (each well under the 5 s test timeout)
+// four seeds x 5000 cases = 20000 cases, one test per seed (~1 s unloaded; the 5 s default test timeout is lifted: it is wall time too)
 for (const seed of [1, 42, 7777, 20261109])
-  test(`fuzz seed ${seed}: no canary secret leaves readGitLog/readMergeLog (5000 cases), bounded time per case`, () => {
+  test(`fuzz seed ${seed}: no canary secret leaves readGitLog/readMergeLog (5000 cases), bounded time per case`, { timeoutMs: 120_000 }, () => {
     const { emitted, slowest } = run(seed, 5000)
     expect(emitted).toBeGreaterThan(2500)  // most cases really produce a task: the invariant is not passed vacuously
-    expect(slowest).toBeLessThan(250)  // per case, JIT warm-up included: catches a regex blow-up, not jitter
+    expect(slowest).toBeLessThan(250)  // ms per case, best of 5 re-runs of the slowest: catches a regex blow-up, not jitter or host load
   })
 
 // Minimized bypasses the fuzzer found (each leaked before the fix).

@@ -43,6 +43,16 @@ def is_git_repo(repo_path: str) -> bool:
         return False
 
 
+# git minimisation (DSGVO): the trace's git object carries commit_hash (required by the server), timestamp, files_changed,
+# insertions, deletions and commit_is_fix only; no author, author_email, branch or commit message. Mod twin: io/spawn.ts gitContext.
+FIX_RE = re.compile(r'\b(revert|fix|fixes|fixed|hotfix|bugfix)\b', re.I | re.A)
+
+
+def commit_is_fix(subject) -> bool:
+    """Is the commit subject a fix or a revert? ASCII word boundaries (re.A) as in the mod's JS regex."""
+    return bool(FIX_RE.search(subject or ''))
+
+
 def get_git_context(repo_path: str) -> Optional[Dict]:
     """
     Extract comprehensive git context from repository.
@@ -56,11 +66,8 @@ def get_git_context(repo_path: str) -> Optional[Dict]:
         Dict with git context or None if not a git repo
         {
             'commit_hash': str,
-            'commit_message': str,
-            'author': str,
-            'author_email': str,
+            'commit_is_fix': bool,  (subject matched FIX_RE; the subject itself is not returned)
             'timestamp': str (ISO format),
-            'branch': str,
             'files_changed': List[str],  # List of changed file paths
             'insertions': int,
             'deletions': int
@@ -92,29 +99,13 @@ def get_git_context(repo_path: str) -> Optional[Dict]:
             timeout=5
         )
         if result.returncode == 0:
-            context['commit_message'] = result.stdout.strip()
+            context['commit_is_fix'] = commit_is_fix(result.stdout.strip().split('\n', 1)[0])  # the subject itself is never sent
+        else:
+            context['commit_is_fix'] = False  # = mod: no readable subject is no fix
 
         # Get author name
-        result = subprocess.run(
-            ['git', 'log', '-1', '--format=%an'],
-            cwd=repo_path,
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0:
-            context['author'] = result.stdout.strip()
 
         # Get author email
-        result = subprocess.run(
-            ['git', 'log', '-1', '--format=%ae'],
-            cwd=repo_path,
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0:
-            context['author_email'] = result.stdout.strip()
 
         # Get timestamp (ISO format)
         result = subprocess.run(
@@ -128,15 +119,6 @@ def get_git_context(repo_path: str) -> Optional[Dict]:
             context['timestamp'] = result.stdout.strip()
 
         # Get branch name
-        result = subprocess.run(
-            ['git', 'rev-parse', '--abbrev-ref', 'HEAD'],
-            cwd=repo_path,
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0:
-            context['branch'] = result.stdout.strip()
 
         # Get diff stats (insertions, deletions)
         result = subprocess.run(
@@ -302,49 +284,3 @@ def detect_commits_in_session(tools: List) -> List[str]:
             continue
 
     return commits
-
-
-def get_uncommitted_changes(repo_path: str) -> Optional[Dict]:
-    """
-    Check for uncommitted changes in the repository.
-
-    Useful for understanding if learning occurred before or after commit.
-
-    Args:
-        repo_path: Path to git repository
-
-    Returns:
-        Dict with staged and unstaged file counts, or None
-    """
-    if not repo_path or not is_git_repo(repo_path):
-        return None
-
-    try:
-        # Check for staged changes
-        result = subprocess.run(
-            ['git', 'diff', '--cached', '--name-only'],
-            cwd=repo_path,
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        staged_files = len([f for f in result.stdout.strip().split('\n') if f])
-
-        # Check for unstaged changes
-        result = subprocess.run(
-            ['git', 'diff', '--name-only'],
-            cwd=repo_path,
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        unstaged_files = len([f for f in result.stdout.strip().split('\n') if f])
-
-        return {
-            'staged_files': staged_files,
-            'unstaged_files': unstaged_files,
-            'has_uncommitted': staged_files > 0 or unstaged_files > 0
-        }
-
-    except Exception:
-        return None

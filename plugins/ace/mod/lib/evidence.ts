@@ -1,11 +1,12 @@
 // F-080 evidence: self-eval prompt + review parse, used-pattern ids (H1/H2), applied log ids, eval stats/injection,
 // user-rejection match (ace_feedback). Pure: no `$`, no I/O.
-import { PyFloat, num, pyFloatRepr } from './pyjson'
+import { num } from './pyjson'
 import { cps, cpSlice, normWs } from './text'
 
 export type ToolRec = { tool: string; action: string; result: string; failed: boolean; start_ms: number; end_ms: number; commit?: string
   hay?: string  // hay: the call's toolHaystack (item H2 used check), never sent in the trace
-  key?: string; dec?: boolean; intr?: true }  // 8.1.3 outcome: recovery key, decisive step, interrupted (lib/trace.ts taskOutcome)
+  key?: string; dec?: boolean; intr?: true  // 8.1.3 outcome: recovery key, decisive step, interrupted (lib/trace.ts taskOutcome)
+  input?: unknown; output?: unknown }  // full steps: the redacted tool input / output, sent as the step's tool_input / tool_response
 
 // ace_after_task.parse_ace_review
 export function parseAceReview(msg: string): { quality_pct: number; time_saved: string } | null {
@@ -58,24 +59,6 @@ export function parseUsedIds(text: string, injected: string[]): string[] {
   if (!m) return []
   const named = new Set(m[1]!.split(/[\s,;]+/).map(x => x.replace(/^[`'"<\[(]+|[`'">\]).]+$/g, '')).filter(Boolean))
   return injected.filter(id => named.has(id))
-}
-
-// ace_before_task.check_eval_request_and_review text. §24: the file is repo-controlled and reaches the model's
-// context, so every field is a number (finite int/float; anything else 0), never text.
-export function evalInjection(d: any): string {
-  const g = (k: string) => {
-    const v = d?.[k]
-    if (v instanceof PyFloat) return Number.isFinite(v.v) ? pyFloatRepr(v.v) : '0'
-    return typeof v === 'number' && Number.isFinite(v) ? String(v) : '0'
-  }
-  // never "0% relevance" / "0 domains": an unknown number is left out
-  const stats = (g('avg_relevance') !== '0' ? `${g('avg_relevance')}% relevance, ` : '') + (g('domains') !== '0' ? `${g('domains')} domains, ` : '')
-  return `<!-- ACE Self-Eval Request: Previous task used ${g('patterns_injected')} patterns ` +
-    `(${stats}${g('tools_executed')} tools). ` +
-    `As a human developer, how much time did these patterns save? ` +
-    `Without ACE, a developer would search docs, explore codebases, ask colleagues, or trial-and-error. ` +
-    `Rate from a HUMAN DEVELOPER perspective, not AI perspective. ` +
-    `Include in your response: ACE_REVIEW: N% | Xm saved | one-line reason -->`
 }
 
 // §31 / item H2 "actually used" (patterns_used_state.used_pattern_ids): evidence in what the task DID. Its id in the
@@ -136,7 +119,6 @@ export function evidenceTokens(content: unknown): Map<string, boolean> {
   }
   return toks
 }
-export const distinctiveTokens = (content: unknown): Set<string> => new Set(evidenceTokens(content).keys())
 // t in hay as a whole token: a word character at an edge of t must not continue into hay (regex \b)
 const isWord = (c: string | undefined) => !!c && /^[A-Za-z0-9_]$/.test(c)
 function hasToken(hay: string, t: string): boolean {
@@ -207,4 +189,42 @@ export function rejectionProbe(text: string | undefined): { matched: string | nu
   }
   return { matched: best, blocked: best === null ? blocked : null, tooLong: false }
 }
-export const rejectionMatch = (text: string | undefined): string | null => rejectionProbe(text).matched
+
+// Upvote phrase fast-path (mod-only), PRECISION first: a phrase as a whole word (any of UPVOTE_PHRASES), every phrase hit cut out,
+// and what is left must be filler words only (thanks, intensifiers, pronouns): the message is nothing but the approval. Anything
+// else (a negation, a '?', a new or additional task, a 'but ...') leaves real words -> blocked, the model decides. Bare
+// acknowledgements (ok, ja, weiter, thanks) are never an upvote (bareAck: no phrase, no model upvote).
+export const UPVOTE_PHRASES = ['perfekt', 'genau richtig', 'genau so', 'genau das', 'super das klappt', 'das klappt', 'klappt jetzt', 'klappt super',
+  'klappt perfekt', 'funktioniert jetzt', 'funktioniert super', 'funktioniert perfekt', 'funktioniert einwandfrei', 'läuft jetzt', 'läuft super',
+  'passt perfekt', 'gut gemacht', 'hat geklappt', 'hat funktioniert', 'das hat geholfen', 'perfect', 'works', 'works now', 'that works', 'it works',
+  'works great', 'works perfectly', 'that fixed it', 'thanks that fixed it', 'fixed it', 'great job', 'good job', 'well done', 'nice work',
+  'exactly right', 'exactly what i wanted', 'spot on', 'nailed it', 'excellent', 'awesome', 'looks good', 'lgtm']
+const UPVOTE_FILLER = new Set(['danke', 'dank', 'vielen', 'besten', 'herzlichen', 'dir', 'euch', 'super', 'toll', 'prima', 'klasse', 'wow', 'oh', 'ah',
+  'ja', 'jo', 'yes', 'yeah', 'yep', 'ok', 'okay', 'cool', 'nice', 'great', 'good', 'gut', 'sehr', 'echt', 'wirklich', 'really', 'so', 'very', 'much',
+  'thanks', 'thank', 'thx', 'ty', 'you', 'du', 'it', 'that', 'this', 'das', 'es', 'ist', 'is', 'now', 'jetzt', 'alles', 'all', 'everything', 'for',
+  'me', 'mir', 'uns', 'us', 'again', 'wieder', 'nochmal', 'endlich', 'finally', 'totally', 'absolutely', 'völlig', 'voll', 'einwandfrei', 'richtig',
+  'genau', 'just', 'einfach', 'und', 'and', 'haha', 'lol', 'perfectly', 'man', 'mann'])
+const UPVOTE_ACK = new Set(['ok', 'okay', 'k', 'ja', 'jo', 'yes', 'yeah', 'yep', 'weiter', 'mach', 'continue', 'go', 'on', 'gut', 'good', 'fine', 'alright',
+  'passt', 'danke', 'thanks', 'thank', 'you', 'thx', 'sure', 'klar', 'cool', 'nice', 'super', 'toll', 'prima'])
+const UPVOTE_SORTED = [...UPVOTE_PHRASES].sort((a, b) => b.length - a.length)
+const words = (t: string) => t.match(/[\p{L}\p{N}_']+/gu) ?? []
+// {matched: the longest phrase when the message is only an approval, blocked: a phrase hit with other content, tooLong, bareAck}
+export function upvoteProbe(text: string | undefined): { matched: string | null; blocked: string | null; tooLong: boolean; bareAck: boolean } {
+  const low = String(text ?? '').trim().toLowerCase().replace(/[‘’]/g, "'")
+  if ([...low].length > REJECTION_MAX_CHARS) return { matched: null, blocked: null, tooLong: true, bareAck: false }
+  const w = words(low)
+  // 3b: emoji / symbol-only replies (no word at all, e.g. a thumbs-up) count as a bare acknowledgement too
+  const bareAck = w.length > 0 ? w.every(x => UPVOTE_ACK.has(x)) : low !== ''
+  let rest = low, best: string | null = null
+  for (const phrase of UPVOTE_SORTED) {
+    for (let i = rest.indexOf(phrase); i >= 0; i = rest.indexOf(phrase, i + 1)) {
+      const j = i + phrase.length
+      if ((i > 0 && isWordChar(rest[i - 1]!)) || (j < rest.length && isWordChar(rest[j]!))) continue
+      if (best === null) best = phrase
+      rest = rest.slice(0, i) + ' ' + rest.slice(j)
+    }
+  }
+  if (best === null) return { matched: null, blocked: null, tooLong: false, bareAck }
+  const clean = !low.includes('?') && words(rest).every(x => UPVOTE_FILLER.has(x))
+  return { matched: clean ? best : null, blocked: clean ? null : best, tooLong: false, bareAck }
+}

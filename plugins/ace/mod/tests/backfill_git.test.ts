@@ -1,7 +1,9 @@
 // 8.2.0 git reader (pure library, unwired): the text of `git log` (GIT_LOG_ARGV) -> fix tasks, same shape family as lib/backfill.ts.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { GIT_LOG_ARGV, gitTaskKey, readGitLog, readMergeLog } from '../lib/backfill_git.ts'
 import { selectTasks } from '../lib/backfill.ts'
+import { expectLinear } from './timing.ts'
 
 const RS = '\x1e', NUL = '\x00'
 const c = (sha: string, date: string, subject: string, files: string[] = ['src/a.ts'], body = '') =>
@@ -155,15 +157,15 @@ test('wider key vocabulary, same gate on files, raw subject redacted before norm
   expect(JSON.stringify(m)).not.toContain('hunter2')
 })
 
-test('any "key" before a separator is redacted (FOO_KEY_ID=, FOO_KEY2=, signing key =, FOOKEY=); long input is cut and fast', () => {
+test('any "key" before a separator is redacted (FOO_KEY_ID=, FOO_KEY2=, signing key =, FOOKEY=); long input is cut and fast', { timeoutMs: 120_000 }, () => {
   const subs = ['fix: FOO_KEY_ID=hunter2 leaked', 'fix: FOO_KEY2=hunter2 leaked', 'fix: signing key = hunter2 leaked', 'fix: FOOKEY=hunter2 leaked']
   const r = subs.flatMap((s, i) => readGitLog(c(String(i).repeat(40), '2026-03-02T10:00:00Z', s), { projectId: 'prj' }))
   expect(r.length).toBe(4)
   expect(JSON.stringify(r)).not.toContain('hunter2')
-  const long = 'fix: ' + 'token '.repeat(200000)  // many keyword starts, no separator: must not blow up
-  const t0 = Date.now()
-  const big = readGitLog(c(S1, '2026-03-02T10:00:00Z', long, ['p/' + 'secret'.repeat(100000)]), { projectId: 'prj' })
-  expect(Date.now() - t0).toBeLessThan(1000)
+  // many keyword starts, no separator: must not blow up (scaling at equal work: linear ~1, quadratic ~8)
+  const mk = (f: number) => c(S1, '2026-03-02T10:00:00Z', 'fix: ' + 'token '.repeat(Math.floor(200000 * f)), ['p/' + 'secret'.repeat(Math.floor(100000 * f))])
+  const big = readGitLog(mk(1), { projectId: 'prj' })
+  expectLinear(mk, x => readGitLog(x, { projectId: 'prj' }))
   expect(big[0].task.length).toBeLessThanOrEqual(600)
   expect(big[0].steps[0].length).toBeLessThanOrEqual(600)
 })

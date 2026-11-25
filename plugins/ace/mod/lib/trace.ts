@@ -4,7 +4,9 @@ import { pyDumps } from './pyjson'
 import { cpSlice, isMachinePrompt } from './text'
 import { toolHaystack, type ToolRec } from './evidence'
 import { APPEND_SH } from './sh'
-import { sha256Hex } from './cohort'
+import { LAYOUT_A_VALUES, sha256Hex } from './cohort'
+import { switchOff } from './switches'
+import { deepRedact, redact } from './redact'  // secret redaction: lib/redact.ts (rules: lib/redact_rules.ts)
 
 // ---------- ace_after_task ----------
 const TRIVIAL = [/<command-message>ace[:\-]/i, /ace:ace-/i, /(?:^|\s)\/ace-[\w:-]*(?:\s|$)/i, /ace-status/i, /ace-patterns/i, /ace-search/i,
@@ -35,9 +37,10 @@ export function summarizeAction(tool: string, i: any): string {
   if (tool === 'Write') return `Wrote ${base(i.file_path)}`
   if (tool === 'Read') return `Read ${base(i.file_path)}`
   if (tool === 'Bash') return bashAction(i.command)  // 8.1.3: '<family> :: <redacted command <= 200>'
-  if (tool === 'Grep') return `Searched for: ${i.pattern ?? ''}`
-  if (tool === 'Glob') return `Found files matching: ${i.pattern ?? ''}`
-  if (tool === 'Task' || tool === 'Agent') return `Spawned task: ${cut(i.description ?? i.prompt ?? '', 60)}` // Python names only 'Task'
+  // Round 10 / M1: the pattern / description through redact() before the label is built and cut (ace_after_task.summarize_tool_action)
+  if (tool === 'Grep') return `Searched for: ${cut(redact(String(i.pattern ?? '')), 100)}`
+  if (tool === 'Glob') return `Found files matching: ${cut(redact(String(i.pattern ?? '')), 100)}`
+  if (tool === 'Task' || tool === 'Agent') return `Spawned task: ${cut(redact(String(i.description ?? i.prompt ?? '')), 60)}` // Python names only 'Task'
   if (tool === 'TodoWrite') return 'Updated todo list'
   if (tool.startsWith('mcp__')) return `Called MCP: ${tool}`
   return tool
@@ -47,10 +50,11 @@ export function summarizeAction(tool: string, i: any): string {
 // structured result plus isError/deny, so failed and denied calls (which Python only sees via
 // PostToolUseFailure / not at all) are recorded too.
 export function summarizeResult(tool: string, res: any, isError = false, denied?: string, text?: string): string {
-  if (denied) return `Error: ${denied.slice(0, 100)}`
+  if (denied) return 'Error: denied'  // round 6: never the reason (hook / policy reasons echo the denied command)
   // 8.1.3: secrets out before any cut
   if (typeof res === 'string') res = redact(res)
-  else if (res && typeof res === 'object' && !Array.isArray(res)) res = Object.fromEntries(Object.entries(res).map(([k, v]) => [k, redact(v)]))
+  // Round 10 / M2: recursive (nested error / stderr / data objects), before anything is stringified (was: top-level strings only)
+  else if (res && typeof res === 'object' && !Array.isArray(res)) res = deepRedact(res)
   else if (Array.isArray(res)) res = redact(JSON.stringify(res))
   if (isError) return `Error: ${String(typeof text === 'string' ? redact(text) : typeof res === 'string' ? res : JSON.stringify(res)).slice(0, 100)}`
   if (res === null || res === undefined || typeof res !== 'object' || Array.isArray(res))
@@ -293,170 +297,6 @@ export function mcpWrites(tool: string): boolean {
   return act.split(/[^a-z0-9]+/).some(x => MCP_WRITE_VERBS.includes(x))
 }
 
-// Secrets in sent text (8.1.3), FAIL-CLOSED (ace_after_task.redact): Claude Code does not redact hook inputs. A secret key
-// followed by ':' or '=' redacts from the value start to the end of the line, and on to the next blank line (at most
-// REDACT_BLOCK code points) for block values; inside a scheme:// token (a URL query) the value ends at '&', '#' or
-// whitespace. --password/--token/--secret/--api-key, mysql/sshpass -p, curl/wget -u user:pass and Bearer redact to the end of the
-// line. ponytail: over-redacts on purpose (the rest of the line is lost), never under-redacts.
-export const REDACT_BLOCK = 500
-const SPAN_RES: [RegExp, boolean][] = [
-  [/(?:password|passwd|passphrase|pwd|secret|token|credential|authorization|cookie|api[-_]?key|_key(?![a-z0-9])|pass(?![a-z]))[A-Za-z0-9_-]*["']?[ \t]*[:=][ \t]*/gi, true],
-  [/--[A-Za-z0-9-]*(?:token|password|passwd|secret|api[-_]?key|credential)[A-Za-z0-9-]*(?:=|[ \t]+)/gi, false],
-  [/\b(?:mysql(?:dump|admin|sh)?|sshpass|7z[a-z]?)\b[^\n]*?[ \t]-p[ \t]*/g, false],
-  [/\b(?:unzip|zip)\b[^\n]*?[ \t]-P[ \t]*/g, false],
-  [/\bssh-keygen\b[^\n]*?[ \t]-N[ \t]*/g, false],
-  [/\bopenssl\b[^\n]*?[ \t]-(?:k|pass|passin|passout)[ \t]+/g, false],
-  [/\bhtpasswd\b[ \t]*/g, false],
-  [/\b(?:curl|wget)\b[^\n]*?[ \t](?:-u|--user)(?:=|[ \t]+)?(?=["']?[^ \t\n\r"']*:)/g, false],
-  [/\bBearer[ \t]+/gi, false],
-]
-const BLANK_LINE = /\n[ \t\r]*\n/g
-const URL_VALUE_END = /[&# \t\n\r\x0b\x0c"']/g
-const TOKEN_SEP = ' \t\n\r\x0b\x0c"\''
-const SECRET_RES: [RegExp, string][] = [
-  // the echo/printf stage that pipes a secret into --password-stdin / --with-token
-  [/\b(echo|printf)\b[^\n]*\|(?=[^|\n]*--(?:password-stdin|with-token))/gi, '$1 [redacted] |'],
-  [/(\b[A-Za-z][A-Za-z0-9+.-]*:\/\/)[^ \t\n\r\x0b\x0c"']*@/g, '$1[redacted]@'],
-  [/\b(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abprs]-|ace_user_|sk-)[A-Za-z0-9_-]{8,}|\bnpm_[A-Za-z0-9]{20,}|\bAKIA[0-9A-Z]{12,}|\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+)?/g, '[redacted]'],
-]
-// Run BEFORE the span rules (which cut the line at the flag): the stdin value of --password-stdin / --with-token that they
-// cannot see. A LOGICAL line is the physical lines joined over an unescaped trailing backslash (and, below, over a
-// multi-line quoted here-string word). On a logical line holding the flag (any case, left or right of the value, behind a
-// pipe): every shell word after a '<<<' (quotes, $'..', backslashes; a word starting $( ` ${ runs to the end of the logical
-// line; an open quote runs to the closing quote on a later line, else to the TEXT END) and the body of every here-doc
-// ('<<[-]DELIM', quoted or \DELIM; case-sensitive; '<<-' allows leading tabs) on the lines below, up to the terminator line, or
-// to the TEXT END when there is none or the delimiter cannot be parsed. Fail closed, a heuristic, not a shell parser. Linear:
-// one cheap flag test first, no backtracking regex. Parity: ace_after_task._redact_stdin.
-const STDIN_FLAG = /--(?:password-stdin|with-token)/i
-const WORD_END = ' \t\n;&|)'
-const DELIM_END = ' \t\n;&|)<>\'"\\('
-const DELIM_MAX = 256
-// The end of the shell word starting at i in text (an open quote runs to the closing quote on a later line, else to the end).
-function stdinWordEnd(t: string, i: number): number {
-  const n = t.length
-  while (i < n && !WORD_END.includes(t[i]!)) {
-    const c = t[i]
-    if (c === '\\') i += 2
-    else if (c === "'" || c === '"' || (c === '$' && t[i + 1] === "'")) {
-      const q = c === '$' ? "'" : c, esc = q === '"' || c === '$'
-      let j = c === '$' ? i + 2 : i + 1
-      while (j < n && t[j] !== q) j += esc && t[j] === '\\' ? 2 : 1
-      if (j >= n) return n
-      i = j + 1
-    } else i++
-  }
-  return Math.min(i, n)
-}
-// The end (index of the '\n' or text end) of the logical line that holds index p.
-function logicalEnd(t: string, p: number): number {
-  let e = t.indexOf('\n', p)
-  while (e >= 0) {
-    let b = 0
-    while (e - 1 - b >= p && t[e - 1 - b] === '\\') b++
-    if (b % 2 === 0) return e
-    e = t.indexOf('\n', e + 1)
-  }
-  return t.length
-}
-// The delimiters of the here-docs on one logical line: [delimiter, dash][], or null when one cannot be parsed.
-function hereDocs(l: string): [string, boolean][] | null {
-  const out: [string, boolean][] = []
-  let k = 0
-  while ((k = l.indexOf('<<', k)) >= 0) {
-    if (l[k + 2] === '<') { k += 1; continue }
-    if (k > 0 && l[k - 1] === '<') { k += 2; continue }
-    let i = k + 2
-    const dash = l[i] === '-'
-    if (dash) i++
-    while (l[i] === ' ' || l[i] === '\t') i++
-    let d: string
-    if (l[i] === "'" || l[i] === '"') { const e = l.indexOf(l[i]!, i + 1); if (e < 0) return null; d = l.slice(i + 1, e); i = e + 1 }
-    else { if (l[i] === '\\') i++; let e = i; while (e < l.length && !DELIM_END.includes(l[e]!)) e++; d = l.slice(i, e); i = e }
-    if (!d || d.length > DELIM_MAX) return null
-    out.push([d, dash])
-    k = i
-  }
-  return out
-}
-function redactStdin(t: string): string {
-  if (!STDIN_FLAG.test(t)) return t
-  const n = t.length, out: string[] = []
-  let p = 0, nextK = -2
-  while (p <= n) {
-    let e = logicalEnd(t, p)
-    let flag = STDIN_FLAG.test(t.slice(p, e))
-    const words: [number, number][] = []
-    let pos = p
-    for (;;) {
-      if (nextK !== -1 && nextK < pos) nextK = t.indexOf('<<<', pos)
-      if (nextK < 0 || nextK >= e) break
-      let s = nextK + 3
-      while (t[s] === ' ' || t[s] === '\t' || (t[s] === '\\' && t[s + 1] === '\n')) s += t[s] === '\\' ? 2 : 1
-      const subst = t[s] === '`' || (t[s] === '$' && (t[s + 1] === '(' || t[s + 1] === '{'))
-      const w = subst ? e : stdinWordEnd(t, s)
-      words.push([s, w])
-      if (w > e) { const e2 = logicalEnd(t, w); flag = flag || STDIN_FLAG.test(t.slice(e, e2)); e = e2 }
-      pos = Math.max(w, nextK + 3)
-    }
-    if (!flag) { out.push(t.slice(p, e)); p = e + 1; continue }
-    let line = '', q = p
-    for (const [s, w] of words) { line += t.slice(q, s) + (w > s ? '[redacted]' : ''); q = w }
-    out.push(line + t.slice(q, e))
-    const docs = hereDocs(t.slice(p, e))
-    let ls = e + 1
-    if (!docs) { if (ls <= n) out.push('[redacted]'); break }
-    let done = false
-    for (const [d, dash] of docs) {
-      if (ls > n) break
-      let b = ls, found = false
-      while (b <= n) {
-        let le = t.indexOf('\n', b); if (le < 0) le = n
-        const ln = t.slice(b, le)
-        if ((dash ? ln.replace(/^\t+/, '') : ln) === d) { found = true; if (b > ls) out.push('[redacted]'); out.push(ln); ls = le + 1; break }
-        b = le + 1
-      }
-      if (!found) { out.push('[redacted]'); done = true; break }
-    }
-    if (done) break
-    p = ls
-  }
-  return out.join('\n')
-}
-const searchFrom = (rx: RegExp, s: string, pos: number) => { rx.lastIndex = pos; return rx.exec(s) }
-// The index REDACT_BLOCK code points after start (Python counts code points).
-function cpAdvance(s: string, start: number, n: number): number {
-  let k = start
-  while (k < s.length && n-- > 0) { const c = s.charCodeAt(k); k += c >= 0xd800 && c <= 0xdbff && k + 1 < s.length && (s.charCodeAt(k + 1) & 0xfc00) === 0xdc00 ? 2 : 1 }
-  return k
-}
-function redactSpans(text: string): string {
-  let out = '', pos = 0
-  for (;;) {
-    let best: RegExpExecArray | null = null, block = false
-    for (const [rx, b] of SPAN_RES) { const m = searchFrom(rx, text, pos); if (m && (!best || m.index < best.index)) { best = m; block = b } }
-    if (!best) break
-    const start = best.index + best[0].length
-    let k = best.index - 1
-    while (k >= 0 && !TOKEN_SEP.includes(text[k]!)) k--
-    let end: number
-    if (text.slice(k + 1, best.index).includes('://')) { const e = searchFrom(URL_VALUE_END, text, start); end = e ? e.index : text.length }  // a URL query value
-    else {
-      end = text.indexOf('\n', start)
-      if (end < 0) end = text.length
-      if (block) { const b = searchFrom(BLANK_LINE, text, start); end = Math.max(end, Math.min(b ? b.index : text.length, cpAdvance(text, start, REDACT_BLOCK))) }
-    }
-    out += text.slice(pos, start) + '[redacted]'
-    pos = end
-  }
-  return out + text.slice(pos)
-}
-export function redact<T>(text: T): T {
-  if (typeof text !== 'string' || !text) return text
-  let s: string = redactSpans(redactStdin(text))
-  for (const [rx, rep] of SECRET_RES) s = s.replace(rx, rep)
-  return s as any
-}
-
 // The family to SEND (ace_after_task.visible_family): from the raw command, kept only if every word is still in the
 // redacted command and holds no secret; else its first word under the same test; else 'unknown'.
 export function visibleFamily(c: string): string {
@@ -527,11 +367,45 @@ export function taskOutcome(tools: ToolRec[]): { success: boolean; failed_steps:
   return { success, failed_steps: st.filter(x => x.s !== 'ok').length, aborted }
 }
 
+// Round 5 F13: tool_input is an ALLOWLIST of the tool's own input keys (Claude Code's documented tool inputs); the tool.call
+// event's own and request keys (tool, agentId, toolUseId, consent, requestMeta ...) never reach the trace.
+const TOOL_INPUT_KEYS: Record<string, string[]> = {
+  Bash: ['command', 'description', 'timeout', 'run_in_background'],
+  Read: ['file_path', 'offset', 'limit', 'pages'],
+  Write: ['file_path', 'content'],
+  Edit: ['file_path', 'old_string', 'new_string', 'replace_all'],
+  MultiEdit: ['file_path', 'edits'],
+  NotebookEdit: ['notebook_path', 'cell_id', 'new_source', 'cell_type', 'edit_mode'],
+  Glob: ['pattern', 'path'],
+  Grep: ['pattern', 'path', 'glob', 'type', 'output_mode', '-i', '-n', '-A', '-B', '-C', 'context', 'multiline', 'head_limit', 'offset'],
+  WebFetch: ['url', 'prompt'],
+  WebSearch: ['query', 'allowed_domains', 'blocked_domains'],
+  Agent: ['description', 'prompt', 'subagent_type', 'model', 'run_in_background', 'isolation', 'effort'],
+  Task: ['description', 'prompt', 'subagent_type', 'model', 'run_in_background'],
+  TodoWrite: ['todos'],
+  Skill: ['skill', 'args'],
+  SubagentHandback: ['message'],
+}
+// ponytail: MCP and unknown tools have no fixed schema, so their arguments pass minus the known event/request keys (a denylist
+// fallback); a new metadata key Claude Code adds to the event would pass for them until it is listed here.
+const EVENT_KEYS = new Set(['tool', 'agentId', 'agent_id', 'toolUseId', 'tool_use_id', 'consent', 'requestMeta', 'request_meta',
+  'sessionId', 'session_id', 'toolName', 'tool_name', 'hookEventName', 'hook_event_name', 'permissionMode', 'permission_mode'])
+const stepInput = (tool: string, input: any) => {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return deepRedact(input ?? null)
+  const allow = TOOL_INPUT_KEYS[tool]
+  return deepRedact(Object.fromEntries(Object.entries(input).filter(([k]) => allow ? allow.includes(k) : !EVENT_KEYS.has(k))))
+}
+// What the model saw: the result's text when there is one, else the structured result; a denial is its message.
+const stepOutput = (res: any, text?: string) => typeof text === 'string' && text ? redact(text) : deepRedact(res ?? null)  // a denied call never gets here (toolRec)
+
 // text: the tool.call result's text (a failed Bash call's "Exit code N" first line lives only there).
-export function toolRec(tool: string, input: any, res: any, isError: boolean, denied: string | undefined, t0: number, t1: number, text?: string): ToolRec {
+export function toolRec(tool: string, input: any, res: any, isError: boolean, denied: string | undefined, t0: number, t1: number, text?: string, full = true): ToolRec {
   const status = stepStatus(tool, input, res, isError, denied, text)
+  // round 5 C1: a DENIED call (the user or a policy refused it) sends nothing of its input: no tool_input / tool_response, the
+  // action names the tool only, no local haystack (ace_permission_denied.py: never ship the payload of a denied call)
+  if (denied) return { tool, action: `Denied ${tool}`, result: summarizeResult(tool, res, isError, denied, text), failed: true, start_ms: t0, end_ms: t1, ...stepKey(tool, input) }
   const rec: ToolRec = { tool, action: summarizeAction(tool, input), result: summarizeResult(tool, res, isError, denied, text), failed: status !== 'ok',
-    start_ms: t0, end_ms: t1, ...stepKey(tool, input) }
+    start_ms: t0, end_ms: t1, ...stepKey(tool, input), ...(full ? { input: stepInput(tool, input), output: stepOutput(res, text) } : {}) }  // round 8 I4: off = no payload work
   if (status === 'interrupted') rec.intr = true
   const hay = cpSlice(toolHaystack([input]), 2000)
   if (hay) rec.hay = hay
@@ -546,20 +420,45 @@ export function toolRec(tool: string, input: any, res: any, isError: boolean, de
 const EFFORT_WEIGHT: Record<string, number> = { auto: 1, low: 1, normal: 1, high: 1.5, xhigh: 2, max: 2 }
 export const effortWeight = (level: string) => EFFORT_WEIGHT[level] ?? 1
 
-const stepFailed = (st: any) => typeof st.result === 'string' && /error|failed/i.test(st.result)
-const MAX_RECENT_STEPS = 50, MAX_TRACE_BYTES = 2_097_152
+// Full steps (no per-step cut, no step-count cap; the server sets its own budgets). ONE hard safety cap against MiB monsters,
+// in pyDumps bytes (ensure_ascii: chars = bytes): env ACE_TRACE_HARD_CAP_BYTES, default 4 MiB (under ace_trace_queue MAX_FILE 5 MiB).
+export const TRACE_HARD_CAP_BYTES = 4 * 1024 * 1024
+// opt-out: env ACE_TRACE_FULL_STEPS 0/false/off/no (any case, lib/switches.ts), or the server's full_steps:false (io/state.ts
+// fullStepsEnabled); default on. Off = the 8.3.0 trace (legacyTruncate: 50 steps + failed ones, task 2000, summary 2000/4000).
+export const fullStepsOn = (env: string | undefined): boolean => !switchOff(env)  // round 5 C4: 0 / false / off / no
+// round 8 I3: never above the trace queue's MAX_FILE (5 MiB, ace_trace_queue.py) minus room for the entry: a queued trace is never too_large
+export const TRACE_HARD_CAP_MAX = 5 * 1024 * 1024 - 256 * 1024
+export const hardCapBytes = (env: string | undefined): number => {
+  const n = env === undefined || env.trim() === '' ? NaN : Number(env)
+  return Math.min(Number.isInteger(n) && n > 0 ? n : TRACE_HARD_CAP_BYTES, TRACE_HARD_CAP_MAX)
+}
+// task (user request) and result.summary (closing answer or SubagentHandback report): complete, redacted first; ONE hard cap in
+// code points, env ACE_TEXT_HARD_CAP_CHARS: over it the head is kept and '<truncated: N chars>' appended (same in ace_after_task.py).
+export const TEXT_HARD_CAP_CHARS = 200_000
+export const textCapChars = (env: string | undefined): number => {
+  const n = env === undefined || env.trim() === '' ? NaN : Number(env)
+  return Number.isInteger(n) && n > 0 ? n : TEXT_HARD_CAP_CHARS
+}
+export type TextCapHit = { field: 'task' | 'summary'; chars_before: number; chars_after: number }
+export function capText(field: 'task' | 'summary', text: string, max: number, hits: TextCapHit[]): string {
+  const n = [...text].length
+  if (n <= max) return text
+  const out = cpSlice(text, max) + `<truncated: ${n} chars>`
+  hits.push({ field, chars_before: n, chars_after: [...out].length })
+  return out
+}
 const shrink = (s: string, max: number, what: string) => s.length > max ? `<truncated: ${s.length} bytes — ${what}>` : s
-
-// trace_truncate.truncate_trace. Our steps hold summaries (<= 100 chars), so its per-step tool_response cap has nothing to cut.
-export function truncateTrace(trace: any): any {
+// The 8.3.0 truncate_trace, word for word (ACE_TRACE_FULL_STEPS off only): last 50 steps + every failed one, then task / summary at 2 MiB.
+const legacyStepFailed = (st: any) => typeof st.result === 'string' && /error|failed/i.test(st.result)
+function legacyTruncate(trace: any): any {
   let truncated = false
   const tr: any[] = trace.trajectory
-  if (tr.length > MAX_RECENT_STEPS) {
-    const keep = tr.map((_, i) => i).filter(i => i >= tr.length - MAX_RECENT_STEPS || stepFailed(tr[i]))
+  if (tr.length > 50) {
+    const keep = tr.map((_, i) => i).filter(i => i >= tr.length - 50 || legacyStepFailed(tr[i]))
     trace.trajectory = [{ _truncation_marker: true, original_length: tr.length, kept: keep.length, kept_indices: keep }, ...keep.map(i => tr[i])]
     truncated = true
   }
-  if (pyDumps(trace).length > MAX_TRACE_BYTES) {
+  if (pyDumps(trace).length > 2_097_152) {
     trace.task = shrink(trace.task, 2048, 'task')
     if (typeof trace.result.summary === 'string') trace.result.summary = shrink(trace.result.summary, 4096, 'summary')
     truncated = true
@@ -567,33 +466,123 @@ export function truncateTrace(trace: any): any {
   if (truncated) trace.metadata = { ...(trace.metadata ?? {}), trace_truncated: true }
   return trace
 }
+export type CapHit = { bytes_before: number; bytes_after: number; steps: number }
+
+// Over the cap: 1. the longest step payloads (tool_response / tool_input) become '<truncated: N bytes>', longest first;
+// 2. then the OLDEST steps that did not fail are dropped (failed steps always stay); 3. last resort task/summary.
+// A `_truncation_marker` (counters) leads the trajectory and metadata.trace_truncated is set. undefined = under the cap.
+export function capTrace(trace: any, failed: boolean[], cap: number): CapHit | undefined {
+  let size = pyDumps(trace).length
+  if (size <= cap) return undefined
+  const before = size, tr: any[] = trace.trajectory, n = tr.length
+  const pay: [number, string, number][] = []
+  tr.forEach((st, i) => { for (const f of ['tool_response', 'tool_input']) if (st[f] !== undefined) pay.push([i, f, pyDumps(st[f]).length]) })
+  pay.sort((a, b) => b[2] - a[2] || a[0] - b[0])
+  let outputs = 0
+  for (const [i, f, len] of pay) {
+    if (size <= cap) break
+    const m = `<truncated: ${len} bytes>`
+    if (pyDumps(m).length >= len) continue
+    tr[i][f] = m; size -= len - pyDumps(m).length; outputs++
+  }
+  const keep = tr.map(() => true)
+  const build = () => {
+    const k = tr.map((_, i) => i).filter(i => keep[i])
+    trace.trajectory = [{ _truncation_marker: true, original_length: n, kept: k.length, kept_indices: k, outputs_truncated: outputs, steps_dropped: n - k.length }, ...k.map(i => tr[i])]
+    trace.metadata = { ...(trace.metadata ?? {}), trace_truncated: true }
+    return pyDumps(trace).length
+  }
+  size = build()
+  // ponytail: one exact re-measure per dropped step only near the cap; the estimate (step bytes + ', ') does the bulk
+  for (let i = 0; i < n && size > cap; i++) {
+    if (failed[i]) continue
+    keep[i] = false
+    size -= pyDumps(tr[i]).length + 2
+    if (size <= cap + 64) size = build()
+  }
+  size = build()
+  if (size > cap) {
+    trace.task = shrink(trace.task, 2048, 'task')
+    if (typeof trace.result.summary === 'string') trace.result.summary = shrink(trace.result.summary, 4096, 'summary')
+    size = pyDumps(trace).length
+  }
+  return { bytes_before: before, bytes_after: size, steps: n }
+}
+
+// Round 5 F8: the running in-memory budget of the tool records (io/state.ts recordTool, 2 x the hard cap). Over it, the longest
+// record payloads (input / output) become '<truncated: N bytes>', longest first (capTrace's order); records are never dropped,
+// so the outcome and the step count stay. Mutates recs; bytes = the JSON size of all records. Pure.
+// ponytail: summaries alone are never trimmed (~200 B a step); a task needs > 40k steps to exceed 8 MiB that way.
+// Round 8 W3: UTF-8 byte length without allocating (the record file is read as bytes, 4 MiB max)
+export function utf8Len(s: string): number {
+  let n = 0
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i)
+    if (c < 0x80) n += 1
+    else if (c < 0x800) n += 2
+    else if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) { n += 4; i++ }  // a surrogate pair = one 4-byte code point
+    else n += 3
+  }
+  return n
+}
+export type BudgetHit = { bytes_before: number; bytes_after: number; records: number; outputs_truncated: number; hay_dropped: number }
+export function trimPayloads(recs: ToolRec[], budget: number, bytes: number): BudgetHit {
+  const before = bytes, pay: [number, 'input' | 'output', number][] = []
+  recs.forEach((r: any, i) => { for (const f of ['input', 'output'] as const) if (r[f] !== undefined) pay.push([i, f, utf8Len(JSON.stringify(r[f]))]) })
+  pay.sort((a, b) => b[2] - a[2] || a[0] - b[0])
+  let outputs = 0
+  for (const [i, f, len] of pay) {
+    if (bytes <= budget) break
+    const m = `<truncated: ${len} bytes>`
+    if (m.length + 2 >= len) continue
+    ;(recs[i] as any)[f] = m; bytes -= len - (m.length + 2); outputs++
+  }
+  // round 9 N5: then the local hay (used check only) of the OLDEST records
+  let hay = 0
+  for (const r of recs as any[]) {
+    if (bytes <= budget) break
+    if (typeof r.hay !== 'string') continue
+    bytes -= utf8Len(JSON.stringify(r.hay)) + 7  // ,"hay":
+    delete r.hay; hay++
+  }
+  return { bytes_before: before, bytes_after: bytes, records: recs.length, outputs_truncated: outputs, hay_dropped: hay }
+}
 
 export const USED_IDS_LIST_CAP = 50
 export function buildTrace(a: {
   userPrompt: string; tools: ToolRec[]; answer: string; playbookUsed: string[]; agentType: string; tsid?: string; agentId?: string
-  parentTaskId?: string; retrievalId?: string; appliedLogIds: number[]; nowIso: string; renderVariant?: string; effort: string; git?: any
+  parentTaskId?: string; retrievalId?: string; appliedLogIds: number[]; nowIso: string; renderVariant?: string; renderControlPct?: number; renderLayout?: string; effort: string; git?: any
   conversationId?: string
   // per-source counters (Haiku, H2), 0 when none; 8.2.7: the ids themselves per source (ids only, injected order, <= 50)
   usedIds?: { used_ids_model: number; used_ids_tokens: number; used_ids_model_list?: string[]; used_ids_tokens_list?: string[] }
   downvote?: number[]  // the previous main task's evidenced ids after a user rejection
   downvoteDetect?: { detect_source?: unknown; model_conf?: unknown }  // 8.3.0: how the rejection was found (read from the pending file; validated here)
-  summaryCap?: number  // 2000 for the closing answer, 4000 for a SubagentHandback report (ace_after_task.handback_summary)
+  upvote?: number[]; upvoteDetect?: { detect_source?: unknown; model_conf?: unknown }  // the previous main task's evidenced ids after a user approval
+  textCap?: number  // task + summary hard cap in chars (textCapChars(env ACE_TEXT_HARD_CAP_CHARS)), default TEXT_HARD_CAP_CHARS
   pluginVersion?: string  // 8.1.4: the manifest x.y.z (the version in X-ACE-Client)
   interactive?: boolean; promptOrigin?: string; humanPromptCount?: number  // 8.2.2: conversation origin, each only when known
+  forkOf?: string  // a fork's parent retrieval_id (ACE_FORK_RETRIEVAL_ID=1): top-level fork_of, so the server books it once
+  legacySummaryCap?: number  // fullSteps false: the 8.3.0 summary cap (2000; 4000 for a SubagentHandback report)
+  fullSteps?: boolean  // false = ACE_TRACE_FULL_STEPS=0: 8.3.0 steps (action/result summaries only, no tool_input / tool_response)
+  hardCap?: number  // full steps: the hard byte cap (hardCapBytes(env ACE_TRACE_HARD_CAP_BYTES)), default TRACE_HARD_CAP_BYTES
 }) {
   const { success, failed_steps } = taskOutcome(a.tools)  // 8.1.3: end outcome + informational count
+  const textCaps: TextCapHit[] = []
   const trace: any = {
-    task: `User request: ${cpSlice(redact(a.userPrompt), 2000)}`,
+    task: `User request: ${a.fullSteps === false ? cpSlice(redact(a.userPrompt), 2000) : capText('task', redact(a.userPrompt), a.textCap ?? TEXT_HARD_CAP_CHARS, textCaps)}`,
     trajectory: a.tools.map((t, k) => ({ step: k + 1, tool: t.tool, action: t.action,
-      result: t.result, start_ms: t.start_ms, end_ms: t.end_ms, duration_ms: t.end_ms - t.start_ms })),
-    result: { success, failed_steps, output: `Executed ${a.tools.length} tool calls`, summary: a.answer ? cpSlice(redact(a.answer), a.summaryCap ?? 2000) : null,
+      result: t.result, start_ms: t.start_ms, end_ms: t.end_ms, duration_ms: t.end_ms - t.start_ms,
+      ...(a.fullSteps !== false && t.input !== undefined ? { tool_input: t.input } : {}), ...(a.fullSteps !== false && t.output !== undefined ? { tool_response: t.output } : {}) })),
+    result: { success, failed_steps, output: `Executed ${a.tools.length} tool calls`, summary: null as string | null,
       plugin_version: a.pluginVersion ?? '0.0.0', outcome_rule: OUTCOME_RULE },  // 8.1.4: inside result (the server keeps result)
     playbook_used: a.playbookUsed,
     timestamp: a.nowIso,
     agent_type: a.agentType,
+    chain: 'mod',  // round 4: which chain built the trace ('mod' | 'python', ace_after_task.py), never omitted
   }
   if (a.tsid) trace.session_id = a.tsid
-  if (a.renderVariant) { trace.render_variant = a.renderVariant; trace.render_path = 'mod' } // §31: only when known; 8.2.1: which chain rendered
+  if (a.renderVariant) { trace.render_variant = a.renderVariant; trace.render_path = 'mod'; trace.render_control_pct = a.renderControlPct ?? 0 } // §31: only when known; 8.2.1: which chain rendered
+  if (a.renderLayout && LAYOUT_A_VALUES.includes(a.renderLayout)) trace.render_layout = a.renderLayout  // layout-a arm: own optional field, render_variant stays budget|full
   if (a.conversationId) trace.conversation_id = a.conversationId.slice(0, 512) // §31: the stable CC session id
   if (a.interactive !== undefined) trace.interactive = a.interactive  // 8.2.2: session.start isInteractive, never defaulted
   if (a.promptOrigin !== undefined) trace.prompt_origin = a.promptOrigin.slice(0, 64)  // the first prompt's origin.kind
@@ -601,16 +590,23 @@ export function buildTrace(a: {
   if (a.agentId) trace.agent_id = a.agentId
   if (a.parentTaskId) trace.parent_agent_id = a.parentTaskId // §16 P3: server field name (local state keeps parent_task_id)
   if (a.retrievalId) trace.retrieval_id = a.retrievalId
+  if (a.forkOf) trace.fork_of = { parent_retrieval_id: a.forkOf }
   trace.applied_log_ids = a.appliedLogIds // server contract: [] when nothing was used, never omitted
-  trace.used_ids_model = a.usedIds?.used_ids_model ?? 0
+  trace.used_ids_model = a.usedIds?.used_ids_model ?? 0  // used_ids_* and effort_*: the server stores them, does not evaluate them yet
   trace.used_ids_tokens = a.usedIds?.used_ids_tokens ?? 0
   trace.used_ids_model_list = (a.usedIds?.used_ids_model_list ?? []).slice(0, USED_IDS_LIST_CAP)  // 8.2.7: [] when none, never omitted
   trace.used_ids_tokens_list = (a.usedIds?.used_ids_tokens_list ?? []).slice(0, USED_IDS_LIST_CAP)
   if (a.downvote?.length) trace.feedback = { kind: 'downvote', applied_log_ids: a.downvote, ...feedbackDetect(a.downvoteDetect) }  // never retrieval_id, never text
+  else if (a.upvote?.length) trace.feedback = { kind: 'upvote', applied_log_ids: a.upvote, ...(a.upvoteDetect?.detect_source === 'phrase' ? { detect_source: 'phrase' } : {}) }  // phrase only, never model_conf; up and down exclude each other
   trace.effort_level = a.effort
   trace.effort_weight = effortWeight(a.effort)
   if (a.git) trace.git = a.git
-  return { trace: truncateTrace(trace), success, failed_steps }
+  if (a.answer) trace.result.summary = a.fullSteps === false ? cpSlice(redact(a.answer), a.legacySummaryCap ?? 2000)
+    : capText('summary', redact(a.answer), a.textCap ?? TEXT_HARD_CAP_CHARS, textCaps)  // the WHOLE answer / report
+  // round 5 C4: off = the complete 8.3.0 behaviour (summaries, 2000 / 4000 text caps, trace_truncate's 50-step rule and 2 MiB fallback)
+  if (a.fullSteps === false) return { trace: legacyTruncate(trace), success, failed_steps, cap: undefined, textCaps }
+  const cap = capTrace(trace, a.tools.map(t => t.failed), a.hardCap ?? TRACE_HARD_CAP_BYTES)
+  return { trace, success, failed_steps, cap, textCaps }
 }
 
 // feedback.detect_source 'phrase'|'model'; feedback.model_conf (only with 'model') finite 0..1, 2 decimals; anything else is left out

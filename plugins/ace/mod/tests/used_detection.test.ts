@@ -1,7 +1,8 @@
 // ACE mod suite, "used" label noise (8.2.7): the token check (usedPatternIds) against a SYNTHETIC fixture (12 invented
 // projects, generated with a fixed seed, no transcript text), and the Haiku self-eval window (selfEvalPrompt).
 // Python twin: tests/test_used_detection_samples.py (same fixture, same numbers).
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import U from './fixtures/used_samples.ts'
 import { selfEvalPrompt, toolHaystack, usedPatternIds } from '../lib/evidence.ts'
 

@@ -3,7 +3,11 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "plugins" / "ace" / "shared-hooks"))
-from ace_after_task import tool_failed  # noqa: E402
+from ace_after_task import _step_status  # noqa: E402
+
+
+def tool_failed(resp):
+    return _step_status("Bash", {}, resp) == "failed"
 
 
 def test_non_zero_exit_code_is_a_failure():

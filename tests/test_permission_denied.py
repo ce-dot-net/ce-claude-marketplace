@@ -405,7 +405,7 @@ class TestMainInfraAbortSkip:
         assert len(calls) == 1, "genuine deny must call _send_to_cli exactly once"
         trace = calls[0]
         assert trace["agent_type"] == "permission_gate"
-        assert trace["domains"] == ["permission-boundary"]
+        assert "domains" not in trace  # round 6: no request field of the trace schema
         assert trace["result"]["success"] is False
         assert trace["result"]["failed_steps"] >= 1  # 8.1.3 contract
 
@@ -485,7 +485,7 @@ class TestGenuineDenyTraceShape:
         assert len(calls) == 1
         t = calls[0]
         assert t["agent_type"] == "permission_gate"
-        assert t["domains"] == ["permission-boundary"]
+        assert "domains" not in t
         assert t["result"]["success"] is False
         assert "timestamp" in t
         assert "trajectory" in t

@@ -1,5 +1,6 @@
 // 8.2.0 tool-noise filter for session items: failed lookups and empty-result greps are dropped before the trace is built.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { denoise, NOISE } from '../lib/backfill_noise.ts'
 import { toolRec } from '../lib/trace.ts'
 

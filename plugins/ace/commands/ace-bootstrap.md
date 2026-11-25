@@ -73,7 +73,7 @@ pilots, so a noise filter drops failed lookups and tasks without real work. `--s
 send into another project than the bound one. `--sources` and `--target-project` are refused without `--backfill-only`.
 
 - **Server support:** only if the server announces `bootstrap_backfill: true` in the search response (the flag is cached for
-  7 days). Otherwise the preview says the server does not support it yet and nothing is sent.
+  7 days, for the installation: global, the last search of any project wins). Otherwise the preview says the server does not support it yet and nothing is sent.
 - **Preview is mandatory** (button, or `--approved`).
 - **Processing:** the server works through about 5 items per minute in the background. The plugin polls every 60 s with a timer
   chain that lives as long as the Claude Code session: a closed session stops polling, a rerun resumes through the ledger.
@@ -417,11 +417,11 @@ Once bootstrapped, ACE continues learning through **online learning**:
 **After bootstrap completes:**
 
 1. **Verify patterns loaded:**
-   - Run `/ace:status` to see playbook statistics
+   - Run `/ace:ace-status` to see playbook statistics
    - Should show bullets distributed across 4 sections
 
 2. **Review learned patterns:**
-   - Run `/ace:patterns` to view what was discovered
+   - Run `/ace:ace-patterns` to view what was discovered
    - Check strategies, snippets, troubleshooting, and API patterns
 
 3. **Start coding:**
@@ -429,14 +429,14 @@ Once bootstrapped, ACE continues learning through **online learning**:
    - Automatic learning will add new patterns as you work
 
 4. **Optional - Export backup:**
-   - Run `/ace:export-patterns` to save initial playbook state
+   - Run `/ace:ace-export-patterns` to save initial playbook state
    - Useful for team sharing or restoration
 
 ## Complementary Commands
 
-- `/ace:patterns` - View the initialized playbook
-- `/ace:status` - Check statistics after initialization
-- `/ace:export-patterns` - Backup before re-initialization
+- `/ace:ace-patterns` - View the initialized playbook
+- `/ace:ace-status` - Check statistics after initialization
+- `/ace:ace-export-patterns` - Backup before re-initialization
 
 ## Git History Requirements
 
@@ -470,6 +470,6 @@ The preview says this before anything is sent. Do not run a code mode on a repos
 ## See Also
 
 - `/ace-patterns` - View playbook
-- `/ace-export-patterns` - Export for backup
+- `/ace:ace-export-patterns` - Export for backup
 - `/ace-import-patterns` - Import from backup
 - `/ace-clear` - Clear playbook

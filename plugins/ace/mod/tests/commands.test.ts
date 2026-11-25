@@ -1,6 +1,7 @@
 // The model-free commands (8.1.0, commands/index.ts): each /ace:ace-<name> answered by the mod, ids from the core,
 // argv-only, output capped, writing commands only after the band's button. Harness: ./helpers.ts.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { COMMANDS, findCommand } from '../commands/index.ts'
 import { OUT_CAP } from '../io/cli.ts'
 import { LINES } from '../context/index.ts'

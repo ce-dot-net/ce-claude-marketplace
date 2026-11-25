@@ -50,10 +50,10 @@ const pyInt = (v: string | undefined, dflt: number): number | null => {
   return /^\s*[+-]?\d+\s*$/.test(v) ? parseInt(v, 10) : null
 }
 export type Cohort = 'control' | 'compact' | 'full' | 'budget'
-// §31: the trace label is 'budget' | 'full' (stripped, lowercase); anything else is unknown -> undefined (OMIT).
-export const normalizeVariant = (v: unknown): 'budget' | 'full' | undefined => {
+// §31: the trace label is 'budget' | 'full' | 'control' (stripped, lowercase); anything else is unknown -> undefined (OMIT).
+export const normalizeVariant = (v: unknown): 'budget' | 'full' | 'control' | undefined => {
   const t = typeof v === 'string' ? v.trim().toLowerCase() : ''
-  return t === 'budget' || t === 'full' ? t : undefined
+  return t === 'budget' || t === 'full' || t === 'control' ? t : undefined
 }
 // §31: the variant stored at render time, normalized; never recomputed, never defaulted (a missing label = unknown).
 // a stored label wins; without one (no search before this trace) the conversation's arm (server request 2026-11-02)
@@ -61,10 +61,15 @@ export const traceVariant = (stored: unknown, conversationId?: string, env: Reco
   normalizeVariant(stored) ?? (conversationId ? normalizeVariant(renderCohort(conversationId, env)) : undefined)
 // ace_pattern_render.render_arm (§31): arms in bucket order control, compact, full (ACE_RENDER_FULL_PCT, default 50,
 // invalid -> 0; register.cohortEnv fills it from the server file when the env is unset), rest budget. No conversation id -> budget.
+// control + compact over 100 (or either invalid/negative) -> both 0; the control share applied, 0 = off (trace render_control_pct)
+function abPcts(env: Record<string, string | undefined>): [number, number] {
+  const ctrl = pyInt(env.ACE_AB_CONTROL_PCT, 0), comp = pyInt(env.ACE_AB_COMPACT_PCT, 0)
+  if (ctrl === null || comp === null || ctrl < 0 || comp < 0 || Math.min(ctrl, 100) + Math.min(comp, 100) > 100) return [0, 0]
+  return [Math.min(ctrl, 100), Math.min(comp, 100)]
+}
+export const appliedControlPct = (env: Record<string, string | undefined>): number => abPcts(env)[0]
 export function renderCohort(sid: string | undefined, env: Record<string, string | undefined>): Cohort {
-  let ctrl = pyInt(env.ACE_AB_CONTROL_PCT, 0), comp = pyInt(env.ACE_AB_COMPACT_PCT, 0)
-  if (ctrl === null || comp === null || ctrl < 0 || comp < 0 || Math.min(ctrl, 100) + Math.min(comp, 100) > 100) { ctrl = 0; comp = 0 }
-  ctrl = Math.min(ctrl, 100); comp = Math.min(comp, 100)
+  const [ctrl, comp] = abPcts(env)
   let full = pyInt(env.ACE_RENDER_FULL_PCT, 50)
   if (full === null || full < 0) full = 0
   full = Math.min(full, 100 - ctrl - comp)
@@ -72,6 +77,32 @@ export function renderCohort(sid: string | undefined, env: Record<string, string
   const b = parseInt(sha256Hex('render:' + sid).slice(0, 8), 16) % 100
   return b < ctrl ? 'control' : b < ctrl + comp ? 'compact' : b < ctrl + comp + full ? 'full' : 'budget'
 }
+
+// Server control share (search response render_control_pct, int 0-100), persisted like render_full_pct but in its OWN file; < 7 days.
+export const RENDER_CONTROL_PCT_FILE = 'render-control-pct.json'
+export const serverControlPct = (resp: any): number | undefined => validPct(resp?.render_control_pct) ? resp.render_control_pct : undefined
+export const storedControlPct = (text: string | undefined, nowMs: number): number | undefined => storedFullPct(text, nowMs)
+
+// Layout (a) arm (ace_pattern_render.layout_a_*): own salt "layout:" (orthogonal to "render:"), env ACE_RENDER_LAYOUT_A_PCT
+// (not an integer / negative -> 0, clamped to 100), unset -> LAYOUT_A_DEFAULT_PCT, the ONE default (0 = off). No id -> not a member.
+export const LAYOUT_A_DEFAULT_PCT = 0  // THE one default (0 = off until the server sends render_layout_a_pct > 0); mirror of ace_pattern_render.LAYOUT_A_DEFAULT_PCT
+// Server share (search response render_layout_a_pct, int 0-100), persisted like render_full_pct but in its OWN file; < 7 days.
+export const RENDER_LAYOUT_A_PCT_FILE = 'render-layout-a-pct.json'
+export const serverLayoutAPct = (resp: any): number | undefined => validPct(resp?.render_layout_a_pct) ? resp.render_layout_a_pct : undefined
+export const storedLayoutAPct = (text: string | undefined, nowMs: number): number | undefined => storedFullPct(text, nowMs)
+// Strict like ace_pattern_render.layout_a_pct: ASCII digits, optional sign, outer blanks only ('5_0', '50.0', '1e1', fullwidth digits -> 0).
+export function layoutAPct(env: Record<string, string | undefined>): number {
+  const raw = env.ACE_RENDER_LAYOUT_A_PCT
+  if (raw === undefined) return LAYOUT_A_DEFAULT_PCT
+  return /^[ \t\n\r]*[+-]?[0-9]+[ \t\n\r]*$/.test(raw) ? Math.min(Math.max(parseInt(raw, 10), 0), 100) : 0
+}
+export function layoutAMember(sid: string | undefined, env: Record<string, string | undefined>): boolean {
+  return !!sid && parseInt(sha256Hex('layout:' + sid).slice(0, 8), 16) % 100 < layoutAPct(env)
+}
+// render_layout values (state, trace, log label): 'a' without, 'a+hint' with the format hint; '' = none
+export const LAYOUT_A_VALUES = ['a', 'a+hint']
+export const layoutValue = (env: Record<string, string | undefined>): 'a' | 'a+hint' => env.ACE_RENDER_LAYOUT_A_HINT === '1' ? 'a+hint' : 'a'
+export const layoutLabel = (v: unknown): string => typeof v === 'string' && LAYOUT_A_VALUES.includes(v) ? '+layout_' + v : ''
 
 // Server kill switch (plugin_data_dir.store_render_full_pct): a search response MAY carry a top-level integer
 // render_full_pct 0-100, persisted to <root>/render-full-pct.json {pct, at (epoch s)}; used while < 7 days old.
@@ -92,6 +123,21 @@ export const FEEDBACK_DOWNVOTE_FILE = 'feedback-downvote.json'
 export const serverDownvote = (resp: any): boolean | undefined => typeof resp?.feedback_downvote === 'boolean' ? resp.feedback_downvote : undefined
 export function storedDownvote(text: string | undefined, nowMs: number): boolean {
   try { const d = JSON.parse(text as string); return d?.on === true && typeof d.at === 'number' && nowMs / 1000 - d.at < RENDER_FULL_PCT_MAX_AGE_S } catch { return false }
+}
+// Round 5 kill switch: search response full_steps (bool), persisted {on, at}, < 7 days. The server can only switch full steps
+// OFF: a missing, broken, stale or non-bool file keeps them on (plugin_data_dir.stored_full_steps, same rule).
+export const FULL_STEPS_FILE = 'full-steps.json'
+export const serverFullSteps = (resp: any): boolean | 'invalid' | undefined =>
+  !resp || typeof resp !== 'object' || !('full_steps' in resp) ? undefined : typeof resp.full_steps === 'boolean' ? resp.full_steps : 'invalid'
+export function storedFullSteps(text: string | undefined, nowMs: number): boolean {
+  try { const d = JSON.parse(text as string); return !(d?.on === false && typeof d.at === 'number' && nowMs / 1000 - d.at < RENDER_FULL_PCT_MAX_AGE_S) } catch { return true }
+}
+// Upvote gate: search response feedback_upvote (bool) when the server sends one, persisted {on, at}, < 7 days. undefined = the
+// server never sent it (or it is stale): no switch of its own, the upvote then follows the downvote gate (io/state.ts upvoteEnabled).
+export const FEEDBACK_UPVOTE_FILE = 'feedback-upvote.json'
+export const serverUpvote = (resp: any): boolean | undefined => typeof resp?.feedback_upvote === 'boolean' ? resp.feedback_upvote : undefined
+export function storedUpvote(text: string | undefined, nowMs: number): boolean | undefined {
+  try { const d = JSON.parse(text as string); return typeof d?.on === 'boolean' && typeof d.at === 'number' && nowMs / 1000 - d.at < RENDER_FULL_PCT_MAX_AGE_S ? d.on : undefined } catch { return undefined }
 }
 
 // 8.1.4 client_policy (DORMANT until the server sends it): plugin_data_dir.valid_client_policy / client_policy_state,
@@ -142,9 +188,15 @@ export function clientPolicyLine(text: string | undefined, version: string, nowM
 }
 
 // 8.2.0 bootstrap backfill capability (DORMANT until the server sends it): a search response with top-level boolean
-// `bootstrap_backfill: true` switches the backfill on for the project; stored {on, at (epoch s)}, < 7 days, else off.
+// `bootstrap_backfill: true` switches the backfill on for the installation (global, the last search wins); stored {on, at (epoch s)}, < 7 days, else off.
 export const BACKFILL_FLAG_FILE = 'bootstrap-backfill.json'
 export const serverBackfill = (resp: any): boolean | undefined => typeof resp?.bootstrap_backfill === 'boolean' ? resp.bootstrap_backfill : undefined
 export function storedBackfill(text: string | undefined, nowMs: number): boolean {
   try { const d = JSON.parse(text as string); return d?.on === true && typeof d.at === 'number' && nowMs / 1000 - d.at < RENDER_FULL_PCT_MAX_AGE_S } catch { return false }
+}
+
+// Layout (a) applies only on arms that render patterns verbatim (budget, full); control and compact never get it.
+export const layoutA = (sid: string | undefined, env: Record<string, string | undefined>): boolean => {
+  const arm = renderCohort(sid, env)
+  return (arm === 'budget' || arm === 'full') && layoutAMember(sid, env)
 }

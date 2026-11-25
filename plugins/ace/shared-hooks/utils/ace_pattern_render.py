@@ -70,6 +70,15 @@ _DROP_TOP_LEVEL = frozenset({'domains_summary', 'expanded', 'threshold'})
 _KEEP_TOP_LEVEL = frozenset({'retrieval_id', 'count'})
 
 
+def _sort_deep(v: Any) -> Any:
+    """Dict keys sorted at every depth (== json.dumps(sort_keys=True), the mod's pyDumps(v, true)); list order kept."""
+    if isinstance(v, dict):
+        return {k: _sort_deep(v[k]) for k in sorted(v)}
+    if isinstance(v, list):
+        return [_sort_deep(x) for x in v]
+    return v
+
+
 def _hoist_and_strip(pattern: Dict[str, Any]) -> Dict[str, Any]:
     """Strip server-internal fields, hoist bandit_rank + semantic_score, cap evidence.
 
@@ -105,7 +114,9 @@ def _hoist_and_strip(pattern: Dict[str, Any]) -> Dict[str, Any]:
     if semantic_score is not None:
         result['semantic_score'] = semantic_score
 
-    return result
+    # Keys SORTED: _KEEP_FIELDS is a frozenset, so its iteration order follows PYTHONHASHSEED.
+    # Sorted = the mod's byte form (pyDumps(p, true)) and the committed goldens.
+    return _sort_deep(result)
 
 
 def _extract_retrieval_log_id(pattern: Dict[str, Any]) -> Optional[int]:
@@ -428,13 +439,26 @@ def render_patterns(
 # Bad values (non-int, negative, sum > 100) → silently default to 0/0 = all budget.
 # ---------------------------------------------------------------------------
 
+def _control_raw() -> str:
+    """ACE_AB_CONTROL_PCT if set (tests/override) > the server's `render_control_pct` (render-control-pct.json, < 7 days) > 0."""
+    raw = os.environ.get("ACE_AB_CONTROL_PCT")
+    if raw is not None:
+        return raw
+    try:
+        import plugin_data_dir
+        server = plugin_data_dir.stored_render_control_pct()
+    except Exception:
+        server = None
+    return "0" if server is None else str(server)
+
+
 def _read_ab_pcts():
-    """Read and validate ACE_AB_CONTROL_PCT / ACE_AB_COMPACT_PCT from env.
+    """Read and validate the control share (_control_raw) / ACE_AB_COMPACT_PCT.
 
     Returns (control_pct, compact_pct) as ints, or (0, 0) on any invalid input.
     """
     try:
-        ctrl = int(os.environ.get("ACE_AB_CONTROL_PCT", "0"))
+        ctrl = int(_control_raw())
         compact = int(os.environ.get("ACE_AB_COMPACT_PCT", "0"))
     except (TypeError, ValueError):
         return 0, 0
@@ -446,6 +470,11 @@ def _read_ab_pcts():
     if ctrl + compact > 100:
         return 0, 0
     return ctrl, compact
+
+
+def render_control_pct() -> int:
+    """The control share the client applies (trace field render_control_pct); 0 = off."""
+    return _read_ab_pcts()[0]
 
 
 def full_pct_source() -> Tuple[int, str]:
@@ -500,15 +529,15 @@ RENDER_VARIANTS = ("control", "compact", "full", "budget")
 
 
 def normalize_render_variant(value) -> Optional[str]:
-    """§31: the trace label is 'budget' or 'full' (stripped, lowercase); anything else is unknown -> None (omit)."""
+    """The trace label is 'budget', 'full' or 'control' (stripped, lowercase); anything else is unknown -> None (omit)."""
     v = value.strip().lower() if isinstance(value, str) else None
-    return v if v in ("budget", "full") else None
+    return v if v in ("budget", "full", "control") else None
 
 
 def trace_render_variant(stored: Optional[str], session_id: Optional[str] = None, mod: bool = False) -> Optional[str]:
     """render_variant for a trace (§31): the variant stored at render time, normalized. Without one (no search
     before this trace), the conversation's arm as the active chain renders it (server request 2026-11-02): the
-    mod renders the full arm as full, the Python chain as budget. control/compact or no conversation -> None (omit)."""
+    mod renders the full arm as full, the Python chain as budget. compact or no conversation -> None (omit)."""
     v = normalize_render_variant(stored)
     if v or not session_id:
         return v
@@ -632,3 +661,165 @@ def render_compact_all(
     }
 
     return ctx, injected_pattern_ids, "", retrieval_log_map
+
+
+# ---------------------------------------------------------------------------
+# Layout (a) arm: a second, orthogonal A/B arm ("layout_a").  The envelope is today's
+# <tag shown= of= ...>; the body is ONE compact JSON header {"retrieval_id","count","fields"}
+# and then ONE line per pattern: a compact JSON array of the values in the fixed field order
+# (missing -> null).  Same source/allow-list/sanitize/rank as render_patterns; the budget loop
+# prices THIS layout (newline separators, no ", ").  Mod parity: mod/lib/render.ts renderLayout*.
+# Assignment: sha256("layout:" + conversation id) % 100 < pct, own salt (orthogonal to "render:").
+# ---------------------------------------------------------------------------
+LAYOUT_A_DEFAULT_PCT = 0  # THE one place that decides default on/off (0 = off until the server sends render_layout_a_pct > 0); env ACE_RENDER_LAYOUT_A_PCT overrides
+LAYOUT_A_FIELDS = sorted(_KEEP_FIELDS | {'bandit_rank', 'semantic_score'})
+LAYOUT_A_HINT = ('Format: line 1 is a JSON header; "fields" names the columns. Each following line is one pattern '
+                 'as a JSON array holding the values in exactly that order; null means the field is absent. '
+                 'Patterns are ordered best first (bandit_rank ascending). evidence is a list of strings.')  # optional, ACE_RENDER_LAYOUT_A_HINT=1
+_LC = (',', ':')
+LAYOUT_A_VALUES = ("a", "a+hint")  # the render_layout values (state, trace, log label): without / with the format hint
+
+
+def layout_a_value(hint=None) -> str:
+    return "a+hint" if (layout_a_hint_on() if hint is None else hint) else "a"
+
+
+def layout_a_label(value) -> str:
+    """relevance-log suffix of a stored render_layout: '+layout_a' / '+layout_a+hint', '' for anything else."""
+    return "+layout_" + value if value in LAYOUT_A_VALUES else ""
+
+
+
+def layout_a_pct(env=None, server=None) -> int:
+    """Layout-a share: env ACE_RENDER_LAYOUT_A_PCT (not an integer -> 0; < 0 -> 0; clamped to 100) > the server's
+    `render_layout_a_pct` (render-layout-a-pct.json, < 7 days) > LAYOUT_A_DEFAULT_PCT. env=None reads os.environ and the
+    stored server file; an explicit env dict reads only itself plus the explicit `server` (pure, for the parity table)."""
+    if env is None:
+        env = os.environ
+        if server is None:
+            try:
+                import plugin_data_dir
+                server = plugin_data_dir.stored_render_layout_a_pct()
+            except Exception:
+                server = None
+    raw = env.get("ACE_RENDER_LAYOUT_A_PCT")
+    if raw is None:
+        return server if server is not None else LAYOUT_A_DEFAULT_PCT
+    import re  # strict like the mod: ASCII digits, optional sign, outer blanks (no '5_0', no fullwidth digits)
+    if not re.fullmatch(r"[ \t\n\r]*[+-]?[0-9]+[ \t\n\r]*", str(raw)):
+        return 0
+    return min(max(int(raw), 0), 100)
+
+
+def layout_a_member(session_id: Optional[str], env=None, server=None) -> bool:
+    if not session_id:
+        return False
+    return int(hashlib.sha256(("layout:" + session_id).encode()).hexdigest()[:8], 16) % 100 < layout_a_pct(env, server)
+
+
+def layout_a_applies(session_id: Optional[str], env=None, server=None) -> bool:
+    """Layout (a) renders only where patterns render verbatim: arms budget and full. control (nothing injected) and
+    compact (one-liners) never get it, whatever the layout bucket says."""
+    return render_arm(session_id) in ("budget", "full") and layout_a_member(session_id, env, server)
+
+
+def layout_a_hint_on(env=None) -> bool:
+    return (os.environ if env is None else env).get("ACE_RENDER_LAYOUT_A_HINT") == "1"
+
+
+def _la_row(p: Dict[str, Any]) -> str:
+    return json.dumps([p.get(f) for f in LAYOUT_A_FIELDS], separators=_LC, sort_keys=True)  # sorted nested keys: parity with the mod (JS puts integer keys first)
+
+
+def _la_head(base: Dict[str, Any], count: int) -> str:
+    return json.dumps(dict(base, count=count, fields=LAYOUT_A_FIELDS), separators=_LC)
+
+
+def _la_open(tag, shown, total, attrs):
+    return f'<{tag} shown="{shown}" of="{total}"' + (f' {attrs}' if attrs else '') + '>'
+
+
+def _la_assemble(open_, head, rows, close, hint):
+    return '\n'.join([open_] + ([LAYOUT_A_HINT] if hint else []) + [head] + rows + [close])
+
+
+def _la_credit(picked, rlog):
+    ids = [p['id'] for p in picked if p.get('id') and is_valid_pattern_id(p['id'])]
+    return ids, {i: rlog[i] for i in ids if i in rlog}
+
+
+def render_layout_a(patterns_response, *, tag, attrs="", budget=_DEFAULT_BUDGET, hint=None):
+    """Layout (a), budget arm: top-N until the whole string fits `budget` (never over, whole patterns, valid JSON per line)."""
+    hint = layout_a_hint_on() if hint is None else hint
+    out, _ids, rlog = render_patterns_dict(patterns_response)
+    allp, total = out['similar_patterns'], out['count']
+    base = {k: v for k, v in out.items() if k not in ('similar_patterns', 'count')}
+    close = f'</{tag}>'
+    avail = budget - len(_la_assemble(_la_open(tag, total, total, attrs), _la_head(base, total), [], close, hint))
+    picked, chars = [], 0
+    for p in allp:
+        cost = len(_la_row(p)) + 1
+        if chars + cost <= avail:
+            picked.append(p)
+            chars += cost
+            continue
+        if not picked:  # even top-1 alone is too big: no evidence, content cut to fit; never empty
+            c = dict(p)
+            c.pop('evidence', None)
+            size = lambda: len(_la_row(c)) + 1  # noqa: E731
+            if chars + size() > avail:
+                content = str(c.get('content') or '')
+                excess = chars + size() - avail
+                c['content'] = content[:max(1, max(4, len(json.dumps(content)) - excess - 1) - 2)]
+                while chars + size() > avail and len(c['content']) > 1:
+                    c['content'] = c['content'][:-10]
+                if chars + size() > avail:
+                    c['content'] = content[:1]
+            picked.append(c)
+        break
+    while True:
+        ctx = _la_assemble(_la_open(tag, len(picked), total, attrs), _la_head(base, total), [_la_row(p) for p in picked], close, hint)
+        if len(ctx) <= budget or not picked:
+            break
+        picked.pop()
+    ids, rl = _la_credit(picked, rlog)
+    return ctx, ids, "", rl
+
+
+def render_layout_a_full(patterns_response, *, tag, attrs="", cap=95000, hint=None):
+    """Layout (a), full arm (mod only): ALL patterns, whole tail patterns dropped until <= cap; count follows the shown set."""
+    hint = layout_a_hint_on() if hint is None else hint
+    out, _ids, rlog = render_patterns_dict(patterns_response)
+    pats, total = list(out['similar_patterns']), out['count']
+    base = {k: v for k, v in out.items() if k not in ('similar_patterns', 'count')}
+    rows = [_la_row(p) for p in pats]
+    n = len(pats)
+    while True:
+        ctx = _la_assemble(_la_open(tag, n, total, attrs), _la_head(base, n), rows[:n], f'</{tag}>', hint)
+        if len(ctx) <= cap or n == 0:
+            break
+        n -= 1
+    ids, rl = _la_credit(pats[:n], rlog)
+    return ctx, ids, "", rl
+
+
+def render_layout_a_domain_shift(stripped: Dict[str, Any], domain: str, cap: int = 10000, hint=None) -> Optional[str]:
+    """Layout (a) for the domain-shift tag. `stripped` = render_patterns_dict's dict; like ace_domain_shift._context it is
+    trimmed to the injected set (count follows); None when not even zero patterns fit."""
+    import html
+    hint = layout_a_hint_on() if hint is None else hint
+    base = {k: v for k, v in stripped.items() if k not in ('similar_patterns', 'count')}
+    pats = stripped.get('similar_patterns') or []
+    attr = html.escape(domain, quote=True)
+    rows = [_la_row(p) for p in pats]
+    n = len(pats)
+    while True:
+        ctx = _la_assemble(f'<ace-patterns-domain-shift domain="{attr}">', _la_head(base, n), rows[:n],
+                           '</ace-patterns-domain-shift>', hint)
+        if len(ctx) <= cap:
+            stripped['similar_patterns'] = pats[:n]
+            stripped['count'] = n
+            return ctx
+        if n == 0:
+            return None
+        n -= 1

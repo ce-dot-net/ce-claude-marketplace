@@ -37,7 +37,7 @@ CTX="$("${CLAUDE_PLUGIN_ROOT}/scripts/ace-context" --shell)" || exit 1
 eval "$CTX"; ORG_ID="$ACE_ORG_ID"; PROJECT_ID="$ACE_PROJECT_ID"
 
 if [ -z "$PROJECT_ID" ]; then
-  echo "❌ Run /ace:configure first"
+  echo "❌ Run /ace:ace-configure first"
   exit 1
 fi
 

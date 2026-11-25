@@ -42,6 +42,7 @@ from patterns_used_state import (load_playbook_used, reap_patterns_used,
                                  load_retrieval_ids, load_task_session_id, load_state, load_search_binding)
 import plugin_data_dir
 from ace_cli import run_learn  # C2: single spawn + DESIGN §8 'database is locked' retry
+from redact import redact, deep_redact  # secret redaction (fail-closed): utils/redact.py, mod parity lib/redact.ts
 sys.path.insert(0, str(Path(__file__).parent))
 from ace_tool_accumulator import log_hook_exception, read_event
 
@@ -58,8 +59,11 @@ import time
 # Guarded so a missing/broken import never prevents the hook from running.
 try:
     from ace_pattern_render import trace_render_variant as _trace_render_variant
+    from ace_pattern_render import LAYOUT_A_VALUES, layout_a_label, render_control_pct
 except Exception:
     _trace_render_variant = None  # type: ignore
+    LAYOUT_A_VALUES, layout_a_label = (), (lambda v: "")  # type: ignore
+    render_control_pct = lambda: 0  # type: ignore
 
 from utils.machine_prompts import is_machine_prompt  # shared with WP-B UPS guard
 
@@ -470,227 +474,6 @@ def mcp_writes(tool):
     return any(x in MCP_WRITE_VERBS for x in regex_module.split(r'[^a-z0-9]+', act))
 
 
-# Secrets in sent text (8.1.3), FAIL-CLOSED: Claude Code does not redact hook inputs. Applied before any cut.
-# A secret key (password/passwd/passphrase/pwd/secret/token/credential/authorization/api key/*_KEY/pass) followed by
-# ':' or '=' redacts from the value start to the end of the line, and on to the next blank line (at most
-# REDACT_BLOCK chars) for block values. Inside a scheme:// token (a URL query) the value ends at '&', '#' or whitespace.
-# --password/--token/--secret/--api-key, mysql/sshpass -p, curl/wget -u user:pass and Bearer redact to the end of the line.
-# ponytail: over-redacts on purpose (the rest of the line is lost), never under-redacts.
-REDACT_BLOCK = 500
-_SPAN_RES = (
-    (regex_module.compile(r'''(?:password|passwd|passphrase|pwd|secret|token|credential|authorization|cookie|api[-_]?key|_key(?![a-z0-9])|pass(?![a-z]))[A-Za-z0-9_-]*["']?[ \t]*[:=][ \t]*''', regex_module.I | regex_module.A), True),
-    (regex_module.compile(r'''--[A-Za-z0-9-]*(?:token|password|passwd|secret|api[-_]?key|credential)[A-Za-z0-9-]*(?:=|[ \t]+)''', regex_module.I | regex_module.A), False),
-    (regex_module.compile(r'''\b(?:mysql(?:dump|admin|sh)?|sshpass|7z[a-z]?)\b[^\n]*?[ \t]-p[ \t]*''', regex_module.A), False),
-    (regex_module.compile(r'''\b(?:unzip|zip)\b[^\n]*?[ \t]-P[ \t]*''', regex_module.A), False),
-    (regex_module.compile(r'''\bssh-keygen\b[^\n]*?[ \t]-N[ \t]*''', regex_module.A), False),
-    (regex_module.compile(r'''\bopenssl\b[^\n]*?[ \t]-(?:k|pass|passin|passout)[ \t]+''', regex_module.A), False),
-    (regex_module.compile(r'''\bhtpasswd\b[ \t]*''', regex_module.A), False),
-    (regex_module.compile(r'''\b(?:curl|wget)\b[^\n]*?[ \t](?:-u|--user)(?:=|[ \t]+)?(?=["']?[^ \t\n\r"']*:)''', regex_module.A), False),
-    (regex_module.compile(r'''\bBearer[ \t]+''', regex_module.I | regex_module.A), False),
-)
-_BLANK_LINE = regex_module.compile(r'\n[ \t\r]*\n')
-_URL_VALUE_END = regex_module.compile(r'''[&# \t\n\r\x0b\x0c"']''')
-_TOKEN_SEP = ' \t\n\r\x0b\x0c"\''
-# Run BEFORE the span rules (which cut the line at the flag): the stdin value of --password-stdin / --with-token that they
-# cannot see. A LOGICAL line is the physical lines joined over an unescaped trailing backslash (and, below, over a
-# multi-line quoted here-string word). On a logical line holding the flag (any case, left or right of the value, behind a
-# pipe): every shell word after a '<<<' (quotes, $'..', backslashes; a word starting $( ` ${ runs to the end of the logical
-# line; an open quote runs to the closing quote on a later line, else to the TEXT END) and the body of every here-doc
-# ('<<[-]DELIM', quoted or \DELIM; case-sensitive; '<<-' allows leading tabs) on the lines below, up to the terminator line, or
-# to the TEXT END when there is none or the delimiter cannot be parsed. Fail closed, a heuristic, not a shell parser. Linear:
-# one cheap flag test first, no backtracking regex. Parity: mod/lib/trace.ts redactStdin.
-_STDIN_FLAG = regex_module.compile(r'--(?:password-stdin|with-token)', regex_module.A | regex_module.I)
-_WORD_END = ' \t\n;&|)'
-_DELIM_END = ' \t\n;&|)<>\'"\\('
-_DELIM_MAX = 256
-
-
-def _stdin_word_end(t, i):
-    """The end of the shell word starting at i in t (an open quote runs to the closing quote on a later line, else to the end)."""
-    n = len(t)
-    while i < n and t[i] not in _WORD_END:
-        c = t[i]
-        if c == '\\':
-            i += 2
-        elif c in '\'"' or (c == '$' and t[i + 1:i + 2] == "'"):
-            q = "'" if c == '$' else c
-            esc = q == '"' or c == '$'
-            j = i + 2 if c == '$' else i + 1
-            while j < n and t[j] != q:
-                j += 2 if esc and t[j] == '\\' else 1
-            if j >= n:
-                return n
-            i = j + 1
-        else:
-            i += 1
-    return min(i, n)
-
-
-def _logical_end(t, p):
-    """The end (index of the '\\n' or text end) of the logical line that holds index p."""
-    e = t.find('\n', p)
-    while e >= 0:
-        b = 0
-        while e - 1 - b >= p and t[e - 1 - b] == '\\':
-            b += 1
-        if b % 2 == 0:
-            return e
-        e = t.find('\n', e + 1)
-    return len(t)
-
-
-def _here_docs(l):
-    """The delimiters of the here-docs on one logical line: [(delimiter, dash)], or None when one cannot be parsed."""
-    out, k = [], 0
-    while True:
-        k = l.find('<<', k)
-        if k < 0:
-            return out
-        if l[k + 2:k + 3] == '<':
-            k += 1
-            continue
-        if k > 0 and l[k - 1] == '<':
-            k += 2
-            continue
-        i = k + 2
-        dash = l[i:i + 1] == '-'
-        if dash:
-            i += 1
-        while l[i:i + 1] in (' ', '\t'):
-            i += 1
-        if l[i:i + 1] in ("'", '"'):
-            e = l.find(l[i], i + 1)
-            if e < 0:
-                return None
-            d, i = l[i + 1:e], e + 1
-        else:
-            if l[i:i + 1] == '\\':
-                i += 1
-            e = i
-            while e < len(l) and l[e] not in _DELIM_END:
-                e += 1
-            d, i = l[i:e], e
-        if not d or len(d) > _DELIM_MAX:
-            return None
-        out.append((d, dash))
-        k = i
-
-
-def _redact_stdin(t):
-    if not _STDIN_FLAG.search(t):
-        return t
-    n, out, p, next_k = len(t), [], 0, -2
-    while p <= n:
-        e = _logical_end(t, p)
-        flag = bool(_STDIN_FLAG.search(t[p:e]))
-        words, pos = [], p
-        while True:
-            if next_k != -1 and next_k < pos:
-                next_k = t.find('<<<', pos)
-            if next_k < 0 or next_k >= e:
-                break
-            s = next_k + 3
-            while t[s:s + 1] in (' ', '\t') or (t[s:s + 1] == '\\' and t[s + 1:s + 2] == '\n'):
-                s += 2 if t[s] == '\\' else 1
-            subst = t[s:s + 1] == '`' or (t[s:s + 1] == '$' and t[s + 1:s + 2] in ('(', '{'))
-            w = e if subst else _stdin_word_end(t, s)
-            words.append((s, w))
-            if w > e:
-                e2 = _logical_end(t, w)
-                flag = flag or bool(_STDIN_FLAG.search(t[e:e2]))
-                e = e2
-            pos = max(w, next_k + 3)
-        if not flag:
-            out.append(t[p:e])
-            p = e + 1
-            continue
-        line, q = [], p
-        for s, w in words:
-            line.append(t[q:s] + ('[redacted]' if w > s else ''))
-            q = w
-        out.append(''.join(line) + t[q:e])
-        docs = _here_docs(t[p:e])
-        ls = e + 1
-        if docs is None:
-            if ls <= n:
-                out.append('[redacted]')
-            break
-        done = False
-        for d, dash in docs:
-            if ls > n:
-                break
-            b, found = ls, False
-            while b <= n:
-                le = t.find('\n', b)
-                if le < 0:
-                    le = n
-                ln = t[b:le]
-                if (ln.lstrip('\t') if dash else ln) == d:
-                    found = True
-                    if b > ls:
-                        out.append('[redacted]')
-                    out.append(ln)
-                    ls = le + 1
-                    break
-                b = le + 1
-            if not found:
-                out.append('[redacted]')
-                done = True
-                break
-        if done:
-            break
-        p = ls
-    return '\n'.join(out)
-
-
-_SECRET_RES = (
-    # the echo/printf stage that pipes a secret into --password-stdin / --with-token
-    (regex_module.compile(r'''\b(echo|printf)\b[^\n]*\|(?=[^|\n]*--(?:password-stdin|with-token))''', regex_module.A | regex_module.I), r'\1 [redacted] |'),
-    (regex_module.compile(r'''(\b[A-Za-z][A-Za-z0-9+.-]*://)[^ \t\n\r\x0b\x0c"']*@''', regex_module.A), r'\1[redacted]@'),
-    (regex_module.compile(r'''\b(?:ghp_|gho_|ghu_|ghs_|ghr_|github_pat_|xox[abprs]-|ace_user_|sk-)[A-Za-z0-9_-]{8,}|\bnpm_[A-Za-z0-9]{20,}|\bAKIA[0-9A-Z]{12,}|\beyJ[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_-]{5,}(?:\.[A-Za-z0-9_-]+)?''', regex_module.A), '[redacted]'),
-)
-
-
-def _redact_spans(text):
-    out, pos = [], 0
-    while True:
-        best = None
-        for rx, block in _SPAN_RES:
-            m = rx.search(text, pos)
-            if m and (best is None or m.start() < best[0].start()):
-                best = (m, block)
-        if best is None:
-            break
-        m, block = best
-        start, k = m.end(), m.start() - 1
-        while k >= 0 and text[k] not in _TOKEN_SEP:
-            k -= 1
-        if '://' in text[k + 1:m.start()]:  # a URL query value ends at '&', '#' or whitespace
-            e = _URL_VALUE_END.search(text, start)
-            end = e.start() if e else len(text)
-        else:
-            end = text.find('\n', start)
-            end = len(text) if end < 0 else end
-            if block:
-                b = _BLANK_LINE.search(text, start)
-                end = max(end, min(b.start() if b else len(text), start + REDACT_BLOCK))
-        out.append(text[pos:start] + '[redacted]')
-        pos = end
-    out.append(text[pos:])
-    return ''.join(out)
-
-
-def redact(text):
-    """Fail-closed secret redaction (see _SPAN_RES), then URL userinfo up to the last '@' of a URL token and known
-    token prefixes / JWTs. Parity: mod/lib/trace.ts redact."""
-    if not isinstance(text, str) or not text:
-        return text
-    text = _redact_spans(_redact_stdin(text))
-    for rx, rep in _SECRET_RES:
-        text = rx.sub(rep, text)
-    return text
-
-
 ACTION_MAX, FAMILY_MAX = 200, 60
 
 
@@ -755,11 +538,6 @@ def _step_status(tool, tin, resp):
     return 'failed' if isinstance(resp, dict) and resp.get('error') else 'ok'
 
 
-def tool_failed(resp) -> bool:
-    """A failed step (8.1.3: stderr alone is not one). Parity: mod/lib/trace.ts toolRec."""
-    return _step_status('Bash', {}, resp) == 'failed'
-
-
 def task_outcome(tools):
     """(success, failed_steps, aborted) from the 8-tuples (name, input_json, response_json, ...). docs/technical/ARCHITECTURE.md "Task outcome":
     a failed step is recovered by a LATER ok step with the same key (Bash: command family; file tools: the path;
@@ -817,16 +595,17 @@ def summarize_tool_action(tool_name: str, tool_input: dict) -> str:
     elif tool_name == 'Bash':
         return bash_action(tool_input.get('command'))  # 8.1.3: '<family> :: <redacted command <= 200>'
 
+    # Round 10 / M1: the pattern / description through redact() before the label is built and cut (mod summarizeAction)
     elif tool_name == 'Grep':
-        pattern = tool_input.get('pattern', '')
-        return f"Searched for: {pattern}"
+        pattern = redact(str(tool_input.get('pattern', '')))
+        return f"Searched for: {pattern[:100] + '...' if len(pattern) > 100 else pattern}"
 
     elif tool_name == 'Glob':
-        pattern = tool_input.get('pattern', '')
-        return f"Found files matching: {pattern}"
+        pattern = redact(str(tool_input.get('pattern', '')))
+        return f"Found files matching: {pattern[:100] + '...' if len(pattern) > 100 else pattern}"
 
     elif tool_name == 'Task':
-        description = tool_input.get('description', tool_input.get('prompt', ''))
+        description = redact(str(tool_input.get('description', tool_input.get('prompt', ''))))
         if len(description) > 60:
             description = description[:60] + '...'
         return f"Spawned task: {description}"
@@ -849,8 +628,9 @@ def summarize_tool_response(tool_name: str, tool_response: dict) -> str:
     Per ACE Research Paper Page 19: Trajectory should show execution feedback.
     """
     # 8.1.3: secrets out before any cut
-    if isinstance(tool_response, dict):
-        tool_response = {k: redact(v) if isinstance(v, str) else v for k, v in tool_response.items()}
+    # Round 10 / M2: recursive (nested error / stderr / data, dicts and lists), before anything is stringified
+    if isinstance(tool_response, (dict, list)):
+        tool_response = deep_redact(tool_response)
     elif isinstance(tool_response, str):
         tool_response = redact(tool_response)
     if not isinstance(tool_response, dict):
@@ -863,11 +643,12 @@ def summarize_tool_response(tool_name: str, tool_response: dict) -> str:
         return tool_response
 
     # Handle error responses
+    # Round 10 / M2: a nested error / stderr (dict or list, common in MCP answers) is redacted as text before the cut
     if tool_response.get('error'):
-        return f"Error: {str(tool_response.get('error'))[:100]}"
+        return f"Error: {redact(str(tool_response.get('error')))[:100]}"
 
     if tool_response.get('stderr'):
-        return f"Stderr: {tool_response.get('stderr', '')[:100]}"
+        return f"Stderr: {redact(str(tool_response.get('stderr', '')))[:100]}"
 
     # Handle success responses
     if tool_name in ['Edit', 'Write']:
@@ -1277,7 +1058,7 @@ def _user_prompt_from_transcript(transcript_path: str, first: bool = False) -> s
                     # CC injects CLAUDE.md as <system-reminder> blocks in the first user entry
                     content = _SYSREM.sub('', content).strip()
                     if len(content) > min_len:
-                        return content[:2000]
+                        return content  # full steps: the whole request; the trace's text cap (cap_text) decides
 
         return "No user prompt found"
 
@@ -1388,7 +1169,10 @@ def dispatch_learn(job, session_id):
     """Start the learn fully detached so `claude -p` teardown cannot kill it
     (cc_hooks_reference.md:4086). The job travels via a file in the plugin-data session dir
     (no /tmp); the learn lock is taken BEFORE the spawn so SessionEnd leaves the dir alone."""
-    if not os.environ.get('ACE_LEARN_INLINE'):
+    # ACE_LEARN_INLINE: ONLY FOR TESTS (runs the learn inline). Never set it in production.
+    # Round 10 / L1: with ACE_TRACE_SINK the learn runs inline (ace_cli._sink writes the file): no signed learn-job file on disk
+    # that a later session WITHOUT a sink could pick up (SessionStart sweep) and send
+    if not os.environ.get('ACE_LEARN_INLINE') and not (os.environ.get('ACE_TRACE_SINK') or '').strip():
         try:
             import uuid
             f = plugin_data_dir.session_dir(job['project'], session_id) / ('learn-job-%s.json' % uuid.uuid4().hex)
@@ -1441,7 +1225,45 @@ def _delegated_running(bg) -> bool:
 from patterns_used_state import APPLIED_LOG_IDS_CAP, USED_MESSAGE_CAP  # noqa: E402  (mod parity: used check reads the full report)
 
 
-def handback_summary(path, cap=4000):
+# full steps (mod parity: lib/trace.ts TEXT_HARD_CAP_CHARS / capText): task and result.summary carry the WHOLE text, redacted
+# first; one hard cap in characters, env ACE_TEXT_HARD_CAP_CHARS (default 200000): head + '<truncated: N chars>', one
+# text-free `text_cap_hit` row (field, chars_before, chars_after).
+TEXT_HARD_CAP_CHARS = 200_000
+
+
+def text_cap_chars():
+    try:
+        n = int(os.environ.get('ACE_TEXT_HARD_CAP_CHARS', '').strip())
+    except ValueError:
+        return TEXT_HARD_CAP_CHARS
+    return n if n > 0 else TEXT_HARD_CAP_CHARS
+
+
+def cap_text(field, text, **row):
+    cap = text_cap_chars()
+    if len(text) <= cap:
+        return text
+    out = text[:cap] + '<truncated: %d chars>' % len(text)
+    try:
+        log_event('text_cap_hit', field=field, chars_before=len(text), chars_after=len(out), source='python', **row)
+    except Exception:
+        pass  # telemetry never costs the learn
+    return out
+
+
+def full_steps_on():
+    """Round 5: full steps unless ACE_TRACE_FULL_STEPS is 0/false/off/no (any case; mod lib/switches.ts switchOff) or the
+    server's full_steps:false is stored (< 7 days, plugin_data_dir.stored_full_steps). A server true never beats the env.
+    Off = the 8.3.0 Python chain: task 2000, summary 2000 (handback 4000), legacy_truncate_trace."""
+    if str(os.environ.get('ACE_TRACE_FULL_STEPS', '')).strip().lower() in ('0', 'false', 'off', 'no'):
+        return False  # without the import, so a broken data dir never re-enables an opt-out
+    try:
+        return plugin_data_dir.full_steps_enabled()
+    except Exception:
+        return True
+
+
+def handback_summary(path, cap=None):
     """§16 P1: the LAST `SubagentHandback` tool_use `message` of a subagent transcript (CC >= 2.1.271), else None.
     Bounded tail read: the handback is the final act of the agent."""
     try:
@@ -1463,7 +1285,7 @@ def handback_summary(path, cap=4000):
                     m = (b.get('input') or {}).get('message')
                     if isinstance(m, str) and m.strip():
                         found = m
-        return found[:cap] if found else None
+        return (found[:cap] if cap else found) if found else None  # full steps: the whole message by default
     except Exception:  # a summary must never cost the learn
         return None
 
@@ -1714,12 +1536,14 @@ def main():
         # load_retrieval_ids is read-only (does NOT unlink). Must call it first so
         # the state file is still present when load_playbook_used later unlinks it.
         retrieval_log_map = {} if no_agent_state else load_retrieval_ids(session_id, agent_id, hook_event_name)
+        _stored_layout = None   # layout-a arm: 'a' when the layout rendered (state key render_layout)
         _stored_variant = None  # §28: the variant rendered at search time (read before the state is reaped)
         _contents = {}          # §31: injected pattern contents, for the "actually used" check
         if not no_agent_state:
             try:
                 _st = load_state(session_id, agent_id, hook_event_name)
                 _stored_variant = _st.get('render_variant')
+                _stored_layout = _st.get('render_layout')
                 _contents = _st.get('pattern_contents') if isinstance(_st.get('pattern_contents'), dict) else {}
             except Exception:
                 pass
@@ -1776,7 +1600,7 @@ def main():
         # §31 / item H2: applied_log_ids = only the injected patterns ACTUALLY USED, for every variant: its id in the
         # final message / handback report, or >= 2 of its distinctive tokens in THIS agent's tool-call inputs.
         # Order follows playbook_used.
-        _handback_full = handback_summary(agent_transcript_path, cap=USED_MESSAGE_CAP) if hook_event_name == 'SubagentStop' and agent_transcript_path else None
+        _handback_full = handback_summary(agent_transcript_path) if hook_event_name == 'SubagentStop' and agent_transcript_path else None
         try:
             from patterns_used_state import tool_haystack, used_pattern_ids
             _inputs = []
@@ -1849,19 +1673,24 @@ def main():
             pass  # non-fatal
 
         # Build the trace
+        _full = full_steps_on()
         trace = {
-            "task": f"User request: {redact(user_prompt)[:2000]}",
+            "task": "User request: " + (cap_text('task', redact(user_prompt), hook=hook_event_name, session_id=session_id) if _full
+                                        else redact(user_prompt)[:2000]),  # full steps off: the 8.3.0 cap
             "trajectory": trajectory,
             "result": {
                 "success": not has_errors,
                 "failed_steps": failed_steps,
                 "output": f"Executed {len(tools)} tool calls",
-                "summary": (redact(_handback_full)[:4000] if _handback_full else None)
-                           or (redact(last_assistant_message)[:2000] if last_assistant_message else None),  # v5.5.0: CC 2.1.51+
+                "summary": (cap_text('summary', redact(_handback_full or last_assistant_message), hook=hook_event_name, session_id=session_id)
+                            if (_handback_full or last_assistant_message) else None) if _full  # v5.5.0: CC 2.1.51+; full steps: whole text
+                           else (redact(_handback_full)[:4000] if _handback_full else None)
+                           or (redact(last_assistant_message)[:2000] if last_assistant_message else None),  # off: the 8.3.0 caps
             },
             "playbook_used": playbook_used,
             "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "agent_type": agent_type  # v5.4.11: Attribute learning to agent type
+            "agent_type": agent_type,  # v5.4.11: Attribute learning to agent type
+            "chain": "python",  # round 4: which chain built the trace ('mod' | 'python'), never omitted (server: one top-level field)
         }
         _stamp_trace(trace, OUTCOME_RULE)  # 8.1.4: result.plugin_version + result.outcome_rule
         # per-task session_id: use task_session_id if stored; else OMIT session_id entirely.
@@ -1874,6 +1703,9 @@ def main():
         if _render_variant:
             trace["render_variant"] = _render_variant
             trace["render_path"] = _render_path
+            trace["render_control_pct"] = render_control_pct()  # the control share applied (0 = off); the server derives propensity
+        if _stored_layout in LAYOUT_A_VALUES:
+            trace["render_layout"] = _stored_layout  # layout-a arm: own optional field; render_variant stays budget|full
         if session_id:
             trace["conversation_id"] = str(session_id)[:512]
         if agent_id:
@@ -1901,7 +1733,7 @@ def main():
         # v6.5.0 Item #9: effort level signal (CC 2.1.133+ provides this in hook input).
         # Plugin-side weight mapping per SDK-team guidance (Q4):
         # auto/low/normal → 1.0 (baseline), high → 1.5, xhigh/max → 2.0
-        # Initially logged-only; Curator scoring planned for later release.
+        # Sent in the trace; the server stores it, it does not evaluate it yet.
         _EFFORT_WEIGHT = {
             "auto": 1.0, "low": 1.0, "normal": 1.0,
             "high": 1.5,
@@ -1928,16 +1760,20 @@ def main():
         if git_context:
             trace["git"] = git_context
 
-        # v6.5.0 Item #16 (PR-review I2): truncate large traces before wire-send.
-        # Target <2MB; preserves all failed steps + last 50 trajectory steps;
-        # drops base64 blobs and oversized tool_response payloads.
+        # Full steps (round 4): ONE hard cap before the wire-send, as the mod's capTrace (utils/trace_truncate.cap_trace):
+        # ACE_TRACE_HARD_CAP_BYTES (4 MiB). Nothing is cut below it; a text-free trace_cap_hit row only when it bites.
         try:
             import sys as _sys
             _self_dir = os.path.dirname(os.path.abspath(__file__))
             if _self_dir not in _sys.path:
                 _sys.path.insert(0, _self_dir)
-            from utils.trace_truncate import truncate_trace
-            trace = truncate_trace(trace)
+            from utils.trace_truncate import cap_trace, legacy_truncate_trace
+            trace, _cap_hit = cap_trace(trace) if _full else (legacy_truncate_trace(trace), None)
+            if _cap_hit:
+                try:
+                    log_event("trace_cap_hit", hook=hook_event_name, session_id=session_id, source="python", **_cap_hit)
+                except Exception:
+                    pass  # telemetry never costs the learn
         except Exception:
             pass  # never fail the learn pipeline on truncation issues
 
@@ -1962,7 +1798,7 @@ def main():
                     **({"used_ids_capped": True} if _capped else {}),
                     # 8.1.0 audit: the same correlation fields as the mod's execution row
                     "agent_id": agent_id or None, "task_session_id": task_session_id or None,
-                    "render_cohort": _render_variant,
+                    "render_cohort": _render_variant + layout_a_label(_stored_layout) if _render_variant else _render_variant,
                 },
             }
         except Exception as e:

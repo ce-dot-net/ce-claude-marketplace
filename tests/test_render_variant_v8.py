@@ -12,6 +12,7 @@
 """
 import hashlib
 import json
+import time
 import uuid
 
 import pytest
@@ -135,9 +136,48 @@ def test_full_sends_no_applied_log_ids(box):
     assert t["render_variant"] == "full"
 
 
-def test_control_variant_is_no_server_label(box):
+def test_control_variant_is_sent_with_the_share(box):
+    """control is a server label now (render_control_pct): the stored label and the applied share travel on the trace."""
+    (box.pd / "render-control-pct.json").write_text(json.dumps({"pct": 35, "at": int(time.time())}))
     learn = _main_learn(box, retrieval_id="ret-c", render_variant="control")
-    assert learn["trace"].get("render_variant") in ("budget", "full"), "§31: only budget|full are sent (control -> conversation arm)"
+    assert (learn["trace"]["render_variant"], learn["trace"]["render_control_pct"]) == ("control", 35)
+
+
+def test_control_trace_has_no_patterns_applied_or_used(box):
+    t = _main_learn(box, retrieval_id="ret-c", render_variant="control")
+    learn_t = t["trace"]
+    assert learn_t["render_variant"] == "control"
+    assert not learn_t.get("applied_log_ids") and not learn_t.get("playbook_used")
+    assert "--applied-log-ids" not in t["argv"]
+    assert not learn_t["used_ids_model_list"] and not learn_t["used_ids_tokens_list"]
+    assert learn_t["used_ids_model"] == 0 and learn_t["used_ids_tokens"] == 0
+
+
+def test_trace_render_control_pct_is_0_when_off(box):
+    t = _main_learn(box, retrieval_id="ret-b", render_variant="budget")["trace"]
+    assert (t["render_variant"], t["render_control_pct"]) == ("budget", 0)
+
+
+def test_trace_render_control_pct_env_beats_server_and_label_falls_back_to_the_arm(box):
+    (box.pd / "render-control-pct.json").write_text(json.dumps({"pct": 5, "at": int(time.time())}))
+    box.write_state("s-rv-env", "main", user_prompt="refactor the parser module")  # no stored label: the conversation arm
+    box.seed_tools("s-rv-env", WORK)
+    p = box.run_after_task(box.stop_event("s-rv-env"), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID, ACE_AB_CONTROL_PCT="100")
+    assert p.returncode == 0, p.stderr
+    (learn,) = box.cli_calls("learn")
+    assert (learn["trace"]["render_variant"], learn["trace"]["render_control_pct"]) == ("control", 100)
+
+
+def test_ups_control_share_from_the_server_file_injects_no_patterns(henv):
+    """Search + retrieval log + F-080 anchor keep running; nothing is injected when the share comes from the server file."""
+    sid = _sid_with(lambda b: b < 50)
+    (henv.pd / "render-control-pct.json").write_text(json.dumps({"pct": 50, "at": int(time.time())}))
+    p = _ups(henv, sid, "55555555-5555-4555-8555-555555555555")
+    assert "ace-patterns" not in p.stdout and "a pattern" not in p.stdout
+    st = henv.read_state(sid)
+    assert st["render_variant"] == "control" and st["task_session_id"] == "55555555-5555-4555-8555-555555555555"
+    assert st.get("retrieval_id") == "ret-rv", "the search ran and its retrieval is logged"
+    assert not st.get("pattern_ids"), "control injects nothing"
 
 
 def test_trace_without_pin_or_label_omits_both(box):
@@ -182,15 +222,15 @@ def test_render_path_mod_when_the_mod_rendered_and_python_learns(box):
     assert (t["render_variant"], t["render_path"]) == ("full", "mod")
 
 
-def test_render_path_omitted_with_render_variant(box):
-    sid = "s-rv-ctl"  # ACE_AB_CONTROL_PCT=100: control is no server label -> render_variant omitted
+def test_render_path_travels_with_the_control_label(box):
+    sid = "s-rv-ctl"  # ACE_AB_CONTROL_PCT=100: control IS a label now -> render_variant, render_path and render_control_pct
     box.write_state(sid, "main", user_prompt="refactor the parser module", render_variant="control")
     box.seed_tools(sid, WORK)
     p = box.run_after_task(box.stop_event(sid), ACE_PROJECT_ID=PROJECT_ID, ACE_ORG_ID=ORG_ID, ACE_AB_CONTROL_PCT="100")
     assert p.returncode == 0, p.stderr
     (learn,) = box.cli_calls("learn")
     t = learn["trace"]
-    assert "render_variant" not in t and "render_path" not in t
+    assert (t["render_variant"], t["render_path"], t["render_control_pct"]) == ("control", "python", 100)
 
 
 # ── 8.2.2: interactive / prompt_origin / human_prompt_count are MOD-chain only ─────────────
@@ -218,4 +258,4 @@ def test_permission_denied_render_path(clean_env, tmp_path):
     clean_env.setenv("ACE_AB_CONTROL_PCT", "100")
     m = _stored(tmp_path / "b", clean_env, False)
     t = m._build_trace({"session_id": "pd-rv", "tool_name": "Bash", "tool_input": {}})
-    assert "render_variant" not in t and "render_path" not in t
+    assert (t["render_variant"], t["render_path"], t["render_control_pct"]) == ("control", "python", 100)

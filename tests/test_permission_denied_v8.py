@@ -162,7 +162,7 @@ def _stored(tmp_path, monkeypatch, variant):
     return m
 
 
-@pytest.mark.parametrize("stored,want", [("full", "full"), (" Budget ", "budget"), ("control", "budget"), (None, "budget")])  # server request 2026-11-02: no stored label -> the conversation arm; the Python chain renders every arm but control/compact as budget
+@pytest.mark.parametrize("stored,want", [("full", "full"), (" Budget ", "budget"), ("control", "control"), (None, "budget")])  # server request 2026-11-02: no stored label -> the conversation arm; the Python chain renders every arm but control/compact as budget
 def test_render_variant_is_the_stored_one(tmp_path, monkeypatch, stored, want):
     m = _stored(tmp_path, monkeypatch, stored)
     assert m._render_variant("pd-rv") == want
@@ -172,8 +172,10 @@ def test_render_variant_without_state_is_the_conversation_arm(tmp_path, monkeypa
     m = _stored(tmp_path, monkeypatch, False)
     assert m._render_variant("pd-rv") == "budget"
     assert m._build_trace({"session_id": "pd-rv", "tool_name": "Bash", "tool_input": {}})["render_variant"] == "budget"
-    monkeypatch.setenv("ACE_AB_CONTROL_PCT", "100")  # control is no server label -> omitted
-    assert m._render_variant("pd-rv") is None
+    monkeypatch.setenv("ACE_AB_CONTROL_PCT", "100")  # control is a server label (render_control_pct)
+    assert m._render_variant("pd-rv") == "control"
+    t = m._build_trace({"session_id": "pd-rv", "tool_name": "Bash", "tool_input": {}})
+    assert (t["render_variant"], t["render_control_pct"]) == ("control", 100)
 
 
 def test_render_variant_full_arm_is_budget_in_the_python_chain(tmp_path, monkeypatch):
