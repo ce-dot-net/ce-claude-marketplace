@@ -412,7 +412,7 @@ console.log(JSON.stringify({ full: pyDumps(a(true)), off: pyDumps(a(false)) }))
 def test_r8_w1_mod_trace_replay_off_vs_live_off(monkeypatch, tmp_path, agent, cap):
     bun = shutil.which("bun")
     if not bun:
-        pytest.skip("bun not installed")
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
     lib = REPO / "plugins/ace/mod/lib"
     f = tmp_path / "build.ts"
     f.write_text(_BUILD_TS % (lib / "trace.ts", lib / "pyjson.ts", agent, cap))
@@ -475,7 +475,7 @@ def test_r9_n1_no_new_meta_field_reaches_the_queue():
 def _watchdog():
     bun = shutil.which("bun")
     if not bun:
-        pytest.skip("bun not installed")
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
     import subprocess
     p = subprocess.run([bun, "-e", "import { UPDATE_WATCHDOG } from '%s'; console.log(JSON.stringify(UPDATE_WATCHDOG))" % (REPO / "plugins/ace/mod/lib/update.ts")],
                        capture_output=True, text=True, timeout=60)

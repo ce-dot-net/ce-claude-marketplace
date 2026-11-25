@@ -16,6 +16,8 @@ Rows (the caller adds timestamp/source) never carry trace content.
 
 `python3 ace_trace_queue.py --replay [--cwd DIR]`: one bounded replay run (async SessionStart, after a good learn).
 `python3 -I ace_trace_queue.py --enqueue FILE JOB`: the mod launcher's parent queues a trace no child got.
+`python3 -I ace_trace_queue.py --auth-held [--data-root DIR]`: prints the one "not logged in, traces NOT sent" line when
+dead/ holds a rejected-token (last_error "auth") entry from the last 30 min, else nothing (the mod's once-per-session notice).
 """
 import hashlib
 import hmac as _hmac
@@ -38,6 +40,7 @@ REPLAY_WINDOW = 23 * 3600
 DEAD_KEEP = 7 * 86400
 BACKOFF = (60, 300, 1800, 7200, 43200)  # after failed attempt 1..5
 MAX_ATTEMPTS = 6
+FORBIDDEN_MAX_ATTEMPTS = 3  # 403 / no_access: retried with BACKOFF, after this many failed attempts dead/ with last_error "no_access"
 MAX_KEY_GEN = 3            # stored:false -> a new key (the server remembers the old key's stored:false for 24 h)
 IN_PROGRESS_WAIT = 75 * 60  # "duplicate in progress": the first request is still writing
 QUOTA_WAIT = 12 * 3600      # 429 without Retry-After
@@ -45,11 +48,15 @@ PER_RUN = 5
 CLAIM_STALE = 900   # a replayer sends at most 5 x 60 s; an older claim is a crashed one
 HANDOVER_STALE = 1800  # a learn child runs at most 2 x 310 s; older job/trace files belong to a killed child
 REPLAY_TIMEOUT = 60
+AUTH_HELD_WINDOW_S = 30 * 60   # a dead/auth entry this young = the token is being rejected right now
+AUTH_COUNT_WINDOW_S = 24 * 3600  # the number in the notice: dead/auth entries of the last hours
+AUTH_HELD_MAX_FILES = 500      # entries parsed per check (newest first)
+AUTH_HELD_LINE = "ACE: nicht angemeldet, Traces werden NICHT gesendet (%d Traces wartend/abgelegt). Bitte `ace-cli login` ausführen."
 
 _ID = re.compile(r"^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$")
 _META = {"org": 128, "project": 128, "retrieval_id": 128, "hook": 64, "agent_type": 128, "session_id": 512}
 _PRECONNECT = re.compile(r"\b(ECONNREFUSED|ENOTFOUND|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH)\b")
-_AUTH_CODES = {"not_logged_in", "token_expired", "no_access"}
+_AUTH_CODES = {"not_logged_in", "token_expired"}  # no_access (403) is NOT here: the server answers it for a transient project-check timeout
 _REJECT_CODES = {"unbound", "project_not_found", "device_limit_exceeded"}
 RESPONSE_TAG = "ace_trace_response "  # engine/learn.js: the last POST /traces answer, one stderr line
 
@@ -139,8 +146,10 @@ def classify(code, output, keyed=True, answered=False):
             return "ok", None
         if st == 429:
             return "requeue", "quota"
-        if st in (401, 403):
+        if st == 401:
             return "dead", "auth"
+        if st == 403:
+            return "requeue", "forbidden"
         if st == 422:
             return "dead", "invalid"
         if 400 <= st < 500:
@@ -158,6 +167,8 @@ def classify(code, output, keyed=True, answered=False):
     if cli is not None:
         return ("requeue", "quota") if cli.get("quota_exceeded") is True else ("requeue", "not_stored")
     ecode = err.get("code") if err else None
+    if ecode == "no_access":
+        return "requeue", "forbidden"
     if ecode in _AUTH_CODES or (ecode is None and not keyed and code in (3, 4)):  # ace-cli: exit 3/4 = auth
         return "dead", "auth"
     if ecode in _REJECT_CODES:
@@ -169,8 +180,10 @@ def classify(code, output, keyed=True, answered=False):
         m = re.search(r"Server error \((\d{3})\)", text)
         st = int(m.group(1)) if m else None
     if st is not None:
-        if st in (401, 403):
+        if st == 401:
             return "dead", "auth"
+        if st == 403:
+            return "requeue", "forbidden"
         if st == 422:
             return "dead", "invalid"
         if st == 429:
@@ -558,6 +571,10 @@ def _settle_replay(qdir, name, claimed, e, res, now):
     if action == "ok":
         os.unlink(claimed)
         return _row("learn_replayed", e["id"], e["meta"], att)
+    if action == "requeue" and cls == "forbidden" and att >= FORBIDDEN_MAX_ATTEMPTS:
+        e["last_error"] = "no_access"
+        _to_dead(qdir, claimed, e["id"], now, entry=e)
+        return _row("learn_lost", e["id"], e["meta"], att, "no_access", "rejected")
     if action == "requeue" and cls == "not_stored":
         if e["key_gen"] >= MAX_KEY_GEN:
             _to_dead(qdir, claimed, e["id"], now, entry=e)
@@ -742,6 +759,45 @@ def doctor_line(qdir, logs_dir, now=None):
         st["depth"], _age(st["oldest_age_s"]) if st["depth"] else "-", replayed, st["dead"], expired)
 
 
+def auth_held_count(qdir, now=None):
+    """0, or how many dead/ entries with last_error "auth" are younger than AUTH_COUNT_WINDOW_S when at least one is
+    younger than AUTH_HELD_WINDOW_S. The cheap part is a listdir + lstat (mtime >= created_at for every dead entry, so
+    nothing younger than the held window can hide); entries are parsed only when something recent died."""
+    now = time.time() if now is None else now
+    d = os.path.join(str(qdir), "dead")
+    recent = []
+    for n in _names(d):
+        p = os.path.join(d, n)
+        try:
+            st = os.lstat(p)
+        except OSError:
+            continue
+        if stat.S_ISREG(st.st_mode) and now - st.st_mtime <= AUTH_COUNT_WINDOW_S:
+            recent.append((st.st_mtime, p))
+    if not any(now - m <= AUTH_HELD_WINDOW_S for m, _ in recent):
+        return 0
+    ages = []
+    for _, p in sorted(recent, reverse=True)[:AUTH_HELD_MAX_FILES]:
+        e = _read_raw(p)
+        if isinstance(e, dict) and e.get("last_error") == "auth" and _num(e.get("created_at")):
+            ages.append(now - e["created_at"])
+    return len(ages) if any(a <= AUTH_HELD_WINDOW_S for a in ages) else 0
+
+
+def auth_held_line(qdir, now=None):
+    """The notice line (the same text in both chains: the mod prints what this prints), or None."""
+    n = auth_held_count(qdir, now)
+    return AUTH_HELD_LINE % n if n else None
+
+
+SINK_LINE = "ACE: Traces gehen in die lokale Senke (ACE_TRACE_SINK), es wird NICHTS gesendet."  # same text: mod handlers/prompt.ts
+
+
+def sink_line():
+    """The once-per-session notice while ACE_TRACE_SINK is set (not blank): the traces are written to a file, nothing is sent."""
+    return SINK_LINE if (os.environ.get("ACE_TRACE_SINK") or "").strip() else None
+
+
 def has_entries(qdir):
     return bool(_names(str(qdir)))
 
@@ -811,8 +867,18 @@ def _main(argv):
     if argv[:1] == ["--enqueue"] and len(argv) == 3:
         _enqueue(argv[1], argv[2])
         return
+    if argv[:1] == ["--auth-held"]:
+        root = argv[argv.index("--data-root") + 1] if "--data-root" in argv[1:] and argv.index("--data-root") + 1 < len(argv) else None
+        if root is None:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import plugin_data_dir
+            root = str(plugin_data_dir.data_root())
+        line = auth_held_line(os.path.join(root, "trace-queue"))
+        if line:
+            print(line)
+        return
     if "--replay" not in argv:
-        sys.exit("usage: ace_trace_queue.py --replay [--cwd DIR] | --enqueue FILE JOB")
+        sys.exit("usage: ace_trace_queue.py --replay [--cwd DIR] | --enqueue FILE JOB | --auth-held [--data-root DIR]")
     if (os.environ.get("ACE_TRACE_SINK") or "").strip():  # round 5 C5: with a sink nothing is sent, the queue stays untouched
         return
     if "--cwd" in argv:

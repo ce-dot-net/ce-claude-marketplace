@@ -2,7 +2,7 @@
 // patterns-used / mod-tools / pending / deferral files (queued read-merge-write), cohort env and server switches.
 import type { EventName, Hook } from 'claude-code'
 import { appendPrivate, readJson, readText, rm, writePrivate } from './fs'
-import { BACKFILL_FLAG_FILE, sha256Hex, serverBackfill, CLIENT_POLICY_FILE, FEEDBACK_DOWNVOTE_FILE, FEEDBACK_UPVOTE_FILE, FULL_STEPS_FILE, RENDER_FULL_PCT_FILE, serverFullSteps, storedFullSteps, serverDownvote, serverFullPct, serverUpvote, storedDownvote, storedFullPct, storedUpvote, validClientPolicy } from '../lib/cohort'
+import { BACKFILL_FLAG_FILE, sha256Hex, serverBackfill, CLIENT_POLICY_FILE, FEEDBACK_DOWNVOTE_FILE, FEEDBACK_UPVOTE_FILE, FULL_STEPS_FILE, RENDER_FULL_PCT_FILE, RENDER_LAYOUT_A_PCT_FILE, RENDER_CONTROL_PCT_FILE, serverControlPct, storedControlPct, serverLayoutAPct, storedLayoutAPct, serverFullSteps, storedFullSteps, serverDownvote, serverFullPct, serverUpvote, storedDownvote, storedFullPct, storedUpvote, validClientPolicy } from '../lib/cohort'
 import { relLog } from './log'
 import { REJECTION_PREV_MAX_AGE_S, type ToolRec } from '../lib/evidence'
 import { num, pyDumps } from '../lib/pyjson'
@@ -269,7 +269,18 @@ export async function cohortEnv($: any, s: Sess) {
     const server = storedFullPct(await readText($, `${s.root}/${RENDER_FULL_PCT_FILE}`), await $.clock.now())
     if (server !== undefined) full = String(server)
   }
-  return { ACE_AB_CONTROL_PCT: await $.env.get('ACE_AB_CONTROL_PCT'), ACE_AB_COMPACT_PCT: await $.env.get('ACE_AB_COMPACT_PCT'), ACE_RENDER_FULL_PCT: full }
+  let layout: string | undefined = await $.env.get('ACE_RENDER_LAYOUT_A_PCT')  // env > the server's render_layout_a_pct (< 7 days) > LAYOUT_A_DEFAULT_PCT
+  if (layout === undefined) {
+    const sl = storedLayoutAPct(await readText($, `${s.root}/${RENDER_LAYOUT_A_PCT_FILE}`), await $.clock.now())
+    if (sl !== undefined) layout = String(sl)
+  }
+  let control: string | undefined = await $.env.get('ACE_AB_CONTROL_PCT')  // env > the server's render_control_pct (< 7 days) > 0
+  if (control === undefined) {
+    const sc = storedControlPct(await readText($, `${s.root}/${RENDER_CONTROL_PCT_FILE}`), await $.clock.now())
+    if (sc !== undefined) control = String(sc)
+  }
+  return { ACE_AB_CONTROL_PCT: control, ACE_AB_COMPACT_PCT: await $.env.get('ACE_AB_COMPACT_PCT'), ACE_RENDER_FULL_PCT: full,
+    ACE_RENDER_LAYOUT_A_PCT: layout, ACE_RENDER_LAYOUT_A_HINT: await $.env.get('ACE_RENDER_LAYOUT_A_HINT') }
 }
 // Every real search persists the valid server switches (latest wins; missing/invalid keeps the stored value):
 // render_full_pct and feedback_downvote. A reuse-cache hit is older and never does.
@@ -277,6 +288,10 @@ export async function storeFullPct($: any, s: Sess, resp: any) {
   const pct = serverFullPct(resp), down = serverDownvote(resp), at = Math.floor(await $.clock.now() / 1000)
   try { if (pct !== undefined) await writePrivate($, `${s.root}/${RENDER_FULL_PCT_FILE}`, JSON.stringify({ pct, at })) } catch { /* keep the old value */ }
   try { if (down !== undefined) await writePrivate($, `${s.root}/${FEEDBACK_DOWNVOTE_FILE}`, JSON.stringify({ on: down, at })) } catch { /* keep the old value */ }
+  const lp = serverLayoutAPct(resp)
+  try { if (lp !== undefined) await writePrivate($, `${s.root}/${RENDER_LAYOUT_A_PCT_FILE}`, JSON.stringify({ pct: lp, at })) } catch { /* keep the old value */ }
+  const cp = serverControlPct(resp)
+  try { if (cp !== undefined) await writePrivate($, `${s.root}/${RENDER_CONTROL_PCT_FILE}`, JSON.stringify({ pct: cp, at })) } catch { /* keep the old value */ }
   const up = serverUpvote(resp)
   try { if (up !== undefined) await writePrivate($, `${s.root}/${FEEDBACK_UPVOTE_FILE}`, JSON.stringify({ on: up, at })) } catch { /* keep the old value */ }
   const fs = serverFullSteps(resp)  // round 5 kill switch: a bool is stored; a non-bool keeps the stored value, logged without it

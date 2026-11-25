@@ -140,16 +140,41 @@ IBAN_LEN = {'AD': 24, 'AE': 23, 'AL': 28, 'AT': 20, 'AZ': 28, 'BA': 20, 'BE': 16
             'NL': 18, 'NO': 15, 'OM': 23, 'PK': 24, 'PL': 28, 'PS': 29, 'PT': 25, 'QA': 29, 'RO': 24, 'RS': 22, 'RU': 33, 'SA': 24,
             'SC': 31, 'SD': 18, 'SE': 24, 'SI': 19, 'SK': 24, 'SM': 27, 'SO': 23, 'ST': 25, 'SV': 28, 'TL': 23, 'TN': 24, 'TR': 26,
             'UA': 29, 'VA': 22, 'VG': 24, 'XK': 20, 'YE': 30}
+# a PII key may carry a suffix (phone_number, phoneNumber, mobile-no, telNr): the kind is looked up on the stem (= mod)
+PII_KEY_SUFFIX = re.compile(r'[_-]?(?:number|nummer|nr|no)$')
+# e-mail look-alikes that are file names (= mod EMAIL_SCALE / EMAIL_FILE_TLDS)
+EMAIL_SCALE = re.compile(r'^[0-9]+(?:\.[0-9]+)?x\.', re.I | re.A)
+EMAIL_FILE_TLDS = {'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'gz', 'tgz', 'zip', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'json', 'css', 'map'}
+# '+' + digits that are a date, an IPv4 address or a decimal number (= mod PHONE_REJECT)
+# Round 15: plausible day / month / year ranges and IPv4 octets 0-255 with an optional CIDR suffix (= mod)
+PHONE_REJECT = (re.compile(r'^[0-9]{4}-[0-9]{2}-[0-9]{2}', re.A), re.compile(r'^(?:0?[1-9]|[12][0-9]|3[01])\.(?:0?[1-9]|1[0-2])\.(?:19|20)[0-9]{2}(?![0-9])', re.A),
+                re.compile(r'^(?:19|20)[0-9]{2}[./](?:0?[1-9]|1[0-2])[./](?:0?[1-9]|[12][0-9]|3[01])(?![0-9])', re.A),
+                re.compile(r'^(?:0?[1-9]|1[0-2])/(?:0?[1-9]|[12][0-9]|3[01])/(?:19|20)[0-9]{2}(?![0-9])', re.A),
+                re.compile(r'^(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])(?:\.(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])){3}(?:/[0-9]{1,2})?$', re.A),
+                re.compile(r'^(?!0[0-9])[0-9]+[.,][0-9]+$', re.A),  # Round 18c / NB1: no leading 0 + digit
+                re.compile(r'^[0-9]{1,6}/-[0-9]{1,6}(?![0-9])', re.A),
+                re.compile(r'^(?:0?[1-9]|[12][0-9]|3[01])\.(?:0?[1-9]|1[0-2])\.(?![0-9])', re.A))  # a diffstat '+1234/-567', a 'DD.MM.' date prefix
+# a version behind a keyword and '/' ('WhatsApp/2.23.20.0') is no phone number (= mod KW_VERSION)
+KW_VERSION = re.compile(r'^[0-9]{1,4}(?:\.[0-9]{1,4})+$', re.A)
+# Round 16 (= mod): a version has at most this many digits; phone-field keys; an address before '(' / '[' with a longer TLD stays;
+# separators inside an IBAN
+KW_VERSION_DIGITS_MAX = 7
+# Round 18 / B1: behind a bare 'call' only a phone-shaped number (= mod KW_CALL_PHONE)
+KW_CALL_PHONE = re.compile(r'^0|^[0-9]{9}|[    \-.)]', re.A)
+PII_KEY_PHONE = re.compile(r'^(?:[a-z]{0,10}[_-]?phone(?:s|[_-]?[0-9]{1,2}|[_-]?(?:numbers?|nummer|nr|no))?|(?:[a-z]{0,16}?(?:telefon|handy|festnetz|mobilfunk|rufnummer)|telephone|telefax|tel|mobile|mobil|fax|whatsapp|durchwahl|fon|cell(?:phone)?)(?:[_-]?(?:nummer|nr|number|no))?(?:(?<!cell)[_-]?[0-9]{1,2})?)$', re.I | re.A)
+EMAIL_CALL_TLD_MAX = 3
+IBAN_SEP = re.compile(r'[ \t\u00a0\u202f\u2009]', re.A)
 PII_KEY_KIND = {'e-mail': 'email', 'email': 'email', 'mail': 'email', 'iban': 'iban', 'telephone': 'phone', 'phone': 'phone',
-                'tel': 'phone', 'mobile': 'phone', 'handy': 'phone', 'fax': 'phone'}
+                'tel': 'phone', 'mobile': 'phone', 'handy': 'phone', 'fax': 'phone', 'telefon': 'phone', 'mobil': 'phone', 'whatsapp': 'phone',
+                'rufnummer': 'phone'}
 PII_RULES = (
-    ('iban', 'iban', re.compile(r'[A-Z]{2}[0-9]{2}', re.A), re.compile(r'(?<![A-Za-z0-9])[A-Z]{2}[0-9]{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,3})?(?![A-Za-z0-9])', re.A)),
+    ('iban', 'iban', re.compile(r'[A-Za-z]{2}[0-9]{2}', re.A), re.compile(r'(?<![A-Za-z0-9])[A-Za-z]{2}[0-9]{2}', re.A)),
     ('email', 'email', re.compile(r'@', re.A), re.compile(r'(?<![A-Za-z0-9._%+\-])(?<!//)[A-Za-z0-9._%+-]{1,64}@((?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.){1,8}[A-Za-z]{2,24})(?![A-Za-z0-9-]|\.[A-Za-z0-9])(?!:[A-Za-z0-9._/~-])', re.A)),
-    ('phone-intl', 'phone', re.compile(r'\+', re.A), re.compile(r'(?<![A-Za-z0-9+])\+([0-9](?:[ ()./-]{0,2}[0-9]){5,16})(?![0-9])', re.A)),
-    ('phone-kw', 'phone', re.compile(r'tel|phone|mobil|handy|fax|whatsapp|call|rufnummer', re.I | re.A),
-     re.compile(r'\b(telefon|tel|phone|mobile|mobil|handy|fax|whatsapp|call|rufnummer)\b([^\n0-9]{0,20})([0-9](?:[ ()./-]{0,2}[0-9]){5,14})(?![0-9])', re.I | re.A)),
-    ('pii-key', '', re.compile(r'mail|iban|phone|tel|mobile|handy|fax', re.I | re.A),
-     re.compile(r'''(?<![A-Za-z0-9_.\-])(["']?)(e-mail|email|mail|iban|telephone|phone|tel|mobile|handy|fax)\1[ \t]*[:=](?!=)[ \t]*(?:"([^"\n]{1,256})"|'([^'\n]{1,256})'|([^''' + JS_WS + r'''"',;}\]]{1,256}))''', re.I | re.A)),
+    ('phone-intl', 'phone', re.compile(r'\+', re.A), re.compile(r'(?<![A-Za-z0-9+])\+([0-9](?:[ ()./   -]{0,2}[0-9]){5,16})(?![0-9])', re.A)),
+    ('phone-kw', 'phone', re.compile(r'tel|phone|mobil|handy|fax|whatsapp|call|rufnummer|anrufen|festnetz|cell|fon|durchwahl', re.I | re.A),
+     re.compile(r'\b((?:[A-Za-z]{0,16}?(?:telefon|handy|festnetz|mobilfunk|rufnummer)|telephone|telefax|tel|phone|mobile|mobil|fax|whatsapp|durchwahl|fon|cellphone|cell(?=[ \t]*(?:[:#]|no\b|nr\b)))(?:nummer|nr\.?|number|no\.?)?|anrufen|call[ \t]+(?:me|us)|call)\b([^\n0-9]{0,20})([0-9](?:[ ()./   -]{0,2}[0-9]){5,14})(?![0-9])', re.I | re.A)),
+    ('pii-key', '', re.compile(r'mail|iban|phone|tel|mobil|handy|fax|whatsapp|rufnummer|festnetz|cell|fon|durchwahl', re.I | re.A),
+     re.compile(r'''(?<![A-Za-z0-9_.\-])(["']?)((?:e-mail|email|mail|iban|telefon|telefax|tel|mobile|mobil|handy|fax|whatsapp|rufnummer|festnetz|durchwahl|fon|cell)(?:[_-]?(?:number|nummer|nr|no))?(?:(?<!cell)[_-]?[0-9]{1,2})?|[A-Za-z]{0,10}[_-]?phone(?:s|[_-]?[0-9]{1,2}|[_-]?(?:numbers?|nummer|nr|no))?)\1[ \t]*[:=](?!=)[ \t]*(?:"([^"\n]{1,256})"|'([^'\n]{1,256})'|((?=[A-Za-z()./+-]{0,11}[0-9])[A-Za-z0-9()./+-]{1,12}(?:[    ](?=[A-Za-z()./-]{0,11}[0-9])[A-Za-z0-9()./-]{1,12}){1,8})|([A-Za-z]{2}[0-9]{2}(?=((?: ?[A-Za-z0-9]{1,4}){1,8}))\7[^''' + JS_WS + r'''"',;}\]]{0,256})|([^''' + JS_WS + r'''"',;}\]]{1,256}))''', re.I | re.A)),
 )
 
 # ---- layer 11: high entropy (write '[redacted:entropy]'); thresholds and reasons: mod/lib/redact_rules.ts ----
@@ -492,16 +517,44 @@ def _is_example_domain(d):
     return any(l == x or l.endswith('.' + x) for x in EXAMPLE_DOMAINS) or l[l.rfind('.') + 1:] in EXAMPLE_TLDS
 
 
+_IBAN_DIGITS = str.maketrans({chr(65 + i): str(10 + i) for i in range(26)})
+
+
 def _iban_mod97(c):
-    m = 0
-    for ch in c[4:] + c[:4]:
-        v = int(ch, 36)
-        m = (m * 10 + v if v < 10 else m * 100 + v) % 97
-    return m
+    """= mod ibanMod97 (upper case input); Round 18 / N7: one int() at C speed instead of a char loop."""
+    return int((c[4:] + c[:4]).translate(_IBAN_DIGITS)) % 97
 
 
 def _digits(x):
     return ''.join(ch for ch in x if '0' <= ch <= '9')
+
+
+def _pii_kind(key):
+    """The kind of a PII key (suffix stripped); None for any other key (= mod piiKind)."""
+    k = re.sub(r'[_-]?[0-9]{1,2}$', '', key) or key  # Round 18 / N2: iban2, email_1, mail1 (the key rule allows a digit suffix on every stem)
+    return (PII_KEY_KIND.get(k.lower()) or PII_KEY_KIND.get(PII_KEY_SUFFIX.sub('', k.lower(), count=1))  # 'rufnummer' is a stem
+            or ('phone' if PII_KEY_PHONE.match(key) else None))  # Round 16: Mobiltelefon, festnetz, cell, MobilePhone, phone2 ...
+
+
+def _js_num(x):
+    """A number as JS String(number) writes it (Round 14/15): integers as they are, floats in fixed notation for 1e-6 <= |x| < 1e21 with the
+    shortest round-trip digits (12345.0 -> '12345', 1.234e-05 -> '0.00001234', 1.2345678901234566e+17 -> '123456789012345660'), else
+    exponent notation without padding ('1.5e-7', '1e+21')."""
+    if isinstance(x, int):
+        return str(x)
+    if x != x:
+        return 'NaN'
+    if x in (float('inf'), float('-inf')):
+        return 'Infinity' if x > 0 else '-Infinity'
+    if x == 0:
+        return '0'
+    r = repr(x)
+    if 1e-6 <= abs(x) < 1e21:
+        from decimal import Decimal
+        f = format(Decimal(r), 'f')
+        return f.rstrip('0').rstrip('.') if '.' in f else f
+    m, e = r.split('e')
+    return m + 'e' + ('-' if e.startswith('-') else '+') + e.lstrip('+-').lstrip('0')
 
 
 def _pii_value(kind, v):
@@ -515,37 +568,119 @@ def _pii_value(kind, v):
     return any('0' <= ch <= '9' for ch in v)
 
 
+_IBAN_BODY = {}
+
+
+def _iban_walk(s, i):
+    """= mod ibanWalk (Round 17 / C1'): from a start candidate at i walk exactly the country's length, one optional IBAN_SEP before each
+    4-char group; the end when a non-alnum char or the text end follows and mod-97 is 1, else -1. Written as one anchored regex per
+    country length (the same walk at C speed: a 4 MB run of starts stays fast); at most 2 * 34 chars per start."""
+    want = IBAN_LEN.get(s[i:i + 2].upper())
+    if want is None:
+        return -1
+    rx = _IBAN_BODY.get(want)
+    if rx is None:
+        q, r = divmod(want - 4, 4)
+        rx = _IBAN_BODY[want] = re.compile('[A-Za-z0-9]{4}(?:%s?[A-Za-z0-9]{4}){%d}' % (IBAN_SEP.pattern, q)
+                                           + ('%s?[A-Za-z0-9]{%d}' % (IBAN_SEP.pattern, r) if r else '') + '(?![A-Za-z0-9])', re.A)
+    m = rx.match(s, i)
+    return m.end() if m and _iban_mod97(IBAN_SEP.sub('', m.group()).upper()) == 1 else -1
+
+
 def _pii_iban(s, rx, label):
-    def one(m):
-        c = m.group(0).replace(' ', '')
-        return '[redacted:%s]' % label if IBAN_LEN.get(c[:2]) == len(c) and _iban_mod97(c) == 1 else m.group(0)
-    return rx.sub(one, s)
+    """Round 17 / C1': every start candidate (rx) is walked; a valid IBAN is replaced and the scan goes on after its end."""
+    out, pos = [], 0
+    for m in rx.finditer(s):
+        if m.start() >= pos:
+            e = _iban_walk(s, m.start())
+            if e >= 0:
+                out += [s[pos:m.start()], '[redacted:%s]' % label]
+                pos = e
+    return ''.join(out) + s[pos:]
 
 
 def _pii_email(s, rx, label):
-    return rx.sub(lambda m: m.group(0) if len(m.group(1)) > DOMAIN_MAX or _is_example_domain(m.group(1)) else '[redacted:%s]' % label, s)
+    def one(m):
+        d = m.group(1)
+        call = s[m.end():m.end() + 1] in ('(', '[') and len(d) - d.rfind('.') - 1 > EMAIL_CALL_TLD_MAX  # Round 16: a method call stays
+        return m.group(0) if len(d) > DOMAIN_MAX or _is_example_domain(d) or EMAIL_SCALE.match(d) or d[d.rfind('.') + 1:].lower() in EMAIL_FILE_TLDS \
+            or call else '[redacted:%s]' % label
+    return rx.sub(one, s)
 
 
 def _pii_phone_intl(s, rx, label):
     def one(m):
         body = m.group(1)
         dg = _digits(body)
+        if any(r.search(body) for r in PHONE_REJECT):  # Round 14: a date, an IPv4 address, a decimal number
+            return m.group(0)
         if len(dg) < 8 or len(dg) > 15 or not (dg[:1] in PHONE_CC or dg[:2] in PHONE_CC or dg[:3] in PHONE_CC):
             return m.group(0)
         return '[redacted:%s]' % label if len(dg) != len(body) or len(dg) >= 11 else m.group(0)  # no separator: only 11-15 digits
     return rx.sub(one, s)
 
 
+def _call_keeps(gap, num):
+    """= mod callKeeps (Round 18 / B1, 18b): a number behind a bare 'call' that is no phone number."""
+    return (re.match(r'^[1-9][0-9]*$', num, re.A) and re.search(r'(?:^|[^A-Za-z])(?:timeout|took|settled|used|ratio)[ \t:=]*$', gap, re.I | re.A) is not None
+            or any(r.search(num) for r in PHONE_REJECT) or re.search(r'[A-Za-z0-9_]\.[A-Za-z0-9]{1,5}:$', gap, re.A) and re.match(r'^[0-9]{1,7}(?:-[0-9]{1,7})?$', num, re.A)
+            or gap == '(' and re.match(r'^[1-9][0-9]*$', num, re.A) or not KW_CALL_PHONE.search(num))
+
+
 def _pii_phone_kw(s, rx, label):
-    return rx.sub(lambda m: m.group(1) + m.group(2) + '[redacted:%s]' % label, s)
+    def one(m):
+        if m.group(2).endswith('/') and KW_VERSION.match(m.group(3)) and len(_digits(m.group(3))) <= KW_VERSION_DIGITS_MAX:
+            return m.group(0)
+        if m.group(1).lower() == 'call' and _call_keeps(m.group(2), m.group(3)):  # Round 18b / B1': the gap is scanned again
+            return m.group(1) + rx.sub(one, m.group(2) + m.group(3))
+        return m.group(1) + m.group(2) + '[redacted:%s]' % label
+    return rx.sub(one, s)
+
+
+def _is_alnum(ch):
+    return ch.isascii() and ch.isalnum()
+
+
+def _iban_country_span(v):
+    """= mod ibanCountrySpan: the end of the IBAN's country length in v (alnum chars, separators between), else -1."""
+    want = IBAN_LEN.get(v[:2].upper())
+    if want is None:
+        return -1
+    n = i = 0
+    while i < len(v) and n < want:
+        if _is_alnum(v[i]):
+            n += 1
+        i += 1
+    return i if n == want and (i == len(v) or not _is_alnum(v[i])) else -1
+
+
+def _iban_span(kind, v):
+    """= mod ibanSpan: an IBAN-shaped value behind a key up to its country's IBAN length; else (Round 16 / I1, fail-closed) every group
+    that has a digit or 4 chars, up to the first other word; for other kinds its first token."""
+    first = v.find(' ') if ' ' in v else len(v)
+    if kind != 'iban':
+        return first
+    c = _iban_country_span(v)
+    if c >= 0:
+        return c
+    end, i = first, first
+    while i < len(v):
+        j = v.find(' ', i + 1)
+        j = len(v) if j < 0 else j
+        tok = v[i + 1:j]
+        if not (any('0' <= ch <= '9' for ch in tok) or len(tok) == 4):
+            break
+        end = i = j
+    return end
 
 
 def _pii_key(s, rx, _label):
     def one(m):
-        v = next(x for x in (m.group(3), m.group(4), m.group(5)) if x is not None)
-        kind, close = PII_KEY_KIND[m.group(2).lower()], 0 if m.group(5) is not None else 1
+        v = next(x for x in (m.group(3), m.group(4), m.group(5), m.group(6), m.group(8)) if x is not None)  # Round 18b / B2: group 7 = v4's atomic groups
+        kind, close = _pii_kind(m.group(2)), 1 if m.group(3) is not None or m.group(4) is not None else 0
+        span = len(v) if m.group(6) is None else _iban_span(kind, m.group(6))  # Round 15: an IBAN-shaped value up to its country length
         t = m.group(0)
-        return t[:len(t) - len(v) - close] + '[redacted:%s]' % kind + t[len(t) - close:] if _pii_value(kind, v) else t
+        return t[:len(t) - len(v) - close] + '[redacted:%s]' % kind + v[span:] + t[len(t) - close:] if _pii_value(kind, v[:span]) else t
     return rx.sub(one, s)
 
 
@@ -638,14 +773,32 @@ def deep_redact(v, depth=0):
     if isinstance(v, dict):
         nm = v.get('name') if isinstance(v.get('name'), str) else v.get('key') if isinstance(v.get('key'), str) else None
         nv = nm is not None and 'value' in v and secret_name(nm)
-        return {k: _deep_value(k, x, nv, depth) for k, x in v.items()}
+        return _deep_object(v, depth, None, nv)
     return v
 
 
-def _deep_value(k, x, nv, depth):
-    if (isinstance(k, str) and secret_name(k)) or (nv and k == 'value'):
+def _deep_object(v, depth, inherited, nv):
+    """= mod deepObject: secret keys and name/value pairs drop their value; a PII key gives its value a kind (Round 13), which also
+    holds for every element and nested value below it (Round 15: arrays, objects)."""
+    out = {}
+    for k, x in v.items():
+        if (isinstance(k, str) and secret_name(k)) or (nv and k == 'value'):
+            out[k] = '[redacted]'
+            continue
+        kind = (_pii_kind(k) if isinstance(k, str) else None) or inherited
+        out[k] = _kind_value(x, kind, depth + 1) if kind else deep_redact(x, depth + 1)
+    return out
+
+
+def _kind_value(x, kind, depth):
+    num = isinstance(x, (int, float)) and not isinstance(x, bool)
+    if isinstance(x, str) or num:
+        return '[redacted:%s]' % kind if _pii_value(kind, _js_num(x) if num else x) else deep_redact(x, depth)
+    if not isinstance(x, (list, dict)):
+        return x
+    if depth > 50:
         return '[redacted]'
-    kind = PII_KEY_KIND.get(k.lower()) if isinstance(k, str) else None  # Round 13: a PII key whose value looks like its kind
-    if kind and (isinstance(x, str) or (isinstance(x, (int, float)) and not isinstance(x, bool))) and _pii_value(kind, str(x)):
-        return '[redacted:%s]' % kind
-    return deep_redact(x, depth + 1)
+    if isinstance(x, list):
+        return [_kind_value(e, kind, depth + 1) for e in x]
+    nm = x.get('name') if isinstance(x.get('name'), str) else x.get('key') if isinstance(x.get('key'), str) else None
+    return _deep_object(x, depth, kind, nm is not None and 'value' in x and secret_name(nm))

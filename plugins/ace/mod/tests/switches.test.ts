@@ -1,5 +1,6 @@
 // ACE mod suite, server switches: render_full_pct kill switch, user rejection -> downvote. Harness: ./helpers.ts.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import S100 from './fixtures/search_100.ts'
 import S8 from './fixtures/search_8.ts'
 import SEDGE from './fixtures/search_edge.ts'
@@ -143,7 +144,7 @@ test('trace label without a search: the conversation arm (server request); a sto
   expect(traceVariant(undefined, 'conv-1', { ACE_RENDER_FULL_PCT: '100' })).toBe('full')
   expect(traceVariant('budget', 'conv-1', { ACE_RENDER_FULL_PCT: '100' })).toBe('budget')
   expect(traceVariant(undefined, undefined, {})).toBe(undefined)
-  expect(traceVariant(undefined, 'conv-1', { ACE_AB_CONTROL_PCT: '100', ACE_RENDER_FULL_PCT: '0' })).toBe(undefined)
+  expect(traceVariant(undefined, 'conv-1', { ACE_AB_CONTROL_PCT: '100', ACE_RENDER_FULL_PCT: '0' })).toBe('control')  // control is a label now (render_control_pct)
 })
 
 test('handoff: the mod rewrites mod-active right before the Python UPS runs (after its own search)', async ($, on) => {

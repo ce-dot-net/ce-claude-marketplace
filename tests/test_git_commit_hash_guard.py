@@ -115,7 +115,7 @@ def test_commit_is_fix_ts_python_parity(tmp_path):
     import shutil
     bun = shutil.which("bun")
     if not bun:
-        pytest.skip("bun not installed")
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
     (tmp_path / "in.json").write_text(json.dumps([s for s, _ in SUBJECTS]))
     (tmp_path / "f.ts").write_text("import { commitIsFix } from '%s'\nconsole.log(JSON.stringify(JSON.parse(require('fs').readFileSync('%s','utf8')).map((s: string) => commitIsFix(s))))\n"
                                    % (REPO / "plugins/ace/mod/io/spawn.ts", tmp_path / "in.json"))

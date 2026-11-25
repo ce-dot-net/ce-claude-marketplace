@@ -151,7 +151,8 @@ def test_mod_is_typescript_without_build_step_or_dependencies():
 
 FAKE_LEARN = """#!/bin/sh
 # fake ace-cli: never the network. Sleeps, records argv, exits $FAKE_LEARN_RC.
-sleep 2
+# 6 s: a launcher that waited for it is unmistakable on a host at load 100+ (spawn cost: seconds)
+sleep 6
 printf '%s\\n' "$*" > "$FAKE_LEARN_MARKER"
 echo '{"ok": true}'
 exit "${FAKE_LEARN_RC:-0}"
@@ -197,15 +198,15 @@ def test_detached_learn_survives_sighup_and_cleans_up(tmp_path, rc, sent):
     t0 = time.monotonic()
     sess = subprocess.Popen(argv, env=env, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                             stderr=subprocess.DEVNULL, start_new_session=True)
-    sess.wait(timeout=5)
-    assert time.monotonic() - t0 < 1.0, "the launcher blocked on the learn"
+    sess.wait(timeout=5)  # also the hard bound: a launcher that blocked on the 6 s learn times out here
+    assert time.monotonic() - t0 < 4.8, "the launcher blocked on the learn"  # < 0.8 x the 6 s learn: relative, not a bare wall bound
     for sig in (signal.SIGHUP, signal.SIGKILL):  # teardown of the whole session group
         try:
             os.killpg(sess.pid, sig)
         except OSError:
             pass
 
-    deadline = time.monotonic() + 8
+    deadline = time.monotonic() + 30
     while time.monotonic() < deadline and (lock.exists() or not log.exists()):
         time.sleep(0.1)
     assert marker.exists(), "learn was killed with the session"
@@ -318,7 +319,11 @@ def test_stale_mod_marker_leaves_python_hooks_working():
     import ace_e2e_harness as H
     r = H.run_fixture("UserPromptSubmit_human", prepare=_marker(11 * 60))
     try:
-        assert [c["argv"][:1] for c in r["cli_calls"]] == [["search"]]
+        # the session's ONE detached verify (`status`, 8.1.0 session_notice) may land before or after the search
+        # (a race with the harness reading the log; same rule as test_e2e_hooks); never a second search or status
+        verbs = [c["argv"][:1] for c in r["cli_calls"]]
+        # strict like test_e2e_hooks: only search / status, exactly one search, at most one status
+        assert set(map(tuple, verbs)) <= {("search",), ("status",)} and verbs.count(["search"]) == 1 and verbs.count(["status"]) <= 1
     finally:
         shutil.rmtree(str(r["sandbox"]), ignore_errors=True)
 

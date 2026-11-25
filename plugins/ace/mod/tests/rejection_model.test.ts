@@ -1,5 +1,6 @@
 // 8.3.0 model-based rejection detector: gate order, fail-safe, threshold, kill switch, logging, prompt hygiene. $.model is stubbed (no network).
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import S8 from './fixtures/search_8.ts'
 import EX, { DEV, HELD, LANGS } from './fixtures/rejection_multilingual.ts'
 import { CWD, SDIR, SID, done, host, mainTask, st8a, submit } from './helpers.ts'

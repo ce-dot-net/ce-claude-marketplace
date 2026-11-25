@@ -1985,7 +1985,7 @@ def generate_text_report(entries, hours: int = 12) -> str:
                    ex.get("used_source") or "none", "success" if ex.get("success") else "error/partial",
                    "sent" if ex.get("learning_sent") else "NOT sent"))
     out.append("\nEvidenced use per arm (main tasks):")
-    for arm in ("budget", "full"):
+    for arm in ("budget", "full", "budget+layout_a", "budget+layout_a+hint", "full+layout_a", "full+layout_a+hint"):  # layout (a) arms: own rows
         rows = [e for e in execs if e.get("render_cohort") == arm]
         if rows:
             src = Counter(e.get("used_source") for e in rows if (e.get("used_ids_count") or 0) > 0)

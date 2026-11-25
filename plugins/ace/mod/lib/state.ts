@@ -1,6 +1,6 @@
 // Pure state shapes: data-root derivation (plugin_data_dir), patterns-used merge (append_patterns_used),
 // reuse-cache keys (ace_search_cache). No `$`, no I/O.
-import { sha256Hex } from './cohort'
+import { LAYOUT_A_VALUES, sha256Hex } from './cohort'
 import { cpSlice } from './text'
 import { redact } from './redact'
 import { isValidPatternId, STATE_CAP } from './render'
@@ -22,7 +22,7 @@ export function dataRootFromPluginRoot(home: string, root: string, name: string,
 // ---------- patterns_used_state.append_patterns_used: same merge, same key order, same bytes ----------
 export const USER_PROMPT_MAX = 200_000  // = TEXT_HARD_CAP_CHARS: the trace's task cap decides, never this store (was 4000)
 export type StateUpdate = { ids?: string[]; retrievalId?: string | null; rlog?: Record<string, number>; tsid?: string | null
-  userPrompt?: string; rendered?: string; hook?: string; parentTaskId?: string; agentType?: string; renderVariant?: string
+  userPrompt?: string; rendered?: string; hook?: string; parentTaskId?: string; agentType?: string; renderVariant?: string; renderLayout?: string | null
   contents?: Record<string, string>; evalStats?: { avg_relevance: number; domains: number }
   searchOrg?: string; searchProject?: string
   forkOf?: string }  // mod-only: a fork's parent retrieval_id (ACE_FORK_RETRIEVAL_ID=1) -> trace.fork_of  // 8.2.6: the binding the search ran with = where the learn goes
@@ -47,6 +47,8 @@ export function mergeState(prior: any, u: StateUpdate): any {
   if (pt) state.parent_task_id = pt
   const rv = u.renderVariant ?? p.render_variant // §28: the variant ACTUALLY rendered, read back at learn
   if (rv) state.render_variant = rv
+  const rl = u.renderLayout === undefined ? p.render_layout : u.renderLayout  // layout-a arm: set only when it ACTUALLY rendered; null = rendered without it (clears), undefined = keep
+  if (typeof rl === 'string' && LAYOUT_A_VALUES.includes(rl)) state.render_layout = rl
   const pc: Record<string, string> = { ...(p.pattern_contents && typeof p.pattern_contents === 'object' ? p.pattern_contents : {}) }
   for (const [id, t] of Object.entries(u.contents ?? {})) if (isValidPatternId(id) && typeof t === 'string' && t) pc[id] = cpSlice(t, CONTENT_CAP)
   if (Object.keys(pc).length) state.pattern_contents = pc  // §31 (Python writes it after its optional keys too)

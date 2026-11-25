@@ -1,14 +1,15 @@
 // prompt.submit: the main search -> cohort render -> inject, the patterns-used state, the rejection downvote,
 // the status line and session title.
+import { python } from '../commands/py'
 import { readJson, readText, rm, writePrivate } from '../io/fs'
 import { nowIso, relLog, searchRow } from '../io/log'
 import { SEARCH_MS, search } from '../io/spawn'
-import { type Load, type Sess, clearDeferred, clearTools, cohortEnv, deferredAnchor, disabled, downvoteEnabled, ensure, notePrompt, pendingFile, pendingFile830, pendingHead, pendingVoteFile, readState, searchOrigin, touchMarker, updateState, upvoteEnabled, uuid, type HookArgs, refreshMarker } from '../io/state'
-import { type Cohort, renderCohort } from '../lib/cohort'
+import { type Load, type Sess, clearDeferred, dataRoot, clearTools, cohortEnv, deferredAnchor, disabled, downvoteEnabled, ensure, notePrompt, pendingFile, pendingFile830, pendingHead, pendingVoteFile, readState, searchOrigin, touchMarker, updateState, upvoteEnabled, uuid, type HookArgs, refreshMarker } from '../io/state'
+import { type Cohort, layoutA, layoutLabel, layoutValue, renderCohort } from '../lib/cohort'
 import { REJECTION_PREV_MAX_AGE_S, evalStats, injectedContents, rejectionProbe, upvoteProbe } from '../lib/evidence'
 import { num, pyDumps } from '../lib/pyjson'
 import { type ModelVerdict, classifyRejection, rejectionCacheKey, rejectionMinConf } from '../lib/rejection'
-import { domainsSummary, renderBudget, renderCompact, renderFull, renderPatternsDict } from '../lib/render'
+import { domainsSummary, renderBudget, renderCompact, renderFull, renderLayoutBudget, renderLayoutFull, renderPatternsDict } from '../lib/render'
 import { type StateUpdate, mergeState } from '../lib/state'
 import { MACHINE_ORIGINS, domainNames, expandAbbreviations, isNoTaskCommand, skipReason } from '../lib/text'
 import { searchErrorLine, searchSummary, sessionTitle, statusLine, topDomains } from '../ui/status'
@@ -101,17 +102,51 @@ export async function onRejection($: any, s: Sess, text: string, L?: Load) {
 // §31 dedupe (main prompts only): under full, ids already injected in this conversation since the last compaction
 // (`seen`) are left out; nothing new -> nothing injected.
 export async function renderArm($: any, resp: any, tag: string, attrs: string, s: Sess, seen?: Set<string>) {
-  const cohort: Cohort = renderCohort(s.sessionId, await cohortEnv($, s))
+  const env = await cohortEnv($, s)
+  const cohort: Cohort = renderCohort(s.sessionId, env)
+  // layout (a): a second, orthogonal arm (own salt) on the budget and full renders; control/compact stay as they are
+  const inLayout = layoutA(s.sessionId, env), hint = env.ACE_RENDER_LAYOUT_A_HINT === '1'
+  const budgetRender = (r: any) => inLayout ? renderLayoutBudget(r, tag, attrs, hint) : renderBudget(r, tag, attrs)
   // item 3: the full arm's re-inject copy is the budget render (<= 9,500) of the WHOLE response, never the deduped subset
-  const reinject = cohort === 'full' ? renderBudget(resp, tag, attrs).context as string : ''
+  const reinject = cohort === 'full' ? budgetRender(resp).context as string : ''
   if (cohort === 'full' && seen?.size) {
     resp = { ...resp, similar_patterns: (resp.similar_patterns || []).filter((p: any) => !seen.has(p?.id)) }
-    if (!resp.similar_patterns.length) return { cohort, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: reinject, truncated: false }
+    if (!resp.similar_patterns.length) return { cohort, layout: undefined as string | null | undefined, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: reinject, truncated: false }
   }
-  if (cohort === 'control') return { cohort, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: '', truncated: false }
-  const r = cohort === 'compact' ? renderCompact(resp, tag, attrs) : cohort === 'budget' ? renderBudget(resp, tag, attrs) : renderFull(resp, tag, attrs)
+  if (cohort === 'control') return { cohort, layout: null as string | null | undefined, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: '', truncated: false }
+  const r = cohort === 'compact' ? renderCompact(resp, tag, attrs) : cohort === 'budget' ? budgetRender(resp)
+    : inLayout ? renderLayoutFull(resp, tag, attrs, hint) : renderFull(resp, tag, attrs)
   const rendered = cohort === 'full' ? reinject : r.context
-  return { cohort, context: r.context as string | null, ids: r.ids, rlog: r.rlog, patterns: r.patterns, rendered, truncated: cohort === 'full' && r.shown < r.total }
+  // layout: the render_layout to store; null = rendered without layout (clears an earlier value), undefined = nothing rendered (keeps it)
+  return { cohort, layout: (inLayout ? layoutValue(env) : null) as string | null | undefined, context: r.context as string | null, ids: r.ids, rlog: r.rlog, patterns: r.patterns, rendered, truncated: cohort === 'full' && r.shown < r.total }
+}
+// relevance-log label of a render: the arm, '+layout_a' when the layout arm rendered it (render_variant itself stays budget|full)
+export const cohortLabel = (r: { cohort: string; layout?: string | null }) => r.cohort + layoutLabel(r.layout)
+// 8.4.0: a rejected token (dead/ entries with last_error 'auth' < 30 min old) is shown ONCE per conversation, from the queue state
+// (not the search). The ONE implementation is the Python one (`ace_trace_queue.py --auth-held` prints the line or nothing), so both chains
+// say the same words at the same threshold. ponytail: one python spawn per prompt until it has been shown (~30 ms), then none.
+export const AUTH_HELD_PREFIX = 'ACE: nicht angemeldet, Traces werden NICHT gesendet'
+export async function authHeldNotice($: any, s: Sess): Promise<string | null> {
+  try {
+    const marker = `${s.sdir}/auth_held_notified`
+    if (await $.fs.exists(marker)) return null
+    const out = await python($, 'utils/ace_trace_queue.py', ['--auth-held', '--data-root', await dataRoot($)], $.plugin.root, 15_000)
+    if (!out.startsWith(AUTH_HELD_PREFIX)) return null
+    await writePrivate($, marker, '1')
+    return out.split('\n')[0] ?? null
+  } catch { return null }
+}
+// 8.4.0: ACE_TRACE_SINK set (not blank) = the traces go to a file and NOTHING is sent: shown once per conversation (marker sink_notified).
+// Same text as ace_trace_queue.SINK_LINE (tests/test_auth_held_notice.py guards the parity).
+export const SINK_LINE = "ACE: Traces gehen in die lokale Senke (ACE_TRACE_SINK), es wird NICHTS gesendet."
+export async function sinkNotice($: any, s: Sess): Promise<string | null> {
+  try {
+    if (!(await $.env.get('ACE_TRACE_SINK'))?.trim()) return null
+    const marker = `${s.sdir}/sink_notified`
+    if (await $.fs.exists(marker)) return null
+    await writePrivate($, marker, '1')
+    return SINK_LINE
+  } catch { return null }
 }
 export async function onPrompt($: any, L: Load, e: any): Promise<any> {
   const s = await ensure($, L)
@@ -134,6 +169,10 @@ export async function onPrompt($: any, L: Load, e: any): Promise<any> {
     return e
   }
   if (await disabled($, s)) { if (!midTurn) L.pendingMain = null; return e }
+  const authHeld = await authHeldNotice($, s)
+  if (authHeld) $.ui.log(authHeld)
+  const sink = await sinkNotice($, s)
+  if (sink) $.ui.log(sink)
   const tsid = uuid()
   // A running task keeps its anchor, tools and state. The new prompt waits on disk: if a turn starts with its text it
   // is its own task (turn.start). If it was delivered into the running turn its work lands in that task's learn, its
@@ -176,7 +215,7 @@ export async function onPrompt($: any, L: Load, e: any): Promise<any> {
   const r = await renderArm($, sr.resp, 'ace-patterns', 'agent-type="main"', s, new Set(seen))
   if (r.cohort === 'full' && r.ids.length) await writePrivate($, seenFile, JSON.stringify([...new Set([...seen, ...r.ids])]))
   await save({ ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, tsid, userPrompt: e.text, rendered: r.rendered, hook: 'UserPromptSubmit',
-    renderVariant: r.cohort, contents: injectedContents(r.patterns, r.ids), evalStats: evalStats(r.patterns, sr.resp.similar_patterns || []) })
+    renderVariant: r.cohort, renderLayout: r.layout, contents: injectedContents(r.patterns, r.ids), evalStats: evalStats(r.patterns, sr.resp.similar_patterns || []) })
   const ds = domainsSummary(sr.resp)
   if (Object.keys(ds).length) {
     L.domains = domainNames(ds)
@@ -184,7 +223,7 @@ export async function onPrompt($: any, L: Load, e: any): Promise<any> {
   }
   const returned = sr.resp.similar_patterns || []
   await relLog($, s, searchRow({ hook: 'UserPromptSubmit', sessionId: s.sessionId, userPrompt: e.text, query, returned, injected: r.patterns,
-    projectId: s.project, orgId: s.org, agentType: 'main', cohort: r.cohort, hookMs: await $.clock.now() - t0, nowIso: await nowIso($),
+    projectId: s.project, orgId: s.org, agentType: 'main', cohort: cohortLabel(r), hookMs: await $.clock.now() - t0, nowIso: await nowIso($),
     extra: { search_ms: sr.ms, pin_ms: sr.pinMs, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, truncated_for_cap: r.truncated || undefined,
       context_chars: r.context?.length ?? 0, task_session_id: tsid, mid_turn: defer || undefined, engine: sr.engine, engine_reason: sr.engineWhy, source: 'mod' } }))
   const processed = renderPatternsDict(sr.resp).dict.similar_patterns

@@ -2,7 +2,8 @@
 // the band's refresh: throttled, fingerprint of the binding files, never per render); a bound one stays as it is.
 // (2) `/ace:ace-configure ... --approved` binds, but only the project of the identical waiting preview; the button still works.
 // (3) the three unbound reasons apart (no_binding / no_org / org_not_member), and a hint for a mistyped --approved.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { LINES } from '../context/index.ts'
 import { UNBOUND_RECHECK_MS, newLoad } from '../io/state.ts'
 import { refreshUnbound } from '../handlers/context.ts'

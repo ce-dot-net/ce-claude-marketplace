@@ -21,9 +21,9 @@
 // Parity TS<->Python: shared-hooks/utils/redact.py, rule for rule; fixture tests-fixtures/secret-filter/cases.json (redact.test.ts,
 // tests/test_secret_filter_py.py, which also compares both chains' outputs), tables compared by tests/test_redact_parity.py.
 // Linear: no backtracking regex, indexOf scans, cached next matches.
-import { DOMAIN_MAX, ENTROPY_LEN_FACTOR, ENTROPY_MIN, ENTROPY_RUN, ENV_HARMLESS, ENV_LINE, ENV_SEGS, ENV_STRIP, EXAMPLE_DOMAINS, EXAMPLE_TLDS,
-  FORMAT_RULES, IBAN_LEN, NV_RULES, OBJECT_ID, PHONE_CC, PII_KEY_KIND, PII_RULES, PREFIX_RULES, REDACT_BLOCK, SECRET_RULES, SPAN_RULES, SWITCH_MIN,
-  URL_CRED } from './redact_rules'
+import { DOMAIN_MAX, EMAIL_FILE_TLDS, EMAIL_SCALE, ENTROPY_LEN_FACTOR, ENTROPY_MIN, ENTROPY_RUN, ENV_HARMLESS, ENV_LINE, ENV_SEGS, ENV_STRIP,
+  EXAMPLE_DOMAINS, EXAMPLE_TLDS, FORMAT_RULES, IBAN_LEN, IBAN_SEP, KW_VERSION, KW_VERSION_DIGITS_MAX, KW_CALL_PHONE, EMAIL_CALL_TLD_MAX, PII_KEY_PHONE, NV_RULES, OBJECT_ID, PHONE_CC, PHONE_REJECT, PII_KEY_KIND, PII_KEY_SUFFIX, PII_RULES,
+  PREFIX_RULES, REDACT_BLOCK, SECRET_RULES, SPAN_RULES, SWITCH_MIN, URL_CRED } from './redact_rules'
 
 export { ENTROPY_LEN_FACTOR, ENTROPY_MIN, REDACT_BLOCK, SWITCH_MIN } from './redact_rules'
 
@@ -305,21 +305,91 @@ const ibanMod97 = (c: string) => {
   return m
 }
 const digits = (x: string) => x.replace(/[^0-9]/g, '')
+// Round 14: lookups keyed by user text read own keys only ('constructor', '__proto__' are no keys)
+const own = <V>(table: Record<string, V>, k: string): V | undefined => Object.prototype.hasOwnProperty.call(table, k) ? table[k] : undefined
+// Round 18 / N2: a digit suffix (iban2, email_1, mail1) is stripped first; the key rule allows it on every stem
+const piiKind = (k: string, key = k.replace(/[_-]?[0-9]{1,2}$/, '') || k) => own(PII_KEY_KIND, key.toLowerCase()) ?? own(PII_KEY_KIND, key.toLowerCase().replace(PII_KEY_SUFFIX, ''))  // 'rufnummer' is a stem
+  ?? (PII_KEY_PHONE.test(k) ? 'phone' : undefined)  // Round 16: Mobiltelefon, festnetz, cell, MobilePhone, phone2 ...
 // whether a value behind a PII key looks like its kind (email: an '@' and no example domain; phone: >= 6 digits; iban: a digit)
 const piiValue = (kind: string, v: string) => !v.startsWith('[redacted') && (kind === 'email' ? v.includes('@') && !isExampleDomain(v.slice(v.lastIndexOf('@') + 1))
   : kind === 'phone' ? digits(v).length >= 6 : /[0-9]/.test(v))
+// The length of an IBAN-shaped value behind a key: up to its country's IBAN length (alnum chars, single spaces between), when that
+// length ends at a space or the value end; else (unknown country, too short, too long) only its first token.
+// Round 16: the end of the IBAN's country length in v (alnum chars, separators between), when it ends at a non-alnum char or the end;
+// else -1. The candidate holds only alnum chars and IBAN_SEP / spaces, so 'not alnum' is a separator.
+const isAlnum = (c: number) => (c >= 48 && c <= 57) || (c >= 65 && c <= 90) || (c >= 97 && c <= 122)
+function ibanCountrySpan(v: string): number {
+  const want = own(IBAN_LEN, v.slice(0, 2).toUpperCase())
+  if (want === undefined) return -1
+  let n = 0, i = 0
+  for (; i < v.length && n < want; i++) if (isAlnum(v.charCodeAt(i))) n++
+  return n === want && (i === v.length || !isAlnum(v.charCodeAt(i))) ? i : -1
+}
+// Round 17 / C1': from a start candidate at i walk exactly the country's length, one optional IBAN_SEP before each 4-char group; the end
+// when a non-alnum char or the text end follows and mod-97 is 1, else -1. At most 2 * 34 chars per start (linear over all starts).
+function ibanWalk(s: string, i: number): number {
+  const want = own(IBAN_LEN, s.slice(i, i + 2).toUpperCase())
+  if (want === undefined) return -1
+  let c = '', j = i
+  while (c.length < want && j < s.length) {
+    if (c.length && c.length % 4 === 0 && IBAN_SEP.test(s.charAt(j)) && j + 1 < s.length && isAlnum(s.charCodeAt(j + 1))) j++
+    if (!isAlnum(s.charCodeAt(j))) return -1
+    c += s.charAt(j++)
+  }
+  return c.length === want && (j === s.length || !isAlnum(s.charCodeAt(j))) && ibanMod97(c.toUpperCase()) === 1 ? j : -1
+}
+// Round 18 / B1, 18b: a number behind a bare 'call' stays when it is no phone number: a compact number after a code word (timeout, took,
+// settled, used, ratio), a date / IPv4 / decimal (PHONE_REJECT), a line range behind a file name, call(N) without a leading 0, or a
+// number without a phone shape (KW_CALL_PHONE)
+const callKeeps = (gap: string, num: string) => /^[1-9][0-9]*$/.test(num) && /(?:^|[^A-Za-z])(?:timeout|took|settled|used|ratio)[ \t:=]*$/i.test(gap)
+  || PHONE_REJECT.some(r => r.test(num)) || /[A-Za-z0-9_]\.[A-Za-z0-9]{1,5}:$/.test(gap) && /^[0-9]{1,7}(?:-[0-9]{1,7})?$/.test(num)
+  || gap === '(' && /^[1-9][0-9]*$/.test(num) || !KW_CALL_PHONE.test(num)
+function ibanSpan(kind: string, v: string): number {
+  const first = v.indexOf(' ') < 0 ? v.length : v.indexOf(' ')
+  if (kind !== 'iban') return first
+  const c = ibanCountrySpan(v)
+  if (c >= 0) return c
+  // Round 16 / I1 (fail-closed): no country length: every group that has a digit or 4 chars, up to the first other word
+  let end = first
+  for (let i = first; i < v.length; ) {
+    const j = v.indexOf(' ', i + 1) < 0 ? v.length : v.indexOf(' ', i + 1), tok = v.slice(i + 1, j)
+    if (!(/[0-9]/.test(tok) || tok.length === 4)) break
+    end = j; i = j
+  }
+  return end
+}
 const PII_HANDLERS: Record<string, (s: string, rx: RegExp, label: string) => string> = {
-  'iban': (s, rx, label) => s.replace(rx, m => { const c = m.replace(/ /g, ''); return IBAN_LEN[c.slice(0, 2)] === c.length && ibanMod97(c) === 1 ? `[redacted:${label}]` : m }),
-  'email': (s, rx, label) => s.replace(rx, (m, d: string) => d.length > DOMAIN_MAX || isExampleDomain(d) ? m : `[redacted:${label}]`),
+  'iban': (s, rx, label) => {  // Round 17 / C1': every start candidate is walked; a valid IBAN is replaced, the scan goes on after its end
+    let out = '', pos = 0
+    for (const m of s.matchAll(rx)) {
+      if (m.index < pos) continue
+      const e = ibanWalk(s, m.index)
+      if (e >= 0) { out += s.slice(pos, m.index) + `[redacted:${label}]`; pos = e }
+    }
+    return out + s.slice(pos)
+  },
+  'email': (s, rx, label) => s.replace(rx, (m, d: string, at: number, str: string) => d.length > DOMAIN_MAX || isExampleDomain(d) || EMAIL_SCALE.test(d)
+    || EMAIL_FILE_TLDS.has(d.slice(d.lastIndexOf('.') + 1).toLowerCase())
+    || ('(['.includes(str[at + m.length] ?? 'x') && d.length - d.lastIndexOf('.') - 1 > EMAIL_CALL_TLD_MAX) ? m : `[redacted:${label}]`),
   'phone-intl': (s, rx, label) => s.replace(rx, (m, body: string) => {
     const dg = digits(body)
+    if (PHONE_REJECT.some(r => r.test(body))) return m  // Round 14: a date, an IPv4 address, a decimal number
     if (dg.length < 8 || dg.length > 15 || !(PHONE_CC.has(dg.slice(0, 1)) || PHONE_CC.has(dg.slice(0, 2)) || PHONE_CC.has(dg.slice(0, 3)))) return m
     return dg.length !== body.length || dg.length >= 11 ? `[redacted:${label}]` : m  // no separator: only 11-15 digits (diff lines)
   }),
-  'phone-kw': (s, rx, label) => s.replace(rx, (_m, kw: string, gap: string) => `${kw}${gap}[redacted:${label}]`),
-  'pii-key': (s, rx) => s.replace(rx, (m, _q: string, key: string, v1?: string, v2?: string, v3?: string) => {
-    const v = (v1 ?? v2 ?? v3)!, kind = PII_KEY_KIND[key.toLowerCase()]!, close = v3 === undefined ? 1 : 0
-    return piiValue(kind, v) ? m.slice(0, m.length - v.length - close) + `[redacted:${kind}]` + m.slice(m.length - close) : m
+  'phone-kw': (s, rx, label) => {
+    const one = (m: string, kw: string, gap: string, num: string): string => {
+      if (gap.endsWith('/') && KW_VERSION.test(num) && digits(num).length <= KW_VERSION_DIGITS_MAX) return m
+      // Round 18b / B1': the gap after a bare 'call' is scanned again (it may hold another phone keyword: 'call or fax 5550123')
+      if (kw.toLowerCase() === 'call' && callKeeps(gap, num)) return kw + (gap + num).replace(rx, one)
+      return `${kw}${gap}[redacted:${label}]`
+    }
+    return s.replace(rx, one)
+  },
+  'pii-key': (s, rx) => s.replace(rx, (m, _q: string, key: string, v1?: string, v2?: string, v3?: string, v4?: string, _v4groups?: string, v5?: string) => {  // Round 18b / B2: v4 is atomic
+    const v = (v1 ?? v2 ?? v3 ?? v4 ?? v5)!, kind = piiKind(key)!, close = v1 !== undefined || v2 !== undefined ? 1 : 0
+    const span = v4 === undefined ? v.length : ibanSpan(kind, v4)  // Round 15: an IBAN-shaped value only up to its country length
+    return piiValue(kind, v.slice(0, span)) ? m.slice(0, m.length - v.length - close) + `[redacted:${kind}]` + v.slice(span) + m.slice(m.length - close) : m
   }),
 }
 function redactPii(s: string): string {
@@ -388,11 +458,22 @@ export function deepRedact(v: any, depth = 0): any {
   // Round 10 / M3: {name|key: <secret name>, value: x} (MCP HTTP headers, env arrays): the value goes
   const nm = typeof v.name === 'string' ? v.name : typeof v.key === 'string' ? v.key : undefined
   const nv = nm !== undefined && 'value' in v && secretKey(nm)
+  return deepObject(v, depth, undefined, nv)
+}
+// The entries of an object: secret keys and name/value pairs drop their value; a PII key (email, mail, iban, phone, tel, telefon, ...)
+// gives its value a kind (Round 13), which also holds for every element and nested value below it (Round 15: arrays, objects).
+function deepObject(v: any, depth: number, inherited: string | undefined, nv: boolean): any {
   return Object.fromEntries(Object.entries(v).map(([k, x]) => {
     if (secretKey(k) || (nv && k === 'value')) return [k, '[redacted]']
-    // Round 13: a PII key (email, mail, iban, phone, tel, ...) with a string / number value that looks like its kind
-    const kind = PII_KEY_KIND[k.toLowerCase()]
-    if (kind && (typeof x === 'string' || typeof x === 'number') && piiValue(kind, String(x))) return [k, `[redacted:${kind}]`]
-    return [k, deepRedact(x, depth + 1)]
+    const kind = piiKind(k) ?? inherited
+    return [k, kind ? kindValue(x, kind, depth + 1) : deepRedact(x, depth + 1)]
   }))
+}
+function kindValue(x: any, kind: string, depth: number): any {
+  if (typeof x === 'string' || typeof x === 'number') return piiValue(kind, String(x)) ? `[redacted:${kind}]` : deepRedact(x, depth)
+  if (x === null || typeof x !== 'object') return x
+  if (depth > 50) return '[redacted]'
+  if (Array.isArray(x)) return x.map(e => kindValue(e, kind, depth + 1))
+  const nm = typeof x.name === 'string' ? x.name : typeof x.key === 'string' ? x.key : undefined
+  return deepObject(x, depth, kind, nm !== undefined && 'value' in x && secretKey(nm))
 }

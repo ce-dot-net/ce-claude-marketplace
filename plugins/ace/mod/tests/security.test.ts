@@ -1,5 +1,6 @@
 // ACE mod suite, §24 file safety, and the plugin-local CLI/engine resolution. Harness: ./helpers.ts.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import S100 from './fixtures/search_100.ts'
 import S8 from './fixtures/search_8.ts'
 import SEDGE from './fixtures/search_edge.ts'

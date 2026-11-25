@@ -1,5 +1,6 @@
 // 8.2.0 bootstrap_backfill capability flag: top-level boolean of a search response, persisted {on, at}, < 7 days, else off.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { BACKFILL_FLAG_FILE, serverBackfill, storedBackfill } from '../lib/cohort.ts'
 
 test('serverBackfill: only a real boolean counts; absent / non-boolean = undefined', () => {

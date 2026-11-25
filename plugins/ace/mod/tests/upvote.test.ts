@@ -1,7 +1,8 @@
 // Upvote path, PHRASE ONLY (3d: the model path found no real approval in 4 rounds on 400 real prompts and the shared prompt cost
 // downvote precision, so the classifier is back on its 8.3.0 3-way prompt). Gates, bare acks, one feedback per task, trace shape.
 // $.model is stubbed (no network): every stub here answers as loudly as it can, to prove the model never decides an upvote.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import S8 from './fixtures/search_8.ts'
 import { NEG, POS } from './fixtures/upvote_cases.ts'
 import { CWD, SDIR, done, host, mainTask, st8a, submit } from './helpers.ts'

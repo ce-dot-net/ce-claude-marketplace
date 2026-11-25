@@ -59,8 +59,11 @@ import time
 # Guarded so a missing/broken import never prevents the hook from running.
 try:
     from ace_pattern_render import trace_render_variant as _trace_render_variant
+    from ace_pattern_render import LAYOUT_A_VALUES, layout_a_label, render_control_pct
 except Exception:
     _trace_render_variant = None  # type: ignore
+    LAYOUT_A_VALUES, layout_a_label = (), (lambda v: "")  # type: ignore
+    render_control_pct = lambda: 0  # type: ignore
 
 from utils.machine_prompts import is_machine_prompt  # shared with WP-B UPS guard
 
@@ -1171,6 +1174,7 @@ def dispatch_learn(job, session_id):
     """Start the learn fully detached so `claude -p` teardown cannot kill it
     (cc_hooks_reference.md:4086). The job travels via a file in the plugin-data session dir
     (no /tmp); the learn lock is taken BEFORE the spawn so SessionEnd leaves the dir alone."""
+    # ACE_LEARN_INLINE: ONLY FOR TESTS (runs the learn inline). Never set it in production.
     # Round 10 / L1: with ACE_TRACE_SINK the learn runs inline (ace_cli._sink writes the file): no signed learn-job file on disk
     # that a later session WITHOUT a sink could pick up (SessionStart sweep) and send
     if not os.environ.get('ACE_LEARN_INLINE') and not (os.environ.get('ACE_TRACE_SINK') or '').strip():
@@ -1537,12 +1541,14 @@ def main():
         # load_retrieval_ids is read-only (does NOT unlink). Must call it first so
         # the state file is still present when load_playbook_used later unlinks it.
         retrieval_log_map = {} if no_agent_state else load_retrieval_ids(session_id, agent_id, hook_event_name)
+        _stored_layout = None   # layout-a arm: 'a' when the layout rendered (state key render_layout)
         _stored_variant = None  # §28: the variant rendered at search time (read before the state is reaped)
         _contents = {}          # §31: injected pattern contents, for the "actually used" check
         if not no_agent_state:
             try:
                 _st = load_state(session_id, agent_id, hook_event_name)
                 _stored_variant = _st.get('render_variant')
+                _stored_layout = _st.get('render_layout')
                 _contents = _st.get('pattern_contents') if isinstance(_st.get('pattern_contents'), dict) else {}
             except Exception:
                 pass
@@ -1702,6 +1708,9 @@ def main():
         if _render_variant:
             trace["render_variant"] = _render_variant
             trace["render_path"] = _render_path
+            trace["render_control_pct"] = render_control_pct()  # the control share applied (0 = off); the server derives propensity
+        if _stored_layout in LAYOUT_A_VALUES:
+            trace["render_layout"] = _stored_layout  # layout-a arm: own optional field; render_variant stays budget|full
         if session_id:
             trace["conversation_id"] = str(session_id)[:512]
         if agent_id:
@@ -1794,7 +1803,7 @@ def main():
                     **({"used_ids_capped": True} if _capped else {}),
                     # 8.1.0 audit: the same correlation fields as the mod's execution row
                     "agent_id": agent_id or None, "task_session_id": task_session_id or None,
-                    "render_cohort": _render_variant,
+                    "render_cohort": _render_variant + layout_a_label(_stored_layout) if _render_variant else _render_variant,
                 },
             }
         except Exception as e:

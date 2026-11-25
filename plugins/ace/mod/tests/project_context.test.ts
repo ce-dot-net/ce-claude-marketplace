@@ -1,6 +1,7 @@
 // Conformance: context/resolve.ts vs the SDK spec fixtures (76 cases) plus our extra probes. In-memory layout, no `$`.
 // Fixtures: ../../tests-fixtures/project-context/ (see its README). Mirror runner: tests/test_project_context_spec.py.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import SPEC from './fixtures/project_context_cases.ts'
 import EXTRA from './fixtures/project_context_extra.ts'
 import { resolve, normPath } from '../context/resolve.ts'

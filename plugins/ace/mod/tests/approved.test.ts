@@ -1,6 +1,7 @@
 // 8.2.0 `--approved` (Moshi/herdr: no button to press): a standalone `--approved` token runs a confirm command at once, like
 // the band button; the preview prints the copy-paste line; the destructive pair (clear, cleanup) runs only on an identical waiting pending.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { stripApproved } from '../lib/approved.ts'
 import { CWD, cliOf, host } from './helpers.ts'
 

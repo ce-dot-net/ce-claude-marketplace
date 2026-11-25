@@ -1,5 +1,6 @@
 // 8.2.0 /ace:ace-bootstrap backfill phase, wired through the host: dormant without the flag, honest preview, send after confirm.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { CWD, HOME, PROOT, ROOT, cliOf, host } from './helpers.ts'
 
 const start = ($: any) => $.session.start({ cwd: CWD, surface: null, isInteractive: false } as any)

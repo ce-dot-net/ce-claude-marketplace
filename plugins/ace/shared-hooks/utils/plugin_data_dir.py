@@ -173,6 +173,17 @@ def render_full_pct_file() -> Path:
     return data_root() / "render-full-pct.json"
 
 
+def render_layout_a_pct_file() -> Path:
+    """The server's layout-a share (search response `render_layout_a_pct`), {"pct": N, "at": <epoch>}; its own file,
+    never render-full-pct.json."""
+    return data_root() / "render-layout-a-pct.json"
+
+
+def render_control_pct_file() -> Path:
+    """The server's A/B control share (search response `render_control_pct`), {"pct": N, "at": <epoch>}; its own file."""
+    return data_root() / "render-control-pct.json"
+
+
 def _valid_pct(v) -> bool:
     return isinstance(v, int) and not isinstance(v, bool) and 0 <= v <= 100
 
@@ -299,6 +310,16 @@ def store_server_switches(resp) -> None:
             private_write(render_full_pct_file(), json.dumps({"pct": r["render_full_pct"], "at": int(time.time())}))
     except Exception:
         pass
+    try:  # A/B control share: same rule as render_full_pct, own file
+        if _valid_pct(r.get("render_control_pct")):
+            private_write(render_control_pct_file(), json.dumps({"pct": r["render_control_pct"], "at": int(time.time())}))
+    except Exception:
+        pass
+    try:  # layout-a arm share: same rule as render_full_pct, own file
+        if _valid_pct(r.get("render_layout_a_pct")):
+            private_write(render_layout_a_pct_file(), json.dumps({"pct": r["render_layout_a_pct"], "at": int(time.time())}))
+    except Exception:
+        pass
     try:
         if isinstance(r.get("feedback_downvote"), bool):
             private_write(feedback_downvote_file(), json.dumps({"on": r["feedback_downvote"], "at": int(time.time())}))
@@ -356,6 +377,32 @@ def stored_render_full_pct() -> Optional[int]:
     try:
         import json, time
         d = json.loads(render_full_pct_file().read_text())
+        at = d.get("at")
+        if _valid_pct(d.get("pct")) and isinstance(at, (int, float)) and time.time() - at < RENDER_FULL_PCT_MAX_AGE:
+            return d["pct"]
+    except Exception:
+        pass
+    return None
+
+
+def stored_render_control_pct() -> Optional[int]:
+    """The stored server control share when valid and younger than 7 days, else None."""
+    try:
+        import json, time
+        d = json.loads(render_control_pct_file().read_text())
+        at = d.get("at")
+        if _valid_pct(d.get("pct")) and isinstance(at, (int, float)) and time.time() - at < RENDER_FULL_PCT_MAX_AGE:
+            return d["pct"]
+    except Exception:
+        pass
+    return None
+
+
+def stored_render_layout_a_pct() -> Optional[int]:
+    """The stored server layout-a share when valid and younger than 7 days, else None."""
+    try:
+        import json, time
+        d = json.loads(render_layout_a_pct_file().read_text())
         at = d.get("at")
         if _valid_pct(d.get("pct")) and isinstance(at, (int, float)) and time.time() - at < RENDER_FULL_PCT_MAX_AGE:
             return d["pct"]

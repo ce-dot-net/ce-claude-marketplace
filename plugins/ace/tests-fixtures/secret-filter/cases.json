@@ -2047,6 +2047,1459 @@
     "post": [
      "\""
     ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Telefonnummer: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Handynummer 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Mobilnummer: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     "-",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Telephone: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Tel.-Nr.: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "{\"phoneNumber\":\"0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": [
+     "\"}"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "{\"phone_number\": \"0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     "/",
+     {
+      "g": "rdig",
+      "n": 6
+     }
+    ],
+    "post": [
+     "\"}"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "mobile_no: "
+    ],
+    "secret": [
+     "0",
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "bitte anrufen unter 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 6
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: "
+    ],
+    "secret": [
+     "de89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "IBAN: "
+    ],
+    "secret": [
+     "DE00 ",
+     {
+      "g": "rdig",
+      "n": 4
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 2
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "{\"iban\": \""
+    ],
+    "secret": [
+     "de89 3704 0044 0532 0130 00"
+    ],
+    "post": [
+     "\"}"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "phone: "
+    ],
+    "secret": [
+     "0",
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": [
+     " (office)"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Telephone 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: "
+    ],
+    "secret": [
+     "gb82 west 1234 5698 7654 32"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: "
+    ],
+    "secret": [
+     "nl91 abna 0417 1643 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: "
+    ],
+    "secret": [
+     "GB82 west 1234 5698 7654 32"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "\"iban\": \""
+    ],
+    "secret": [
+     "gb82 west 1234 5698 7654 32"
+    ],
+    "post": [
+     "\""
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "meine iban ist "
+    ],
+    "secret": [
+     "de89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "transfer to "
+    ],
+    "secret": [
+     "gb82west12345698765432"
+    ],
+    "post": [
+     " now"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: "
+    ],
+    "secret": [
+     "gb00 west 1234 5698 7654 32"
+    ],
+    "post": [
+     " and more"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Mobiltelefon: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Mobiltelefonnummer: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Mobilfunknummer: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Diensthandy: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Firmenhandy 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Festnetz: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Cell: "
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "cellphone: "
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Tel. privat 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Telefon (mobil) 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "{\"telefon\": \"0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": [
+     "\"}"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "handynummer=0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "+49 30 "
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Tel.: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call center "
+    ],
+    "secret": [
+     "+44.20.794.609"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "Bitte ueberweisen an "
+    ],
+    "secret": [
+     "AT61 1904 3002 3457 3201"
+    ],
+    "post": [
+     " bis Freitag"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "IBAN "
+    ],
+    "secret": [
+     "AT61 1904 3002 3457 3201"
+    ],
+    "post": [
+     " BIC x"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "IBAN "
+    ],
+    "secret": [
+     "AT611904300234573201"
+    ],
+    "post": [
+     " und BIC"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "my IBAN is "
+    ],
+    "secret": [
+     "ES91 2100 0418 4502 0005 1332"
+    ],
+    "post": [
+     " and the BIC"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [],
+    "secret": [
+     "BE68 5390 0754 7034"
+    ],
+    "post": [
+     " ok"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [],
+    "secret": [
+     "BE68539007547034"
+    ],
+    "post": [
+     " ok"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [],
+    "secret": [
+     "PL61 1090 1014 0000 0712 1981 2874"
+    ],
+    "post": [
+     " von Max"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [],
+    "secret": [
+     "SE45 5000 0000 0583 9825 7466"
+    ],
+    "post": [
+     " to pay"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [],
+    "secret": [
+     "AT61 1904 3002 3457 3201"
+    ],
+    "post": [
+     " BANK"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [],
+    "secret": [
+     "AT61 1904 3002 3457 3201"
+    ],
+    "post": [
+     " 1"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [],
+    "secret": [
+     "CH93 0076 2011 6238 5295 7"
+    ],
+    "post": [
+     " an"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "IBAN "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "IBAN "
+    ],
+    "secret": [
+     "DE89\t3704\t0044\t0532\t0130\t00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: "
+    ],
+    "secret": [
+     "GB82 WEST 1234 5698 7654 3"
+    ],
+    "post": [
+     " and more"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "MobilePhone: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "HomePhone: 0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "mobilephone=0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 8
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "\"phoneNumbers\": \"0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": [
+     "\""
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "\"home_phone\": \"0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": [
+     "\""
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "\"phone2\": \"0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 7
+     }
+    ],
+    "post": [
+     "\""
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "\"cell\": \""
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     " ",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": [
+     "\""
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Tel/0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 2
+     },
+     ".",
+     {
+      "g": "rdig",
+      "n": 4
+     },
+     ".",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "WhatsApp/0"
+    ],
+    "secret": [
+     {
+      "g": "rdig",
+      "n": 3
+     },
+     ".",
+     {
+      "g": "rdig",
+      "n": 4
+     },
+     ".",
+     {
+      "g": "rdig",
+      "n": 4
+     }
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "Kontakt: "
+    ],
+    "secret": [
+     {
+      "g": "rlow",
+      "n": 4
+     },
+     ".",
+     {
+      "g": "rlow",
+      "n": 3
+     },
+     "@",
+     {
+      "g": "rlow",
+      "n": 6
+     },
+     ".de"
+    ],
+    "post": [
+     "(Vertrieb)"
+    ]
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "siehe "
+    ],
+    "secret": [
+     {
+      "g": "rlow",
+      "n": 4
+     },
+     "@",
+     {
+      "g": "rlow",
+      "n": 6
+     },
+     ".io"
+    ],
+    "post": [
+     "[1]"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "Bitte auf AT61 1904 3002 3457 3201 oder "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": [
+     " überweisen"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "Bitte auf "
+    ],
+    "secret": [
+     "AT61 1904 3002 3457 3201"
+    ],
+    "post": [
+     " oder DE89 3704 0044 0532 0130 00 überweisen"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "IBAN AT61 1904 3002 3457 3201 IBAN "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "IBAN alt AT61 1904 3002 3457 3201 neue "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "Max\tAT61 1904 3002 3457 3201\t"
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": [
+     "\tBerlin"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "AT61 1904 3002 3457 3201 "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "AT611904300234573201\t"
+    ],
+    "secret": [
+     "DE89370400440532013000"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "Zahlung KW47 "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "KW47 "
+    ],
+    "secret": [
+     "DE89370400440532013000"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "Re24 "
+    ],
+    "secret": [
+     "AT61 1904 3002 3457 3201"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: AT61 1904 3002 3457 3201 oder "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: "
+    ],
+    "secret": [
+     "AT61 1904 3002 3457 3201"
+    ],
+    "post": [
+     " oder DE89 3704 0044 0532 0130 00"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Telefax: "
+    ],
+    "secret": [
+     "089 1234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Telefax "
+    ],
+    "secret": [
+     "089/1234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Fon: "
+    ],
+    "secret": [
+     "089 1234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Fon "
+    ],
+    "secret": [
+     "089 1234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Durchwahl: "
+    ],
+    "secret": [
+     "089 1234-567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "phone_2: "
+    ],
+    "secret": [
+     "0151 12345678"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "phone12: "
+    ],
+    "secret": [
+     "0151 12345678"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "telefon2: "
+    ],
+    "secret": [
+     "0151 12345678"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "fax2: "
+    ],
+    "secret": [
+     "089 1234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Please call "
+    ],
+    "secret": [
+     "030 1234567"
+    ],
+    "post": [
+     " tomorrow"
+    ]
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Call: ("
+    ],
+    "secret": [
+     "415) 555-0123"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call our hotline "
+    ],
+    "secret": [
+     "0800 1234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call the customer at "
+    ],
+    "secret": [
+     "0151 23456789"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call "
+    ],
+    "secret": [
+     "015112345678"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call "
+    ],
+    "secret": [
+     "1-800-555-0123"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban2: "
+    ],
+    "secret": [
+     "DE89 3704 0044 0532 0130 00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:email",
+    "pre": [
+     "email2: "
+    ],
+    "secret": [
+     "max.mustermann@firma.de"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban: "
+    ],
+    "secret": [
+     "DE893704.0044.0532.0130.00"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Call or WhatsApp "
+    ],
+    "secret": [
+     "91234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call or fax "
+    ],
+    "secret": [
+     "5550123"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Call (mobil): "
+    ],
+    "secret": [
+     "299839"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call Tel.Nr:"
+    ],
+    "secret": [
+     "0301234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call me "
+    ],
+    "secret": [
+     "5550123"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call  me "
+    ],
+    "secret": [
+     "5550123"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Call:"
+    ],
+    "secret": [
+     "555-0123"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call "
+    ],
+    "secret": [
+     "0123456"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call "
+    ],
+    "secret": [
+     "123456789"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call("
+    ],
+    "secret": [
+     "0301234567"
+    ],
+    "post": [
+     ")"
+    ]
+   },
+   {
+    "kind": "pii:iban",
+    "pre": [
+     "iban_2="
+    ],
+    "secret": [
+     "XX12 3456 7890"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call timeout "
+    ],
+    "secret": [
+     "0301234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "call "
+    ],
+    "secret": [
+     "030.1234567"
+    ],
+    "post": []
+   },
+   {
+    "kind": "pii:phone",
+    "pre": [
+     "Call ("
+    ],
+    "secret": [
+     "030.1234567"
+    ],
+    "post": [
+     ")"
+    ]
    }
   ],
   "normal": [
@@ -2198,9 +3651,6 @@
     "DE89 3704"
    ],
    [
-    "de89370400440532013000"
-   ],
-   [
     "KEY ",
     {
      "g": "rUP",
@@ -2225,6 +3675,235 @@
    ],
    [
     "if mail == other: pass"
+   ],
+   [
+    "logo@2x.png"
+   ],
+   [
+    "src=\"icon@3x.webp\""
+   ],
+   [
+    "backup@2026.tar.gz"
+   ],
+   [
+    "img@1.5x.jpg"
+   ],
+   [
+    "+2026-11-24 10:00:00 deploy"
+   ],
+   [
+    "+192.168.1.100"
+   ],
+   [
+    "+3.14159265358979"
+   ],
+   [
+    "tool call took 1",
+    {
+     "g": "rdig",
+     "n": 7
+    },
+    " ns"
+   ],
+   [
+    "call(1",
+    {
+     "g": "rdig",
+     "n": 6
+    },
+    ")"
+   ],
+   [
+    "q@k.transpose(x)"
+   ],
+   [
+    "m@k.items[0]"
+   ],
+   [
+    "iban: none yet"
+   ],
+   [
+    "phone: n/a, see below"
+   ],
+   [
+    "sprite@2x.avif"
+   ],
+   [
+    "hero@1.5x.heic"
+   ],
+   [
+    "+24.11.2026 10:00:00 Uhr"
+   ],
+   [
+    "+2026/11/24 10:00"
+   ],
+   [
+    "+11/24/2026 10:00"
+   ],
+   [
+    "+2026.11.24 build"
+   ],
+   [
+    "+192.168.100.200/24"
+   ],
+   [
+    "Hotel ",
+    {
+     "g": "rdig",
+     "n": 7
+    }
+   ],
+   [
+    "telemetry ",
+    {
+     "g": "rdig",
+     "n": 6
+    },
+    " events"
+   ],
+   [
+    "Automobil ",
+    {
+     "g": "rdig",
+     "n": 7
+    }
+   ],
+   [
+    "iPhone 15 Pro ",
+    {
+     "g": "rdig",
+     "n": 6
+    }
+   ],
+   [
+    "mobile=false; mobile_count=",
+    {
+     "g": "rdig",
+     "n": 7
+    }
+   ],
+   [
+    "3 files changed, +1",
+    {
+     "g": "rdig",
+     "n": 4
+    },
+    "/-",
+    {
+     "g": "rdig",
+     "n": 4
+    }
+   ],
+   [
+    "+24.11. 9.8.7 10/30"
+   ],
+   [
+    "User-Agent: WhatsApp/2.23.20.0 A"
+   ],
+   [
+    "cell size ",
+    {
+     "g": "rdig",
+     "n": 7
+    },
+    " bytes"
+   ],
+   [
+    "Cell execution took ",
+    {
+     "g": "rdig",
+     "n": 7
+    },
+    " ns"
+   ],
+   [
+    "WhatsApp/2.23.20.0 Android"
+   ],
+   [
+    "x@y.name(arg)"
+   ],
+   [
+    "smartphone ",
+    {
+     "g": "rdig",
+     "n": 7
+    }
+   ],
+   [
+    "iPhone ",
+    {
+     "g": "rdig",
+     "n": 7
+    }
+   ],
+   [
+    "Fonds 1234567"
+   ],
+   [
+    "Fondue fuer 1234567 Leute"
+   ],
+   [
+    "cell_2 = 1234567"
+   ],
+   [
+    "cell2: 1234567"
+   ],
+   [
+    "KW47 Re24 AB12 1234567"
+   ],
+   [
+    "call(123456)"
+   ],
+   [
+    "call timeout 123456"
+   ],
+   [
+    "tool call took 1234567 ns"
+   ],
+   [
+    "API call 1234567 ok"
+   ],
+   [
+    "call used 1234567 bytes"
+   ],
+   [
+    "call ratio 123/456"
+   ],
+   [
+    "tool call: redact.py:1234-5678"
+   ],
+   [
+    "mail1=0301234567"
+   ],
+   [
+    "email2: \"max\""
+   ],
+   [
+    "per call (2026-11-24)"
+   ],
+   [
+    "call on 24.11.2026"
+   ],
+   [
+    "first call 2026-11-24T10:00"
+   ],
+   [
+    "call settled in 12.5 ms"
+   ],
+   [
+    "call timeout 123456789"
+   ],
+   [
+    "call 0.5"
+   ],
+   [
+    "call 09.30 am"
+   ],
+   [
+    "+49.301234567"
+   ],
+   [
+    "+4930.1234567"
    ]
   ]
  }

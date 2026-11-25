@@ -1,7 +1,8 @@
 // ACE mod suite, 8.1.4: client_policy (dormant until the server sends it) and the /ace:ace-doctor delivery line.
 // Cases: ../../tests-fixtures/client-policy/cases.json via ./fixtures/client_policy_cases.ts (shared with
 // tests/test_client_policy.py). Harness: ./helpers.ts.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { CASES } from './fixtures/client_policy_cases.ts'
 import S8 from './fixtures/search_8.ts'
 import { CLIENT_POLICY_FILE, clientPolicyBand, clientPolicyState, validClientPolicy } from '../lib/cohort.ts'

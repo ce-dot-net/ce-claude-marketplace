@@ -1,5 +1,6 @@
 // Full steps (no per-step summaries as the only content, no 50-step cap); one hard byte cap against MiB monsters.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import S8 from './fixtures/search_8.ts'
 import { HUMAN, SDIR, done, host, mainTask, submit } from './helpers.ts'
 import { PRIVATE_APPEND_SH, PRIVATE_WRITE_SH, SINK_WRITE_SH } from '../lib/sh.ts'
@@ -214,7 +215,7 @@ test('sink: the trace lands in <dir>/ace-trace-<idempotency-key>.json, no launch
   await mainTask($, h)
   await done($)
   expect(launches(h).length).toBe(0)                                 // 0 HTTP: nothing that could send is started
-  expect(h.runs.some((r: any) => r.argv.some((a: any) => String(a).includes('ace_trace_queue')))).toBe(false)
+  expect(h.runs.some((r: any) => r.argv.some((a: any) => String(a).includes('ace_trace_queue')) && !r.argv.includes('--auth-held'))).toBe(false)
   expect(h.searches().length).toBe(1)                                // search is read-only and stays
   const f = [...h.files.keys()].filter(k => k.startsWith(SINK + '/'))
   expect(f.length).toBe(1)

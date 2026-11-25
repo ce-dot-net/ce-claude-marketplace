@@ -1,7 +1,8 @@
 // The 422 trap: the server requires GitContext.commit_hash; a trace with `git` but no commit_hash is rejected whole (422).
 // gitContext (io/spawn.ts) returns undefined without a HEAD hash; turn.ts sets trace.git only from it and hangs
 // session_commits only onto an existing git object (never a git object made of session_commits alone).
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import S8 from './fixtures/search_8.ts'
 import { done, host, mainTask } from './helpers.ts'
 import { commitIsFix, gitContext } from '../io/spawn.ts'

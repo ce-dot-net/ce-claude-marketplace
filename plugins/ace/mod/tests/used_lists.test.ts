@@ -1,6 +1,7 @@
 // ACE mod suite, 8.2.7: the trace carries the used ids per source as lists (ids only, <= 50, injected order) next to
 // the counters; applied_log_ids and its cap of 20 are unchanged. Harness: ./helpers.ts.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import S8 from './fixtures/search_8.ts'
 import S100 from './fixtures/search_100.ts'
 import G from './fixtures/golden.ts'

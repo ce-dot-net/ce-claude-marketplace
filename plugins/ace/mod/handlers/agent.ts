@@ -1,6 +1,6 @@
 // agent.spawn: the subagent search + inject (fork, resume and workflow-placeholder rules), and the anchors a run
 // gets when no hook can rewrite its prompt.
-import { renderArm } from './prompt'
+import { cohortLabel, renderArm } from './prompt'
 import { nowIso, relLog, searchRow } from '../io/log'
 import { SEARCH_MS, hitResult, reuseGet, reuseStore, search } from '../io/spawn'
 import { type Load, type Sess, readState, searchOrigin, updateState, uuid, type HookArgs, disabled, ensure, refreshMarker } from '../io/state'
@@ -14,7 +14,7 @@ export async function subagentRender($: any, s: Sess, sr: any, query: string, ag
   const attr = `agent-type="${String(agentType).replace(/"/g, '&quot;')}"`
   const r = await renderArm($, sr.resp, 'ace-patterns-subagent', attr, s)
   await relLog($, s, searchRow({ hook: 'SubagentStart', sessionId: s.sessionId, userPrompt: query, query, returned: sr.resp.similar_patterns || [], injected: r.patterns,
-    projectId: s.project, orgId: s.org, agentType, cohort: r.cohort, hookMs: await $.clock.now() - t0, nowIso: await nowIso($),
+    projectId: s.project, orgId: s.org, agentType, cohort: cohortLabel(r), hookMs: await $.clock.now() - t0, nowIso: await nowIso($),
     extra: { search_ms: sr.ms, pin_ms: sr.pinMs, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, truncated_for_cap: r.truncated || undefined, context_chars: r.context?.length ?? 0,
       task_session_id: tsid, parent_task_id: parent ?? null, engine: sr.engine, engine_reason: sr.engineWhy, source: 'mod', ...extra } }))
   return r
@@ -59,7 +59,7 @@ export async function beforeSpawn($: any, L: Load, s: Sess, e: any) {
   }
   const r = await subagentRender($, s, sr, query, e.subagentType, tsid, t0, state.parentTaskId, { workflow: e.workflow?.runId, cache_hit: !!cached })
   return { out: r.context ? { ...e, prompt: `${e.prompt}\n\n${r.context}` } : e,
-    state: { ...state, ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort,
+    state: { ...state, ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort, renderLayout: r.layout,
       contents: injectedContents(r.patterns, r.ids) } }
 }
 

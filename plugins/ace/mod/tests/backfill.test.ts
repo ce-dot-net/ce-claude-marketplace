@@ -1,6 +1,7 @@
 // 8.2.0 session reader (pure library, not wired to any send path): a Claude Code transcript JSONL -> one task per real user
 // prompt -> the SAME ToolRec / buildTrace / taskOutcome the live learn path uses. Hermetic synthetic transcripts only.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { readSession, readSessionLines, selectBalanced, selectTasks, taskKey } from '../lib/backfill.ts'
 
 let n = 0

@@ -9,6 +9,7 @@ v8 (DESIGN §14): when the ace_engine gate passes they spawn the in-process core
 instead, and fall back to the ace-cli path below.
 """
 
+import hashlib
 import json
 import os
 import re
@@ -272,8 +273,44 @@ def _search_lib(node, query, org, project, session_id, top_k, timeout, hook_even
     return None, reason
 
 
+def _auth_fp() -> str:
+    """sha256 of the global token file (never the token itself); 'none' without one. Mod twin: mod/io/spawn.ts authFp."""
+    try:
+        p = (os.environ.get('ACE_CONFIG_PATH')
+             or os.path.join(os.environ.get('XDG_CONFIG_HOME') or os.path.join(os.path.expanduser('~'), '.config'),
+                             'ace', 'config.json'))
+        with open(p, 'rb') as f:
+            return hashlib.sha256(f.read()).hexdigest()
+    except Exception:
+        return 'none'
+
+
+def _auth_marker() -> Optional[Path]:
+    pdd = _plugin_dir()
+    return pdd.data_root() / 'auth-rejected' if pdd is not None else None
+
+
+def _auth_held() -> bool:
+    """8.4.0: True after an auth failure until the token file changes: every engine / ace-cli call is a GET /config
+    on the server (a dead token polled it 886 times a day), so none is made while held."""
+    try:
+        return _auth_marker().read_text().strip() == _auth_fp()
+    except Exception:
+        return False
+
+
+def _hold_auth() -> None:
+    try:
+        m = _auth_marker()
+        m.parent.mkdir(parents=True, exist_ok=True)
+        m.write_text(_auth_fp())
+    except Exception:
+        pass
+
+
 def _is_auth_failure(stderr: str, stdout: str) -> bool:
-    return (any(x in stderr.lower() for x in ['unauthorized', '401', 'not logged in', 'no api token', 'token_expired'])
+    return (any(x in stderr.lower() for x in ['unauthorized', '401', 'not logged in', 'no api token', 'token_expired',
+                                              'session expired', 'log in again', 'ace-cli login'])
             or any(x in stdout.lower() for x in ['not logged in', 'no api token']))
 
 
@@ -298,6 +335,8 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
     t_cli = t0
     want_pin = pin
     pin = None
+    if _auth_held():
+        return dict(_AUTH_MSG), 0
     try:
         node, reason = ace_engine.preflight()
         if node:
@@ -340,6 +379,7 @@ def run_search(query: str, *, org: str = None, project: str = None, session_id: 
                 stdout = _text(result.stdout)
         if result.returncode != 0:
             if _is_auth_failure(stderr, stdout):
+                _hold_auth()
                 return dict(_AUTH_MSG), _ms(t0)
             _log_cli_error("ace_cli_nonzero_exit", result.returncode, stdout, stderr,
                            query=query, project_id=project, hook_event_name=hook_event_name)

@@ -50,6 +50,7 @@ export type Opts = { search?: (argv: string[], stdin?: string) => SearchAnswer; 
   learnExit?: number; early?: (agentId: string) => Promise<unknown>; beforeWrite?: (path: string) => Promise<unknown>; sid?: () => string
   selfEval?: boolean; model?: (req: any) => any; compact?: (files: Map<string, string>) => any
   cli?: (args: string[], stdin?: string) => SearchAnswer | undefined; noSettings?: boolean; ignored?: boolean; root?: string; cwd?: string; noPython?: boolean
+  authHeld?: (args: string[]) => string  // 8.4.0: `ace_trace_queue.py --auth-held` answers (the notice line, or '' = nothing); default ''
   installer?: (args: string[]) => { state: string, detail?: string }  // ace_cli_installer.py answers (8.1.1)
   git?: (argv: string[]) => string | undefined  // 8.2.0: git answers (full argv); undefined = the default stub
   realpaths?: Record<string, string>  // REALPATH_SH answers (a symlinked path); default: the path as given
@@ -135,6 +136,7 @@ export function host(on: any, o: Opts = {}) {
     }
     if (argv[0] === 'sleep') { now += Number(argv[1]) * 1000; return res(0, '') }
     if (o.cli && cliOf(argv)) { const a = o.cli(cliOf(argv)!, init.stdin); if (a) { now += a.advanceMs ?? 0; if (a.killed) throw new Error('ace: $.process.run aborted: still running after timeoutMs'); return res(a.exitCode ?? 0, a.stdout ?? '', a.stderr ?? '') } }
+    if (argv.some(a => a.endsWith('/ace_trace_queue.py')) && argv.includes('--auth-held')) return res(0, o.authHeld?.(argv) ?? '')
     if (o.installer && argv.some(a => a.endsWith('/ace_cli_installer.py'))) return res(0, JSON.stringify(o.installer(argv.slice(argv.findIndex(a => a.endsWith('/ace_cli_installer.py')) + 1))) + '\n')
     if (argv[0].endsWith('/scripts/ace-python')) return o.noPython ? res(1, '') : res(0, '/usr/bin/python3.13\n')
     if (argv[0] === '/bin/sh' && argv[2] === REALPATH_SH) return res(0, o.realpaths?.[argv[4]] ?? argv[4])

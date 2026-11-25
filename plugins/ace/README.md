@@ -23,9 +23,22 @@ From this version a learned trace (`POST /traces` to the ACE server) carries mor
 - **Personal data** (both chains, also inside structured tool input/output): e-mail addresses (`[redacted:email]`; addresses
   at the reserved example domains `example.com/.org/.net`, `.test`, `.example`, `.invalid`, `.localhost` stay; an `ssh user@host`
   target without a path counts as an address, the SCP form `git@github.com:org/repo.git` and URL userinfo do not), phone numbers
-  (`[redacted:phone]`: `+` with a valid ITU country code and 8-15 digits; a national number only after a keyword such as `Tel.`,
-  `phone`, `Handy`, `fax`, `call`), IBANs (`[redacted:iban]`: country length and mod-97 check), and the value behind an `email`,
-  `mail`, `iban`, `phone`, `tel`, `mobile`, `telephone`, `handy` or `fax` key (`key=value`, `key: value`, JSON) when it looks like one.
+  (`[redacted:phone]`: `+` with a valid ITU country code and 8-15 digits, not a date, IPv4 address or decimal number; a national
+  number only after a keyword such as `Tel.`, `Telefonnummer`, `phone`, `Handynr.`, `fax`, `anrufen`, `call me`; after a bare `call` only a phone-shaped number: a leading 0, 9 or more digits, a space,
+  `-`, `.` or `)`, not a date, IPv4 address or decimal number, not a compact number after `timeout` / `took` / `settled` / `used` /
+  `ratio`; a phone keyword after `call` still counts (`call or fax 5550123`); so `call(123456)`, `tool call took 1234567 ns`,
+  `call ratio 123/456`, `call on 24.11.2026` and `x.py:1234-5678` stay), IBANs (`[redacted:iban]`:
+  country length and mod-97 check), and the value behind an `email`, `mail`, `iban`, `phone`, `tel`, `mobile`, `telephone`, `handy` or
+  `fax` key, also with a `number`/`nr`/`no` suffix (`phone_number`, `phoneNumber`), in `key=value`, `key: value` or JSON, when it looks
+  like one (an unquoted value runs over single spaces between digit groups; behind an `iban` key up to the country's IBAN
+  length, also over letter groups). IBANs are found in any letter case. In structured data the same keys (also German: `telefon`,
+  `Telefonnummer`, `handynummer`, `mobil`, `rufnummer`, `whatsapp`, the keyword stems such as `Mobiltelefon`, `festnetz`, `cell`, and
+  English phone fields such as `MobilePhone`, `home_phone`, `phoneNumbers`, `phone2`) apply to every element of an array or object
+  below them. An IBAN is found by walking exactly its country length from each candidate start (one optional space, tab, NBSP or
+  narrow space before each group of 4), so a following word stays readable, and two IBANs in a row, a tab-separated column or a
+  token such as `KW47` before it do not hide it. `Telefax`, `Fon` and `Durchwahl` are phone keywords, and a phone key may carry a
+  1-2 digit suffix (`phone_2`, `telefon2`, `fax2`; not `cell_2`).
+  File names such as `logo@2x.png` are no addresses.
 - **Hard limits.** One trace is at most `ACE_TRACE_HARD_CAP_BYTES` (default 4 MiB); over it the longest payloads become
   `<truncated: N bytes>`, then the oldest steps that did not fail are dropped. `task` and `summary` are at most
   `ACE_TEXT_HARD_CAP_CHARS` (default 200,000). While a task runs, its tool records (in memory and on disk) are held
@@ -47,7 +60,33 @@ between key and value, or a secret that only appears percent- or JSON-escaped (`
 key rules. Do not paste secrets into prompts or commands.
 Personal data it does not recognize: names and postal addresses, internationalized domains (`xn--…` or non-ASCII) and quoted
 local parts outside an `email` key, a national phone number without a keyword or key, and it redacts a `+` followed by 11-15
-digits with a valid country code and no separator even when it is a constant in a diff (`+491701234567`).
+digits with a valid country code and no separator even when it is a constant in a diff (`+491701234567`). Also not recognized: a
+number with the `00` international prefix and no keyword (`0049 30 …`), `user@host:8080` (a port reads as the SCP path form), an
+IP-literal domain (`user@[127.0.0.1]`), and an address whose domain ends in a real `.zip` or `.mov` TLD; a matrix product such as
+`weights@inputs.transpose` without a following `(` or `[` is redacted as an address. Further limits: a word such as `mobile` before an
+unrelated number is read as a phone keyword (`mobile app build 20261124` is redacted), a pre-release package spec whose last
+part is letters looks like an address (`next@14.0.0-canary.abc` is redacted), an IBAN or phone value split into more than 9 groups
+is only partly matched behind a key, and an IBAN whose country letters are separated from the check digits (`de 89 3704 …`) is
+not recognized as one. `cell` counts as a phone keyword only with a following `:`, `#`, `No` or `Nr` (`cell size 1000000` stays), and an address
+right before `(` or `[` stays when its TLD has more than 3 letters (a method call such as `x@y.name(`; `jane@firma.de(…)` is
+redacted). Known parity differences between the chains (not new): an integer of 1e21 or more in structured data (`{"tel": 1e21}`:
+Python reads an integer and redacts it, TS writes `1e+21` and does not), and a list nested 51 or more levels deep (Python
+`[redacted]`, TS the value). Fail-closed on purpose: a word ending in `phone` before a key colon and 6+ digits (`microphone: 192000`,
+`saxophone=1234567`, `iPhone: 20261124`, `const phone2 = 123456`) is redacted. Real numbers and addresses lost with the removed false
+alarms: a dotted number of at most 7 digits behind a keyword and `/` (`Tel/030.7871`, `Fax/0711.812`, `Tel/123.45.67`), a `+`
+number read as a decimal or a date (`+49.301234567`, `+4930.1234567`, `+31.6.2012 3456`), an address with a TLD of more than 3
+letters right before `(` or `[` (`anna@kanzlei.berlin(Vertrieb)`, `max@firma.gmbh[2]`), an address with a file-extension TLD
+(`user@site.zip`), and a 5-digit float under a phone key in structured data (`{"phone": 12345.0}`; the old Python chain redacted it
+as the string `12345.0`, TS never did; both now follow TS). Not covered: an IBAN written with double spaces, `-` or `.` between the
+groups or in groups of 3, and an IBAN glued to a following word. Rarely (about 1 in 97) a token such as `AT12` right before an IBAN forms a valid IBAN together with its first groups;
+then that span is redacted and the rest of the real IBAN stays readable. Behind a bare `call` a compact number of 6-8 digits
+without a leading 0 stays, also with words or a name before it (`call 5550123`, `call her at 5550123`, `call Anna 91234567`,
+`call x.py:5550123`), as do a dotted number read as a decimal (`call 555.0123`; with a leading 0, `call 030.1234567`, it is
+redacted) and a number with `/` (`call 555/0123`); a version after `call` stays (`call v4.04.2`). An unquoted value behind a
+key is cut into blocks of at most 12 chars, so the tail of a long glued block stays readable (`tel: AB12 CDEF/0301234567` keeps
+`567`), and a phone number glued behind an IBAN value with `/` stays (`iban: NO93 8601 1117 947/0301234567`). A phone
+number inside a quoted key value is redacted alone, a word after `,` / `;` in the same quotes stays (`telephone: "…,next"`). A
+valid IBAN that starts inside another valid IBAN is not joined into one span (the outer one wins).
 
 **Switches.**
 
@@ -74,6 +113,15 @@ the queue. `ACE_TRACE_QUEUE=0` turns the queue off. Limits: a trace is still los
 learn finished, the plugin data dir is wiped, the queue is full (200 traces / 50 MB), the trace is older than 23 h, or
 the ace-cli fallback (no engine) got a 5xx or a timeout. Details: docs/technical/ARCHITECTURE.md "Trace delivery
 (8.1.4)".
+
+Rejected token notice (8.4.0): when traces land in `dead/` because the server rejected the token (401/403, `last_error`
+`auth`) and the newest such entry is under 30 minutes old, the first prompt of a session (both chains) shows once:
+`ACE: nicht angemeldet, Traces werden NICHT gesendet (N Traces wartend/abgelegt). Bitte `ace-cli login` ausführen.`
+(N = auth entries of the last 24 h). It reads the queue, not the search; after a login no new entry arrives and the line
+is gone 30 minutes later. At most once per conversation.
+A 403 / `no_access` answer is not a login problem: it is retried (backoff, 3 attempts) and only then lands in `dead/` as `no_access`, without that notice.
+
+Local sink notice (8.4.0): while `ACE_TRACE_SINK` is set (not blank) the first prompt of a conversation shows once `ACE: Traces gehen in die lokale Senke (ACE_TRACE_SINK), es wird NICHTS gesendet.` (both chains; independent of the queue; no backfill notice).
 
 ## 8.1.3: task outcome
 
@@ -135,7 +183,7 @@ docs/technical/ARCHITECTURE.md "Task outcome (8.1.3)".
   kept); the main search counts the current prompt. The ace-cli fallback and the Python chain send neither.
 - **CLI pin.** Claude Code installs the `@ace-sdk/cli` version pinned in `package.json` into the plugin directory. A
   global `ace-cli` at or above the pin is used only as a fallback and `/ace:ace-doctor` marks it untested. Requests
-  through the in-process engine (`@ace-sdk/core`) and through the pinned `ace-cli` (4.4.4, via `ACE_CLIENT_ID`) both say
+  through the in-process engine (`@ace-sdk/core`) and through the pinned `ace-cli` (4.4.5, via `ACE_CLIENT_ID`) both say
   `X-ACE-Client: claude-code-plugin/<version>`.
 
 ## 🚀 Quick Start
@@ -260,6 +308,8 @@ After completing work, run `/ace-learn`:
 ### Render knobs (environment)
 
 - `ACE_RENDER_FULL_PCT` (default 50, 0 = off): share of conversations the mod renders `full`; see the cost note above.
+- `ACE_AB_CONTROL_PCT` (0-100, default: the server's `render_control_pct`, else 0 = off): share of conversations in the control arm (search runs, nothing is injected); the env value overrides the server's.
+- `ACE_RENDER_LAYOUT_A_PCT` (default 0 = off, 0-100): share of conversations whose budget/full/subagent/domain-shift render uses the compact "layout (a)" (one JSON header + one array line per pattern); a search answer's `render_layout_a_pct` is used when the env is unset. `ACE_RENDER_LAYOUT_A_HINT=1` adds a one-line format hint.
   The ACE server can switch the share for everyone without a plugin release: a search response field `render_full_pct` (0-100, kept for 7 days in `render-full-pct.json`) applies when the env is unset.
 - `ACE_ENGINE=cli`: never use the in-process engine.
 - `ACE_AUTO_INSTALL=0`: never install the pinned ace-cli in the background at SessionStart (default on).
@@ -387,5 +437,5 @@ MIT License - See [LICENSE](../../LICENSE)
 
 **Version**: v8.2.8
 **Maintainer**: CE.NET Team
-**Requires**: Claude Code >= 2.1.311, ace-cli 4.4.4 pinned in package.json (@ace-sdk/core >= 3.10.0; installed with the plugin; a global ace-cli >= the pin is an untested fallback), Python >= 3.10 for the fallback hooks (Ubuntu 22.04+, Debian 12+, Homebrew/pyenv; the macOS system 3.9 is not enough, the mod chain is unaffected). Windows not supported (WSL2 works).
+**Requires**: Claude Code >= 2.1.311, ace-cli 4.4.5 pinned in package.json (@ace-sdk/core >= 3.11.0; installed with the plugin; a global ace-cli >= the pin is an untested fallback), Python >= 3.10 for the fallback hooks (Ubuntu 22.04+, Debian 12+, Homebrew/pyenv; the macOS system 3.9 is not enough, the mod chain is unaffected). Windows not supported (WSL2 works).
 **Architecture**: mod + Python hooks + CLI/engine (no MCP)

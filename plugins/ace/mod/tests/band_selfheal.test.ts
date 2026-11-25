@@ -1,7 +1,8 @@
 // 8.2.4: a `server_error` band heals itself. A transient failure at session start (a deploy's 502 window) is re-probed
 // in the background on a short bounded backoff ($.clock.after chain), and any later successful server search clears it.
 // Non-transient states stay one-shot. Harness: ./helpers.ts (mockClock: the timers move only with h.clock.advance).
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { classify } from '../context/index.ts'
 import { MAX_REPROBES, REPROBE_EVERY_MS, REPROBE_MS, RECOVERED_LINE } from '../handlers/context.ts'
 import { SID, cliOf, host, submit } from './helpers.ts'
@@ -58,7 +59,7 @@ for (const [exitCode, state] of [[4, 'expired'], [7, 'no_access'], [3, 'not_logg
   })
 }
 
-test('a failing re-probe keeps the band, no log or toast spam; the backoff follows the schedule and stops at the cap', async ($, on) => {
+test('a failing re-probe keeps the band, no log or toast spam; the backoff follows the schedule and stops at the cap', { timeoutMs: 120_000 }, async ($, on) => {
   const h = host(on, { mockClock: true, installer: () => ({ state: 'ok' }), cli: status(() => false) })
   await start($)
   await tick()

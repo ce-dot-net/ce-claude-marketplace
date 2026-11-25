@@ -208,7 +208,6 @@ export function rejectionProbe(text: string | undefined): { matched: string | nu
   }
   return { matched: best, blocked: best === null ? blocked : null, tooLong: false }
 }
-export const rejectionMatch = (text: string | undefined): string | null => rejectionProbe(text).matched
 
 // Upvote phrase fast-path (mod-only), PRECISION first: a phrase as a whole word (any of UPVOTE_PHRASES), every phrase hit cut out,
 // and what is left must be filler words only (thanks, intensifiers, pronouns): the message is nothing but the approval. Anything
@@ -248,3 +247,4 @@ export function upvoteProbe(text: string | undefined): { matched: string | null;
   const clean = !low.includes('?') && words(rest).every(x => UPVOTE_FILLER.has(x))
   return { matched: clean ? best : null, blocked: clean ? null : best, tooLong: false, bareAck }
 }
+export const rejectionMatch = (text: string | undefined): string | null => rejectionProbe(text).matched

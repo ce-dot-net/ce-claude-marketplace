@@ -1,7 +1,8 @@
 // 8.2.5: the device login works without a browser (remote / SSH): `ace-cli login --no-browser` is streamed through
 // $.process.spawn, the URL and the code are shown (toast + log) while the CLI still waits. `--approved` runs login and
 // install like their button (Moshi/herdr). An unbound repo without ace-cli gets the CLI installed first (CLI -> login -> configure).
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { parseLogin } from '../ui/band.ts'
 import { CWD, cliOf, host } from './helpers.ts'
 

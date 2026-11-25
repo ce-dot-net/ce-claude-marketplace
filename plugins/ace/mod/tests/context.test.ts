@@ -1,6 +1,7 @@
 // The mod's one core (8.1.0): verify classification, export, adopt, remote map, the context row, ▼ status, band,
 // worktrees, and every hook taking its ids from it. Mirror: tests/test_project_context_service.py. Harness: ./helpers.ts.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import VERIFY from './fixtures/verify_cases.ts'
 import { classify, fixGitignore, LINES, ADOPT_LINE } from '../context/index.ts'
 import { CWD, HUMAN, PRJ, REL, ROOT, cliOf, done, host, mainTask, settle, submit } from './helpers.ts'

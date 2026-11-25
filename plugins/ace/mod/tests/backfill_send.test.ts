@@ -1,5 +1,6 @@
 // 8.2.0 backfill send helpers (pure, unwired): task -> server item, batching, response classification, job status -> ledger.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { applyJob, batches, classify, describeAnswer, failedItems, reportLine, toItem } from '../lib/backfill_send.ts'
 import { add, emptyLedger, MAX_ATTEMPTS, MAX_KEYS, serialize, statusOf } from '../lib/ledger.ts'
 import { readSession } from '../lib/backfill.ts'
@@ -203,7 +204,7 @@ test('reportLine is one German line', () => {
   expect(() => reportLine(null as any)).not.toThrow()
 })
 
-test('ledger cap fits the 4 MiB file limit: a full ledger serializes under 3 MiB', () => {
+test('ledger cap fits the 4 MiB file limit: a full ledger serializes under 3 MiB', { timeoutMs: 120_000 }, () => {
   expect(MAX_KEYS).toBe(20000)
   const l = emptyLedger()
   for (let i = 0; i < MAX_KEYS; i++) l.entries.set(K(i), { status: 'skipped-failed', atMs: 1_800_000_000_000, attempts: 3 })

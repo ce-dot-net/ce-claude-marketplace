@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / 'utils'))
 from validation import is_valid_pattern_id
 from patterns_used_state import append_patterns_used, eval_stats, injected_contents, task_session_id_for
 from ace_pattern_render import render_patterns, render_cohort, render_compact_all
+from ace_pattern_render import render_layout_a, layout_a_member, layout_a_value, layout_a_label
 
 
 def sanitize_unicode(text: str) -> str:
@@ -356,6 +357,40 @@ def _with_notice(output, notice):
     return output
 
 
+def auth_held_notice(project, sid):
+    """Once per session (marker in the session dir): the 'token rejected, traces NOT sent' line while dead/ holds a
+    fresh auth entry (ace_trace_queue.auth_held_line), else None. Independent of the search. Never raises."""
+    try:
+        if not project or not sid:
+            return None
+        marker = plugin_data_dir.session_dir(project, sid) / 'auth_held_notified'
+        if marker.exists():
+            return None
+        import ace_trace_queue
+        line = ace_trace_queue.auth_held_line(plugin_data_dir.data_root() / 'trace-queue')
+        if line:
+            plugin_data_dir.private_write(marker, '1')
+        return line
+    except Exception:
+        return None
+
+
+def sink_notice(project, sid):
+    """Once per session (marker sink_notified): ace_trace_queue.sink_line while ACE_TRACE_SINK is set, else None. Never raises."""
+    try:
+        import ace_trace_queue
+        line = ace_trace_queue.sink_line()
+        if not line or not project or not sid:
+            return None
+        marker = plugin_data_dir.session_dir(project, sid) / 'sink_notified'
+        if marker.exists():
+            return None
+        plugin_data_dir.private_write(marker, '1')
+        return line
+    except Exception:
+        return None
+
+
 def main():
     try:
         # Read hook event from stdin
@@ -418,6 +453,13 @@ def main():
         # P-26: session OR project disabled.flag stops everything, before any state is written.
         if plugin_data_dir.is_disabled(context['project'], session_id) or plugin_data_dir.is_mod_active(context['project'], session_id, plugin_data_dir.MOD_HANDOFF_S):
             sys.exit(0)
+
+        _auth = auth_held_notice(context['project'], session_id)  # queue state, not the search: shown even when the search fails
+        if _auth:
+            _notice = _auth if not _notice else _notice + " · " + _auth
+        _sink = sink_notice(context['project'], session_id)
+        if _sink:
+            _notice = _sink if not _notice else _notice + " · " + _sink
 
         # Per-task session_id = hook prompt_id (G2), else uuid4.
         # This is passed to ace-cli search --pin-session and stored in the state file
@@ -525,6 +567,7 @@ def main():
         # ── A/B cohort (§28): bucket on the STABLE CC session_id (one arm per conversation), never the
         # per-task pin. Default: the full arm, which this chain renders as budget. Domain-shift unaffected.
         _cohort = render_cohort(session_id)
+        _layout = False  # layout-a arm: set by the budget branch only when it rendered
 
         # Capture top-3 patterns WITH match_factors BEFORE render so that
         # _format_bullet_token can use ucb_score for display.  render_patterns
@@ -576,12 +619,20 @@ def main():
             )
 
         else:
-            # Budget arm (default): existing budget-verbatim render (unchanged).
-            ace_context, _pattern_ids, _, _retrieval_log_map = render_patterns(
-                patterns_response,
-                tag='ace-patterns',
-                attrs=_tag_attrs,
-            )
+            # Budget arm (default): existing budget-verbatim render (unchanged); the layout-a cohort renders layout (a).
+            _layout = layout_a_member(session_id)
+            if _layout:
+                ace_context, _pattern_ids, _, _retrieval_log_map = render_layout_a(
+                    patterns_response,
+                    tag='ace-patterns',
+                    attrs=_tag_attrs,
+                )
+            else:
+                ace_context, _pattern_ids, _, _retrieval_log_map = render_patterns(
+                    patterns_response,
+                    tag='ace-patterns',
+                    attrs=_tag_attrs,
+                )
             # CRITICAL: Save pattern IDs for reinforcement learning.
             # render_patterns returns only budget-limited injected ids (no gate drop).
 
@@ -606,7 +657,7 @@ def main():
                                  task_session_id=task_session_id,
                                  user_prompt=user_prompt,
                                  rendered_context=_rendered_for_state if _rendered_for_state is not None else '',
-                                 hook_event_name='UserPromptSubmit', render_variant=_cohort, binding=context,
+                                 hook_event_name='UserPromptSubmit', render_variant=_cohort, render_layout=layout_a_value() if _layout else '', binding=context,
                                  pattern_contents=injected_contents(original_pattern_list, _pattern_ids),
                                  eval_stats=eval_stats([p for p in original_pattern_list if p.get('id') in _inj],
                                                        original_pattern_list))
@@ -631,7 +682,7 @@ def main():
                 project_id=context.get('project'),
                 org_id=context.get('org'),
                 agent_type=agent_type,
-                render_cohort=_cohort,
+                render_cohort=_cohort + layout_a_label(layout_a_value()) if _layout else _cohort,
                 hook_ms=int((time.monotonic() - t_start) * 1000),
                 cache_hit=_cache_hit,
                 task_session_id=task_session_id,

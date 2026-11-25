@@ -177,3 +177,71 @@ export function renderDomainShift(resp: any, domain: string) {
   }
   return { context, ...credit(pats.slice(0, n), rlog), shown: n, patterns: pats.slice(0, n) }
 }
+
+// ---------- layout (a) arm (ace_pattern_render.render_layout_a*): header + one compact JSON array per pattern ----------
+export const LAYOUT_A_FIELDS = [...KEEP, 'bandit_rank', 'semantic_score'].sort()
+export const LAYOUT_A_HINT = 'Format: line 1 is a JSON header; "fields" names the columns. Each following line is one pattern '
+  + 'as a JSON array holding the values in exactly that order; null means the field is absent. '
+  + 'Patterns are ordered best first (bandit_rank ascending). evidence is a list of strings.'  // optional (ACE_RENDER_LAYOUT_A_HINT=1)
+const laRow = (p: any) => pyDumps(LAYOUT_A_FIELDS.map(f => p[f] ?? null), true, true)  // sorted nested keys, as Python's sort_keys=True
+const laHead = (dict: any, count: number) => pyDumps({ ...Object.fromEntries(baseOf(dict).map(k => [k, dict[k]])), count, fields: LAYOUT_A_FIELDS }, false, true)
+const laOpen = (tag: string, shown: number, total: number, attrs: string) => openTag(tag, shown, total, attrs)
+const laAssemble = (open: string, head: string, rows: string[], close: string, hint: boolean) =>
+  [open, ...(hint ? [LAYOUT_A_HINT] : []), head, ...rows, close].join('\n')
+
+export function renderLayoutBudget(resp: any, tag: string, attrs: string, hint = false, budget = BUDGET) {
+  const { dict, rlog } = renderPatternsDict(resp)
+  const total: number = dict.count, close = `</${tag}>`
+  const avail = budget - laAssemble(laOpen(tag, total, total, attrs), laHead(dict, total), [], close, hint).length
+  const picked: any[] = []
+  let chars = 0
+  for (const p of dict.similar_patterns as any[]) {
+    const cost = laRow(p).length + 1
+    if (chars + cost <= avail) { picked.push(p); chars += cost; continue }
+    if (!picked.length) {
+      const c: any = { ...p }; delete c.evidence
+      const size = () => laRow(c).length + 1
+      if (chars + size() > avail) {
+        const content = String(c.content ?? '')
+        const excess = chars + size() - avail
+        c.content = cpSlice(content, Math.max(1, Math.max(4, pyDumps(content).length - excess - 1) - 2))
+        while (chars + size() > avail && cpLen(c.content) > 1) c.content = cps(c.content).slice(0, -10).join('')
+        if (chars + size() > avail) c.content = cpSlice(content, 1)
+      }
+      picked.push(c)
+    }
+    break
+  }
+  let context = ''
+  for (;;) {
+    context = laAssemble(laOpen(tag, picked.length, total, attrs), laHead(dict, total), picked.map(laRow), close, hint)
+    if (context.length <= budget || !picked.length) break
+    picked.pop()
+  }
+  return { context, ...credit(picked, rlog), patterns: picked, shown: picked.length, total }
+}
+
+export function renderLayoutFull(resp: any, tag: string, attrs: string, hint = false, cap = FULL_CAP) {
+  const { dict, rlog } = renderPatternsDict(resp)
+  const total: number = dict.count, pats: any[] = dict.similar_patterns, rows = pats.map(laRow)
+  let n = pats.length, context = ''
+  for (;;) {
+    context = laAssemble(laOpen(tag, n, total, attrs), laHead(dict, n), rows.slice(0, n), `</${tag}>`, hint)
+    if (context.length <= cap || n === 0) break
+    n--
+  }
+  return { context, ...credit(pats.slice(0, n), rlog), patterns: pats.slice(0, n), shown: n, total }
+}
+
+export function renderLayoutDomainShift(resp: any, domain: string, hint = false) {
+  const { dict, rlog } = renderPatternsDict(resp)
+  const attr = domain.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#x27;')
+  const pats: any[] = dict.similar_patterns, rows = pats.map(laRow)
+  let n = pats.length, context = ''
+  for (;;) {
+    context = laAssemble(`<ace-patterns-domain-shift domain="${attr}">`, laHead(dict, n), rows.slice(0, n), '</ace-patterns-domain-shift>', hint)
+    if (context.length <= DOMAIN_CAP || n === 0) break
+    n--
+  }
+  return { context, ...credit(pats.slice(0, n), rlog), shown: n, patterns: pats.slice(0, n) }
+}

@@ -4,7 +4,7 @@ import { pyDumps } from './pyjson'
 import { cpSlice, isMachinePrompt } from './text'
 import { toolHaystack, type ToolRec } from './evidence'
 import { APPEND_SH } from './sh'
-import { sha256Hex } from './cohort'
+import { LAYOUT_A_VALUES, sha256Hex } from './cohort'
 import { switchOff } from './switches'
 import { deepRedact, redact } from './redact'  // secret redaction: lib/redact.ts (rules: lib/redact_rules.ts)
 
@@ -551,7 +551,7 @@ export function trimPayloads(recs: ToolRec[], budget: number, bytes: number): Bu
 export const USED_IDS_LIST_CAP = 50
 export function buildTrace(a: {
   userPrompt: string; tools: ToolRec[]; answer: string; playbookUsed: string[]; agentType: string; tsid?: string; agentId?: string
-  parentTaskId?: string; retrievalId?: string; appliedLogIds: number[]; nowIso: string; renderVariant?: string; effort: string; git?: any
+  parentTaskId?: string; retrievalId?: string; appliedLogIds: number[]; nowIso: string; renderVariant?: string; renderControlPct?: number; renderLayout?: string; effort: string; git?: any
   conversationId?: string
   // per-source counters (Haiku, H2), 0 when none; 8.2.7: the ids themselves per source (ids only, injected order, <= 50)
   usedIds?: { used_ids_model: number; used_ids_tokens: number; used_ids_model_list?: string[]; used_ids_tokens_list?: string[] }
@@ -581,7 +581,8 @@ export function buildTrace(a: {
     chain: 'mod',  // round 4: which chain built the trace ('mod' | 'python', ace_after_task.py), never omitted
   }
   if (a.tsid) trace.session_id = a.tsid
-  if (a.renderVariant) { trace.render_variant = a.renderVariant; trace.render_path = 'mod' } // §31: only when known; 8.2.1: which chain rendered
+  if (a.renderVariant) { trace.render_variant = a.renderVariant; trace.render_path = 'mod'; trace.render_control_pct = a.renderControlPct ?? 0 } // §31: only when known; 8.2.1: which chain rendered
+  if (a.renderLayout && LAYOUT_A_VALUES.includes(a.renderLayout)) trace.render_layout = a.renderLayout  // layout-a arm: own optional field, render_variant stays budget|full
   if (a.conversationId) trace.conversation_id = a.conversationId.slice(0, 512) // §31: the stable CC session id
   if (a.interactive !== undefined) trace.interactive = a.interactive  // 8.2.2: session.start isInteractive, never defaulted
   if (a.promptOrigin !== undefined) trace.prompt_origin = a.promptOrigin.slice(0, 64)  // the first prompt's origin.kind

@@ -1,7 +1,8 @@
 // Round 4 (C102): the update path when the server's client_policy says this plugin is below min_plugin_version (the server does not
 // send client_policy yet: these tests seed a stub policy). Interactive: one band action 'Aktualisieren'. Non-interactive (claude -p,
 // CI): the fixed command runs by itself, behind gates. The command is never really run: the host answers `claude plugin update`.
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { CLIENT_POLICY_FILE } from '../lib/cohort.ts'
 import { UPDATE_ARGS, UPDATE_LAUNCHER, UPDATE_LOCK, UPDATE_MS, UPDATE_WATCHDOG, UPDATE_PLUGIN, UPDATE_STATE_FILE, updateBinaryCandidates } from '../lib/update.ts'
 import { flushUpdates } from '../io/update.ts'

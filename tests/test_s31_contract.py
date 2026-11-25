@@ -49,7 +49,7 @@ def test_full_split_never_without_a_conversation_id(clean_env):
 
 
 @pytest.mark.parametrize("raw,want", [("full", "full"), (" Budget\n", "budget"), ("FULL", "full"),
-                                      ("control", None), ("compact", None), ("", None), (None, None), (7, None)])
+                                      ("control", "control"), ("compact", None), ("", None), (None, None), (7, None)])
 def test_normalize_render_variant(raw, want):
     assert normalize_render_variant(raw) == want
     assert trace_render_variant(raw, None) == want, "no stored label and no conversation: omitted"
@@ -62,7 +62,7 @@ def test_trace_without_a_search_carries_its_conversations_arm(clean_env):
     assert trace_render_variant(None, "conv-1") == "budget"              # the Python chain renders it as budget
     assert trace_render_variant("budget", "conv-1", mod=True) == "budget"  # a stored label always wins
     clean_env.setenv("ACE_AB_CONTROL_PCT", "100"); clean_env.setenv("ACE_RENDER_FULL_PCT", "0")
-    assert trace_render_variant(None, "conv-1", mod=True) is None        # control/compact are no server labels
+    assert trace_render_variant(None, "conv-1", mod=True) == "control"   # control is a server label (render_control_pct)
 
 
 # ── "actually used" ─────────────────────────────────────────────────────────────────────
@@ -160,8 +160,12 @@ def test_conversation_id_truncated_to_512(clean_env):
     assert t["conversation_id"] == "c" * 512
 
 
+def test_stored_control_label_is_kept(box):
+    assert _learn(box, box.stop_event("s31-c"), render_variant="control")["trace"]["render_variant"] == "control"
+
+
 def test_unknown_variant_falls_back_to_the_conversation_arm(box):
-    for i, stored in enumerate((None, "control", "compact")):
+    for i, stored in enumerate((None, "compact", "bogus")):
         b = Box(box.root / ("v%d" % i))
         st = {} if stored is None else {"render_variant": stored}
         learn = _learn(b, b.stop_event("s31-u"), **st)

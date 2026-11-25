@@ -99,18 +99,31 @@ function pyStr(s: string): string {
   return out + '"'
 }
 
+// Python sorts str by code point, JS by UTF-16 unit (they differ for an astral key vs one >= U+E000):
+// lift surrogates above the BMP's top range, no allocation per comparison.
+const cpUnit = (c: number) => c >= 0xe000 ? c - 0x800 : c >= 0xd800 ? c + 0x2000 : c
+function cpCmp(a: string, b: string): number {
+  const n = Math.min(a.length, b.length)
+  for (let i = 0; i < n; i++) {
+    const x = a.charCodeAt(i), y = b.charCodeAt(i)
+    if (x !== y) return cpUnit(x) - cpUnit(y)
+  }
+  return a.length - b.length
+}
+
 // json.dumps(v[, sort_keys=True]) byte-for-byte (ensure_ascii, ", " / ": ").
-export function pyDumps(v: any, sortKeys = false): string {
+// compact = separators (',', ':') (the layout-a arm).
+export function pyDumps(v: any, sortKeys = false, compact = false): string {
   if (v === null || v === undefined) return 'null'
   if (v === true) return 'true'
   if (v === false) return 'false'
   if (v instanceof PyFloat) return pyFloatRepr(v.v)
   if (typeof v === 'number') return Number.isInteger(v) ? String(v) : pyFloatRepr(v)
   if (typeof v === 'string') return pyStr(v)
-  if (Array.isArray(v)) return '[' + v.map(x => pyDumps(x, sortKeys)).join(', ') + ']'
+  if (Array.isArray(v)) return '[' + v.map(x => pyDumps(x, sortKeys, compact)).join(compact ? ',' : ', ') + ']'
   const keys = Object.keys(v).filter(k => v[k] !== undefined)
-  if (sortKeys) keys.sort()
-  return '{' + keys.map(k => pyStr(k) + ': ' + pyDumps(v[k], sortKeys)).join(', ') + '}'
+  if (sortKeys) keys.sort(cpCmp)
+  return '{' + keys.map(k => pyStr(k) + (compact ? ':' : ': ') + pyDumps(v[k], sortKeys, compact)).join(compact ? ',' : ', ') + '}'
 }
 
 // ace_before_task.sanitize_response: a lone surrogate -> 3 x U+FFFD (utf-8 surrogatepass -> replace).

@@ -180,9 +180,29 @@ def test_pii_rules_match():
     assert rows == [(n, label, _py(pre), _py(rx)) for n, label, pre, rx in rd.PII_RULES]
 
 
+def test_pii_round14_tables_match():
+    """Round 14: key suffix, file-name e-mail look-alikes, phone rejects (date / IPv4 / decimal)."""
+    assert _single('PII_KEY_SUFFIX') == _py(rd.PII_KEY_SUFFIX) and _single('EMAIL_SCALE') == _py(rd.EMAIL_SCALE)
+    assert _single('KW_VERSION') == _py(rd.KW_VERSION)
+    # Round 16
+    assert _single('PII_KEY_PHONE') == _py(rd.PII_KEY_PHONE) and _single('IBAN_SEP') == _py(rd.IBAN_SEP)
+    assert _single('KW_CALL_PHONE') == _py(rd.KW_CALL_PHONE)  # Round 18 / B1
+    assert 'export const KW_VERSION_DIGITS_MAX = %d' % rd.KW_VERSION_DIGITS_MAX in TS and 'export const EMAIL_CALL_TLD_MAX = %d' % rd.EMAIL_CALL_TLD_MAX in TS
+    assert _set('EMAIL_FILE_TLDS') == rd.EMAIL_FILE_TLDS
+    i = TS.index('export const PHONE_REJECT: RegExp[] = [') + len('export const PHONE_REJECT: RegExp[] = [')
+    rules = []
+    while TS[i] == '/':
+        src, flags, i = _regex_literal(TS, i)
+        rules.append((_norm(src), _ts_flags(flags)))
+        while TS[i] in ', \n':
+            i += 1
+    assert rules == [_py(rx) for rx in rd.PHONE_REJECT]
+
+
 def test_every_table_is_checked():
     """A new rule table or constant in redact_rules.ts needs a parity check here."""
     tables = set(re.findall(r"export const (\w+)", TS))
     assert tables == {'REDACT_BLOCK', 'SPAN_RULES', 'SECRET_RULES', 'PREFIX_RULES', 'JS_WS', 'ENV_LINE', 'ENV_STRIP', 'ENV_SEGS', 'ENV_HARMLESS',
                       'URL_CRED', 'FORMAT_RULES', 'NV_RULES', 'DOMAIN_MAX', 'EXAMPLE_DOMAINS', 'EXAMPLE_TLDS', 'PHONE_CC', 'IBAN_LEN',
-                      'PII_KEY_KIND', 'PII_RULES', 'ENTROPY_MIN', 'SWITCH_MIN', 'ENTROPY_RUN', 'OBJECT_ID'}
+                      'PII_KEY_KIND', 'PII_RULES', 'PII_KEY_SUFFIX', 'EMAIL_SCALE', 'EMAIL_FILE_TLDS', 'PHONE_REJECT', 'KW_VERSION', 'KW_VERSION_DIGITS_MAX', 'PII_KEY_PHONE', 'EMAIL_CALL_TLD_MAX', 'IBAN_SEP', 'KW_CALL_PHONE', 'ENTROPY_MIN',
+                      'SWITCH_MIN', 'ENTROPY_RUN', 'OBJECT_ID'}

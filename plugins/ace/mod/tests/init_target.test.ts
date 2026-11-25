@@ -1,7 +1,8 @@
 // 8.1.0 (cli 4.4.1): bind / configure / auto-adopt write through `ace-cli init --json --fix-gitignore`; our writer only
 // when the CLI has no init --json. Fixture: ../../tests-fixtures/project-context/init-target.json (spec §9).
 // Mirror: tests/test_init_target.py (Python chain + real CLI in tests/test_cli_contract.py).
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import CASES from './fixtures/init_target_cases.ts'
 import { initTarget, WARN_LINES } from '../context/index.ts'
 import { normPath, type Reader } from '../context/resolve.ts'

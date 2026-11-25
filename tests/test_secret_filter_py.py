@@ -17,6 +17,7 @@ sys.path.insert(0, str(PLUGIN / "shared-hooks"))
 sys.path.insert(0, str(PLUGIN / "shared-hooks" / "utils"))
 import ace_after_task as at  # noqa: E402
 import redact as rd  # noqa: E402
+from timing_util import BUN_LINEAR_JS, LIMIT, assert_linear, prefix  # noqa: E402
 
 FIX = PLUGIN / "tests-fixtures" / "secret-filter" / "cases.json"
 CASES = json.loads(FIX.read_text())
@@ -135,9 +136,7 @@ def test_deep_redact_drops_the_value_under_a_secret_key():
                                  "token: abc\n\nplain line here\n" * 20_000 + "x" * 1_000_000, "machine x login y " * 120_000,
                                  "a:1:b:c:" * 250_000, "d\tTRUE\t/\tTRUE\t1\tn\t" * 100_000, "define('A_KEY', '" * 120_000])
 def test_linear_on_hostile_inputs(big):
-    t0 = time.time()
-    at.redact(big)
-    assert time.time() - t0 < 3.0
+    assert_linear(at.redact, prefix(big), big[:12])
 
 
 
@@ -169,7 +168,7 @@ def test_round8_ts_and_python_redact_identically_on_the_whole_fixture(tmp_path):
     import shutil, subprocess
     bun = shutil.which("bun")
     if not bun:
-        pytest.skip("bun not installed")
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
     texts = [t for _, t, _ in SECRETS] + NORMAL
     (tmp_path / "in.json").write_text(json.dumps(texts))
     (tmp_path / "r.ts").write_text("import { redact } from '%s'\nconst t = JSON.parse(require('fs').readFileSync('%s', 'utf8'))\nconsole.log(JSON.stringify(t.map((x: string) => redact(x))))\n"
@@ -181,24 +180,22 @@ def test_round8_ts_and_python_redact_identically_on_the_whole_fixture(tmp_path):
 
 
 # ---- round 9 N6: CR-heavy text is linear in both chains (cookie-jar fields stop at CR as JS ^/$ do) ----
-def _ts_ms(tmp_path, n):
+def _ts_ratio(tmp_path, n):
     import shutil, subprocess
     bun = shutil.which("bun")
     if not bun:
-        pytest.skip("bun not installed")
-    (tmp_path / "t.ts").write_text("import { redact } from '%s'\nconst t = 'x\\r'.repeat(%d) + '\\tTRUE\\tx'\nconst t0 = performance.now(); redact(t); console.log(performance.now() - t0)\n"
-                                   % (PLUGIN / "mod" / "lib" / "redact.ts", n))
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
+    (tmp_path / "t.ts").write_text("import { redact } from '%s'\n" % (PLUGIN / "mod" / "lib" / "redact.ts") + BUN_LINEAR_JS +
+                                   "console.log(linear(f => 'x\\r'.repeat(Math.floor(%d * f)) + '\\tTRUE\\tx', redact))\n" % n)
     return float(subprocess.run([bun, str(tmp_path / "t.ts")], capture_output=True, text=True, timeout=120).stdout)
 
 
 def test_round9_cr_heavy_text_is_linear_python():
-    t0 = time.time()
-    at.redact("x\r" * 1_000_000 + "\tTRUE\tx")   # 2 MB, one CR per 2 chars: quadratic would take minutes
-    assert time.time() - t0 < 10
+    assert_linear(at.redact, lambda f: "x\r" * int(1_000_000 * f) + "\tTRUE\tx")   # 2 MB, one CR per 2 chars: quadratic would take minutes
 
 
 def test_round9_cr_heavy_text_is_linear_ts(tmp_path):
-    assert _ts_ms(tmp_path, 1_000_000) < 10_000
+    assert _ts_ratio(tmp_path, 1_000_000) <= LIMIT
 
 
 # ---- round 9 N7: \s / \S in the env / url-cred / pgpass rules mean JS's whitespace set in both chains ----
@@ -212,7 +209,7 @@ def test_round9_whitespace_parity_ts_python(tmp_path):
     import shutil, subprocess
     bun = shutil.which("bun")
     if not bun:
-        pytest.skip("bun not installed")
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
     (tmp_path / "in.json").write_text(json.dumps(WS_EDGE))
     (tmp_path / "r.ts").write_text("import { redact } from '%s'\nconst t = JSON.parse(require('fs').readFileSync('%s', 'utf8'))\nconsole.log(JSON.stringify(t.map((x: string) => redact(x))))\n"
                                    % (PLUGIN / "mod" / "lib" / "redact.ts", tmp_path / "in.json"))
@@ -240,7 +237,7 @@ def test_round10_m1_actions_ts_python_parity(tmp_path):
     import shutil, subprocess
     bun = shutil.which("bun")
     if not bun:
-        pytest.skip("bun not installed")
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
     items = [(tool, t) for _, t, _ in SECRETS[:30] for tool in ("Grep", "Glob", "Task")] + [("Task", "short"), ("Grep", "plain words")]
     (tmp_path / "in.json").write_text(json.dumps(items))
     (tmp_path / "a.ts").write_text("import { summarizeAction } from '%s'\nconst it = JSON.parse(require('fs').readFileSync('%s','utf8'))\n"
@@ -348,24 +345,22 @@ L3_FORMS = {"curl": ("", " curl -u ", 220_000), "mysql": ("", "mysql ", 330_000)
 @pytest.mark.parametrize("form", sorted(L3_FORMS))
 def test_round10_l3_linear_python(form):
     pre, unit, n = L3_FORMS[form]
-    t0 = time.time()
-    at.redact(pre + unit * n)          # ~2 MB; quadratic took minutes
-    assert time.time() - t0 < 15
+    assert_linear(at.redact, lambda f: pre + unit * int(n * f), form)          # ~2 MB; quadratic took minutes
 
 
 def test_round10_l3_linear_ts(tmp_path):
     import shutil, subprocess
     bun = shutil.which("bun")
     if not bun:
-        pytest.skip("bun not installed")
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
     (tmp_path / "f.json").write_text(json.dumps(L3_FORMS))
-    (tmp_path / "t.ts").write_text("import { redact } from '%s'\nconst f = JSON.parse(require('fs').readFileSync('%s','utf8'))\nconst out: any = {}\n"
-                                   "for (const k of Object.keys(f)) { const [p, u, n] = f[k]; const t0 = performance.now(); redact(p + u.repeat(n)); out[k] = performance.now() - t0 }\n"
-                                   "console.log(JSON.stringify(out))\n" % (PLUGIN / "mod" / "lib" / "redact.ts", tmp_path / "f.json"))
+    (tmp_path / "t.ts").write_text("import { redact } from '%s'\nconst f = JSON.parse(require('fs').readFileSync('%s','utf8'))\nconst out: any = {}\n" % (PLUGIN / "mod" / "lib" / "redact.ts", tmp_path / "f.json") + BUN_LINEAR_JS +
+                                   "for (const k of Object.keys(f)) { const [p, u, n] = f[k]; out[k] = linear(g => p + u.repeat(Math.floor(n * g)), redact) }\n"
+                                   "console.log(JSON.stringify(out))\n")
     p = subprocess.run([bun, str(tmp_path / "t.ts")], capture_output=True, text=True, timeout=150)
     assert p.returncode == 0, p.stderr
-    ms = json.loads(p.stdout)
-    assert all(v < 15000 for v in ms.values()), ms
+    ratios = json.loads(p.stdout)
+    assert all(v <= LIMIT for v in ratios.values()), ratios
 
 
 # ---- Round 10 / T1: in CI the bun-based cross-chain tests must run, never skip silently ----
@@ -392,7 +387,7 @@ def test_round11_w2_echo_lines_ts_python_parity(tmp_path):
     import random, shutil, subprocess
     bun = shutil.which("bun")
     if not bun:
-        pytest.skip("bun not installed")
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
     parts = ["echo", "printf", "ECHO", "|", " ", "x", "--password-stdin", "--with-token", "'", "secret", "docker login", "echos", "-"]
     rnd = random.Random(11)
     lines = ["".join(rnd.choice(parts) for _ in range(rnd.randint(1, 14))) for _ in range(3000)]
@@ -411,9 +406,8 @@ def _nv_pair(v):
 
 def test_round12_i31_nv_json_4mb_40_pairs_linear_python():
     big = "[" + ", ".join(_nv_pair("a" * 100_000) for _ in range(40)) + "]"
-    t0 = time.time()
     r = at.redact(big)
-    assert time.time() - t0 < 3.0
+    assert_linear(at.redact, lambda f: "[" + ", ".join(_nv_pair("a" * 100_000) for _ in range(int(40 * f))) + "]")
     assert r.count("[redacted:name-value]") == 40 and "a" * 1000 not in r
 
 
@@ -426,17 +420,17 @@ def test_round12_i31_nv_json_ts_python(tmp_path):
     import shutil, subprocess
     bun = shutil.which("bun")
     if not bun:
-        pytest.skip("bun not installed")
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
     items = ["[" + ", ".join(_nv_pair("a" * 100_000) for _ in range(40)) + "]", _nv_pair("x" * 600_000)]
     (tmp_path / "in.json").write_text(json.dumps(items))
-    (tmp_path / "r.ts").write_text("import { redact } from '%s'\nconst t = JSON.parse(require('fs').readFileSync('%s', 'utf8'))\n"
-                                   "const out: any[] = []\nfor (const x of t) { const t0 = performance.now(); const r = redact(x); out.push([r, performance.now() - t0]) }\n"
-                                   "console.log(JSON.stringify(out))\n" % (PLUGIN / "mod" / "lib" / "redact.ts", tmp_path / "in.json"))
+    (tmp_path / "r.ts").write_text("import { redact } from '%s'\nconst t = JSON.parse(require('fs').readFileSync('%s', 'utf8'))\n" % (PLUGIN / "mod" / "lib" / "redact.ts", tmp_path / "in.json") + BUN_LINEAR_JS +
+                                   "const out: any[] = []\nfor (const x of t) { const r = redact(x); out.push([r, linear(f => x.slice(0, Math.floor(x.length * f)), redact)]) }\n"
+                                   "console.log(JSON.stringify(out))\n")
     p = subprocess.run([bun, str(tmp_path / "r.ts")], capture_output=True, text=True, timeout=120)
     assert p.returncode == 0, p.stderr
     out = json.loads(p.stdout)
     assert [r for r, _ in out] == [at.redact(x) for x in items]
-    assert all(ms < 2000 for _, ms in out), [ms for _, ms in out]
+    assert all(ratio <= LIMIT for _, ratio in out), [ratio for _, ratio in out]
 
 
 # ---- Round 13: PII layer (email, phone, IBAN, key context); labels [redacted:email|phone|iban]; after the secret / url-cred / name-value
@@ -487,24 +481,27 @@ def test_round13_deep_redact_pii_keys():
                  "iban": "[redacted:iban]", "fax": True, "mobile": "n/a", "note": "x"}
 
 
+# Round 18b / B2: key values that made the IBAN-shaped value alternative backtrack (Opus hostile18 seeds, 1 MB each)
+R18_KEY_SEEDS = {"run40": "iban: DE12" + "A" * 40 + " ", "run33": "iban: DE12" + "A" * 33 + " ", "run33_x": "iban=DE12" + "AB1" * 11 + "Z\n",
+                 "mixed": "iban: DE12" + "A1B2" * 10 + "/x ", "short": "iban: DE12ABCDABCDABCD-x ", "sp": "iban: DE12 ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCDX ",
+                 "mail": "mail=AB12" + "C" * 40 + " ", "tel": "tel: AB12" + "C1" * 20 + ";x "}
 R13_HOSTILE = {"dot_chain": "a@" + "a." * 100_000 + "1", "long_local": "a@" + "a" * 1_000_000, "many_at": "a@b." * 1_000_000,
                "many_plus": "+1 " * 1_300_000, "digit_run": "+" + "1" * 4_000_000, "upper_run": "AB12" + "C" * 4_000_000,
                "kw_spam": "tel " * 1_000_000, "key_spam": "phone: " * 570_000, "real_emails": "x@acme-corp.io " * 280_000,
-               "iban_spam": "DE89 3704 0044 0532 0130 00 " * 140_000}
+               "iban_spam": "DE89 3704 0044 0532 0130 00 " * 140_000, "iban_lc_starts": "LC55 " * 800_000,
+               **{"key_" + k: (s * (1_000_000 // len(s) + 1))[:1_000_000] for k, s in R18_KEY_SEEDS.items()}}
 
 
 @pytest.mark.parametrize("form", sorted(R13_HOSTILE))
 def test_round13_pii_linear_python(form):
-    t0 = time.time()
-    at.redact(R13_HOSTILE[form])
-    assert time.time() - t0 < 15, form
+    assert_linear(at.redact, prefix(R13_HOSTILE[form]), form)
 
 
 def test_round13_pii_ts_python(tmp_path):
     import shutil, subprocess
     bun = shutil.which("bun")
     if not bun:
-        pytest.skip("bun not installed")
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
     texts = [t for _, t, _ in PII_SECRETS] + PII_NORMAL + [v[:5000] for v in R13_HOSTILE.values()] + [
         "ssh ubuntu@host.acme-corp.io", "+123456789012", "+422 123 456 789", "Tel: (030) 1234567", '"email": "a@b.example.com"']
     (tmp_path / "in.json").write_text(json.dumps(texts))
@@ -519,15 +516,15 @@ def test_round13_pii_timing_ts(tmp_path):
     import shutil, subprocess
     bun = shutil.which("bun")
     if not bun:
-        pytest.skip("bun not installed")
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
     (tmp_path / "f.json").write_text(json.dumps(R13_HOSTILE))
-    (tmp_path / "t.ts").write_text("import { redact } from '%s'\nconst f = JSON.parse(require('fs').readFileSync('%s','utf8'))\nconst out: any = {}\n"
-                                   "for (const k of Object.keys(f)) { const t0 = performance.now(); redact(f[k]); out[k] = performance.now() - t0 }\n"
-                                   "console.log(JSON.stringify(out))\n" % (PLUGIN / "mod" / "lib" / "redact.ts", tmp_path / "f.json"))
+    (tmp_path / "t.ts").write_text("import { redact } from '%s'\nconst f = JSON.parse(require('fs').readFileSync('%s','utf8'))\nconst out: any = {}\n" % (PLUGIN / "mod" / "lib" / "redact.ts", tmp_path / "f.json") + BUN_LINEAR_JS +
+                                   "for (const k of Object.keys(f)) out[k] = linear(g => f[k].slice(0, Math.floor(f[k].length * g)), redact)\n"
+                                   "console.log(JSON.stringify(out))\n")
     p = subprocess.run([bun, str(tmp_path / "t.ts")], capture_output=True, text=True, timeout=300)
     assert p.returncode == 0, p.stderr
-    ms = json.loads(p.stdout)
-    assert all(v < 15000 for v in ms.values()), ms
+    ratios = json.loads(p.stdout)
+    assert all(v <= LIMIT for v in ratios.values()), ratios
 
 
 # ---- Round 13: the url-userinfo rule runs linear (the regex was quadratic on 'a.a.a.…') and gives exactly the regex's result ----
@@ -551,7 +548,7 @@ def test_round13_url_userinfo_lines_ts_python(tmp_path):
     import shutil, subprocess
     bun = shutil.which("bun")
     if not bun:
-        pytest.skip("bun not installed")
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
     lines = _ui_lines()
     (tmp_path / "in.json").write_text(json.dumps(lines))
     (tmp_path / "r.ts").write_text("import { redact } from '%s'\nconsole.log(JSON.stringify(JSON.parse(require('fs').readFileSync('%s','utf8')).map((x: string) => redact(x))))\n"
@@ -559,3 +556,365 @@ def test_round13_url_userinfo_lines_ts_python(tmp_path):
     p = subprocess.run([bun, str(tmp_path / "r.ts")], capture_output=True, text=True, timeout=120)
     assert p.returncode == 0, p.stderr
     assert [(l, t) for l, t in zip(lines, json.loads(p.stdout)) if at.redact(l) != t] == []
+
+
+# ---- Round 14 (review of the PII layer): suffix keys, spaced values behind a key, file-name / date / IP / decimal false alarms,
+# no 'call' keyword, prototype-safe lookups, float parity. Fixture cases: cases.json "pii" (appended) ----
+def test_round14_prototype_keys_and_float_parity():
+    d = {"__proto__": "1234567", "constructor": "abc", "toString": "x", "hasOwnProperty": "0301234567"}
+    assert at.deep_redact(d) == d
+    assert at.deep_redact({"phone": 12345.0}) == {"phone": 12345.0}                      # JS String(12345.0) == "12345": 5 digits
+    assert at.deep_redact({"phone": 1234567.0, "Phone_Number": 30123456}) == {"phone": "[redacted:phone]", "Phone_Number": "[redacted:phone]"}
+    assert at.deep_redact({"phoneNumber": "030 1234567", "mobile_no": "0151 1234 5678", "telNr": "x"}) == \
+        {"phoneNumber": "[redacted:phone]", "mobile_no": "[redacted:phone]", "telNr": "x"}
+
+
+def test_round14_limits_stay_documented():
+    assert at.redact("0049 30 1234567") == "0049 30 1234567"          # 00-prefix without a keyword: known limit
+    assert at.redact("user@host.acme-corp.io:8080") == "user@host.acme-corp.io:8080"   # host:port reads as the SCP form: known limit
+    assert at.redact("+49\u00a030\u00a01234567") == "[redacted:phone]"               # NBSP as a separator (optional fix 8)
+    assert at.redact("Tel.:\u00a0030\u00a01234567") == "Tel.:\u00a0[redacted:phone]"
+
+
+R14_HOSTILE = {"suffix_spam": "Telefonnummer " * 300_000, "spaced_key": "iban: de89 " * 360_000, "spaced_key2": "phone_number: 1 2 3 4 5 6 7 8 9 " * 125_000,
+               "file_at": "logo@2x.png " * 330_000, "date_plus": "+2026-11-24 10:00:00 " * 190_000}
+
+
+@pytest.mark.parametrize("form", sorted(R14_HOSTILE))
+def test_round14_linear_python(form):
+    assert_linear(at.redact, prefix(R14_HOSTILE[form]), form)
+
+
+def test_round14_ts_python(tmp_path):
+    import shutil, subprocess
+    bun = shutil.which("bun")
+    if not bun:
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
+    texts = [v[:6000] for v in R14_HOSTILE.values()] + ["Tel.-Nr.: 030 1234567", "iban: de89 3704 0044 0532 0130 00 and more", "img@1.5x.jpg"]
+    objs = [{"phone": 12345.0}, {"phone": 1234567.0}, {"constructor": "abc", "toString": "0301234567"}, {"phoneNumber": "030 1234567"}]
+    (tmp_path / "in.json").write_text(json.dumps([texts, objs]))
+    (tmp_path / "r.ts").write_text("import { redact, deepRedact } from '%s'\nconst [t, o] = JSON.parse(require('fs').readFileSync('%s', 'utf8'))\n"
+                                   "console.log(JSON.stringify([t.map((x: string) => redact(x)), o.map((x: any) => deepRedact(x))]))\n"
+                                   % (PLUGIN / "mod" / "lib" / "redact.ts", tmp_path / "in.json"))
+    p = subprocess.run([bun, str(tmp_path / "r.ts")], capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0, p.stderr
+    ts_t, ts_o = json.loads(p.stdout)
+    assert ts_t == [at.redact(x) for x in texts]
+    assert ts_o == json.loads(json.dumps([at.deep_redact(x) for x in objs]))
+
+
+# ---- Round 15 (review of round 14): IBAN groups without a digit and lower case, German deepRedact keys and arrays under a PII key,
+# German compound keywords, JS float text, more date / CIDR rejects, narrow spaces, no silent bun skip. Fixture: cases.json "pii" ----
+def test_round15_keyed_iban_stops_at_its_country_length():
+    assert at.redact("iban: gb00 west 1234 5698 7654 32 and more") == "iban: [redacted:iban] and more"   # bad checksum: the key rule
+    assert at.redact("iban: gb82 west 1234 5698 7654 32 and more") == "iban: [redacted:iban] and more"   # valid: the IBAN rule
+    assert at.redact("iban: xq12 abcd efgh and more") == "iban: [redacted:iban] and more"       # Round 16 / I1: unknown country: all groups
+
+
+def test_round15_deep_redact_german_keys_and_arrays():
+    r = at.deep_redact({"telefon": "030 1234567", "Telefonnummer": "030 1234567", "handynummer": "0151 12345678", "mobil": "0151 12345678",
+                        "rufnummer": "030 1234567", "whatsapp": "0151 12345678", "mobilnummer": "0151 12345678", "handy-nr": "0151 1234567",
+                        "phone": ["030 1234567", ["0151 2345678", {"n": 301234567}], "n/a"], "iban": ["de89 3704 0044 0532 0130 00"],
+                        "fax": {"n": "0301234567"}, "mobile": [1234567, True, None]})
+    P = "[redacted:phone]"
+    assert r == {"telefon": P, "Telefonnummer": P, "handynummer": P, "mobil": P, "rufnummer": P, "whatsapp": P, "mobilnummer": P, "handy-nr": P,
+                 "phone": [P, [P, {"n": P}], "n/a"], "iban": ["[redacted:iban]"], "fax": {"n": P}, "mobile": [P, True, None]}
+
+
+def test_round15_js_float_text():
+    for x, want in [(1e-6, "0.000001"), (1.234e-05, "0.00001234"), (1.5e-07, "1.5e-7"), (0.0001234, "0.0001234"), (12345.0, "12345"),
+                    (1e21, "1e+21"), (1.2345678901234566e+17, "123456789012345660"), (123456.789, "123456.789"), (-1234567.0, "-1234567"), (2.5e-10, "2.5e-10")]:
+        assert rd._js_num(x) == want, (x, rd._js_num(x), want)
+
+
+R15_HOSTILE = {"prefix_spam": "Mobiltelefonnummer " * 220_000, "prefix_nostem": "Firmenhandyxyzabcde " * 200_000, "iban_lower": "gb82 west " * 400_000,
+               "iban_key_words": "iban: gb00 west 1234 and more " * 130_000, "dates_plus": "+24.11.2026 10:00:00 " * 190_000}
+
+
+@pytest.mark.parametrize("form", sorted(R15_HOSTILE))
+def test_round15_linear_python(form):
+    assert_linear(at.redact, prefix(R15_HOSTILE[form]), form)
+
+
+def test_round15_deep_array_linear_python():
+    assert_linear(at.deep_redact, lambda f: {"phone": ["030 1234567"] * int(100_000 * f), "x": [{"tel": "0301234567"}] * int(50_000 * f)})
+
+
+def test_round15_ts_python(tmp_path):
+    import shutil, subprocess
+    bun = shutil.which("bun")
+    if not bun:
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
+    texts = [v[:6000] for v in R15_HOSTILE.values()] + ["iban: gb00 west 1234 5698 7654 32 and more", "iban: xq12 abcd efgh and more",
+             "meine iban ist de89 3704 0044 0532 0130 00", "+44.20.794.609", "+49\u202f30\u202f1234567", "Hotel 1234567"]
+    objs = [{"phone": x} for x in (1e-6, 1.234e-05, 1.5e-07, 0.0001234, 1e21, 1.2345678901234566e+17, 123456.789, -1234567.0, 2.5e-10, 12345678901234567890)] + [
+        {"Telefonnummer": "030 1234567", "phone": ["030 1234567", ["0151 2345678", {"n": 301234567}], "n/a"], "fax": {"n": "0301234567"}}]
+    (tmp_path / "in.json").write_text(json.dumps([texts, objs]))
+    (tmp_path / "r.ts").write_text("import { redact, deepRedact } from '%s'\nconst [t, o] = JSON.parse(require('fs').readFileSync('%s', 'utf8'))\n"
+                                   "console.log(JSON.stringify([t.map((x: string) => redact(x)), o.map((x: any) => deepRedact(x))]))\n"
+                                   % (PLUGIN / "mod" / "lib" / "redact.ts", tmp_path / "in.json"))
+    p = subprocess.run([bun, str(tmp_path / "r.ts")], capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0, p.stderr
+    ts_t, ts_o = json.loads(p.stdout)
+    assert ts_t == [at.redact(x) for x in texts]
+    assert ts_o == json.loads(json.dumps([at.deep_redact(json.loads(json.dumps(x))) for x in objs]))
+
+
+# ---- Round 16 (review of round 15): an unkeyed IBAN is cut to its country length before the checks (a following short word no
+# longer hides it), NBSP / tab inside an IBAN, keyword keys in deepRedact, English '...phone' keys, dotted numbers behind 'Tel/', 'cell'
+# only with ':' / '#' / 'no', a keyed IBAN that does not validate loses all its groups, an address with a real TLD before '(' / '[' ----
+def _iban16(cc, n):
+    bban = "".join(str((i * 7 + 3) % 10) for i in range(n - 4))
+    num = "".join(str(int(ch, 36)) for ch in bban + cc + "00")
+    return cc + "%02d" % (98 - int(num) % 97) + bban
+
+
+R16_FOLLOW = [" bis", " BANK", " 1", ".", ", ok", " und mehr"]
+
+
+def _r16_iban_texts():
+    out = []
+    for cc, n in sorted(rd.IBAN_LEN.items()):
+        iban = _iban16(cc, n)
+        spaced = " ".join(iban[i:i + 4] for i in range(0, len(iban), 4))
+        for form in (iban, spaced):
+            for follow in R16_FOLLOW:
+                out.append((form, "Konto " + form + follow, follow))
+    return out
+
+
+def test_round16_every_iban_country_with_a_following_word():
+    leaks = [(t, at.redact(t)) for form, t, follow in _r16_iban_texts() if at.redact(t) != "Konto [redacted:iban]" + follow]
+    assert leaks == []
+
+
+def test_round16_words_after_an_iban_stay():
+    assert at.redact("Bitte ueberweisen an AT61 1904 3002 3457 3201 bis Freitag") == "Bitte ueberweisen an [redacted:iban] bis Freitag"
+    assert at.redact("IBAN AT611904300234573201 und BIC") == "IBAN [redacted:iban] und BIC"
+    assert at.redact("iban: GB82 WEST 1234 5698 7654 3 and more") == "iban: [redacted:iban] and more"     # does not validate: all groups
+    assert at.redact("iban: xyz and more") == "iban: xyz and more"
+    assert at.redact("iban: xq12 abcd efgh and more") == "iban: [redacted:iban] and more"
+
+
+def test_round16_keys_and_cell():
+    P = "[redacted:phone]"
+    r = at.deep_redact({"festnetz": "030 1234567", "Mobiltelefon": "0151 12345678", "Diensthandy": "0151 12345678", "Firmenhandy": "0151 12345678",
+                        "Mobilfunknummer": "0151 12345678", "cell": "415 555 0123", "cellphone": "415 555 0123", "MobilePhone": "0151 12345678",
+                        "HomePhone": "030 1234567", "phoneNumbers": ["030 1234567"], "home_phone": "030 1234567", "phone2": "030 1234567",
+                        "phones": [{"value": "030 1234567"}], "iPhone": "15 Pro", "cells": "030 1234567"})
+    assert r == {"festnetz": P, "Mobiltelefon": P, "Diensthandy": P, "Firmenhandy": P, "Mobilfunknummer": P, "cell": P, "cellphone": P, "MobilePhone": P,
+                 "HomePhone": P, "phoneNumbers": [P], "home_phone": P, "phone2": P, "phones": [{"value": P}], "iPhone": "15 Pro", "cells": "030 1234567"}
+    assert at.redact("cell size 1000000 bytes") == "cell size 1000000 bytes"
+    assert at.redact("Cell: 415 555 0123") == "Cell: " + P
+    assert at.redact("Tel/089.1234.5678") == "Tel/" + P and at.redact("WhatsApp/2.23.20.0 Android") == "WhatsApp/2.23.20.0 Android"
+    assert at.redact("jane.doe@firma.de(Vertrieb)") == "[redacted:email](Vertrieb)" and at.redact("q@k.transpose(-1)") == "q@k.transpose(-1)"
+    assert at.redact("x@y.name(arg)") == "x@y.name(arg)"
+
+
+def test_round16_ts_python(tmp_path):
+    import shutil, subprocess
+    bun = shutil.which("bun")
+    if not bun:
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
+    texts = [t for _, t, _ in _r16_iban_texts()] + ["iban: GB82 WEST 1234 5698 7654 3 and more", "iban: xq12 abcd efgh and more", "cell size 1000000 bytes",
+             "Tel/089.1234.5678", "jane.doe@firma.de(Vertrieb)", "q@k.transpose(-1)", "IBAN DE89\t3704\t0044\t0532\t0130\t00", "MobilePhone: 0151 12345678"]
+    objs = [{"festnetz": "030 1234567", "cell": "415 555 0123", "MobilePhone": "0151 12345678", "phones": [{"value": "030 1234567"}], "iPhone": "15 Pro"}]
+    (tmp_path / "in.json").write_text(json.dumps([texts, objs]))
+    (tmp_path / "r.ts").write_text("import { redact, deepRedact } from '%s'\nconst [t, o] = JSON.parse(require('fs').readFileSync('%s', 'utf8'))\n"
+                                   "console.log(JSON.stringify([t.map((x: string) => redact(x)), o.map((x: any) => deepRedact(x))]))\n"
+                                   % (PLUGIN / "mod" / "lib" / "redact.ts", tmp_path / "in.json"))
+    p = subprocess.run([bun, str(tmp_path / "r.ts")], capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0, p.stderr
+    ts_t, ts_o = json.loads(p.stdout)
+    assert [(x, a) for x, a in zip(texts, ts_t) if a != at.redact(x)] == []
+    assert ts_o == json.loads(json.dumps([at.deep_redact(json.loads(json.dumps(x))) for x in objs]))
+
+
+# ---- Round 17 (review of round 16 / C1'): an unkeyed IBAN is found by a scan over start candidates that walks exactly the country
+# length (no group regex): two IBANs in a row, a 'CC+2 digits' token before it (KW47, Re24), tab-separated columns. Telefax / Fon /
+# Durchwahl as phone words, a digit suffix on phone keys (phone_2, telefon2, fax2; not cell) ----
+def _iban17(cc, n, k):
+    bban = "".join(("ABCDEFGHJK"[(i * 3 + k) % 10] if k and i < 4 else str((i * (5 + k) + 3 + k) % 10)) for i in range(n - 4))
+    num = "".join(str(int(ch, 36)) for ch in bban + cc + "00")
+    return cc + "%02d" % (98 - int(num) % 97) + bban
+
+
+R17_SEPS = [None, " ", "\t", "\u00a0"]
+R17_MIDS = [" ", "\t", " oder ", " IBAN ", ", ", " / ", " neue "]
+R17_LEADS = ["", "KW47 ", "Re24 ", "AB12 ", "DE00 ", "Nr12 ", "IBAN ", "Zahlung KW47: "]
+R17_FOLLOWS = ["", " bis", " 1234", ".", " BANK", "\tBerlin"]
+
+
+def _r17_render(iban, sep, lower):
+    t = iban if sep is None else sep.join(iban[i:i + 4] for i in range(0, len(iban), 4))
+    return t.lower() if lower else t
+
+
+def _r17_cases():
+    """(text, [ibans], expected): every country, two IBANs in a row (each separator x middle word) and one IBAN behind every lead /
+    before every follow form; deterministic."""
+    ccs, out = sorted(rd.IBAN_LEN), []
+    for x, cc in enumerate(ccs):
+        b = ccs[(x * 7 + 1) % len(ccs)]
+        for y, sep in enumerate(R17_SEPS):
+            for z, mid in enumerate(R17_MIDS):
+                i1, i2 = _iban17(cc, rd.IBAN_LEN[cc], (y + z) % 2), _iban17(b, rd.IBAN_LEN[b], (y + z + 1) % 2)
+                lead, follow = R17_LEADS[(x + y + z) % len(R17_LEADS)], R17_FOLLOWS[(x + z) % len(R17_FOLLOWS)]
+                t = lead + _r17_render(i1, sep, z % 3 == 1) + mid + _r17_render(i2, sep, z % 3 == 2) + follow
+                out.append((t, [i1, i2], lead + "[redacted:iban]" + mid + "[redacted:iban]" + follow))
+        for y, lead in enumerate(R17_LEADS):
+            for z, follow in enumerate(R17_FOLLOWS):
+                i1 = _iban17(cc, rd.IBAN_LEN[cc], z % 2)
+                t = lead + _r17_render(i1, R17_SEPS[(y + z) % 4], False) + follow
+                out.append((t, [i1], lead + "[redacted:iban]" + follow))
+    return out
+
+
+def _r17_leaks(cases, outs):
+    strip = lambda s: re.sub(r"[^A-Za-z0-9]", "", s).upper()
+    return [(t, o) for (t, ibans, _), o in zip(cases, outs) if any(i in strip(o) or i[-8:] in strip(o) for i in ibans)]
+
+
+def test_round17_two_ibans_leads_follows_every_country():
+    cases = _r17_cases()
+    outs = [at.redact(t) for t, _, _ in cases]
+    assert len(cases) == 89 * (4 * 7 + 8 * 6)
+    assert _r17_leaks(cases, outs) == []
+    # an exact output except where a lead plus the IBAN's first groups happen to form a valid IBAN of the lead's country (1 in 97)
+    off = [(t, o) for (t, _, e), o in zip(cases, outs) if o != e]
+    assert all(o.startswith("[redacted:iban]") for _, o in off) and len(off) <= len(cases) // 97, off
+
+
+def test_round17_review_examples():
+    I = "[redacted:iban]"
+    AT, DE = "AT61 1904 3002 3457 3201", "DE89 3704 0044 0532 0130 00"
+    assert at.redact("Max\t" + AT + "\t" + DE + "\tBerlin") == "Max\t" + I + "\t" + I + "\tBerlin"
+    assert at.redact("Bitte auf " + AT + " oder " + DE + " ueberweisen") == "Bitte auf " + I + " oder " + I + " ueberweisen"
+    assert at.redact("IBAN alt " + AT + " neue " + DE) == "IBAN alt " + I + " neue " + I
+    assert at.redact("iban: " + AT + " oder " + DE) == "iban: " + I + " oder " + I
+    assert at.redact("Zahlung KW47 " + DE + " danke") == "Zahlung KW47 " + I + " danke"
+    assert at.redact("Re24 " + AT.replace(" ", "")) == "Re24 " + I
+    assert at.redact(AT + " oder 12345") == I + " oder 12345"
+    assert at.redact("AE41 ABCD NO93 8601 1117 947 x") == I + " x"     # a valid IBAN inside a found one: the scan goes on after the end
+    assert at.redact("AB12" + AT.replace(" ", "")) == "AB12" + AT.replace(" ", "")                    # no boundary before the start
+    assert at.redact(AT.replace(" ", "") + "X") == AT.replace(" ", "") + "X"                          # no boundary after the end
+    assert at.redact("AT61  1904 3002 3457 3201") == "AT61  1904 3002 3457 3201"                      # limit: a double space
+    P = "[redacted:phone]"
+    for t in ("Telefax: 089 1234567", "Telefax 089/1234567", "Fon: 089 1234567", "Fon 089 1234567", "Durchwahl: 089 1234-567"):
+        assert at.redact(t) == t[:t.index("0")] + P, t
+    assert at.redact("Fonds 1234567") == "Fonds 1234567" and at.redact("cell_2 = 1234567") == "cell_2 = 1234567"
+    assert at.redact("phone_2: 0151 12345678") == "phone_2: " + P and at.redact("telefon2: 0151 12345678") == "telefon2: " + P
+    assert at.redact("fax2: 089 1234567") == "fax2: " + P and at.redact("phone12: 0151 12345678") == "phone12: " + P
+    r = at.deep_redact({"Telefax": "089 1234567", "fon": "089 1234567", "Durchwahl": "1234567", "phone_2": "030 1234567", "telefon2": "030 1234567",
+                        "fax2": "030 1234567", "cell_2": "1234567", "font": "1234567"})
+    assert r == {"Telefax": P, "fon": P, "Durchwahl": P, "phone_2": P, "telefon2": P, "fax2": P, "cell_2": "1234567", "font": "1234567"}
+
+
+def test_round17_ts_python(tmp_path):
+    import shutil, subprocess
+    bun = shutil.which("bun")
+    if not bun:
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
+    texts = [t for t, _, _ in _r17_cases()] + ["Telefax: 089 1234567", "Fon 089 1234567", "Durchwahl: 089 1234-567", "phone_2: 0151 12345678", "cell_2 = 1234567"]
+    objs = [{"Telefax": "089 1234567", "fon": "089 1234567", "phone_2": "030 1234567", "cell_2": "1234567"}]
+    (tmp_path / "in.json").write_text(json.dumps([texts, objs]))
+    (tmp_path / "r.ts").write_text("import { redact, deepRedact } from '%s'\nconst [t, o] = JSON.parse(require('fs').readFileSync('%s', 'utf8'))\n"
+                                   "console.log(JSON.stringify([t.map((x: string) => redact(x)), o.map((x: any) => deepRedact(x))]))\n"
+                                   % (PLUGIN / "mod" / "lib" / "redact.ts", tmp_path / "in.json"))
+    p = subprocess.run([bun, str(tmp_path / "r.ts")], capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0, p.stderr
+    ts_t, ts_o = json.loads(p.stdout)
+    assert len(texts) == 6769 and [(x, a) for x, a in zip(texts, ts_t) if a != at.redact(x)] == []
+    assert ts_o == json.loads(json.dumps([at.deep_redact(json.loads(json.dumps(x))) for x in objs]))
+
+
+# ---- Round 18 (review of round 17): a phone number behind a bare 'call' (B1, a regression against the base: 'call' + up to 3 words /
+# ':' / '(' and a number that looks like a phone number: leading 0, a space, '(' before it or 2+ separators; code numbers stay), digit
+# suffix on every PII key stem (N2: iban2, email2, mail1 resolve their kind), an IBAN-shaped key value must end at a value end (N3) ----
+def test_round18_call_and_key_suffix():
+    P, I, E = "[redacted:phone]", "[redacted:iban]", "[redacted:email]"
+    assert at.redact("Please call 030 1234567 tomorrow") == "Please call " + P + " tomorrow"
+    assert at.redact("Call: (415) 555-0123") == "Call: (" + P
+    assert at.redact("call our hotline 0800 1234567") == "call our hotline " + P
+    assert at.redact("call the customer at 0151 23456789") == "call the customer at " + P
+    assert at.redact("call 015112345678") == "call " + P and at.redact("call 1-800-555-0123") == "call " + P
+    assert at.redact("call 4155550123") == "call " + P and at.redact("API call 12345678 ok") == "API call 12345678 ok"
+    for t in ("call(123456)", "call timeout 123456", "call(timeout=123456)", "tool call took 1234567 ns", "API call 1234567 ok",
+              "call used 1234567 bytes", "call ratio 123/456", "tool call: redact.py:1234-5678", "call with timeout: 12345678 ms"):
+        assert at.redact(t) == t, t
+    assert at.redact("iban2: DE89 3704 0044 0532 0130 00") == "iban2: " + I and at.redact("email2: max.mustermann@firma.de") == "email2: " + E
+    assert at.redact("IBAN10: XX12 3456") == "IBAN10: " + I and at.redact("mail1=0301234567") == "mail1=0301234567"
+    assert at.redact("iban: DE893704.0044.0532.0130.00") == "iban: " + I and at.redact("iban: Re24089.1234.5678") == "iban: " + I
+    assert at.redact("iban: AT61 1904 3002 3457 3201 oder 12") == "iban: " + I + " oder 12"
+    assert at.deep_redact({"iban2": "DE89 3704 0044 0532 0130 00", "email_1": "max@firma.de"}) == {"iban2": I, "email_1": E}
+
+
+def test_round18_ts_python(tmp_path):
+    import shutil, subprocess
+    bun = shutil.which("bun")
+    if not bun:
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
+    texts = ["Please call 030 1234567 tomorrow", "Call: (415) 555-0123", "call our hotline 0800 1234567", "call(123456)", "tool call took 1234567 ns",
+             "iban2: DE89 3704 0044 0532 0130 01", "iban_2=XX12 3456 7890", "mail1=0301234567", "IBAN10: 1234", "email2: \"max\"",
+             "iban: DE893704.0044.0532.0130.00", "iban: Re24089.1234.5678", "iban: AB12 3.456.789", "call me0151 23456789"]
+    objs = [{"iban2": "DE89 3704 0044 0532 0130 00", "email_1": "max@firma.de", "mail1": "0301234567"}]
+    (tmp_path / "in.json").write_text(json.dumps([texts, objs]))
+    (tmp_path / "r.ts").write_text("import { redact, deepRedact } from '%s'\nconst [t, o] = JSON.parse(require('fs').readFileSync('%s', 'utf8'))\n"
+                                   "console.log(JSON.stringify([t.map((x: string) => redact(x)), o.map((x: any) => deepRedact(x))]))\n"
+                                   % (PLUGIN / "mod" / "lib" / "redact.ts", tmp_path / "in.json"))
+    p = subprocess.run([bun, str(tmp_path / "r.ts")], capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0, p.stderr
+    ts_t, ts_o = json.loads(p.stdout)
+    assert [(x, a) for x, a in zip(texts, ts_t) if a != at.redact(x)] == []
+    assert not any("None" in a or "undefined" in a for a in ts_t)
+    assert ts_o == json.loads(json.dumps([at.deep_redact(json.loads(json.dumps(x))) for x in objs]))
+
+
+# ---- Round 18b (review of round 18): a bare 'call' no longer swallows a following phone keyword (the gap is scanned again), the
+# file-name exception only for a line range, dates / IPv4 / decimals and code words (timeout, took, settled, used, ratio) after 'call',
+# 'call  me'; the IBAN-shaped key value alternative is linear again (B2) ----
+R18B_REDACT = [("Call or WhatsApp 91234567", "91234567"), ("call/whatsapp 91234567", "91234567"), ("call or fax 5550123", "5550123"),
+               ("Please call my phone number 5550123", "5550123"), ("call mobile 87654321", "87654321"), ("call Fax 1234567", "1234567"),
+               ("Call Anna (mobile): 5550123", "5550123"), ("Call/Tel. 5550123", "5550123"), ("Call (mobil): 299839", "299839"),
+               ("call Tel.Nr:0301234567", "0301234567"), ("call Mobil.Nr:0151234567", "0151234567"), ("call me 5550123", "5550123"),
+               ("call  me 5550123", "5550123"), ("Call:555-0123", "555-0123"), ("call 030 1234567", "030 1234567"), ("call 015112345678", "015112345678"),
+               ("Call: (415) 555-0123", "555-0123"), ("call timeout 030 1234567", "030 1234567"), ("call(0301234567)", "0301234567"),
+               ("Call Dr.Meier:0301234567", "0301234567"), ("call 0123456", "0123456"), ("call 123456789", "123456789"),
+               ("call or tel. 5550123", "5550123"), ("call timeout 0301234567", "0301234567"), ("Call/Fax: 5550123", "5550123")]
+R18B_STAY = ["per call (2026-11-24)", "call on 24.11.2026", "first call 2026-11-24T10:00", "call settled in 12.5 ms", "call timeout 123456789",
+             "call(123456)", "call x.py:1234-5678", "tool call took 1234567 ns", "call 1234567", "call 192.168.10.20 failed"]
+
+
+def test_round18b_call():
+    assert [(t, at.redact(t)) for t, s in R18B_REDACT if s in at.redact(t) or "[redacted:phone]" not in at.redact(t)] == []
+    assert [(t, at.redact(t)) for t in R18B_STAY if at.redact(t) != t] == []
+
+
+def test_round18b_key_value_linear_and_unchanged():
+    assert at.redact("iban: DE12" + "A" * 40 + " x") == "iban: [redacted:iban] x"
+    assert at.redact("iban: GB82 WEST 1234 5698 7654 32.") == at.redact("iban: GB82 WEST 1234 5698 7654 32.")  # (pinned below by TS == Py)
+    assert_linear(at.redact, lambda f: ("iban: DE12" + "A" * 40 + " ") * int(2000 * f))
+
+
+def test_round18b_ts_python(tmp_path):
+    import shutil, subprocess
+    bun = shutil.which("bun")
+    if not bun:
+        pytest.skip("bun not installed") if os.environ.get("ACE_ALLOW_NO_BUN") == "1" else pytest.fail("bun missing: the TS/Python parity tests must run (ACE_ALLOW_NO_BUN=1 skips them locally)")
+    texts = [t for t, _ in R18B_REDACT] + R18B_STAY + ["iban2: DE89370400440532013000", "email_1=max@firma.de", "iban: DE89 3704 0044 0532 0130 00/x",
+             "iban=DE89370400440532013000xyz", "iban: DE12ABCDEFGH", "iban: GB82 WEST 1234 5698 7654 32.", "iban: XX12 3456 7890 1234 bitte",
+             "tel: ab12 3456 7890;", "Tel: AB12-3456", "iban: DE12" + "A" * 40 + " x", "iban: DE12 ABCD ABCD ABCD ABCD ABCD ABCD ABCD ABCDX x"]
+    (tmp_path / "in.json").write_text(json.dumps(texts))
+    (tmp_path / "r.ts").write_text("import { redact } from '%s'\nconsole.log(JSON.stringify(JSON.parse(require('fs').readFileSync('%s', 'utf8')).map((x: string) => redact(x))))\n"
+                                   % (PLUGIN / "mod" / "lib" / "redact.ts", tmp_path / "in.json"))
+    p = subprocess.run([bun, str(tmp_path / "r.ts")], capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0, p.stderr
+    assert [(x, a) for x, a in zip(texts, json.loads(p.stdout)) if a != at.redact(x)] == []
+
+
+# ---- Round 18c (NB1): a number with a leading 0 and one '.' behind 'call' is a phone number, not a decimal ----
+def test_round18c_leading_zero_dot():
+    P = "[redacted:phone]"
+    assert at.redact("call 030.1234567") == "call " + P and at.redact("Call (030.1234567)") == "Call (" + P + ")"
+    for t in ("call settled in 12.5 ms", "call 0.5", "call 09.30 am", "+49.301234567", "+4930.1234567", "+0.123456789"):
+        assert at.redact(t) == t, t

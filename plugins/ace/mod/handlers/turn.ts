@@ -4,7 +4,7 @@ import { SINK_WRITE_SH } from '../lib/sh'
 import { logsSafe, nowIso, relLog } from '../io/log'
 import { LAUNCHER_MS, aceEnv, cliHead, engineScript, gitContext, ids } from '../io/spawn'
 import { type Load, type Sess, clearTools, cohortEnv, fullStepsEnabled, readState, stateFile, takeDownvote, takeTools, takeUpvote, uuid, type HookArgs, classicFresh, clearDeferred, deferFile, disabled, enqueue, ensure, pendingFile, pendingFile830, pendingMatches, readOrigin, refreshMarker } from '../io/state'
-import { traceVariant } from '../lib/cohort'
+import { appliedControlPct, layoutLabel, traceVariant } from '../lib/cohort'
 import { type ToolRec, appliedLogIds, parseAceReview, parseUsedIds, selfEvalPrompt, usedPatternIds } from '../lib/evidence'
 import { pyDumps, pyLoads } from '../lib/pyjson'
 import { answerTail } from '../lib/rejection'
@@ -53,7 +53,8 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
   }
   const playbook: string[] = state.pattern_ids ?? []
   const rlog: Record<string, number> = state.retrieval_log_ids ?? {}
-  const variant = traceVariant(state.render_variant, s.sessionId, await cohortEnv($, s))  // §31: stored label, else the conversation arm
+  const cenv = await cohortEnv($, s)
+  const variant = traceVariant(state.render_variant, s.sessionId, cenv), controlPct = appliedControlPct(cenv)  // §31: stored label, else the conversation arm
   const tokenUsed = usedPatternIds(playbook, state.pattern_contents ?? {}, usedText, recs.map(r => r.hay).filter(Boolean).join('\n'))
   const tsid: string | undefined = state.task_session_id ?? undefined
   const effort = effortEvent || await $.env.get('CLAUDE_EFFORT') || 'normal'
@@ -86,7 +87,7 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
     } catch { /* git context is optional */ }
     const { trace, success, failed_steps, cap, textCaps } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
       tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, forkOf: agentId ? state.fork_of_retrieval_id ?? undefined : undefined, appliedLogIds: applied, usedIds: { ...bySource, used_ids_model_list: modelList, used_ids_tokens_list: tokenList }, downvote, downvoteDetect: dv, upvote: uv?.ids, upvoteDetect: uv,
-      nowIso: await nowIso($), renderVariant: variant, conversationId: s.sessionId, effort, git, textCap: textCapChars(await $.env.get('ACE_TEXT_HARD_CAP_CHARS')),
+      nowIso: await nowIso($), renderVariant: variant, renderControlPct: controlPct, renderLayout: state.render_layout, conversationId: s.sessionId, effort, git, textCap: textCapChars(await $.env.get('ACE_TEXT_HARD_CAP_CHARS')),
       pluginVersion: s.clientId.slice(s.clientId.lastIndexOf('/') + 1),
       interactive: L.interactive, ...await readOrigin($, s), hardCap: hardCapBytes(await $.env.get('ACE_TRACE_HARD_CAP_BYTES')), fullSteps: await fullStepsEnabled($, s), legacySummaryCap })
     // full steps: how often the hard cap bites (sizes only, never content)
@@ -117,7 +118,7 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
       tools_executed: recs.length, state_changing_tools: recs.filter(r => ['Edit', 'Write', 'Bash', 'mcp__', 'NotebookEdit'].some(x => r.tool.includes(x))).length,
       success, failed_steps, outcome_rule: OUTCOME_RULE, execution_time_seconds: Math.round((await $.clock.now() - t0) / 10) / 100, learning_sent: sent,
       used_ids_count: used.length, used_source: source, ...bySource, ...(capped ? { used_ids_capped: true } : {}),
-      source: 'mod', agent_id: agentId ?? null, task_session_id: tsid ?? null, render_cohort: variant ?? null })  // 8.1.0 audit
+      source: 'mod', agent_id: agentId ?? null, task_session_id: tsid ?? null, render_cohort: variant ? variant + layoutLabel(state.render_layout) : null })  // 8.1.0 audit
     const log = `${s.logs}/ace-relevance.jsonl`
     const python = (await readText($, `${s.root}/python_path`))?.trim()
     const verbosity = await $.env.get('ACE_VERBOSITY') || 'detailed'

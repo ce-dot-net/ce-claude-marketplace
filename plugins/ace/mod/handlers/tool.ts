@@ -3,9 +3,10 @@ import { logSubagentError, subagentRender } from './agent'
 import { readJson, readText } from '../io/fs'
 import { nowIso, relLog } from '../io/log'
 import { DOMAIN_MS, hitResult, reuseGet, reuseStore, search } from '../io/spawn'
-import { type Load, type Sess, disabled, ensure, readState, searchOrigin, updateState, uuid, type HookArgs, recordTool, refreshMarker } from '../io/state'
+import { type Load, type Sess, cohortEnv, disabled, ensure, readState, searchOrigin, updateState, uuid, type HookArgs, recordTool, refreshMarker } from '../io/state'
 import { injectedContents } from '../lib/evidence'
-import { renderDomainShift } from '../lib/render'
+import { layoutA, layoutValue } from '../lib/cohort'
+import { renderDomainShift, renderLayoutDomainShift } from '../lib/render'
 import { safeComponent as safe } from '../lib/state'
 import { basenameQuery, domainNames, matchDomainToPath } from '../lib/text'
 import { fullStepsOn, toolRec } from '../lib/trace'
@@ -25,7 +26,7 @@ export async function lateInject($: any, L: Load, s: Sess, key: string): Promise
   const sr = await search($, s, query, tsid, undefined, DOMAIN_MS, tsid, await searchOrigin($, L, s), L)
   if (!sr.resp) { await logSubagentError($, s, sr); return null }
   const r = await subagentRender($, s, sr, query, st.agent_type ?? 'unknown', tsid, t0, st.parent_task_id, { late: true })
-  await updateState($, L, s, key, { ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort,
+  await updateState($, L, s, key, { ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort, renderLayout: r.layout,
     contents: injectedContents(r.patterns, r.ids) })
   return r.context
 }
@@ -61,14 +62,17 @@ export async function domainShift($: any, L: Load, e: any, key: string): Promise
     if (!cached) await reuseStore($, L, s, 'domain', query, key, sr.resp)
     // A failed search stays retryable. Parallel domains: the newest claim writes, so the finishing order cannot flip it.
     if (sr.resp && L.lastClaim.get(key) === matched) await $.fs.write(lastFile, matched)
-    const rd = sr.resp && (sr.resp.similar_patterns || []).length ? renderDomainShift(sr.resp, matched) : null
+    const env = await cohortEnv($, s)  // layout (a): the conversation's layout cohort (own salt), arms budget/full only
+    const la = layoutA(s.sessionId, env)
+    const rd = sr.resp && (sr.resp.similar_patterns || []).length
+      ? la ? renderLayoutDomainShift(sr.resp, matched, env.ACE_RENDER_LAYOUT_A_HINT === '1') : renderDomainShift(sr.resp, matched) : null
     await relLog($, s, { timestamp: await nowIso($), event: 'domain_shift', hook: 'PostToolUse', session_id: s.sessionId, project_id: s.project,
       from_domain: last, to_domain: matched, file_path: file.slice(0, 200), patterns_found: rd?.shown ?? 0, search_succeeded: !!sr.resp,
       patterns_injected: rd?.ids.length ?? 0, hook_ms: await $.clock.now() - t1, agent_id: e.agentId ?? null, cache_hit: !!cached, search_ms: sr.ms, pin_failed: sr.pinFailed || undefined, pin_skipped: sr.pinSkipped, source: 'mod' })
     if (!rd || !rd.shown) return null
     // F-080: merge the injected ids + log ids; keep the task's FIRST retrieval_id.
     await updateState($, L, s, key, { ids: rd.ids, rlog: rd.rlog, tsid, retrievalId: state?.retrieval_id ? undefined : sr.resp.retrieval_id || undefined,
-      contents: injectedContents(rd.patterns, rd.ids) })
+      contents: injectedContents(rd.patterns, rd.ids), renderLayout: la ? layoutValue(env) : undefined })  // undefined keeps what the main render set
     return rd.context
   } finally { L.claims.delete(claim) }
 }

@@ -81,7 +81,7 @@ def ok_send(log):
     (4, '{"error":{"code":"token_expired","status":401,"message":"expired"}}', False, "dead", "auth"),
     (3, "", False, "dead", "auth"),                          # ace-cli exit 3 = not_logged_in
     (4, "", False, "dead", "auth"),                          # ace-cli exit 4 = token_expired
-    (1, '{"error":{"code":"no_access","status":403,"message":"x"}}', False, "dead", "auth"),
+    (1, '{"error":{"code":"no_access","status":403,"message":"x"}}', False, "requeue", "forbidden"),  # 8.4.0: a transient project check, retried
     (5, "ace_trace_quota_exceeded", True, "requeue", "quota"),
     (1, '{"error":{"code":"server_error","status":500,"message":"Server error (500): boom"}}', True, "requeue", "server_5xx"),
     (1, '{"error":{"code":"server_error","status":500,"message":"Server error (500): boom"}}', False, "lost", "server_5xx"),

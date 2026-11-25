@@ -1,0 +1,119 @@
+{
+ "_doc": "Hostile-input registry, one entry per redaction rule (id = <table>:<name>; env-line, url-cred, entropy-run for the single regexes). The test generators (mod/tests/hostile_gen.ts, tests/hostile_gen.py) derive a worst-case input per rule from its regex source (longest literal words + a class filler, repeated, then a fast-failing tail) and every rule listed here is measured for its scaling exponent. 'units' adds hand-picked repeated units (engine scanners the regex does not describe); 'linear' marks a rule as a pure literal / single-class scan with the reason (not measured). A rule in a table without an entry, or an entry without a rule, fails the test.",
+ "rules": {
+  "span:key": {},
+  "span:flag": {},
+  "span:mysql-p": {},
+  "span:zip-P": {},
+  "span:ssh-keygen-N": {},
+  "span:openssl-pass": {},
+  "span:htpasswd": {
+   "linear": "one literal word and a [ \\t]* run"
+  },
+  "span:curl-user": {},
+  "span:bearer": {
+   "linear": "one literal word and a [ \\t]+ run"
+  },
+  "secret:stdin-echo": {
+   "units": [
+    "echo |",
+    "echo a | --password-stdin\n"
+   ]
+  },
+  "secret:url-userinfo": {
+   "units": [
+    "a.",
+    "a://b.",
+    "http://x"
+   ]
+  },
+  "secret:token-8.1.3": {},
+  "prefix:aws": {},
+  "prefix:google": {},
+  "prefix:gitlab": {},
+  "prefix:stripe": {},
+  "prefix:huggingface": {},
+  "prefix:shopify": {},
+  "format:netrc": {},
+  "format:pgpass": {},
+  "format:docker-auth": {},
+  "format:cookie-jar": {
+   "units": [
+    "d\tTRUE\t/\tTRUE\t1\tn\t",
+    "x\r"
+   ]
+  },
+  "format:php-define": {},
+  "nv:yaml": {},
+  "nv:json": {
+   "units": [
+    "{\"name\": \"API_KEY\", \"value\": \""
+   ]
+  },
+  "pii:iban": {
+   "units": [
+    "DE89 3704 0044 0532 0130 00 ",
+    "iban: de89 ",
+    "gb82 west ",
+    "iban: gb00 west 1234 and more "
+   ]
+  },
+  "pii:email": {
+   "units": [
+    "a@b.",
+    "a@",
+    "x@acme-corp.io ",
+    "logo@2x.png "
+   ]
+  },
+  "pii:phone-intl": {
+   "units": [
+    "+1 ",
+    "+2026-11-24 10:00:00 ",
+    "+24.11.2026 10:00:00 "
+   ]
+  },
+  "pii:phone-kw": {
+   "units": [
+    "tel ",
+    "Telefonnummer ",
+    "Mobiltelefonnummer ",
+    "Firmenhandyxyzabcde "
+   ]
+  },
+  "pii:pii-key": {
+   "units": [
+    "phone: ",
+    "phone_number: 1 2 3 4 5 6 7 8 9 ",
+    "iban: de89 "
+   ]
+  },
+  "env-line": {
+   "units": [
+    "AUTH=a\n",
+    "  12\tK=v\n"
+   ]
+  },
+  "url-cred": {},
+  "entropy-run": {
+   "units": [
+    "A1b2",
+    "Aa1Bb2Cc3Dd4Ee5Ff6Gg7 "
+   ]
+  },
+  "engine:stdin": {
+   "units": [
+    "<<< a ",
+    "x --with-token <<",
+    "<<< $(\n",
+    "a \\\n",
+    "--password-stdin <<E\na\n"
+   ]
+  },
+  "engine:pem": {
+   "units": [
+    "-----BEGIN PRIVATE KEY-----"
+   ]
+  }
+ }
+}

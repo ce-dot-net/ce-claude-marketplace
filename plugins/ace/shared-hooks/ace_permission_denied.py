@@ -303,6 +303,17 @@ def _render_variant(session_id, with_path=False):
     return (variant, path) if with_path else variant
 
 
+def _render_layout(session_id):
+    """The layout-a value ('a' | 'a+hint') the task's state carries, else None."""
+    try:
+        from patterns_used_state import load_state
+        from ace_pattern_render import LAYOUT_A_VALUES
+        v = load_state(session_id, None, 'Stop', project_id=_PROJECT_ID).get('render_layout')
+        return v if v in LAYOUT_A_VALUES else None
+    except Exception:
+        return None
+
+
 def _build_trace(event: dict) -> dict:
     """Build ExecutionTrace shape per SDK-team guidance."""
     tool_name = event.get("tool_name", "unknown")
@@ -346,6 +357,14 @@ def _build_trace(event: dict) -> dict:
     if variant:  # §31: omitted when unknown; 8.2.1: render_path only next to it
         trace["render_variant"] = variant
         trace["render_path"] = path
+        try:
+            from ace_pattern_render import render_control_pct
+            trace["render_control_pct"] = render_control_pct()
+        except Exception:
+            trace["render_control_pct"] = 0
+    layout = _render_layout(session_id)
+    if layout:  # layout-a arm: only when the stored state carries it
+        trace["render_layout"] = layout
     return trace
 
 

@@ -28,7 +28,8 @@ for _p in (PLUGIN / "shared-hooks" / "utils", PLUGIN / "utils"):
     if str(_p) not in sys.path:
         sys.path.insert(0, str(_p))
 
-from ace_pattern_render import render_patterns_dict  # noqa: E402
+from ace_pattern_render import (render_layout_a, render_layout_a_domain_shift, render_layout_a_full,  # noqa: E402
+                                render_patterns_dict)
 
 HUMAN_PROMPT = "please fix the domain shift hook so it injects patterns when reading plugin files"
 TSID_PLACEHOLDER = "__TSID__"
@@ -237,6 +238,11 @@ def generated_files():
         "full_main_edge": render_full(redge, "ace-patterns", 'agent-type="main"')[0],
         "full_sub_8": render_full(r8, "ace-patterns-subagent", 'agent-type="general-purpose"')[0],
         "domain_shift_8": render_domain_shift(r8, "ace-cli"),
+        # layout (a) arm (ace_pattern_render.render_layout_a*), hint off; the mod must hit these bytes
+        "layout_a_main_8": render_layout_a(r8, tag="ace-patterns", attrs='agent-type="main"', hint=False)[0],
+        "layout_a_full_8": render_layout_a_full(r8, tag="ace-patterns", attrs='agent-type="main"', hint=False)[0],
+        "layout_a_sub_8": render_layout_a(r8, tag="ace-patterns-subagent", attrs='agent-type="general-purpose"', hint=False)[0],
+        "layout_a_domain_shift_8": render_layout_a_domain_shift(render_patterns_dict(r8)[0], "ace-cli", hint=False),
         "state_main_8": expected_main_state(s8),
         "budget_main_8": render_budget(r8, "ace-patterns", 'agent-type="main"'),
         "eval_injection": eval_injection({"patterns_injected": 100, "avg_relevance": 0, "domains": 0,
@@ -244,6 +250,10 @@ def generated_files():
         "eval_injection_stats": eval_injection({"patterns_injected": 8, "avg_relevance": 61, "domains": 3,
                                                 "tools_executed": 2, "success": True}),
     }
+    vec = (PLUGIN / "tests-fixtures" / "layout-a" / "cohort_vectors.json").read_text()  # the server's cohort vectors: the mod suite reads a TS twin
+    out[FIX_TS / "layout_a_vectors.ts"] = "export default " + json.dumps(json.loads(vec), sort_keys=True) + "\n"
+    cvec = (PLUGIN / "tests-fixtures" / "control-pct" / "vectors.json").read_text()  # control-share vectors: TS twin for the mod suite
+    out[FIX_TS / "control_pct_vectors.ts"] = "export default " + json.dumps(json.loads(cvec), sort_keys=True) + "\n"
     out[FIX_JSON / "golden.json"] = json.dumps(goldens, indent=1, sort_keys=True) + "\n"
     out[FIX_TS / "golden.ts"] = "export default " + json.dumps(goldens, sort_keys=True) + " as Record<string, string>\n"
     return out

@@ -156,7 +156,7 @@ rows and releases the lock); if the parent has it, no child sent anything, so th
 `subprocess.run` returned). SessionEnd and the 7-day sweep touch only session dirs; the trace temp files are swept
 only as orphans (below).
 
-**What the SDK does (ace-cli 4.4.4 / core 3.10.0, read-only).** `POST /traces` is tried 4 times (waits about 2, 8, 20 s,
+**What the SDK does (ace-cli 4.4.5 / core 3.11.0, read-only).** `POST /traces` is tried 4 times (waits about 2, 8, 20 s,
 ±20 %, `Retry-After` honoured) on 502/503/504 and on connection errors; never on 4xx, 500 or a timeout/abort. When the
 attempts are exhausted the core writes ONE stderr line `{"event":"ace_trace_dead_letter",...}`, nothing on disk.
 Every attempt carries the same `Idempotency-Key`; the core draws it at random per call unless the caller passes one.

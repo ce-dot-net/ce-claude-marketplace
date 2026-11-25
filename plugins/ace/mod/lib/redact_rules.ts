@@ -83,17 +83,24 @@ export const NV_RULES: [string, RegExp, number][] = [
 
 // ---- layer 10: personal data (Round 13, write '[redacted:email]' / '[redacted:phone]' / '[redacted:iban]') ----
 // [name, label, prefilter, rule], run in this order; the engine (redact.ts PII_HANDLERS) checks each candidate:
-//   iban        a candidate whose length matches its country (IBAN_LEN) and whose mod-97 check is 1 (upper case, groups of 4 may be spaced)
+//   iban        a candidate whose length matches its country (IBAN_LEN) and whose mod-97 check is 1 (any case since Round 15, groups of 4
+//               may be spaced); Round 17 / C1': the rule is the start candidate only, the engine walks exactly the country length from each start
+//               (one optional IBAN_SEP before each group of 4), needs a non-alnum char or the end after it and goes on after a hit
 //   email       ASCII local@domain (local <= 64, at most 8 labels + a letters TLD, the whole domain, <= DOMAIN_MAX); not right after a local char
 //               or '//' (URL userinfo), not before ':' + a path char (SCP form 'git@github.com:org/repo.git'); reserved example
 //               domains stay (EXAMPLE_DOMAINS and their subdomains, EXAMPLE_TLDS); an ssh target without a path is an e-mail
 //   phone-intl  '+' + a valid country code (PHONE_CC, ITU E.164) + 8-15 digits in all; without a separator only 11-15 digits
 //               (a diff line '+12345678' stays; a '+' + 11-15 digit constant is a known false alarm)
-//   phone-kw    a national number (6-15 digits) at most 20 chars (no line break, no digit) after a phone keyword
+//   phone-kw    a national number (6-15 digits) at most 20 chars (no line break, no digit) after a phone keyword (with a suffix: Telefonnummer,
+//               Handynr., phoneNumber; Round 15: a bounded prefix on unique German stems: Mobiltelefon, Diensthandy, Festnetz, Mobilfunknummer;
+//               cell / cellphone; 'anrufen', 'call me', 'call us', no bare 'call'; tel / mobil / fax keep their word boundary: Hotel, Automobil)
 //   pii-key     the value after an email / mail / iban / phone key (key=value, key: value, JSON "key": "value"), label by PII_KEY_KIND,
-//               when it looks like one (email: has '@' and no example domain; phone: >= 6 digits; iban: a digit); deepRedact the same per key
+//               when it looks like one (email: has '@' and no example domain; phone: >= 6 digits; iban: a digit); deepRedact the same per key;
+//               the key may carry a suffix (PII_KEY_SUFFIX); an unquoted value runs over single spaces between digit groups (IBAN, phone),
+//               and behind an iban key an IBAN-shaped value runs to its country length even over letter groups (Round 15: 'gb82 west …')
 // KNOWN LIMITS: names and postal addresses, internationalized domains and quoted local parts (outside the key rule), bare national
-// numbers without context, '+' diff constants of 11-15 digits (redacted).
+// numbers without context, '+' diff constants of 11-15 digits (redacted), '00'-prefixed numbers without a keyword, 'user@host:port' (reads as
+// the SCP form), IP-literal domains, a matrix product 'a@b.transpose' without '(' (redacted), real '.zip' / '.mov' address domains.
 export const DOMAIN_MAX = 253
 export const EXAMPLE_DOMAINS = new Set(['example.com', 'example.org', 'example.net'])
 export const EXAMPLE_TLDS = new Set(['test', 'example', 'invalid', 'localhost'])
@@ -115,14 +122,40 @@ export const IBAN_LEN: Record<string, number> = { AD: 24, AE: 23, AL: 28, AT: 20
   GT: 28, HN: 28, HR: 21, HU: 28, IE: 22, IL: 23, IQ: 23, IS: 26, IT: 27, JO: 30, KW: 30, KZ: 20, LB: 28, LC: 32, LI: 21, LT: 20, LU: 20, LV: 21, LY: 25,
   MC: 27, MD: 24, ME: 22, MK: 19, MN: 20, MR: 27, MT: 31, MU: 30, NI: 28, NL: 18, NO: 15, OM: 23, PK: 24, PL: 28, PS: 29, PT: 25, QA: 29, RO: 24, RS: 22,
   RU: 33, SA: 24, SC: 31, SD: 18, SE: 24, SI: 19, SK: 24, SM: 27, SO: 23, ST: 25, SV: 28, TL: 23, TN: 24, TR: 26, UA: 29, VA: 22, VG: 24, XK: 20, YE: 30 }
+// a PII key may carry a suffix (phone_number, phoneNumber, mobile-no, telNr): the kind is looked up on the stem (own keys only)
+export const PII_KEY_SUFFIX = /[_-]?(?:number|nummer|nr|no)$/
+// e-mail look-alikes that are file names: an '@2x.' scale suffix ('logo@2x.png', 'img@1.5x.jpg') or a file-extension TLD
+export const EMAIL_SCALE = /^\d+(?:\.\d+)?x\./i
+export const EMAIL_FILE_TLDS = new Set(['png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'ico', 'gz', 'tgz', 'zip', 'js', 'mjs', 'cjs', 'ts', 'tsx', 'jsx', 'json', 'css', 'map'])
+// '+' + digits that are a date, an IPv4 address or a decimal number in a diff / log line, not a phone number (checked on the digits after '+')
+// Round 15: plausible day / month / year ranges ('+49.30.1234567' stays a phone number) and IPv4 octets 0-255 with an optional CIDR suffix
+// Round 18c / NB1: a decimal has no leading 0 + digit ('030.1234567' behind 'call' is a phone number)
+export const PHONE_REJECT: RegExp[] = [/^\d{4}-\d{2}-\d{2}/, /^(?:0?[1-9]|[12]\d|3[01])\.(?:0?[1-9]|1[0-2])\.(?:19|20)\d{2}(?!\d)/,
+  /^(?:19|20)\d{2}[./](?:0?[1-9]|1[0-2])[./](?:0?[1-9]|[12]\d|3[01])(?!\d)/, /^(?:0?[1-9]|1[0-2])\/(?:0?[1-9]|[12]\d|3[01])\/(?:19|20)\d{2}(?!\d)/,
+  /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}(?:\/\d{1,2})?$/, /^(?!0\d)\d+[.,]\d+$/,
+  /^\d{1,6}\/-\d{1,6}(?!\d)/, /^(?:0?[1-9]|[12]\d|3[01])\.(?:0?[1-9]|1[0-2])\.(?!\d)/]  // a diffstat '+1234/-567', a 'DD.MM.' date prefix
+// a version behind a keyword and '/' ('WhatsApp/2.23.20.0') is no phone number
+export const KW_VERSION = /^\d{1,4}(?:\.\d{1,4})+$/
+// Round 16: a version is at most this many digits ('Tel/089.1234.5678' is a number, 'WhatsApp/2.23.20.0' a version)
+export const KW_VERSION_DIGITS_MAX = 7
+// Round 18 / B1: behind a bare 'call' only a number that looks like a phone number (a leading 0, 9+ digits, a space, '-', '.' or ')') counts,
+// not behind a file name ('x.py:'); code and log numbers (call(123456), 'tool call took 1234567 ns', 'call ratio 123/456', 'x.py:1234-5678') stay
+export const KW_CALL_PHONE = /^0|^\d{9}|[    \-.)]/
+// Round 16: a key that names a phone field by itself (deepRedact and the PII key rule): the keyword stems as a whole key, English
+// '...phone' fields with an optional s / digit / numbers (MobilePhone, home_phone, phoneNumbers, phone2, phones)
+export const PII_KEY_PHONE = /^(?:[a-z]{0,10}[_-]?phone(?:s|[_-]?\d{1,2}|[_-]?(?:numbers?|nummer|nr|no))?|(?:[a-z]{0,16}?(?:telefon|handy|festnetz|mobilfunk|rufnummer)|telephone|telefax|tel|mobile|mobil|fax|whatsapp|durchwahl|fon|cell(?:phone)?)(?:[_-]?(?:nummer|nr|number|no))?(?:(?<!cell)[_-]?\d{1,2})?)$/i
+// Round 16: an address right before '(' / '[' stays when its TLD is longer than this (a method call 'q@k.transpose(', 'x@y.name(')
+export const EMAIL_CALL_TLD_MAX = 3
+// Round 16: separators inside an IBAN (as I3 for phone numbers, plus tab)
+export const IBAN_SEP = /[ \t\u00a0\u202f\u2009]/
 export const PII_KEY_KIND: Record<string, string> = { 'e-mail': 'email', email: 'email', mail: 'email', iban: 'iban', telephone: 'phone', phone: 'phone',
-  tel: 'phone', mobile: 'phone', handy: 'phone', fax: 'phone' }
+  tel: 'phone', mobile: 'phone', handy: 'phone', fax: 'phone', telefon: 'phone', mobil: 'phone', whatsapp: 'phone', rufnummer: 'phone' }
 export const PII_RULES: [string, string, RegExp, RegExp][] = [
-  ['iban', 'iban', /[A-Z]{2}\d{2}/, /(?<![A-Za-z0-9])[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){2,7}(?: ?[A-Z0-9]{1,3})?(?![A-Za-z0-9])/g],
+  ['iban', 'iban', /[A-Za-z]{2}\d{2}/, /(?<![A-Za-z0-9])[A-Za-z]{2}\d{2}/g],
   ['email', 'email', /@/, /(?<![A-Za-z0-9._%+\-])(?<!\/\/)[A-Za-z0-9._%+-]{1,64}@((?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.){1,8}[A-Za-z]{2,24})(?![A-Za-z0-9-]|\.[A-Za-z0-9])(?!:[A-Za-z0-9._\/~-])/g],
-  ['phone-intl', 'phone', /\+/, /(?<![A-Za-z0-9+])\+(\d(?:[ ().\/-]{0,2}\d){5,16})(?!\d)/g],
-  ['phone-kw', 'phone', /tel|phone|mobil|handy|fax|whatsapp|call|rufnummer/i, /\b(telefon|tel|phone|mobile|mobil|handy|fax|whatsapp|call|rufnummer)\b([^\n0-9]{0,20})(\d(?:[ ().\/-]{0,2}\d){5,14})(?!\d)/gi],
-  ['pii-key', '', /mail|iban|phone|tel|mobile|handy|fax/i, new RegExp(String.raw`(?<![A-Za-z0-9_.\-])(["']?)(e-mail|email|mail|iban|telephone|phone|tel|mobile|handy|fax)\1[ \t]*[:=](?!=)[ \t]*(?:"([^"\n]{1,256})"|'([^'\n]{1,256})'|([^${JS_WS}"',;}\]]{1,256}))`, 'gi')],
+  ['phone-intl', 'phone', /\+/, /(?<![A-Za-z0-9+])\+(\d(?:[ ().\/   -]{0,2}\d){5,16})(?!\d)/g],
+  ['phone-kw', 'phone', /tel|phone|mobil|handy|fax|whatsapp|call|rufnummer|anrufen|festnetz|cell|fon|durchwahl/i, /\b((?:[A-Za-z]{0,16}?(?:telefon|handy|festnetz|mobilfunk|rufnummer)|telephone|telefax|tel|phone|mobile|mobil|fax|whatsapp|durchwahl|fon|cellphone|cell(?=[ \t]*(?:[:#]|no\b|nr\b)))(?:nummer|nr\.?|number|no\.?)?|anrufen|call[ \t]+(?:me|us)|call)\b([^\n0-9]{0,20})(\d(?:[ ().\/   -]{0,2}\d){5,14})(?!\d)/gi],
+  ['pii-key', '', /mail|iban|phone|tel|mobil|handy|fax|whatsapp|rufnummer|festnetz|cell|fon|durchwahl/i, new RegExp(String.raw`(?<![A-Za-z0-9_.\-])(["']?)((?:e-mail|email|mail|iban|telefon|telefax|tel|mobile|mobil|handy|fax|whatsapp|rufnummer|festnetz|durchwahl|fon|cell)(?:[_-]?(?:number|nummer|nr|no))?(?:(?<!cell)[_-]?[0-9]{1,2})?|[A-Za-z]{0,10}[_-]?phone(?:s|[_-]?[0-9]{1,2}|[_-]?(?:numbers?|nummer|nr|no))?)\1[ \t]*[:=](?!=)[ \t]*(?:"([^"\n]{1,256})"|'([^'\n]{1,256})'|((?=[A-Za-z()./+-]{0,11}[0-9])[A-Za-z0-9()./+-]{1,12}(?:[    ](?=[A-Za-z()./-]{0,11}[0-9])[A-Za-z0-9()./-]{1,12}){1,8})|([A-Za-z]{2}[0-9]{2}(?=((?: ?[A-Za-z0-9]{1,4}){1,8}))\7[^${JS_WS}"',;}\]]{0,256})|([^${JS_WS}"',;}\]]{1,256}))`, 'gi')],
 ]
 
 // ---- layer 11: high entropy (write '[redacted:entropy]') ----

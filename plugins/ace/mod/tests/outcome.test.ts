@@ -1,6 +1,7 @@
 // ACE mod suite, 8.1.3 end-outcome rule: the shared fixture (tests-fixtures/task-outcome, wrapper ./fixtures/outcome_cases.ts).
 // Mirror runner: tests/test_task_outcome.py (same cases, same expectations; it also guards table parity and the wrapper sync).
-import { expect, test } from 'claude-code/testing'
+import { expect } from 'claude-code/testing'
+import { test } from './t.ts'
 import { CASES, PAIRS, RANDOM, TABLES } from './fixtures/outcome_cases.ts'
 import { BENIGN_EXIT1, DECISIVE_TOOLS, MCP_WRITE_VERBS, READ_ONLY_BASH, SUBCOMMAND_TOOLS, bashStep, buildTrace, commandFamily, summarizeAction, taskOutcome, toolRec } from '../lib/trace.ts'
 import { redact } from '../lib/redact.ts'
@@ -67,9 +68,10 @@ export function fuzzLeaks(trip: string[][], templates: string[]): Record<string,
   return leaks
 }
 
-// Chunks of 50 passwords keep each test well under the per-test timeout.
+// Chunks of 50 passwords keep each test small; a fixed generous timeout (not the 5 s default) because the run takes ~1-5 s
+// of wall clock and the host load can multiply that (a correctness fuzz, not a timing test).
 for (let i = 0; i < TABLES.fuzz_passwords.length; i += 50) {
-  test(`8.1.3 fuzz (fail-closed): passwords ${i}-${i + 49} x every form reach no sent trace field`, () => {
+  test(`8.1.3 fuzz (fail-closed): passwords ${i}-${i + 49} x every form reach no sent trace field`, { timeoutMs: 120_000 }, () => {
     expect(TABLES.fuzz_templates.length >= 25).toBe(true)
     expect(fuzzLeaks(TABLES.fuzz_passwords.slice(i, i + 50), TABLES.fuzz_templates)).toEqual({})
   })

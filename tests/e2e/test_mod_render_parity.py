@@ -154,9 +154,28 @@ def test_used_pattern_ids_python_ts_parity(node_out):
 
 def test_normalize_variant_python_ts_parity(node_out):
     assert node_out["normalized"] == [normalize_render_variant(v) for v in VARIANTS] == \
-        ["full", "budget", "full", None, None, None, None]
+        ["full", "budget", "full", "control", None, None, None]
 
 
 def test_data_root_derives_from_plugin_root(node_out):
     assert node_out["roots"] == ["/h/.claude/plugins/data/ace-ce-dot-net-marketplace",
                                  "/h/.claude/plugins/data/ace-inline"]
+
+
+def test_nested_evidence_dict_bytes_match_the_mod(tmp_path):
+    """Dict items in evidence: Python sorts them deep like the mod's pyDumps(p, true). Own temp fixture, goldens untouched.
+    Keys are sorted by code point on both sides (an astral key after one above U+E000)."""
+    pats = [{"id": "a799d7ed-b5d0-5287-8c19-33645cc1000%d" % i, "content": "c", "section": "s",
+             "evidence": [{"b": 1, "10": 2, "2": 3, "a": {"z": 1, "y": [{"q": 1, "p": 2}]}},
+                          {"ü": 1, "\U0001F600": 2, "￮": 5, "a": 3, "Z": 4}],
+             "match_factors": {"bandit_rank": i + 1}} for i in range(3)]
+    f = tmp_path / "search_nested.json"
+    f.write_text(json.dumps({"retrieval_id": "r", "similar_patterns": pats, "count": 3}))
+    job = {"fixtures": [str(f)], "sids": [], "envs": [], "roots": [], "learnJob": None, "used": [], "variants": []}
+    p = subprocess.run([NODE, "--experimental-strip-types", "--no-warnings", "--import", str(HERE / "ts_resolve.mjs"),
+                        str(HERE / "mod_parity_node.mjs")], input=json.dumps(job), capture_output=True, text=True, timeout=120)
+    assert p.returncode == 0, p.stderr[-2000:]
+    got = json.loads(p.stdout)["fixtures"][str(f)]["patterns_sorted_bytes"]
+    d = render_patterns_dict(_resp(str(f)))[0]
+    assert got == [json.dumps(x) for x in d["similar_patterns"]]  # the rendered form itself, no sort_keys
+    assert any('{"10": 2, "2": 3, "a": {"y": [{"p": 2, "q": 1}], "z": 1}, "b": 1}' in g for g in got)
