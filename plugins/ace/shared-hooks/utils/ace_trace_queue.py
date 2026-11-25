@@ -83,7 +83,7 @@ def _lines(text):
             try:
                 o = json.loads(line[len(RESPONSE_TAG):])
                 resp = o if isinstance(o, dict) else resp
-            except ValueError:
+            except (ValueError, RecursionError):  # 3.10 (the floor) raises RecursionError on deeply nested JSON
                 pass
             continue
         i = line.find("{")
@@ -91,7 +91,7 @@ def _lines(text):
             continue
         try:
             o = json.loads(line[i:])
-        except ValueError:
+        except (ValueError, RecursionError):
             continue
         if not isinstance(o, dict):
             continue
@@ -109,7 +109,7 @@ def _cli_not_stored(text):
     for m in itertools.islice(re.finditer(r"(?m)^\{", text), 20):  # bounded: a failed raw_decode costs O(position)
         try:
             o = dec.raw_decode(text, m.start())[0]
-        except ValueError:
+        except (ValueError, RecursionError):
             continue
         if isinstance(o, dict) and o.get("success") is False and o.get("stored") is False:
             return o

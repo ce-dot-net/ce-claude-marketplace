@@ -673,3 +673,10 @@ def test_cli_not_stored_parser_is_bounded_on_many_brace_lines():
     assert time.time() - t0 < 2.0
     real = '{\n  "success": false,\n  "stored": false,\n  "message": "x"\n}\n'
     assert Q._cli_not_stored(real)["stored"] is False
+
+
+def test_deeply_nested_output_line_is_ignored_not_a_crash():
+    # Python 3.10 (the floor) raises RecursionError, not ValueError, on a deeply nested JSON line: the parser must skip it
+    text = "x " + '{"k":' * 100000 + "\n" + "ace_trace_response " + '{"k":' * 100000 + "\n"
+    assert Q._lines(text) == (None, None, None)
+    assert Q._cli_not_stored(text) is None
