@@ -9,16 +9,19 @@ import { authHeld, holdAuth } from './auth'
 import { dataRoot } from './state'
 
 export const BOOT_NO_AUTH = 'ACE: Bootstrap nicht gestartet: nicht angemeldet, bitte /ace:ace-login ausführen.'
+// 8.4.2: every confirm-type CLI call behind the auth hold (command name -> ace-cli subcommand); one login line while held
+export const AUTH_GUARDED: Record<string, string> = { bootstrap: 'bootstrap', clear: 'clear', delta: 'delta', 'import-patterns': 'import', learn: 'learn', tune: 'tune' }
+export const noAuthLine = (sub: string) => sub === 'bootstrap' ? BOOT_NO_AUTH : `ACE: ${sub} nicht ausgeführt: nicht angemeldet, bitte /ace:ace-login ausführen.`
 
 export type Done = { ok: boolean, toast: string, out: string }
 // kind cli | exec. The result line: `<label> erledigt` / `fehlgeschlagen (exit N)`; out = the named report line, else stdout/stderr (2000 chars).
 export async function execPending($: any, c: any, p: any): Promise<Done> {
   const only = p.kind === 'cli' && p.backfill?.only === true  // --backfill-only: the legacy CLI bootstrap never runs
-  const boot = p.kind === 'cli' && p.argv?.[0] === 'bootstrap', root = { root: await dataRoot($) }
-  if (boot && await authHeld($, root)) return { ok: false, toast: BOOT_NO_AUTH, out: '' }  // 8.4.1: a pending pressed after the hold
+  const sub = p.kind === 'cli' && Object.values(AUTH_GUARDED).includes(p.argv?.[0]) ? p.argv[0] as string : null, root = { root: await dataRoot($) }
+  if (sub && await authHeld($, root)) return { ok: false, toast: noAuthLine(sub), out: '' }  // 8.4.1/8.4.2: a pending pressed after the hold
   const r = only ? null : p.kind === 'exec' ? await run($, p.argv, { timeoutMs: 30_000 }) : await cliRun($, c, p.argv, { stdin: p.stdin, timeoutMs: 300_000, cwd: c?.root })
   const ok = only || (!!r && r.exitCode === 0)
-  if (boot && r && !ok && ['not_logged_in', 'expired'].includes(classify(r.exitCode, r.stderr ?? ''))) await holdAuth($, root)  // 8.4.1: its 401 holds the token (exit code + stderr, never stdout)
+  if (sub && r && !ok && ['not_logged_in', 'expired'].includes(classify(r.exitCode, r.stderr ?? ''))) await holdAuth($, root)  // 8.4.1: its 401 holds the token (exit code + stderr, never stdout)
   const raw = String((ok ? r?.stdout : r?.stderr) ?? '').trim()
   const rep = ok && p.report ? reportLine(String(p.report), raw) : undefined
   let out = rep ?? (raw ? cap(raw, 2000) : '')

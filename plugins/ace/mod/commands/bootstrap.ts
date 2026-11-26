@@ -2,9 +2,6 @@ import { type Cmd, type Kit, confirm, json } from './kit'
 import { cliIds } from '../context/index'
 import { run } from '../io/fs'
 import { collect, flagOn } from '../io/backfill_io'
-import { authHeld } from '../io/auth'
-import { BOOT_NO_AUTH } from '../io/pending'
-import { dataRoot } from '../io/state'
 import { parseBackfillFlags, parseLimit, previewLines } from '../lib/backfill_run'
 import { parseBootstrapArgs } from '../lib/bootstrap_args'
 export const bootstrap: Cmd = { name: 'bootstrap', md: 'ace-bootstrap', description: 'Build the playbook from the codebase (preview + confirm)', argumentHint: '[mode] [thoroughness] | --mode X --thoroughness Y | --backfill-only [--sources git,merge,session] [--limit N]', bound: true }
@@ -47,7 +44,6 @@ function leaveLine(mode: string | undefined): string {
 }
 
 export async function bootstrapCmd($: any, { c, args, cli }: Kit): Promise<string> {
-    if (await authHeld($, { root: await dataRoot($) })) return BOOT_NO_AUTH  // 8.4.1: a held token: no status, no preview, nothing pending
     const lim = parseLimit(args)
     if (!lim.ok) return 'Usage: --limit N (1 bis 100)\n' + (parseBootstrapArgs('--invalid') as { usage: string }).usage
     const bfl = parseBackfillFlags(lim.rest)

@@ -4,7 +4,7 @@ import { expect } from 'claude-code/testing'
 import { test } from './t.ts'
 import S8 from './fixtures/search_8.ts'
 import { sha256Hex } from '../lib/cohort.ts'
-import { HOME, HUMAN, PROOT, ROOT, SDIR, cliOf, done, host, mainTask, settle, submit } from './helpers.ts'
+import { HOME, HUMAN, PROOT, ROOT, SDIR, cliOf, done, host, mainTask, settle, spawn, submit } from './helpers.ts'
 
 const CFG = `${HOME}/.config/ace/config.json`
 const ENGINE = { [`${PROOT}/engine/search.js`]: '' }
@@ -211,4 +211,31 @@ test('dead/ scan: at most the 20 newest entries, each read once per load (head o
   expect(h.files.has(`${ROOT}/auth-rejected`)).toBe(false)
   await submit($, HUMAN + ' again')
   expect(heads().length).toBe(20)          // nothing new: nothing re-read
+})
+
+// 8.4.2: the learn child's dead auth entry is read at the start of every learn too (not only on the next prompt): a later learn in
+// the same turn (a second subagent, the main Stop) is parked instead of sent.
+test('learn in the same turn: a dead auth entry from an earlier learn child parks the next learn (no prompt in between)', async ($, on) => {
+  const h = host(on, { files: { [CFG]: '{}' }, search: () => ({ stdout: S8 }) })
+  await mainTask($, h)
+  h.advance(61_000)
+  h.put(`${DEAD}/2123456789abcdef0123456789abcdef.json`, deadEntry('auth'))
+  await done($)
+  expect(h.learns().length).toBe(0)
+  expect(h.enqueued.length).toBe(1)
+  expect(h.files.get(`${ROOT}/auth-rejected`)).toBe(sha256Hex('{}'))
+})
+
+// review (8.4.2): two learns finishing together both see the earlier child's dead auth entry (deadSeen moves only after the reads)
+test('two concurrent subagent learns both park on a dead auth entry', async ($, on) => {
+  const h = host(on, { files: { [CFG]: '{}' }, search: () => ({ stdout: S8 }) })
+  await submit($)
+  await spawn($, 'audit the session-end reaper for races between the learn lock and the GC')
+  await spawn($, 'port the domain shift matcher to the new state layout and add the tests')
+  for (const a of ['agent-1', 'agent-2']) await $.tool.call({ tool: 'Edit', file_path: `/proj/${a}.py`, old_string: 'a', new_string: 'b', agentId: a } as any)
+  h.advance(61_000)
+  h.put(`${DEAD}/3123456789abcdef0123456789abcdef.json`, deadEntry('auth'))
+  await Promise.all([done($, 'one done', 'agent-1'), done($, 'two done', 'agent-2')])
+  expect(h.learns().length).toBe(0)
+  expect(h.enqueued.length).toBe(2)
 })

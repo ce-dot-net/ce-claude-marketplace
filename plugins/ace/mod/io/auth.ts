@@ -53,10 +53,13 @@ export async function noteDeadAuth($: any, s: Root, seen: { deadSeen?: number })
     const list: any[] = await $.fs.list(dir).catch(() => [])
     const recent = list.filter(f => String(f.name).endsWith('.json') && !f.isLink && f.mtimeMs >= after && now - f.mtimeMs < AUTH_HOLD_MS)
       .sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, 20)
-    if (recent.length) seen.deadSeen = recent[0].mtimeMs
+    let auth = false
     for (const f of recent) {
       const r = await run($, ['head', '-c', String(DEAD_HEAD_BYTES), `${dir}/${f.name}`], { timeoutMs: 2000 })
-      if (r && r.exitCode === 0 && /"last_error"\s*:\s*"auth"/.test(String(r.stdout ?? ''))) return holdAuth($, s)
+      if (r && r.exitCode === 0 && /"last_error"\s*:\s*"auth"/.test(String(r.stdout ?? ''))) { auth = true; break }
     }
+    if (auth) await holdAuth($, s)
+    // 8.4.2: moved only after the reads (and the hold): a concurrent learn scanning meanwhile reads the same entries, never skips them
+    if (recent.length) seen.deadSeen = Math.max(seen.deadSeen ?? 0, recent[0].mtimeMs)
   } catch { /* the guard is an optimisation */ }
 }

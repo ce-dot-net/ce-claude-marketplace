@@ -126,6 +126,16 @@ def test_ci_validates_with_the_pinned_version():
     assert "claude-code@2.1.332" in TESTS_YML.read_text()
 
 
+def test_ci_floor_job_validates_and_tests_the_mod_on_the_floor():
+    """8.4.2: a separate ubuntu job runs validate --strict and the mod tests on the manifest floor (2.1.311), next to 2.1.332."""
+    t = TESTS_YML.read_text()
+    assert "claude-code@2.1.311" in t and "claude-code@2.1.332" in t
+    floor = t[t.index("\n  floor:"):]
+    assert "runs-on: ubuntu-latest" in floor and 'python-version: "3.15"' in floor
+    assert floor.index("claude-code@2.1.311") < floor.index("claude plugin validate plugins/ace --strict") < floor.index("claude plugin test plugins/ace")
+    assert "claude-code@2.1.332" not in floor
+
+
 def test_troubleshooting_documents_old_cc_behavior():
     """§15: what an older CC does with entries it does not know, and that ACE pauses itself."""
     t = (PLUGIN / "docs" / "guides" / "TROUBLESHOOTING.md").read_text()

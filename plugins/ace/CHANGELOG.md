@@ -5,6 +5,17 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- 401 guard on every confirm-type CLI write: `/ace:ace-clear`, `-delta`, `-import-patterns`, `-learn` and `-tune` (like `/ace:ace-bootstrap` since 8.4.1) answer one "nicht angemeldet, bitte /ace:ace-login ausführen" line while the token is held: no preview, no ace-cli call, nothing pending (also for a confirm pressed after the hold started). A failed write whose exit code / stderr says not logged in or expired holds the token. The read-only `/ace:ace-tune` (no arguments or `show`) stays allowed. Not covered: the markdown fallback commands (`commands/ace-*.md`, used when the mod is not running) call ace-cli directly and are not guarded.
+- A wrong hold can be released by hand: a successful `status` from `/ace:ace-status`, `/ace:ace-doctor`, `/ace:ace-test` or `/ace:ace-login` releases it (as the session-start status and a successful search already did).
+- A learn child's 401 now holds the token at the start of the next learn too (a second subagent or the main Stop in the same turn is parked), not only on the next prompt; learns that finish at the same time all see the entry (the scan marks entries as seen only after reading them). Known limit: learns that start before the first child has written its `dead/` entry still send once each (the detached child reports nothing earlier; no Python change for that).
+- CI: a small floor job (ubuntu, Python 3.15) runs `claude plugin validate --strict` and the mod tests on Claude Code 2.1.311 (the manifest floor), next to the 2.1.332 jobs.
+
+### Fixed
+- Mod tests: the four band tests in `rebind.test.ts` failed on the 2.1.311 test kit (`$.ui.mount: no implementation for ui.render`); a test-only `ui.render` fallback stub fixes them (no mod code change).
+
 ## [8.4.1] - 2026-11-26
 
 ### Added
