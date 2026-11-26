@@ -1999,6 +1999,7 @@ def generate_text_report(entries, hours: int = 12) -> str:
     out.append("\nLearn health:")
     out.append("  learning_sent false: %d · learns with 0 applied ids: %d · learn retries: %d" % (
         sum(1 for e in by("execution") if e.get("learning_sent") is False), zero, len(by("learn_retry"))))
+    out.append("  parked (not logged in): %d · lost: %d" % (len(by("learn_parked")), len(by("learn_lost"))))  # 8.4.1
     out.append("  engine lib %d · cli %d%s" % (lib, cli, ("; errors: " + ", ".join("%s %d" % kv for kv in errs.most_common(3))) if errs else ""))
     skips = Counter(e.get("reason") for e in by("search_skipped") + by("learn_skipped"))
     rej = by("rejection_detected")

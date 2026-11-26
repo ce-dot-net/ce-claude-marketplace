@@ -290,11 +290,19 @@ def _auth_marker() -> Optional[Path]:
     return pdd.data_root() / 'auth-rejected' if pdd is not None else None
 
 
+AUTH_HOLD_S = 30 * 60  # 8.4.1: self-heal, mod twin mod/io/auth.ts AUTH_HOLD_MS
+
+
 def _auth_held() -> bool:
     """8.4.0: True after an auth failure until the token file changes: every engine / ace-cli call is a GET /config
-    on the server (a dead token polled it 886 times a day), so none is made while held."""
+    on the server (a dead token polled it 886 times a day), so none is made while held. 8.4.1: and only for AUTH_HOLD_S after
+    the marker was written (a missing stat or a future mtime = expired); any other value ('ok' = released) is not held."""
     try:
-        return _auth_marker().read_text().strip() == _auth_fp()
+        m = _auth_marker()
+        if m.read_text().strip() != _auth_fp():
+            return False
+        age = time.time() - m.stat().st_mtime
+        return 0 <= age < AUTH_HOLD_S
     except Exception:
         return False
 

@@ -121,8 +121,9 @@ def test_floor_text_is_2_1_311(rel):
     assert "2.1.311" in t, rel
 
 
-def test_ci_validates_with_the_floor_version():
-    assert "claude-code@2.1.311" in TESTS_YML.read_text()
+def test_ci_validates_with_the_pinned_version():
+    # 8.4.1: CI pins the tested Claude Code (2.1.332); the manifest floor (>= 2.1.311) is unchanged
+    assert "claude-code@2.1.332" in TESTS_YML.read_text()
 
 
 def test_troubleshooting_documents_old_cc_behavior():

@@ -4,6 +4,7 @@ import { ADOPT_LINE, WARN_LINES, type Ctx, type State, adopt, classify, cliIds, 
 import { run, writePrivate } from '../io/fs'
 import { cliRun } from '../io/cli'
 import { installer } from '../io/installer'
+import { holdAuth, releaseAuth } from '../io/auth'
 import { nowIso } from '../io/log'
 import { type Load, dataRoot, resolveContextOnce, unboundStale } from '../io/state'
 import { pyDumps } from '../lib/pyjson'
@@ -92,6 +93,8 @@ export async function startContext($: any, L: Load, cwd: string) {
         } else if (e.state === 'failed') retry = e.detail || 'failed'
         else if (e.state === 'unavailable' && TOOLCHAIN.test(e.detail)) retry = e.detail  // no node/npm: no install attempt
       }
+      if (st === 'not_logged_in' || st === 'expired') await holdAuth($, { root })  // 8.4.1: no search / learn until the token file changes
+      else if (st === 'ok') await releaseAuth($, { root })  // 8.4.1: the server took the token: a stale hold goes
       await publish($, L, c, st === 'ok' ? null : st, st === 'cli_missing' ? retry : undefined)
       await logOnce($, L, c, st)
       if (st === 'server_error') reprobeLater($, L, c, gen, 0)  // 8.2.4: only this state is transient

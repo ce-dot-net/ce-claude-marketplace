@@ -2,7 +2,7 @@
 import { run, writePrivate } from './fs'
 import { type Load, type SearchOrigin, type Sess, storeFullPct } from './state'
 import { pyDumps, pyLoads, sanitize } from '../lib/pyjson'
-import { sha256Hex } from '../lib/cohort'
+import { authHeld, holdAuth, isAuthFailure, releaseAuth } from './auth'  // 8.4.1: the guard lives in its own leaf module
 import { REUSE_TTL_MS, reuseEnabled, reuseKey } from '../lib/state'
 import { parseDiffStat } from '../lib/trace'
 import { serverReachable } from '../handlers/context'
@@ -17,18 +17,6 @@ export function aceEnv(s: Sess): Record<string, string> {
 }
 // 8.1.0: --org/--project on every CLI spawn, after the subcommand: the CLI never picks its own binding (4.3.4 reads settings.json).
 export const ids = (s: Sess): string[] => [...(s.org ? ['--org', s.org] : []), '--project', s.project]
-export const isAuthFailure = (t: string) => /unauthorized|401|not logged in|no api token|token_expired|session expired|log in again|ace-cli login/i.test(t)
-// 8.4.0: after an auth failure no engine / ace-cli call (each is a GET /config on the server) until the global token file
-// changes. <root>/auth-rejected = sha256 of that file (never the token). Python twin: ace_cli._auth_held / _hold_auth.
-async function authFp($: any): Promise<string> {
-  const x = await $.env.get('XDG_CONFIG_HOME')
-  const p = await $.env.get('ACE_CONFIG_PATH') || `${x || `${await $.env.get('HOME') ?? ''}/.config`}/ace/config.json`
-  try { return sha256Hex(String(await $.fs.read(p))) } catch { return 'none' }
-}
-export async function authHeld($: any, s: Sess): Promise<boolean> {
-  try { return String(await $.fs.read(`${s.root}/auth-rejected`)).trim() === await authFp($) } catch { return false }
-}
-async function holdAuth($: any, s: Sess) { try { await $.fs.write(`${s.root}/auth-rejected`, await authFp($)) } catch { /* the guard is an optimisation */ } }
 const AUTH_HELD_RESULT = { resp: null, error: 'not_authenticated', ms: 0, pinFailed: false, pinSkipped: undefined, pinMs: undefined, stderr: '', engine: 'guard', engineWhy: 'auth_held' }
 // §17/§23: the same order as ace_cli.cli_argv: the plugin-local pinned CLI, else the global `ace-cli` on PATH.
 export async function cliHead($: any): Promise<string[]> {
@@ -73,7 +61,7 @@ export async function search($: any, s: Sess, query: string, pin: string | undef
   if (eng) {
     const e = await engineSearch($, s, eng, query, sid, topK, budgetMs, origin)  // engine never pins: session_id is the task stamp
     const ms = await $.clock.now() - t0
-    if ('resp' in e) { await storeFullPct($, s, e.resp); if (L) await serverReachable($, L).catch(() => undefined) }
+    if ('resp' in e) { await releaseAuth($, s); await storeFullPct($, s, e.resp); if (L) await serverReachable($, L).catch(() => undefined) }
     if ('resp' in e) return { resp: e.resp, error: undefined, ms, pinFailed: false, pinSkipped: undefined, pinMs: undefined, stderr: '', engine: 'lib', engineWhy: 'ok' }
     if ('timeout' in e) return { resp: null, error: 'timeout', ms, pinFailed: false, pinSkipped: undefined, pinMs: undefined, stderr: '', engine: 'lib', engineWhy: 'timeout' }
     engineWhy = 'lib failed: ' + e.why
@@ -110,11 +98,11 @@ export async function search($: any, s: Sess, query: string, pin: string | undef
   }
   let resp: any = null, error: string | undefined
   if (r.threw) error = /ENOENT|not found/i.test(r.threw) ? 'cli_not_found' : 'timeout'
-  else if (r.exitCode !== 0) error = isAuthFailure(r.stderr + r.stdout) ? 'not_authenticated' : /timed? ?out/i.test(r.stderr) ? 'timeout' : 'nonzero_exit'
+  else if (r.exitCode !== 0) error = isAuthFailure(r.stderr) ? 'not_authenticated' : /timed? ?out/i.test(r.stderr) ? 'timeout' : 'nonzero_exit'
   else { try { resp = sanitize(pyLoads(r.stdout)) } catch { error = 'json_parse_failed' } }
   if (error === 'not_authenticated') await holdAuth($, s)
   if (resp && resp.error) { error = String(resp.error); resp = null }
-  if (resp) { await storeFullPct($, s, resp); if (L) await serverReachable($, L).catch(() => undefined) }
+  if (resp) { await releaseAuth($, s); await storeFullPct($, s, resp); if (L) await serverReachable($, L).catch(() => undefined) }
   // A kill alone may be a slow server. Only a re-run that then answers in less time than the pin was given points
   // at the pin. ponytail: server latency varies, so a false 30-min backoff is possible; a lock probe would need the sqlite path.
   if (killedPin && !r.threw && r.exitCode === 0) await $.fs.write(backoffPath, '')

@@ -5,8 +5,9 @@ import { readText, run, writePrivate } from './fs'
 import { APPEND_SH } from '../lib/sh'
 import { pyDumps } from '../lib/pyjson'
 import { engineScript, ids } from './spawn'
+import { authHeld, holdAuth } from './auth'
 import { dataRoot, uuid } from './state'
-import { DEFAULT_SOURCES, POLL_MS, buildItems, finalLines, newRun, progress, runActive, startLine, stepBackfill, type Built, type Deps, type EngineAnswer, type RunState, type Source } from '../lib/backfill_run'
+import { DEFAULT_SOURCES, NO_AUTH, POLL_MS, buildItems, finalLines, newRun, progress, runActive, startLine, stepBackfill, type Built, type Deps, type EngineAnswer, type RunState, type Source } from '../lib/backfill_run'
 import type { Item } from '../lib/backfill_send'
 import { GIT_LOG_ARGV, GIT_MERGES_ARGV } from '../lib/backfill_git'
 import { BACKFILL_FLAG_FILE, storedBackfill } from '../lib/cohort'
@@ -87,6 +88,7 @@ async function stepDeps($: any, c: C, script: string): Promise<{ d: Deps, call: 
     loadLedger: () => loadLedger($, c), saveLedger: l => saveLedger($, c, l),
     log: async row => { const root = await dataRoot($); await run($, ['/bin/sh', '-c', APPEND_SH, 'sh', `${root}/backfill-log.jsonl`, root], { stdin: pyDumps({ timestamp: new Date(t).toISOString(), ...row }) + '\n' }) },
     setResume: async ms => { await $.state.set(RESUME, { at: ms }) },
+    onAuth: async () => holdAuth($, { root: await dataRoot($) }),
   }
   return { d, call }
 }
@@ -149,6 +151,7 @@ export async function backfillPhase($: any, bound: C, o: { days: number, limit: 
   if (!await flagOn($, c.root)) return ['Backfill: Server unterstützt es noch nicht']
   const script = await engineScript($, 'backfill.js')
   if (!script) return ['Backfill: Engine nicht verfügbar (engine/backfill.js fehlt oder ACE_ENGINE=cli), nichts gesendet']
+  if (await authHeld($, { root: await dataRoot($) })) return [NO_AUTH]  // 8.4.1: a rejected token: no run, no request
   const resume = ((await $.state.get(RESUME)) as any)?.value?.at
   const now = await $.clock.now()
   if (typeof resume === 'number' && resume > now) return [`Backfill: Kontingent für heute erreicht, weiter ab ${new Date(resume).toISOString().slice(0, 16).replace('T', ' ')} UTC`]

@@ -549,6 +549,7 @@ export function trimPayloads(recs: ToolRec[], budget: number, bytes: number): Bu
 }
 
 export const USED_IDS_LIST_CAP = 50
+const EVIDENCE_SOURCE = { none: 'none', model: 'self_eval', tokens: 'token', both: 'both' } as const
 export function buildTrace(a: {
   userPrompt: string; tools: ToolRec[]; answer: string; playbookUsed: string[]; agentType: string; tsid?: string; agentId?: string
   parentTaskId?: string; retrievalId?: string; appliedLogIds: number[]; nowIso: string; renderVariant?: string; renderControlPct?: number; renderLayout?: string; effort: string; git?: any
@@ -565,6 +566,7 @@ export function buildTrace(a: {
   legacySummaryCap?: number  // fullSteps false: the 8.3.0 summary cap (2000; 4000 for a SubagentHandback report)
   fullSteps?: boolean  // false = ACE_TRACE_FULL_STEPS=0: 8.3.0 steps (action/result summaries only, no tool_input / tool_response)
   hardCap?: number  // full steps: the hard byte cap (hardCapBytes(env ACE_TRACE_HARD_CAP_BYTES)), default TRACE_HARD_CAP_BYTES
+  evidenceSource?: 'both' | 'model' | 'tokens' | 'none'  // turn.ts dispatch: where the used ids came from (H1 Haiku / H2 tokens)
 }) {
   const { success, failed_steps } = taskOutcome(a.tools)  // 8.1.3: end outcome + informational count
   const textCaps: TextCapHit[] = []
@@ -592,6 +594,8 @@ export function buildTrace(a: {
   if (a.retrievalId) trace.retrieval_id = a.retrievalId
   if (a.forkOf) trace.fork_of = { parent_retrieval_id: a.forkOf }
   trace.applied_log_ids = a.appliedLogIds // server contract: [] when nothing was used, never omitted
+  // 8.4.1: why applied_log_ids is what it is, never omitted; the control arm (0 injected) wins over the evidence
+  trace.evidence_source = a.renderVariant === 'control' ? 'control_arm' : EVIDENCE_SOURCE[a.evidenceSource ?? 'none']
   trace.used_ids_model = a.usedIds?.used_ids_model ?? 0  // used_ids_* and effort_*: the server stores them, does not evaluate them yet
   trace.used_ids_tokens = a.usedIds?.used_ids_tokens ?? 0
   trace.used_ids_model_list = (a.usedIds?.used_ids_model_list ?? []).slice(0, USED_IDS_LIST_CAP)  // 8.2.7: [] when none, never omitted

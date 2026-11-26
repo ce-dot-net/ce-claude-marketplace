@@ -63,3 +63,29 @@ def test_no_token_file_is_a_stable_fingerprint(fake, monkeypatch):
     fake.cli.run_search("q", session_id="s1", hook_event_name="UserPromptSubmit")
     fake.cli.run_search("q", session_id="s1", hook_event_name="UserPromptSubmit")
     assert len(_search(fake)) == 1
+
+
+# 8.4.1: the same 30-minute self-heal as the mod (mod/io/auth.ts AUTH_HOLD_MS): the hold counts while the marker is younger than
+# 30 min; a missing stat or a future mtime counts as expired; any value other than the token hash ('ok' = released) is not held.
+def _held_marker(fake, text):
+    m = fake.pdd.data_root() / "auth-rejected"
+    m.parent.mkdir(parents=True, exist_ok=True)
+    m.write_text(text)
+    return m
+
+
+@pytest.mark.parametrize("age,held", [(30 * 60 - 1, True), (30 * 60, False), (-60, False)])
+def test_hold_expires_after_30_minutes(fake, monkeypatch, tmp_path, age, held):
+    import time
+    _cfg(tmp_path, "{}")
+    m = _held_marker(fake, hashlib.sha256(b"{}").hexdigest())
+    now = 1_900_000_000.0
+    os.utime(m, (now - age, now - age))
+    monkeypatch.setattr(time, "time", lambda: now)
+    assert fake.cli._auth_held() is held
+
+
+def test_released_marker_is_not_held(fake, tmp_path):
+    _cfg(tmp_path, "{}")
+    _held_marker(fake, "ok")
+    assert fake.cli._auth_held() is False

@@ -4,6 +4,7 @@ import { python } from '../commands/py'
 import { readJson, readText, rm, writePrivate } from '../io/fs'
 import { nowIso, relLog, searchRow } from '../io/log'
 import { SEARCH_MS, search } from '../io/spawn'
+import { heldSince, noteDeadAuth } from '../io/auth'
 import { type Load, type Sess, clearDeferred, dataRoot, clearTools, cohortEnv, deferredAnchor, disabled, downvoteEnabled, ensure, notePrompt, pendingFile, pendingFile830, pendingHead, pendingVoteFile, readState, searchOrigin, touchMarker, updateState, upvoteEnabled, uuid, type HookArgs, refreshMarker } from '../io/state'
 import { type Cohort, layoutA, layoutLabel, layoutValue, renderCohort } from '../lib/cohort'
 import { REJECTION_PREV_MAX_AGE_S, evalStats, injectedContents, rejectionProbe, upvoteProbe } from '../lib/evidence'
@@ -125,15 +126,27 @@ export const cohortLabel = (r: { cohort: string; layout?: string | null }) => r.
 // 8.4.0: a rejected token (dead/ entries with last_error 'auth' < 30 min old) is shown ONCE per conversation, from the queue state
 // (not the search). The ONE implementation is the Python one (`ace_trace_queue.py --auth-held` prints the line or nothing), so both chains
 // say the same words at the same threshold. ponytail: one python spawn per prompt until it has been shown (~30 ms), then none.
+// 8.4.1: a held token (io/auth.ts) shows it too, without a count (learns are skipped while held, so dead/ may stay empty); the
+// learn child's dead auth entries are turned into the hold first (noteDeadAuth), so this prompt's search already respects it.
 export const AUTH_HELD_PREFIX = 'ACE: nicht angemeldet, Traces werden NICHT gesendet'
-export async function authHeldNotice($: any, s: Sess): Promise<string | null> {
+export const AUTH_HELD_MARKER_LINE = `${AUTH_HELD_PREFIX}. Bitte \`ace-cli login\` ausführen.`
+export async function authHeldNotice($: any, s: Sess, L: { deadSeen?: number } = {}): Promise<string | null> {
   try {
+    await noteDeadAuth($, s, L)
     const marker = `${s.sdir}/auth_held_notified`
-    if (await $.fs.exists(marker)) return null
-    const out = await python($, 'utils/ace_trace_queue.py', ['--auth-held', '--data-root', await dataRoot($)], $.plugin.root, 15_000)
-    if (!out.startsWith(AUTH_HELD_PREFIX)) return null
-    await writePrivate($, marker, '1')
-    return out.split('\n')[0] ?? null
+    const since = await heldSince($, s), key = since === undefined ? null : `hold:${since}`
+    const seen = (await readText($, marker))?.trim()
+    let line: string | null = null
+    if (seen === undefined) {  // the queue's counted line, once per conversation; a failing spawn never suppresses the marker line
+      try {
+        const out = await python($, 'utils/ace_trace_queue.py', ['--auth-held', '--data-root', await dataRoot($)], $.plugin.root, 15_000)
+        if (out.startsWith(AUTH_HELD_PREFIX)) line = out.split('\n')[0] ?? null
+      } catch { /* the marker line below still counts */ }
+    }
+    if (!line && key && seen !== key) line = AUTH_HELD_MARKER_LINE  // once per hold (a new hold = a new mtime shows it again)
+    if (!line) return null
+    await writePrivate($, marker, key ?? '1')
+    return line
   } catch { return null }
 }
 // 8.4.0: ACE_TRACE_SINK set (not blank) = the traces go to a file and NOTHING is sent: shown once per conversation (marker sink_notified).
@@ -169,7 +182,7 @@ export async function onPrompt($: any, L: Load, e: any): Promise<any> {
     return e
   }
   if (await disabled($, s)) { if (!midTurn) L.pendingMain = null; return e }
-  const authHeld = await authHeldNotice($, s)
+  const authHeld = await authHeldNotice($, s, L)
   if (authHeld) $.ui.log(authHeld)
   const sink = await sinkNotice($, s)
   if (sink) $.ui.log(sink)
