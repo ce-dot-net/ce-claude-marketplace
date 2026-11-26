@@ -4,7 +4,7 @@ import { type Cmd, type Kit, approveOrHint, kitCli, unboundLine, cap } from './k
 import { flagHint, stripApproved } from '../lib/approved'
 import { refreshUnbound } from '../handlers/context'
 import { localState, problemLine } from '../context/index'
-import { type Load, resolveContextOnce } from '../io/state'
+import { type Load, dataRoot, resolveContextOnce } from '../io/state'
 import { search, searchCmd } from './search'
 import { patterns, patternsCmd } from './patterns'
 import { top, topCmd } from './top'
@@ -26,6 +26,8 @@ import { configure, configureCmd } from './configure'
 import { login, loginCmd } from './login'
 import { installCli, installCliCmd } from './install_cli'
 import { bandAction } from '../ui/band'
+import { authHeld } from '../io/auth'
+import { AUTH_GUARDED, noAuthLine } from '../io/pending'
 
 export const ace: Cmd = { name: 'ace', description: 'ACE overview: binding, state and every command' }
 export async function aceCmd($: any, { c }: Kit): Promise<string> {
@@ -54,6 +56,10 @@ export async function runCommand($: any, L: Load, cmd: Cmd, args: string): Promi
   if (cmd.bound && !c.bound) return withHint(unboundLine(c))
   if (cmd.bound && localState(c)) return withHint(unboundLine(c))
   const a = stripApproved(args ?? '')  // 8.2.0: the standalone token never reaches a command
+  // 8.4.2: a held token (io/auth.ts): the confirm-type writes answer one login line (no preview, no call, nothing pending);
+  // the read-only tune (no args / show) stays allowed
+  const readOnly = cmd.name === 'tune' && /^(show)?$/.test(a.args.trim())
+  if (AUTH_GUARDED[cmd.name] && !readOnly && await authHeld($, { root: await dataRoot($) })) return withHint(noAuthLine(AUTH_GUARDED[cmd.name]!))
   const k: Kit = { c, args: a.args, cli: kitCli($, c), approved: a.approved }
   const before = ((await $.state.get({ plugin: 'ace', key: 'pending' })) as any).value
   try { return withHint(cap(await approveOrHint($, k, cmd, before, await dispatch($, cmd.name, k), p => bandAction($, L, p)))) } catch (err) { return `ACE ▼ ${cmd.name} failed: ${String(err).slice(0, 300)}` }

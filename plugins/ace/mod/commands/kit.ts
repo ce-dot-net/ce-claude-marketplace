@@ -3,6 +3,8 @@
 import { type Ctx, classify, cliIds, problemLine, localState } from '../context/index'
 import { cap, cliRun, type CliResult } from '../io/cli'
 import { execExport, execPending } from '../io/pending'
+import { releaseAuth } from '../io/auth'
+import { dataRoot } from '../io/state'
 import type { AcePending } from '../types/index.d'
 
 const PENDING = { plugin: 'ace', key: 'pending' } as const
@@ -10,7 +12,11 @@ export type Kit = { c: Ctx, args: string, cli: (argv: string[], o?: { stdin?: st
 export type Cmd = { name: string, md?: string, description: string, argumentHint?: string, bound?: boolean }
 
 export function kitCli($: any, c: Ctx) {
-  return (argv: string[], o: { stdin?: string, timeoutMs?: number } = {}) => cliRun($, c as any, [...argv, ...cliIds(c)], { ...o, cwd: c.root })
+  return async (argv: string[], o: { stdin?: string, timeoutMs?: number } = {}) => {
+    const r = await cliRun($, c as any, [...argv, ...cliIds(c)], { ...o, cwd: c.root })
+    if (argv[0] === 'status' && r.exitCode === 0) await releaseAuth($, { root: await dataRoot($) })  // 8.4.2: status/doctor/test release a wrong hold by hand
+    return r
+  }
 }
 // A failed CLI run as one line: classified by exit code + stderr, never stdout.
 export function failLine(r: CliResult): string {

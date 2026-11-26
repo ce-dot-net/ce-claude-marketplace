@@ -8,7 +8,11 @@ import { LINES } from '../context/index.ts'
 import { UNBOUND_RECHECK_MS, newLoad } from '../io/state.ts'
 import { refreshUnbound } from '../handlers/context.ts'
 import { flagHint } from '../lib/approved.ts'
-import { CWD, HOME, cliOf, host } from './helpers.ts'
+import { CWD, HOME, cliOf, host as baseHost } from './helpers.ts'
+// 8.4.2: the band falls through to next(e) when it shows nothing; the 2.1.311 test kit has no ui.render implementation behind it
+// ("$.ui.mount: no implementation for ui.render"), newer kits do. A test-only stub: nothing rendered. Mod code unchanged.
+declare const h: any
+const host = (on: any, o: any = {}) => { on('ui.render', async (x: any, e: any, next: any) => { try { return await next(e) } catch (err) { if (!/no implementation for ui\.render/.test(String(err))) throw err; return h(x.ui.resolve(e).Box, null) } }); return baseHost(on, o) }
 
 const BAND = { plugin: 'ace', component: 'AbovePrompt', surface: 'terminal', props: { hasSurvey: false, isWorking: false, bodyRows: 10, bodyColumns: 120 } } as any
 const start = ($: any) => $.session.start({ cwd: CWD, surface: null, isInteractive: false } as any)

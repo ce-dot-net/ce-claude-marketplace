@@ -3,7 +3,7 @@ import { readText, rm, run, writePrivate, readJson } from '../io/fs'
 import { SINK_WRITE_SH } from '../lib/sh'
 import { logsSafe, nowIso, relLog } from '../io/log'
 import { LAUNCHER_MS, aceEnv, cliHead, engineScript, gitContext, ids } from '../io/spawn'
-import { authHeld } from '../io/auth'
+import { authHeld, noteDeadAuth } from '../io/auth'
 import { type Load, type Sess, clearTools, cohortEnv, fullStepsEnabled, readState, stateFile, takeDownvote, takeTools, takeUpvote, uuid, type HookArgs, classicFresh, clearDeferred, deferFile, disabled, enqueue, ensure, pendingFile, pendingFile830, pendingMatches, readOrigin, refreshMarker } from '../io/state'
 import { appliedControlPct, layoutLabel, traceVariant } from '../lib/cohort'
 import { type ToolRec, appliedLogIds, parseAceReview, parseUsedIds, selfEvalPrompt, usedPatternIds } from '../lib/evidence'
@@ -55,7 +55,10 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
   // 8.4.1: a held token (io/auth.ts): nothing goes out. Decided here, before the lock and the Haiku self-eval: no model call, no
   // pending vote taken, no last-main-applied record; the trace (H2 evidence only) is PARKED in the trace queue (--enqueue) and sent
   // by the next good learn's replay. The sink sends nothing anyway: it keeps its trace.
-  const park = !(await $.env.get('ACE_TRACE_SINK'))?.trim() && await authHeld($, s)
+  // 8.4.2: an earlier learn child's 401 (its dead/ auth entry) holds here already, not only on the next prompt
+  const sinkSet = !!(await $.env.get('ACE_TRACE_SINK'))?.trim()
+  if (!sinkSet) await noteDeadAuth($, s, L)
+  const park = !sinkSet && await authHeld($, s)
   const playbook: string[] = state.pattern_ids ?? []
   const rlog: Record<string, number> = state.retrieval_log_ids ?? {}
   const cenv = await cohortEnv($, s)
