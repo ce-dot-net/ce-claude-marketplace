@@ -2,6 +2,9 @@
 import { expect } from 'claude-code/testing'
 import { test } from './t.ts'
 import { CWD, HOME, PROOT, ROOT, cliOf, host } from './helpers.ts'
+import { sha256Hex } from '../lib/cohort.ts'
+import { BOOT_NO_AUTH, execPending } from '../io/pending.ts'
+import { dataRoot } from '../io/state.ts'
 
 const start = ($: any) => $.session.start({ cwd: CWD, surface: null, isInteractive: false } as any)
 const run = async ($: any, args = '') => (await $.command.run({ command: 'ace:ace-bootstrap', args })).text as string
@@ -140,6 +143,29 @@ const stopCase = (a: any, word: string) => async ($: any, on: any) => {
 }
 test('approved with engine exit 3: Gate line, the bootstrap result stays', stopCase({ exit: 3 }, 'Gate'))
 test('approved with 401: login line, the bootstrap result stays', stopCase({ status: 401, body: {} }, 'angemeldet'))
+const CFG = `${HOME}/.config/ace/config.json`
+test('8.4.1 a backfill 401 holds the token (auth-rejected = token-file hash): later searches and backfills spawn nothing', async ($, on) => {
+  const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn(), [CFG]: '{"auth":{"token":"dead"}}' }), backfill: () => ({ status: 401, body: {} }) })
+  await start($)
+  await run($, '--approved')
+  await idle($, h)
+  expect(h.files.get(`${ROOT}/auth-rejected`)).toBe(sha256Hex('{"auth":{"token":"dead"}}'))
+  const n = bf(h).length, searches = h.searches().length
+  await $.prompt.submit({ text: 'please fix the parser module so the tests pass again', origin: { kind: 'composer' } } as any)
+  expect(h.searches().length).toBe(searches)
+  expect(await run($, '--backfill-only --approved')).toContain('nicht angemeldet')
+  expect(bf(h).length).toBe(n)
+})
+// a held token stays held at session start only when the status probe agrees (status ok releases it, review fix 3)
+const cliHeld = (a: string[]) => a[0] === 'status' ? { exitCode: 4, stderr: '{"error":{"code":"token_expired","status":401}}' } : cli(a)
+test('8.4.1 a held token starts no backfill run: login line, no engine call, no marker', async ($, on) => {
+  const h = host(on, { mockClock: true, cli: cliHeld, git, files: base({ [FLAG]: flagOn(), [CFG]: '{}', [`${ROOT}/auth-rejected`]: sha256Hex('{}') }), backfill: () => ({ status: 202, body: {} }) })
+  await start($)
+  const t = await run($, '--approved')
+  expect(t).toContain('nicht angemeldet')
+  expect(bf(h).length).toBe(0)
+  expect(h.marker()).toBe(null)
+})
 
 test('a ledger file with a bad signature starts empty (never crashes); the key file is created 0600-style via the private write', async ($, on) => {
   const h = host(on, { mockClock: true, cli, git, files: base({ [FLAG]: flagOn(), [`${ROOT}/projects/prj_t/backfill-ledger.tsv`]: 'v1\tgarbage\n\x00' }), backfill: () => ({ status: 429, body: {} }) })
@@ -477,4 +503,36 @@ test('--sources without --backfill-only is refused (the legacy bootstrap never r
     expect(await run($, a)).toContain('nur mit --backfill-only')
   expect(h.pending()).toBe(null)
   noLegacy(h, n0)
+})
+
+// 8.4.1 item 2: `ace-cli bootstrap` behind the same guard
+const CFG2 = `${HOME}/.config/ace/config.json`
+const bootCalls = (h: any) => h.runs.filter((r: any) => cliOf(r.argv)?.[0] === 'bootstrap' || r.argv.includes('ls-files'))  // the CLI bootstrap, or the preview's facts
+test('8.4.1 bootstrap with a held token: login line, no preview (no facts), no ace-cli bootstrap, nothing pending', async ($, on) => {
+  const h = host(on, { mockClock: true, cli: cliHeld, git, files: base({ [CFG2]: '{}', [`${ROOT}/auth-rejected`]: sha256Hex('{}') }) })
+  await start($)
+  const before = bootCalls(h).length
+  const t = await run($, '--approved')
+  expect(t).toContain('nicht angemeldet')
+  expect(bootCalls(h).length).toBe(before)
+  expect(h.pending()).toBe(null)
+})
+test('8.4.1 a 401 from ace-cli bootstrap holds the token', async ($, on) => {
+  const h = host(on, { mockClock: true, git, files: base({ [CFG2]: '{"auth":{"token":"dead"}}' }),
+    cli: (a: string[]) => a[0] === 'bootstrap' ? { exitCode: 1, stderr: 'Error: Not logged in' } : cli(a) })
+  await start($)
+  await run($, '--approved')
+  expect(h.files.get(`${ROOT}/auth-rejected`)).toBe(sha256Hex('{"auth":{"token":"dead"}}'))
+})
+// The band button runs execPending directly (no command, so no bootstrapCmd guard in front): a minimal $ without the host.
+test('8.4.1 execPending: a bootstrap pending pressed while held runs nothing and answers the login line', async () => {
+  const files = new Map<string, string>(), ran: string[][] = []
+  const fake: any = { env: { get: async (k: string) => (k === 'HOME' ? HOME : undefined) }, plugin: { root: PROOT, name: 'ace' }, clock: { now: async () => 1_800_000_000_000 },
+    fs: { read: async (p: string) => { if (!files.has(p)) throw new Error('ENOENT'); return files.get(p) }, stat: async () => ({ mtimeMs: 1_800_000_000_000 - 1000 }) },
+    process: { run: async (argv: string[]) => { ran.push(argv); return { exitCode: 0, stdout: '', stderr: '' } } } }
+  const root = await dataRoot(fake)
+  files.set(`${HOME}/.config/ace/config.json`, '{}'); files.set(`${root}/auth-rejected`, sha256Hex('{}'))
+  const d = await execPending(fake, { root: CWD, orgId: 'org_t', projectId: 'prj_t' }, { kind: 'cli', label: 'Bootstrap starten', argv: ['bootstrap', '--json'], report: 'bootstrap' })
+  expect([d.ok, d.toast]).toEqual([false, BOOT_NO_AUTH])
+  expect(ran.length).toBe(0)
 })

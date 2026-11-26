@@ -2,16 +2,23 @@
 // one executor, so the button and the typed line cannot drift apart. No band, no rebind: only the action and its result lines.
 import { run } from './fs'
 import { cap, cliRun } from './cli'
-import { cliIds, repoWrite } from '../context/index'
+import { classify, cliIds, repoWrite } from '../context/index'
 import { backfillPhase } from './backfill_io'
 import { reportLine } from '../lib/reports'
+import { authHeld, holdAuth } from './auth'
+import { dataRoot } from './state'
+
+export const BOOT_NO_AUTH = 'ACE: Bootstrap nicht gestartet: nicht angemeldet, bitte /ace:ace-login ausführen.'
 
 export type Done = { ok: boolean, toast: string, out: string }
 // kind cli | exec. The result line: `<label> erledigt` / `fehlgeschlagen (exit N)`; out = the named report line, else stdout/stderr (2000 chars).
 export async function execPending($: any, c: any, p: any): Promise<Done> {
   const only = p.kind === 'cli' && p.backfill?.only === true  // --backfill-only: the legacy CLI bootstrap never runs
+  const boot = p.kind === 'cli' && p.argv?.[0] === 'bootstrap', root = { root: await dataRoot($) }
+  if (boot && await authHeld($, root)) return { ok: false, toast: BOOT_NO_AUTH, out: '' }  // 8.4.1: a pending pressed after the hold
   const r = only ? null : p.kind === 'exec' ? await run($, p.argv, { timeoutMs: 30_000 }) : await cliRun($, c, p.argv, { stdin: p.stdin, timeoutMs: 300_000, cwd: c?.root })
   const ok = only || (!!r && r.exitCode === 0)
+  if (boot && r && !ok && ['not_logged_in', 'expired'].includes(classify(r.exitCode, r.stderr ?? ''))) await holdAuth($, root)  // 8.4.1: its 401 holds the token (exit code + stderr, never stdout)
   const raw = String((ok ? r?.stdout : r?.stderr) ?? '').trim()
   const rep = ok && p.report ? reportLine(String(p.report), raw) : undefined
   let out = rep ?? (raw ? cap(raw, 2000) : '')

@@ -103,6 +103,7 @@ export type Load = {
   markerAt: number
   reuseUsed: Set<string>                         // §32: `${entry}\0${agent}` already served to that agent
   mainSeen: number                              // item 4: main tool.call events of the current task (diagnostic: tools_mismatch)
+  deadSeen?: number                             // 8.4.1: newest trace-queue/dead entry mtime io/auth.ts noteDeadAuth already read
   compacted: boolean                             // item A: a main compaction ran; prompt.compose re-adds the patterns
   stopDefer: string[] | null                    // classic.Stop: background task types while delegated work runs (§16 P2)
   deferred: string | undefined                  // tsid of the main task whose learn waits for its delegated work

@@ -115,9 +115,10 @@ export type Deps = {
   setResume: (ms: number) => Promise<void>
   noiseExcluded?: number   // session tasks the tool-noise filter set aside (logged in backfill_batch)
   sources?: Record<string, Source>   // source per idempotency key: logged as backfill_item_sent / backfill_batch (keys and counts only)
+  onAuth?: () => Promise<void>   // 8.4.1: a 401 holds the token (io/auth.ts holdAuth): nothing else goes out until it changes
   log?: (row: any) => Promise<void>   // diagnosis rows (backfill_response / backfill_item); a failing logger never breaks the run
 }
-const NO_AUTH = 'Backfill gestoppt: nicht angemeldet (401), bitte /ace:ace-login ausführen. Nichts vermerkt.'
+export const NO_AUTH = 'Backfill gestoppt: nicht angemeldet (401), bitte /ace:ace-login ausführen. Nichts vermerkt.'
 const NO_PLAN = 'Backfill gestoppt: Abo/Zahlung nötig (402), bitte Abo prüfen. Nichts vermerkt.'
 const LATER = 'Backfill gestoppt: Server gerade nicht erreichbar, später erneut ausführen (bereits Gesendetes bleibt vermerkt).'
 
@@ -165,7 +166,7 @@ export async function stepBackfill(all: Item[], st: RunState, d: Deps): Promise<
     st.pollFails = undefined
     if (g.exit !== 0) { stop(`Backfill gestoppt: Job-Abfrage fehlgeschlagen (Engine exit ${g.exit}).`); return 'stop' }
     if (g.status === 404) return true            // unknown job: treated as submitted
-    if (g.status === 401) { stop(NO_AUTH); return 'stop' }
+    if (g.status === 401) { await d.onAuth?.(); stop(NO_AUTH); return 'stop' }
     if (g.status === 402) { stop(NO_PLAN); return 'stop' }
     if (g.status !== 200) { stop(LATER); return 'stop' }
     const judged = new Set(st.judged ?? [])
@@ -207,7 +208,7 @@ export async function stepBackfill(all: Item[], st: RunState, d: Deps): Promise<
     if (a.exit === 3) { stop('Backfill nicht gesendet: Gate fehlgeschlagen (Core/Client nicht nutzbar).'); break }
     if (a.exit === 1) { stop('Backfill gestoppt: keine Antwort vom Server, der Batch kam evtl. an. Ledger unverändert, Wiederholung ist sicher (Duplikate werden erkannt).'); break }
     if (a.exit !== 0) { stop(`Backfill nicht gesendet: Engine exit ${a.exit}.`); break }
-    if (a.status === 401) { stop(NO_AUTH); break }
+    if (a.status === 401) { await d.onAuth?.(); stop(NO_AUTH); break }
     if (a.status === 402) { stop(NO_PLAN); break }
     const c = classify(a.status ?? 0, a.body, d.now())
     if (c.kind === 'capability_off') { stop('Backfill: Server unterstützt es noch nicht, nichts gesendet.'); break }

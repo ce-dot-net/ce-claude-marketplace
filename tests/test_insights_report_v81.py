@@ -50,3 +50,16 @@ def test_report_sections_and_numbers():
 def test_empty_and_old_rows():
     assert 'No telemetry' in ai.generate_text_report([], hours=12)
     assert 'No events' in ai.generate_text_report([{'timestamp': ts(60 * 48), 'event': 'search'}], hours=12)
+
+
+def test_learn_health_counts_parked_and_lost_learns():
+    """8.4.1: the mod parks a learn while the token is held (learn_parked) and logs learn_lost when nothing could be kept."""
+    rows = ROWS + [
+        {'timestamp': ts(15), 'event': 'learn_parked', 'session_id': 's', 'reason': 'auth_held', 'enqueued': True},
+        {'timestamp': ts(14), 'event': 'learn_parked', 'session_id': 's', 'reason': 'auth_held', 'enqueued': True},
+        {'timestamp': ts(13), 'event': 'learn_lost', 'session_id': 's', 'reason': 'enqueue_failed', 'error_class': 'not_sent'},
+    ]
+    t = ai.generate_text_report(rows, hours=12)
+    assert 'parked (not logged in): 2 · lost: 1' in t
+    assert 'auth_held' not in t.split('Skips: ')[1].split('\n')[0]  # never mis-bucketed as a skip
+    assert 'parked (not logged in): 0 · lost: 0' in ai.generate_text_report(ROWS, hours=12)

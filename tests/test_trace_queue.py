@@ -680,3 +680,26 @@ def test_deeply_nested_output_line_is_ignored_not_a_crash():
     text = "x " + '{"k":' * 100000 + "\n" + "ace_trace_response " + '{"k":' * 100000 + "\n"
     assert Q._lines(text) == (None, None, None)
     assert Q._cli_not_stored(text) is None
+
+
+# ---------- 8.4.1: the replay respects the auth hold (ace_cli._auth_held): nothing sent, entries stay queued ----------
+
+def _replay_main(monkeypatch, tmp_path, held):
+    monkeypatch.setenv("CLAUDE_PLUGIN_DATA", str(tmp_path / "data"))
+    monkeypatch.delenv("ACE_TRACE_SINK", raising=False)
+    import ace_cli
+    monkeypatch.setattr(ace_cli, "_auth_held", lambda: held)
+    calls = []
+    monkeypatch.setattr(Q, "replay", lambda qdir, send, **k: calls.append(qdir) or [])
+    Q._main(["--replay"])
+    return calls
+
+
+def test_replay_does_nothing_while_the_token_is_held(qdir, monkeypatch, tmp_path):
+    queue(qdir, 1)
+    assert _replay_main(monkeypatch, tmp_path, True) == []
+    assert entries(qdir) == [qid(1) + ".json"]
+
+
+def test_replay_runs_when_the_token_is_not_held(qdir, monkeypatch, tmp_path):
+    assert len(_replay_main(monkeypatch, tmp_path, False)) == 1

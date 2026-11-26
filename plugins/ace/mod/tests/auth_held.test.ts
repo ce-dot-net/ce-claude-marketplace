@@ -5,6 +5,7 @@ import { expect } from 'claude-code/testing'
 import { test } from './t.ts'
 import S8 from './fixtures/search_8.ts'
 import { HUMAN, PDIR, PROOT, ROOT, SDIR, SID, host, submit } from './helpers.ts'
+import { sha256Hex } from '../lib/cohort.ts'
 
 const LINE = (n: number) => `ACE: nicht angemeldet, Traces werden NICHT gesendet (${n} Traces wartend/abgelegt). Bitte \`ace-cli login\` ausführen.`
 const asked = (h: any) => h.runs.filter((r: any) => r.argv.some((a: string) => a.endsWith('/ace_trace_queue.py') && r.argv.includes('--auth-held')))
@@ -89,4 +90,35 @@ test('sink + auth-held together: one line each', async ($, on) => {
   await submit($)
   expect(sinkShown(h).length).toBe(1)
   expect(shown(h)).toEqual([LINE(1)])
+})
+
+// 8.4.1 item 3: the held marker alone (no dead/ entry yet) shows the notice too, once per conversation; counts-only wording.
+test('auth-held from the marker: shown once (no count), marker written; the queue line wins when there is one', async ($, on) => {
+  const CFG = '/home/u/.config/ace/config.json'
+  const HELD = { [CFG]: '{}', [`${ROOT}/auth-rejected`]: sha256Hex('{}') }
+  const h = host(on, { files: HELD, search: () => ({ stdout: S8 }) })
+  await submit($)
+  await submit($, HUMAN + ' again')
+  expect(shown(h)).toEqual(['ACE: nicht angemeldet, Traces werden NICHT gesendet. Bitte `ace-cli login` ausführen.'])
+  expect(h.files.has(`${SDIR}/auth_held_notified`)).toBe(true)
+})
+// review fixes (8.4.1): a second hold in the same conversation shows the line again; a failing --auth-held spawn cannot suppress it
+const MLINE = 'ACE: nicht angemeldet, Traces werden NICHT gesendet. Bitte `ace-cli login` ausführen.'
+test('auth-held from the marker: a new hold (new marker mtime) in the same conversation shows the line again', async ($, on) => {
+  const CFG = '/home/u/.config/ace/config.json'
+  let n = 0
+  const h = host(on, { files: { [CFG]: '{}', [`${ROOT}/auth-rejected`]: sha256Hex('{}') }, search: () => (n++, { exitCode: 1, stderr: 'Error: Not logged in' }) })
+  await submit($)
+  expect(shown(h)).toEqual([MLINE])
+  h.advance(31 * 60_000)                     // the hold expires; the next search fails again: a new hold
+  await submit($, HUMAN + ' later')
+  expect(n).toBe(1)
+  await submit($, HUMAN + ' once more')
+  expect(shown(h)).toEqual([MLINE, MLINE])
+})
+test('auth-held from the marker: a throwing --auth-held spawn still shows the marker line', async ($, on) => {
+  const CFG = '/home/u/.config/ace/config.json'
+  const h = host(on, { files: { [CFG]: '{}', [`${ROOT}/auth-rejected`]: sha256Hex('{}') }, search: () => ({ stdout: S8 }), authHeld: () => { throw new Error('spawn failed') } })
+  await submit($)
+  expect(shown(h)).toEqual([MLINE])
 })

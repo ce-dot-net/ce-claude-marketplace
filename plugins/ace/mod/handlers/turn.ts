@@ -3,6 +3,7 @@ import { readText, rm, run, writePrivate, readJson } from '../io/fs'
 import { SINK_WRITE_SH } from '../lib/sh'
 import { logsSafe, nowIso, relLog } from '../io/log'
 import { LAUNCHER_MS, aceEnv, cliHead, engineScript, gitContext, ids } from '../io/spawn'
+import { authHeld } from '../io/auth'
 import { type Load, type Sess, clearTools, cohortEnv, fullStepsEnabled, readState, stateFile, takeDownvote, takeTools, takeUpvote, uuid, type HookArgs, classicFresh, clearDeferred, deferFile, disabled, enqueue, ensure, pendingFile, pendingFile830, pendingMatches, readOrigin, refreshMarker } from '../io/state'
 import { appliedControlPct, layoutLabel, traceVariant } from '../lib/cohort'
 import { type ToolRec, appliedLogIds, parseAceReview, parseUsedIds, selfEvalPrompt, usedPatternIds } from '../lib/evidence'
@@ -51,6 +52,10 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
     await relLog($, s, { timestamp: await nowIso($), event: 'learn_skipped', hook, session_id: s.sessionId, reason: skip, tools: recs.length, agent_id: agentId ?? null, source: 'mod' })
     return false
   }
+  // 8.4.1: a held token (io/auth.ts): nothing goes out. Decided here, before the lock and the Haiku self-eval: no model call, no
+  // pending vote taken, no last-main-applied record; the trace (H2 evidence only) is PARKED in the trace queue (--enqueue) and sent
+  // by the next good learn's replay. The sink sends nothing anyway: it keeps its trace.
+  const park = !(await $.env.get('ACE_TRACE_SINK'))?.trim() && await authHeld($, s)
   const playbook: string[] = state.pattern_ids ?? []
   const rlog: Record<string, number> = state.retrieval_log_ids ?? {}
   const cenv = await cohortEnv($, s)
@@ -72,13 +77,13 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
     const modelList = playbook.filter(id => m.has(id)), tokenList = playbook.filter(id => tk.has(id))
     const bySource = { used_ids_model: modelList.length, used_ids_tokens: tokenList.length }
     // §31: used only (this agent's own tools, report, self-eval); for the 20-cap Haiku ids first, then H2 ids, injected order
-    const dv = key === 'main' ? await takeDownvote($, s) : undefined
+    const dv = key === 'main' && !park ? await takeDownvote($, s) : undefined
     const downvote = dv?.ids
     // one feedback per trace: a pending downvote wins; a pending upvote then waits for the next main trace (within 6 h)
-    const uv = key === 'main' && !downvote?.length ? await takeUpvote($, s) : undefined
+    const uv = key === 'main' && !park && !downvote?.length ? await takeUpvote($, s) : undefined
     const { ids: applied, capped } = appliedLogIds([...used.filter(id => m.has(id)), ...used.filter(id => !m.has(id))], rlog)
     // the record a later rejection downvotes ([] too: rejecting a task without evidenced ids sends nothing)
-    if (key === 'main') await writePrivate($, `${s.sdir}/last-main-applied.json`, JSON.stringify({ task_session_id: tsid ?? null, applied_log_ids: applied, at: await $.clock.now() / 1000, answer_tail: answerTail(answer) })).catch(() => {})
+    if (key === 'main' && !park) await writePrivate($, `${s.sdir}/last-main-applied.json`, JSON.stringify({ task_session_id: tsid ?? null, applied_log_ids: applied, at: await $.clock.now() / 1000, answer_tail: answerTail(answer) })).catch(() => {})
     let git: any
     try {
       git = await gitContext($, s.cwd)
@@ -86,7 +91,7 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
       if (git && commits.length) git.session_commits = commits
     } catch { /* git context is optional */ }
     const { trace, success, failed_steps, cap, textCaps } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
-      tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, forkOf: agentId ? state.fork_of_retrieval_id ?? undefined : undefined, appliedLogIds: applied, usedIds: { ...bySource, used_ids_model_list: modelList, used_ids_tokens_list: tokenList }, downvote, downvoteDetect: dv, upvote: uv?.ids, upvoteDetect: uv,
+      tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, forkOf: agentId ? state.fork_of_retrieval_id ?? undefined : undefined, appliedLogIds: applied, evidenceSource: source, usedIds: { ...bySource, used_ids_model_list: modelList, used_ids_tokens_list: tokenList }, downvote, downvoteDetect: dv, upvote: uv?.ids, upvoteDetect: uv,
       nowIso: await nowIso($), renderVariant: variant, renderControlPct: controlPct, renderLayout: state.render_layout, conversationId: s.sessionId, effort, git, textCap: textCapChars(await $.env.get('ACE_TEXT_HARD_CAP_CHARS')),
       pluginVersion: s.clientId.slice(s.clientId.lastIndexOf('/') + 1),
       interactive: L.interactive, ...await readOrigin($, s), hardCap: hardCapBytes(await $.env.get('ACE_TRACE_HARD_CAP_BYTES')), fullSteps: await fullStepsEnabled($, s), legacySummaryCap })
@@ -131,6 +136,16 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
     const queue = pyDumps({ id: qid, root: s.root, utils, log, cwd: s.logRoot, on: (await $.env.get('ACE_TRACE_QUEUE')) !== '0',
       meta: { org: s.org ?? null, project: s.project, retrieval_id: state.retrieval_id ?? null, applied_log_ids: applied, hook,
         agent_type: agentType, session_id: s.sessionId } })
+    if (park) {  // the launcher's reclaim path entry point: error class not_sent (requeue), never dead/ auth, so it renews no hold
+      const q = await run($, [python || 'python3', '-I', `${utils}/ace_trace_queue.py`, '--enqueue', traceFile, queue], { timeoutMs: 5000 })
+      const enqueued = !!q && q.exitCode === 0
+      await rm($, lock, traceFile)
+      await relLog($, s, { timestamp: await nowIso($), event: 'learn_parked', reason: 'auth_held', hook, session_id: s.sessionId, agent_id: agentId ?? null,
+        agent_type: agentType, task_session_id: tsid ?? null, trace_id: qid, enqueued, used_source: source, source: 'mod' })
+      if (!enqueued) await relLog($, s, { timestamp: await nowIso($), event: 'learn_lost', reason: 'enqueue_failed',
+        error_class: 'not_sent', attempts: 1, trace_id: qid, agent_type: agentType, hook, project_id: s.project, session_id: s.sessionId, source: 'mod' })
+      return false
+    }
     const argv = detachedLearnArgv({ learnArgv: learnCmd,
       trace: traceFile, lock, log, rowOk: pyDumps(await row(true)), rowFail: pyDumps(await row(false)), errLog: `${s.root}/logs/ace-hook-errors.log`, python,
       retryRow: pyDumps({ event: 'learn_retry', hook, session_id: s.sessionId, conversation_id: s.sessionId, task_session_id: tsid ?? null,
@@ -160,7 +175,7 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
   // Not awaited: the turn ends now; a failed or timed-out call falls back to the token evidence (H2). item 3: the
   // "learning sent" line goes out once the learn really did, with the review's parts (none at 0% or without one).
   // item 1a: non-interactive (-p, SDK): the process may exit right after this turn, so no wait; H2 only.
-  if (hook === 'Stop' && playbook.length && L.interactive !== false && (await $.env.get('ACE_SELF_EVAL')) !== '0') {  // a rejecting call falls back too
+  if (!park && hook === 'Stop' && playbook.length && L.interactive !== false && (await $.env.get('ACE_SELF_EVAL')) !== '0') {  // a rejecting call falls back too
     // item 1b: session.end flushes a still-pending chain with H2 ids; whichever comes first dispatches, once.
     let fired = false
     const p = { ctl: new AbortController(), flush: () => once(null) }

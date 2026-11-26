@@ -93,7 +93,7 @@ valid IBAN that starts inside another valid IBAN is not joined into one span (th
 - `ACE_TRACE_FULL_STEPS=0` (also `false`, `off`, `no`): no full steps. The trace is built as in 8.3.0 (action/result
   summaries only, task 2,000 and summary 2,000 / handback 4,000 characters). The ACE server can switch full steps off
   for everyone (`full_steps: false` in a search answer, kept 7 days); it can never switch them on against this setting.
-- `ACE_TRACE_SINK=file:<absolute dir>`: nothing is sent. The finished trace (the exact request body) is written to
+- `ACE_TRACE_SINK=file:<absolute dir>`: inspection/tests only, never on in production; sends nothing. Nothing is sent. The finished trace (the exact request body) is written to
   `<dir>/ace-trace-<id>.json` (mode 0600; a missing dir is created 0700, an existing one keeps its mode) so you can
   inspect it. An invalid value sends nothing either. Search is not affected.
 - Upvotes: a positive reply is recognized only by a phrase (German or English, the whole reply), never by a model; a

@@ -1,10 +1,10 @@
 name: tests
 
 # CI cost: a PR runs ONE job (ubuntu, latest Python) and only when plugin code, tests or this workflow change; the full
-# 2 OS x 2 Python matrix (macOS runners cost ~10x per minute) runs on push to main / release branches only.
+# 2 OS x 2 Python matrix (macOS runners cost ~10x per minute) runs on push to main only.
 on:
   push:
-    branches: [main, v8-modernize, "release/**"]
+    branches: [main, v8-modernize]
     paths: ["plugins/ace/**", "tests/**", ".github/workflows/tests.yml"]
   pull_request:
     paths: ["plugins/ace/**", "tests/**", ".github/workflows/tests.yml"]
@@ -21,7 +21,7 @@ jobs:
     strategy:
       fail-fast: false
       # 8.1.0: the Python hook chain supports >= 3.10 (the floor) up to the latest stable (3.15).
-      # PR: ubuntu x 3.15 (1 job). push (main / release): ubuntu + macOS x 3.10 + 3.15 (4 jobs).
+      # PR: ubuntu x 3.15 (1 job). push (main): ubuntu + macOS x 3.10 + 3.15 (4 jobs).
       matrix: ${{ fromJSON(github.event_name == 'pull_request' && '{"include":[{"os":"ubuntu-latest","python":"3.15"}]}' || '{"include":[{"os":"ubuntu-latest","python":"3.10"},{"os":"ubuntu-latest","python":"3.15"},{"os":"macos-latest","python":"3.10"},{"os":"macos-latest","python":"3.15"}]}') }}
     runs-on: ${{ matrix.os }}
     steps:
@@ -61,9 +61,9 @@ jobs:
         run: rstest tests/e2e -q -p no:cacheprovider -n 4  # real node + fake servers: 4 workers on 3-core runners
       - name: CLI contract test (every flag and field the plugin uses, against the pinned CLI)
         run: rstest tests/test_cli_contract.py -q -p no:cacheprovider
-      - name: claude plugin validate --strict (Claude Code floor)
+      - name: claude plugin validate --strict (pinned Claude Code)
         run: |
-          npm i -g @anthropic-ai/claude-code@2.1.311
+          npm i -g @anthropic-ai/claude-code@2.1.332
           claude plugin validate plugins/ace --strict
       - name: Mod tests (claude plugin test)
         run: claude plugin test plugins/ace

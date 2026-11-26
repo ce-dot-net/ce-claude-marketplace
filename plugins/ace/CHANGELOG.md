@@ -5,6 +5,18 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Trace field `evidence_source` (mod chain): `none` | `self_eval` | `token` | `both` | `control_arm`; always set, also with `ACE_TRACE_FULL_STEPS=0`. `control_arm` wins when the trace's `render_variant` is `control`. A trace without the field (Python chain) means unknown.
+
+### Changed
+- 401 guard (the `auth-rejected` marker) now also covers learn, session start, backfill and `/ace:ace-bootstrap`; a 401 in the detached learn is seen on the next prompt through its `dead/` `auth` entry (only one written more than 60 s after the token file, so an old-token learn finishing after a re-login never holds the new token). The hold ends after 30 minutes (one probe, then held again on a new 401), at once when the token file changes, and when the session-start status says ok or a search answers. Only stderr counts as an auth failure, and `401` only as a whole number. The "nicht angemeldet, Traces werden NICHT gesendet" line also shows while the token is held, once per hold.
+- While the token is held a learn is **parked, not sent**: no Haiku self-eval, no pending up/downvote taken (they wait for the next sent main trace); the trace (token evidence only) goes into the durable trace queue through the existing `ace_trace_queue.py --enqueue` entry point (class `not_sent`, never `dead/` `auth`, so it never renews the hold) and is sent by the replay after the next good learn. Limits: the queue's 23 h replay window and 200-entry cap apply; with `ACE_TRACE_QUEUE=0` the trace is lost (logged). In 8.4.0 such a trace was sent and went to `dead/` (resend only by hand).
+- Python chain, same hold: `ace_cli._auth_held` now also ends after 30 minutes (a missing or future marker time counts as expired; a released `ok` marker is not held), the queue replay sends nothing while the token is held (entries stay queued), and the recap's learn health counts `learn_parked` and `learn_lost`.
+- CI validates with Claude Code 2.1.332 (was 2.1.311); `release/**` no longer triggers the push workflow.
+- Docs: `ACE_TRACE_SINK` is for inspection/tests only, never on in production; it sends nothing.
+
 ## [8.4.0] - 2026-11-25
 
 ### Changed

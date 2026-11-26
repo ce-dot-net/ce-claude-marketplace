@@ -890,6 +890,8 @@ def _main(argv):
     import plugin_data_dir
     import ace_cli
     from ace_relevance_logger import log_event
+    if ace_cli._auth_held():  # 8.4.1: a held token sends nothing; the entries stay queued for the next run
+        return
 
     full = plugin_data_dir.full_steps_enabled()
 

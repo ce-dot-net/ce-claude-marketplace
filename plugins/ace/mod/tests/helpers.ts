@@ -75,6 +75,7 @@ export function host(on: any, o: Opts = {}) {
   if (!o.noSettings) put(`${CWD}/.claude/settings.json`, JSON.stringify({ env: { ACE_PROJECT_ID: PRJ, ACE_ORG_ID: 'org_t' } }))
   for (const [k, v] of Object.entries(o.files ?? {})) put(k, v)
   if (!o.noClassic) put(`${SDIR}/mod-classic`, String(now))  // classic.* hooks fire (no managed-settings guard)
+  const enqueued: { argv: string[], body?: string }[] = []
   const reads: string[] = []   // every fs.read / fs.list path (tests assert what was never touched)
   const debug: string[] = [], registered: string[] = [], runs: Run[] = [], logs: string[] = [], statuses: (string | undefined)[] = [], toasts: string[] = [], envAsked: string[] = [], envSet: [string, string | undefined][] = []
   // §31 default is ACE_RENDER_FULL_PCT=50 (50/50 split); this suite pins the full arm unless defaultArm (its own tests below)
@@ -137,6 +138,8 @@ export function host(on: any, o: Opts = {}) {
     if (argv[0] === 'sleep') { now += Number(argv[1]) * 1000; return res(0, '') }
     if (o.cli && cliOf(argv)) { const a = o.cli(cliOf(argv)!, init.stdin); if (a) { now += a.advanceMs ?? 0; if (a.killed) throw new Error('ace: $.process.run aborted: still running after timeoutMs'); return res(a.exitCode ?? 0, a.stdout ?? '', a.stderr ?? '') } }
     if (argv.some(a => a.endsWith('/ace_trace_queue.py')) && argv.includes('--auth-held')) return res(0, o.authHeld?.(argv) ?? '')
+    if (argv.some(a => a.endsWith('/ace_trace_queue.py')) && argv.includes('--enqueue')) enqueued.push({ argv, body: files.get(argv[argv.indexOf('--enqueue') + 1]!) })  // 8.4.1: what was parked
+    if (argv[0] === 'head' && argv[1] === '-c') return files.has(argv[3]!) ? res(0, files.get(argv[3]!)!.slice(0, Number(argv[2]))) : res(1, '')  // 8.4.1: the dead/ entry head
     if (o.installer && argv.some(a => a.endsWith('/ace_cli_installer.py'))) return res(0, JSON.stringify(o.installer(argv.slice(argv.findIndex(a => a.endsWith('/ace_cli_installer.py')) + 1))) + '\n')
     if (argv[0].endsWith('/scripts/ace-python')) return o.noPython ? res(1, '') : res(0, '/usr/bin/python3.13\n')
     if (argv[0] === '/bin/sh' && argv[2] === REALPATH_SH) return res(0, o.realpaths?.[argv[4]] ?? argv[4])
@@ -210,7 +213,7 @@ export function host(on: any, o: Opts = {}) {
   return { files, mtime, reads, runs, spawns, logs, statuses, toasts, clock: clk!, marker: () => marker, setMarker: (v: any) => { marker = v; markerV++ }, envAsked, envSet, env, registered, debug,
     band: () => { const l = [...debug].reverse().find(x => x.startsWith('ace band ')); return l ? JSON.parse(l.slice(9)) : null },
     pending: () => { const l = [...debug].reverse().find(x => x.startsWith('ace pending ')); return l ? JSON.parse(l.slice(12)) : null }, searches, learns, rows, state, pin, learnArgv, flag, trace, modelCalls,
-    advance: (ms: number) => { now += ms }, now: () => now, put }
+    advance: (ms: number) => { now += ms }, now: () => now, put, enqueued }
 }
 
 export const submit = ($: any, text = HUMAN, kind = 'composer') => $.prompt.submit({ text, wait: false, origin: { kind } } as any)

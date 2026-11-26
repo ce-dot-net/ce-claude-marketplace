@@ -39,6 +39,7 @@ export function toItem(task: any, kind: 'session' | 'git'): Item | null {
   for (const f of ['session_id', 'retrieval_id', 'conversation_id', 'agent_id', 'parent_agent_id', 'feedback']) delete trace[f]
   trace.playbook_used = []   // the server clears these anyway; empty keeps the live shape valid
   trace.applied_log_ids = []
+  trace.evidence_source = 'none'  // ids cleared -> no evidence
   return { idempotency_key: task.key, occurred_at: at, trace }
 }
 
