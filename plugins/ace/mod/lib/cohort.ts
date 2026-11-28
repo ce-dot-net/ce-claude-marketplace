@@ -124,6 +124,34 @@ export const serverDownvote = (resp: any): boolean | undefined => typeof resp?.f
 export function storedDownvote(text: string | undefined, nowMs: number): boolean {
   try { const d = JSON.parse(text as string); return d?.on === true && typeof d.at === 'number' && nowMs / 1000 - d.at < RENDER_FULL_PCT_MAX_AGE_S } catch { return false }
 }
+// 8.4.3 server-side follow-up judging. Search response followup_judging: exactly "shadow" -> 'shadow' (send trace.followup AND keep
+// the client vote), exactly true -> 'live' (trace.followup, no client vote), any other present value -> 'off', absent -> undefined
+// (a real server answer without the key withdraws it: io/state.ts stores 'off'). Stored {mode, at, org, project}; only 'shadow' / 'live'
+// for THIS org/project, younger than 7 days and not from the future (5 min skew) count; anything else is off. No env knob.
+// 8.4.3 (review 2): ONE file per org/project (a short hash of org + NUL + project, no plain names), so a search of project B can never
+// switch project A. The pre-hash global files (followup-judging.json, feedback-unresolved.json) are never read: they count as off.
+const bindingHash = (org: string | null | undefined, project: string) => sha256Hex(`${org ?? ''}\0${project}`).slice(0, 16)
+export const followupFileFor = (org: string | null | undefined, project: string) => `followup-judging-${bindingHash(org, project)}.json`
+export const unresolvedFileFor = (org: string | null | undefined, project: string) => `feedback-unresolved-${bindingHash(org, project)}.json`
+export type FollowupMode = 'off' | 'shadow' | 'live'
+export const serverFollowup = (resp: any): FollowupMode | undefined => !resp || typeof resp !== 'object' || !('followup_judging' in resp) ? undefined
+  : resp.followup_judging === 'shadow' ? 'shadow' : resp.followup_judging === true ? 'live' : 'off'
+const FOLLOWUP_SKEW_S = 300
+// 8.4.3 unresolved votes: search response feedback_unresolved, exactly true = on; any other present value = false; absent = undefined
+// (io/state.ts then stores false: a real answer without the key is off). Stored {on, at, org, project}, same rules as followup_judging.
+export const serverUnresolved = (resp: any): boolean | undefined => !resp || typeof resp !== 'object' || !('feedback_unresolved' in resp) ? undefined : resp.feedback_unresolved === true
+export function storedUnresolved(text: string | undefined, nowMs: number, org: string | null, project: string): boolean {
+  try {
+    const d = JSON.parse(text as string), age = typeof d?.at === 'number' ? nowMs / 1000 - d.at : NaN
+    return d?.on === true && age < RENDER_FULL_PCT_MAX_AGE_S && age > -FOLLOWUP_SKEW_S && d.org === org && d.project === project
+  } catch { return false }
+}
+export function storedFollowup(text: string | undefined, nowMs: number, org: string | null, project: string): FollowupMode {
+  try {
+    const d = JSON.parse(text as string), age = typeof d?.at === 'number' ? nowMs / 1000 - d.at : NaN
+    return (d?.mode === 'shadow' || d?.mode === 'live') && age < RENDER_FULL_PCT_MAX_AGE_S && age > -FOLLOWUP_SKEW_S && d.org === org && d.project === project ? d.mode : 'off'
+  } catch { return 'off' }
+}
 // Round 5 kill switch: search response full_steps (bool), persisted {on, at}, < 7 days. The server can only switch full steps
 // OFF: a missing, broken, stale or non-bool file keeps them on (plugin_data_dir.stored_full_steps, same rule).
 export const FULL_STEPS_FILE = 'full-steps.json'

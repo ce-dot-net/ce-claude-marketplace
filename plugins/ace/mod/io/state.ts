@@ -2,11 +2,11 @@
 // patterns-used / mod-tools / pending / deferral files (queued read-merge-write), cohort env and server switches.
 import type { EventName, Hook } from 'claude-code'
 import { appendPrivate, readJson, readText, rm, writePrivate } from './fs'
-import { BACKFILL_FLAG_FILE, sha256Hex, serverBackfill, CLIENT_POLICY_FILE, FEEDBACK_DOWNVOTE_FILE, FEEDBACK_UPVOTE_FILE, FULL_STEPS_FILE, RENDER_FULL_PCT_FILE, RENDER_LAYOUT_A_PCT_FILE, RENDER_CONTROL_PCT_FILE, serverControlPct, storedControlPct, serverLayoutAPct, storedLayoutAPct, serverFullSteps, storedFullSteps, serverDownvote, serverFullPct, serverUpvote, storedDownvote, storedFullPct, storedUpvote, validClientPolicy } from '../lib/cohort'
+import { BACKFILL_FLAG_FILE, sha256Hex, serverBackfill, CLIENT_POLICY_FILE, FEEDBACK_DOWNVOTE_FILE, FEEDBACK_UPVOTE_FILE, followupFileFor, type FollowupMode, serverFollowup, storedFollowup, unresolvedFileFor, serverUnresolved, storedUnresolved, FULL_STEPS_FILE, RENDER_FULL_PCT_FILE, RENDER_LAYOUT_A_PCT_FILE, RENDER_CONTROL_PCT_FILE, serverControlPct, storedControlPct, serverLayoutAPct, storedLayoutAPct, serverFullSteps, storedFullSteps, serverDownvote, serverFullPct, serverUpvote, storedDownvote, storedFullPct, storedUpvote, validClientPolicy } from '../lib/cohort'
 import { relLog } from './log'
 import { REJECTION_PREV_MAX_AGE_S, type ToolRec } from '../lib/evidence'
 import { num, pyDumps } from '../lib/pyjson'
-import { fullStepsOn, hardCapBytes, trimPayloads, utf8Len } from '../lib/trace'
+import { type Followup, followupField, fullStepsOn, isUuid, hardCapBytes, trimPayloads, utf8Len } from '../lib/trace'
 import { type StateUpdate, dataRootFromPluginRoot, mergeState, safeComponent as safe } from '../lib/state'
 import { type Ctx, type Env, type State, exportEnv, globalConfigPath, machineMapPath, readEnv, resolveContext } from '../context/index'
 import { cliRun } from './cli'
@@ -285,7 +285,7 @@ export async function cohortEnv($: any, s: Sess) {
 }
 // Every real search persists the valid server switches (latest wins; missing/invalid keeps the stored value):
 // render_full_pct and feedback_downvote. A reuse-cache hit is older and never does.
-export async function storeFullPct($: any, s: Sess, resp: any) {
+export async function storeFullPct($: any, s: Sess, resp: any, engine = false) {
   const pct = serverFullPct(resp), down = serverDownvote(resp), at = Math.floor(await $.clock.now() / 1000)
   try { if (pct !== undefined) await writePrivate($, `${s.root}/${RENDER_FULL_PCT_FILE}`, JSON.stringify({ pct, at })) } catch { /* keep the old value */ }
   try { if (down !== undefined) await writePrivate($, `${s.root}/${FEEDBACK_DOWNVOTE_FILE}`, JSON.stringify({ on: down, at })) } catch { /* keep the old value */ }
@@ -300,6 +300,13 @@ export async function storeFullPct($: any, s: Sess, resp: any) {
     if (typeof fs === 'boolean') await writePrivate($, `${s.root}/${FULL_STEPS_FILE}`, JSON.stringify({ on: fs, at }))
     else if (fs === 'invalid') await relLog($, s, { timestamp: new Date(at * 1000).toISOString(), event: 'full_steps_invalid', source: 'mod' })
   } catch { /* keep the old value */ }
+  // 8.4.3: every real answer decides: an absent or invalid followup_judging is off at once; scoped to this org/project
+  // 8.4.3: followup_judging / feedback_unresolved, per org/project (the search ran with this session's binding). A present key always
+  // counts; an ABSENT key means off only on an ENGINE answer (engine/search.js captures the raw body, so absent = the server did not send
+  // it). An ace-cli fallback answer without the key keeps the stored value: an ace-cli on an old core may drop unknown keys.
+  const fm = serverFollowup(resp), un = serverUnresolved(resp), bind = { org: s.org ?? null, project: s.project }
+  try { if (fm !== undefined || engine) await writePrivate($, `${s.root}/${followupFileFor(s.org, s.project)}`, JSON.stringify({ mode: fm ?? 'off', at, ...bind })) } catch { /* keep the old value */ }
+  try { if (un !== undefined || engine) await writePrivate($, `${s.root}/${unresolvedFileFor(s.org, s.project)}`, JSON.stringify({ on: un ?? false, at, ...bind })) } catch { /* keep the old value */ }
   const bf = serverBackfill(resp)
   try { if (bf !== undefined) await writePrivate($, `${s.root}/${BACKFILL_FLAG_FILE}`, JSON.stringify({ on: bf, at })) } catch { /* keep the old value */ }
   if (resp && typeof resp === 'object' && 'client_policy' in resp) {  // 8.1.4 (dormant): invalid -> dropped, reason logged
@@ -325,17 +332,47 @@ export async function upvoteEnabled($: any, s: Sess): Promise<boolean> {
   if (env === '1' || env === '0') return env === '1'
   return storedUpvote(await readText($, `${s.root}/${FEEDBACK_UPVOTE_FILE}`), await $.clock.now()) ?? await downvoteEnabled($, s)
 }
+// 8.4.3: the stored follow-up judging mode (server-only, no env knob)
+export async function followupMode($: any, s: Sess): Promise<FollowupMode> { return storedFollowup(await readText($, `${s.root}/${followupFileFor(s.org, s.project)}`), await $.clock.now(), s.org ?? null, s.project) }
+// 8.4.3: the stored feedback_unresolved capability (server-only, no env knob)
+export async function unresolvedEnabled($: any, s: Sess): Promise<boolean> { return storedUnresolved(await readText($, `${s.root}/${unresolvedFileFor(s.org, s.project)}`), await $.clock.now(), s.org ?? null, s.project) }
+export const pendingFollowupFile = (s: Sess) => `${s.sdir}/pending-followup.json`
+// the task a follow-up may target: written only with a main task's FINAL record (handlers/turn.ts), removed at every human main
+// turn.complete before it branches (abort, deferral, a task-less answer leave none); the vote record last-main-applied.json is separate
+export const followupTargetFile = (s: Sess) => `${s.sdir}/followup-target.json`
+// At the next MAIN trace: the pending follow-up, consumed once. Removed unsent when the privacy gates fail now (ACE_REJECTION_MODEL=0,
+// headless: a resumed -p session), when it or its target task is >= 6 h old, when the server withdrew the switch since, or when it fails
+// the contract (lib/trace.ts followupField). One whose target is the carrying trace's own retrieval_id stays pending.
+export async function takeFollowup($: any, s: Sess, carryingRid: string | null | undefined, L?: Load): Promise<Followup | undefined> {
+  const f = pendingFollowupFile(s), d = await readJson($, f)
+  if (d === undefined) return undefined
+  if (L?.interactive === false || (await $.env.get('ACE_REJECTION_MODEL')) === '0') { await rm($, f); return undefined }
+  if (typeof carryingRid === 'string' && d?.target_retrieval_id === carryingRid) return undefined
+  await rm($, f)
+  const at = Date.parse(typeof d?.ts === 'string' ? d.ts : ''), now = await $.clock.now(), tAt = num(d?.target_at)
+  if (!Number.isFinite(at) || now - at >= REJECTION_PREV_MAX_AGE_S * 1000) return undefined
+  if (tAt === undefined || now / 1000 - tAt >= REJECTION_PREV_MAX_AGE_S) return undefined
+  if ((await followupMode($, s)) === 'off') return undefined
+  return followupField(d)
+}
 export const pendingVoteFile = (s: Sess, kind: 'downvote' | 'upvote') => `${s.sdir}/pending-${kind}.json`
 // At the next main trace: the pending downvote's ids (and how the rejection was found), consumed once.
-export function takeDownvote($: any, s: Sess) { return takeVote($, s, 'downvote') }
-export function takeUpvote($: any, s: Sess) { return takeVote($, s, 'upvote') }
-export async function takeVote($: any, s: Sess, kind: 'downvote' | 'upvote'): Promise<{ ids: number[]; detect_source?: unknown; model_conf?: unknown } | undefined> {
+export function takeDownvote($: any, s: Sess, carryingTsid?: string | null) { return takeVote($, s, 'downvote', carryingTsid) }
+export function takeUpvote($: any, s: Sess, carryingTsid?: string | null) { return takeVote($, s, 'upvote', carryingTsid) }
+// 8.4.3 unresolved (feedback_unresolved): a pending vote with [] ids counts only with unresolved exactly true while the capability is
+// still on; its target_retrieval_id is passed on only when it is a UUID. An unresolved vote on the carrying task itself (same
+// task_session_id: written in the self-eval window) stays pending for the next main learn.
+export async function takeVote($: any, s: Sess, kind: 'downvote' | 'upvote', carryingTsid?: string | null): Promise<{ ids: number[]; detect_source?: unknown; model_conf?: unknown; unresolved?: true; target_retrieval_id?: string } | undefined> {
   const f = pendingVoteFile(s, kind), d = await readJson($, f)
   if (d === undefined) return undefined
+  const unres = Array.isArray(d?.applied_log_ids) && !d.applied_log_ids.length && d.unresolved === true
+  if (unres && carryingTsid && d.task_session_id === carryingTsid) return undefined
   await rm($, f)
   const dAt = num(d?.at)
-  if (!(Array.isArray(d?.applied_log_ids) && d.applied_log_ids.length && dAt !== undefined && await $.clock.now() / 1000 - dAt < REJECTION_PREV_MAX_AGE_S)) return undefined
-  return { ids: d.applied_log_ids, detect_source: d.detect_source, model_conf: num(d.model_conf) }
+  if (!(Array.isArray(d?.applied_log_ids) && (d.applied_log_ids.length || unres) && dAt !== undefined && await $.clock.now() / 1000 - dAt < REJECTION_PREV_MAX_AGE_S)) return undefined
+  if (!unres) return { ids: d.applied_log_ids, detect_source: d.detect_source, model_conf: num(d.model_conf) }
+  if (!(await unresolvedEnabled($, s))) return undefined
+  return { ids: [], detect_source: d.detect_source, model_conf: num(d.model_conf), unresolved: true, ...(isUuid(d.target_retrieval_id) ? { target_retrieval_id: d.target_retrieval_id } : {}) }
 }
 // §16 P2: the deferral survives a mod reload on disk (tsid only).
 export const deferFile = (s: Sess) => `${s.sdir}/learn-deferred`

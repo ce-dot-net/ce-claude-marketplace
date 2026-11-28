@@ -26,7 +26,7 @@ export async function lateInject($: any, L: Load, s: Sess, key: string): Promise
   const sr = await search($, s, query, tsid, undefined, DOMAIN_MS, tsid, await searchOrigin($, L, s), L)
   if (!sr.resp) { await logSubagentError($, s, sr); return null }
   const r = await subagentRender($, s, sr, query, st.agent_type ?? 'unknown', tsid, t0, st.parent_task_id, { late: true })
-  await updateState($, L, s, key, { ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort, renderLayout: r.layout,
+  await updateState($, L, s, key, { ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort, renderControlPct: r.controlPct, renderLayout: r.layout,
     contents: injectedContents(r.patterns, r.ids) })
   return r.context
 }

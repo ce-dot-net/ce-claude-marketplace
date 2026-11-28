@@ -106,7 +106,7 @@ class AceClient {
       if (!r.ok) throw new Error('Server error (' + r.status + '): ' + (d.message || text));
       return d;
     }
-    log({ op: 'raw', endpoint, body }); return { ...RESP, feedback_downvote: false, render_full_pct: 9, client_policy: { min_plugin_version: '8.1.0' }, full_steps: false, feedback_upvote: true }; }
+    log({ op: 'raw', endpoint, body }); return { ...RESP, feedback_downvote: false, render_full_pct: 9, client_policy: { min_plugin_version: '8.1.0' }, full_steps: false, feedback_upvote: true, followup_judging: 'shadow', feedback_unresolved: true }; }
   async storeExecutionTrace(t, o) {
     log({ op: 'learn', trace: t, opts: o || null });
     if (mode() === 'hang') await new Promise(() => setInterval(() => {}, 1000));

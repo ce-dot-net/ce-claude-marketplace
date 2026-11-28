@@ -36,7 +36,7 @@ const { AceClient, createContext } = loadCoreOrExit();
     if (isSearch && body && Object.getPrototypeOf(body) === Object.prototype) body = { ...body, ...origin };
     const r = await rawRequest(endpoint, method, body, ...rest);
     if (isSearch && r && typeof r === 'object') {
-      for (const k of ['render_full_pct', 'feedback_downvote', 'feedback_upvote', 'client_policy', 'full_steps']) if (k in r) switches[k] = r[k];  // 8.1.4: client_policy (dormant)
+      for (const k of ['render_full_pct', 'feedback_downvote', 'feedback_upvote', 'client_policy', 'full_steps', 'followup_judging', 'feedback_unresolved']) if (k in r) switches[k] = r[k];  // the server keys an older core drops (8.1.4 client_policy, 8.4.3 followup_judging + feedback_unresolved)
     }
     return r;
   };

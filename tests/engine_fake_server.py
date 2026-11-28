@@ -6,7 +6,7 @@ JSON line to the log file. Answers /api/v1/config, /patterns/search, /traces,
 /traces/stream and /api/v1/auth/refresh like the real server. FAKE_MODE=401|500|400 makes
 the trace POSTs fail; FAKE_REFRESH=429|reuse fails the token refresh; FAKE_SEARCH=401 rejects searches; FAKE_GRAPH_DELAY=<s> stalls the graph edge refresh;
 FAKE_STATUS=401|403|404|500 fails GET /analytics (ace-cli status);
-FAKE_TRACE_502=<n> answers the first n trace POSTs 502 with Retry-After: 0 (the SDK retries at once). Usage: engine_fake_server.py <port|0> <log> [<portfile>]
+FAKE_SEARCH_EXTRA=<json object> adds top-level keys to the search answer; FAKE_TRACE_502=<n> answers the first n trace POSTs 502 with Retry-After: 0 (the SDK retries at once). Usage: engine_fake_server.py <port|0> <log> [<portfile>]
 (port 0 = pick a free port and write it to <portfile>).
 """
 import json
@@ -176,7 +176,7 @@ class H(BaseHTTPRequestHandler):
         if self.path.startswith("/patterns/search"):
             if os.environ.get("FAKE_SEARCH") == "401":  # the token family was revoked server-side
                 return self._send(401, {"detail": "token revoked"})
-            return self._send(200, SEARCH)
+            return self._send(200, {**SEARCH, **json.loads(os.environ.get("FAKE_SEARCH_EXTRA") or "{}")})  # 8.4.3: extra top-level keys
         if self.path.startswith("/api/v1/auth/refresh"):
             refresh = os.environ.get("FAKE_REFRESH", "ok")
             if refresh == "429":  # 30 req/min per IP on the refresh endpoint

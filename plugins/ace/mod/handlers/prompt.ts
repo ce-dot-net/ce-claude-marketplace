@@ -5,8 +5,8 @@ import { readJson, readText, rm, writePrivate } from '../io/fs'
 import { nowIso, relLog, searchRow } from '../io/log'
 import { SEARCH_MS, search } from '../io/spawn'
 import { heldSince, noteDeadAuth } from '../io/auth'
-import { type Load, type Sess, clearDeferred, dataRoot, clearTools, cohortEnv, deferredAnchor, disabled, downvoteEnabled, ensure, notePrompt, pendingFile, pendingFile830, pendingHead, pendingVoteFile, readState, searchOrigin, touchMarker, updateState, upvoteEnabled, uuid, type HookArgs, refreshMarker } from '../io/state'
-import { type Cohort, layoutA, layoutLabel, layoutValue, renderCohort } from '../lib/cohort'
+import { type Load, type Sess, clearDeferred, dataRoot, clearTools, cohortEnv, deferredAnchor, disabled, downvoteEnabled, ensure, followupMode, followupTargetFile, pendingFollowupFile, notePrompt, pendingFile, pendingFile830, pendingHead, pendingVoteFile, readState, searchOrigin, touchMarker, unresolvedEnabled, updateState, upvoteEnabled, uuid, type HookArgs, refreshMarker } from '../io/state'
+import { type Cohort, appliedControlPct, layoutA, layoutLabel, layoutValue, renderCohort } from '../lib/cohort'
 import { REJECTION_PREV_MAX_AGE_S, evalStats, injectedContents, rejectionProbe, upvoteProbe } from '../lib/evidence'
 import { num, pyDumps } from '../lib/pyjson'
 import { type ModelVerdict, classifyRejection, rejectionCacheKey, rejectionMinConf } from '../lib/rejection'
@@ -14,6 +14,9 @@ import { domainsSummary, renderBudget, renderCompact, renderFull, renderLayoutBu
 import { type StateUpdate, mergeState } from '../lib/state'
 import { MACHINE_ORIGINS, domainNames, expandAbbreviations, isNoTaskCommand, skipReason } from '../lib/text'
 import { searchErrorLine, searchSummary, sessionTitle, statusLine, topDomains } from '../ui/status'
+import { humanPart } from '../lib/humanpart'
+import { isUuid } from '../lib/trace'
+import type { FollowupMode } from '../lib/cohort'
 
 // ace_feedback.on_human_prompt: a rejection of the previous main task -> a pending downvote with its evidenced ids.
 // 8.2.9: every human main prompt also logs one text-free row `rejection_check` for the server team's detection measurement:
@@ -34,6 +37,11 @@ const classified = new Map<string, { reject: boolean; confidence: number; label:
 // (rejection_check failed 'upvote_phrase'). last-downvoted-task locks BOTH directions: one feedback per task. One text-free
 // `upvote_check` row whenever an upvote phrase was seen.
 export async function onRejection($: any, s: Sess, text: string, L?: Load) {
+  // 8.4.3 server-side follow-up judging: 'shadow' queues the follow-up and keeps the client vote below unchanged; 'live' queues it and,
+  // when its gates held, skips the client vote (no phrase probe, no Haiku); 'off' (the default) changes nothing (golden test).
+  // live always returns here (no client vote, also when a follow-up gate failed: headless / ACE_REJECTION_MODEL=0 get no signal).
+  const mode = await followupMode($, s)
+  if (mode !== 'off') { await queueFollowup($, s, text, L, mode).catch(() => false); if (mode === 'live') return }  // never throws into the vote path
   const { matched, blocked, tooLong } = rejectionProbe(text)
   const up = upvoteProbe(text)
   const prev = tooLong ? undefined : await readJson($, `${s.sdir}/last-main-applied.json`)
@@ -42,36 +50,52 @@ export async function onRejection($: any, s: Sess, text: string, L?: Load) {
   const fresh = ageS !== undefined && ageS < REJECTION_PREV_MAX_AGE_S
   const ids: number[] = fresh && Array.isArray(prev.applied_log_ids) ? prev.applied_log_ids.filter((x: unknown) => Number.isInteger(x)) : []
   const on = tooLong ? undefined : await downvoteEnabled($, s)
-  const gate = tooLong ? 'too_long' : !fresh ? 'prev_stale' : !ids.length ? 'empty_ids' : !on ? 'switch_off' : null
+  // 8.4.3 unresolved (server capability feedback_unresolved, read only when 8.4.2 would stop at prev_stale / empty_ids): the vote is
+  // still detected and goes out without ids, aimed at the record's retrieval_id when it is a UUID (also a stale record's), else no target.
+  // too_long and switch_off stay off. Capability off: the 8.4.2 gate order exactly (golden test).
+  const unresolved = !tooLong && (!fresh || !ids.length) && await unresolvedEnabled($, s)
+  const target: string | null = unresolved && isUuid(prev?.retrieval_id) ? prev.retrieval_id : null
+  const gate = tooLong ? 'too_long' : !fresh && !unresolved ? 'prev_stale' : !ids.length && !unresolved ? 'empty_ids' : !on ? 'switch_off' : null
   const upOn = gate === null || gate === 'switch_off' ? await upvoteEnabled($, s) : false
-  const upGate = tooLong ? 'too_long' : !fresh ? 'prev_stale' : !ids.length ? 'empty_ids' : !upOn ? 'switch_off' : matched ? 'reject_phrase' : up.bareAck ? 'bare_ack' : null
+  const upGate = tooLong ? 'too_long' : !fresh && !unresolved ? 'prev_stale' : !ids.length && !unresolved ? 'empty_ids' : !upOn ? 'switch_off' : matched ? 'reject_phrase' : up.bareAck ? 'bare_ack' : null
   const upPhrase = upGate === null && up.matched !== null
   const modelOk = async () => String(text ?? '').trim() !== '' && L?.interactive !== false && (await $.env.get('ACE_REJECTION_MODEL')) !== '0'
   // S4: headless (-p / SDK, interactive === false) skips the model like the self-eval does; the phrase path is unchanged. Empty text: nothing to classify.
-  const useModel = gate === null && !matched && !upPhrase && await modelOk()
+  // 8.4.3 (save Haiku): with the capability the model runs only on a record with a valid retrieval_id (so a model vote always
+  // has a target); no record / a record without one: the phrase path only (its unresolved vote then has no target)
+  const noTarget = unresolved && !target
+  // 8.4.3 (prod finding: an untargeted vote books nothing): unresolved rows say whether the vote carries a target and why not. The target
+  // is fixed here (the pending file); takeVote only re-checks the UUID, so this is what is sent. 'other' is not reachable from here.
+  const targetLog: Record<string, unknown> = !unresolved ? {} : target ? { target: true } : { target: false, no_target_reason: prev === undefined ? 'no_prev_record' : 'no_prev_retrieval' }
+  const modelCandidate = gate === null && !matched && !upPhrase && await modelOk()
+  const useModel = modelCandidate && !noTarget
   const row = (failed: string | null, extra: Record<string, unknown>, nowIsoStr: string) => ({ timestamp: nowIsoStr, event: 'rejection_check', matched, blocked,
     chars: [...String(text ?? '')].length, failed, prev_age_s: ageS === undefined ? null : Math.round(ageS), prev_ids: ids.length, session_id: s.sessionId,
-    detect_source: matched ? 'phrase' : useModel ? 'model' : null, model_reject: null, model_conf: null, model_ms: null, model_label: null, ...extra, source: 'mod' })
+    detect_source: matched ? 'phrase' : useModel ? 'model' : null, model_reject: null, model_conf: null, model_ms: null, model_label: null, ...(unresolved ? { unresolved: true, ...targetLog } : {}), ...extra, source: 'mod' })
   const upRow = async (failed: string | null, extra: Record<string, unknown> = {}) => relLog($, s, { timestamp: await nowIso($), event: 'upvote_check',
     matched: up.matched, blocked: up.blocked, chars: [...String(text ?? '')].length, failed, prev_age_s: ageS === undefined ? null : Math.round(ageS),
-    prev_ids: ids.length, session_id: s.sessionId, detect_source: upPhrase ? 'phrase' : null, ...extra, source: 'mod' })
+    prev_ids: ids.length, session_id: s.sessionId, detect_source: upPhrase ? 'phrase' : null, ...(unresolved ? { unresolved: true, ...targetLog } : {}), ...extra, source: 'mod' })
   const tsid: string | null = typeof prev?.task_session_id === 'string' && prev.task_session_id ? prev.task_session_id : null
   const doneFile = `${s.sdir}/last-downvoted-task`  // name kept (8.3.0); it now locks up- and downvote alike
+  // 8.4.3: an unresolved vote without a task id locks the previous answer by its record time ('none:<at>', 'none:none' without a
+  // record), so one untargeted downvote is never followed by an untargeted upvote; a new record opens the next vote. 8.4.2 votes: tsid only.
+  const lockKey: string | null = tsid ?? (unresolved ? `none:${prevAt ?? 'none'}` : null)
   // S7: one feedback per task, and never into a session dir that is gone (session.end removed it while the model was answering).
   // null = written, else why it was skipped.
   const write = async (kind: 'downvote' | 'upvote', meta: { detect_source: 'phrase' | 'model'; model_conf?: number }): Promise<'session_gone' | 'task_downvoted' | 'task_voted' | null> => {
     if (!(await $.fs.exists(s.sdir))) return 'session_gone'
-    if (tsid && (await readText($, doneFile))?.trim() === tsid) return kind === 'downvote' ? 'task_downvoted' : 'task_voted'
-    await writePrivate($, pendingVoteFile(s, kind), JSON.stringify({ applied_log_ids: ids, at: await $.clock.now() / 1000, task_session_id: tsid, ...meta }))
-    if (tsid) await writePrivate($, doneFile, tsid).catch(() => {})
+    if (lockKey && (await readText($, doneFile))?.trim() === lockKey) return kind === 'downvote' ? 'task_downvoted' : 'task_voted'
+    await writePrivate($, pendingVoteFile(s, kind), JSON.stringify({ applied_log_ids: ids, at: await $.clock.now() / 1000, task_session_id: tsid, ...meta,
+      ...(unresolved ? { unresolved: true, ...(target ? { target_retrieval_id: target } : {}) } : {}) }))
+    if (lockKey) await writePrivate($, doneFile, lockKey).catch(() => {})
     return null
   }
   if (!useModel) {
-    const failed = gate ?? (matched ? null : upPhrase ? 'upvote_phrase' : 'no_phrase')
+    const failed = gate ?? (matched ? null : upPhrase ? 'upvote_phrase' : noTarget && modelCandidate ? (prev === undefined ? 'no_prev_record' : 'no_target_record') : 'no_phrase')  // only when the model would have run
     const skipped = failed === null ? await write('downvote', { detect_source: 'phrase' }) : failed
     await relLog($, s, row(skipped, {}, await nowIso($)))
     if (matched) await relLog($, s, { timestamp: await nowIso($), event: 'rejection_detected', matched, downvote_sent: skipped === null,
-      prev_task: String(prev?.task_session_id ?? '').slice(0, 8) || null, session_id: s.sessionId, source: 'mod' })
+      prev_task: String(prev?.task_session_id ?? '').slice(0, 8) || null, session_id: s.sessionId, ...targetLog, source: 'mod' })
   }
   if (upPhrase) await upRow(await write('upvote', { detect_source: 'phrase' }))
   else if (up.matched || up.blocked) await upRow(upGate ?? 'no_phrase')
@@ -93,10 +117,55 @@ export async function onRejection($: any, s: Sess, text: string, L?: Load) {
     await relLog($, s, row(failed, { model_reject: v.reject, model_conf: v.conf, model_ms: ms, model_label: v.label ?? null }, await nowIso($)))
     if (v.reject === true && v.conf !== null && v.conf >= minConf)
       await relLog($, s, { timestamp: await nowIso($), event: 'rejection_detected', matched: null, downvote_sent: failed === null, detect_source: 'model',
-        prev_task: String(prev?.task_session_id ?? '').slice(0, 8) || null, session_id: s.sessionId, source: 'mod' })
+        prev_task: String(prev?.task_session_id ?? '').slice(0, 8) || null, session_id: s.sessionId, ...targetLog, source: 'mod' })
   }
   try { $.clock.after(1, () => { const p: Promise<void> = work().catch(() => {}).finally(() => { inflight.delete(p) }); inflight.add(p) }) }
   catch { await relLog($, s, row('model_error', {}, await nowIso($))) }
+}
+// 8.4.3: the follow-up of the previous main task, for the server to judge (locked contract v1, lib/trace.ts followupField).
+// Gates (nothing written when they fail): interactive (headless sends nothing), ACE_REJECTION_MODEL != '0' (no follow-up text leaves the
+// machine), a follow-up target (io/state.ts followupTargetFile: the previous main task's FINAL record) younger than 6 h with a UUID
+// retrieval_id. Then: one follow-up per previous task
+// (own lock last-followup-task, so the client vote lock is untouched), an empty human part sends nothing. The text is the redacted human
+// part (lib/humanpart.ts). One text-free `followup_check` row.
+async function queueFollowup($: any, s: Sess, text: string, L: Load | undefined, mode: FollowupMode): Promise<boolean> {
+  let ids: number[] = []
+  const row = async (failed: string | null, extra: Record<string, unknown> = {}) => relLog($, s, { timestamp: await nowIso($), event: 'followup_check', mode, failed,
+    prev_ids: ids.length, session_id: s.sessionId, ...extra, source: 'mod' })
+  // 8.4.3 (review S3): a gate that stops it logs why. no_target = no target file (no task yet, or the turn after it was aborted, deferred,
+  // task-less or still in its self-eval window: the file is gone or not written yet; those cases cannot be told apart here).
+  if (L?.interactive === false) { await row('headless'); return false }
+  if ((await $.env.get('ACE_REJECTION_MODEL')) === '0') { await row('model_off'); return false }
+  const prev = await readJson($, followupTargetFile(s))
+  const prevAt = num(prev?.at), now = await $.clock.now()
+  if (prevAt === undefined) { await row('no_target'); return false }
+  ids = Array.isArray(prev.applied_log_ids) ? prev.applied_log_ids.filter((x: unknown) => Number.isInteger(x)) : []
+  if (now / 1000 - prevAt >= REJECTION_PREV_MAX_AGE_S) { await row('stale_target'); return false }
+  if (!isUuid(prev?.target_retrieval_id)) { await row('no_uuid'); return false }
+  const tsid: string | null = typeof prev?.task_session_id === 'string' && prev.task_session_id ? prev.task_session_id : null
+  const lock = `${s.sdir}/last-followup-task`
+  if (!(await $.fs.exists(s.sdir))) { await row('session_gone'); return true }
+  if (tsid && (await readText($, lock))?.trim() === tsid) { await row('task_sent'); return true }
+  const human = humanPart(text)
+  if (!human) { await row('empty_human'); return true }
+  try { await writePrivate($, pendingFollowupFile(s), JSON.stringify({ text: human, target_retrieval_id: prev.target_retrieval_id, applied_log_ids: ids, ts: new Date(now).toISOString(), target_at: prevAt })) }
+  catch { await row('write_failed').catch(() => {}); return true }  // shadow: the client vote below still runs
+  if (tsid) await writePrivate($, lock, tsid).catch(() => {})
+  await row(null, { sent_chars: [...human].length })
+  return true
+}
+// 8.4.3: shown once per conversation while the follow-up is on and allowed to leave the machine (marker followup_notified).
+export const FOLLOWUP_LINE_LIVE = 'ACE: Follow-up-Text (geschwärzt, rund 600 Zeichen) geht zur Bewertung an den Server; aus mit ACE_REJECTION_MODEL=0.'
+export const FOLLOWUP_LINE_SHADOW = 'ACE: Follow-up-Text (geschwärzt, rund 600 Zeichen) geht zur Bewertung an den Server (Vergleichsphase, eigene Bewertung läuft weiter); aus mit ACE_REJECTION_MODEL=0.'
+export async function followupNotice($: any, s: Sess, L: Load): Promise<string | null> {
+  try {
+    const mode = await followupMode($, s)
+    if (mode === 'off' || L.interactive === false || (await $.env.get('ACE_REJECTION_MODEL')) === '0') return null
+    const marker = `${s.sdir}/followup_notified`
+    if (await $.fs.exists(marker)) return null
+    await writePrivate($, marker, '1')
+    return mode === 'live' ? FOLLOWUP_LINE_LIVE : FOLLOWUP_LINE_SHADOW
+  } catch { return null }
 }
 // §13.1 cohort arms; `rendered` = the ≤ 10K re-inject copy (C1). control: search + anchor, nothing injected.
 // §28: bucket on the STABLE CC session id (one arm per conversation; subagents share it), never the per-task pin.
@@ -105,6 +174,7 @@ export async function onRejection($: any, s: Sess, text: string, L?: Load) {
 export async function renderArm($: any, resp: any, tag: string, attrs: string, s: Sess, seen?: Set<string>) {
   const env = await cohortEnv($, s)
   const cohort: Cohort = renderCohort(s.sessionId, env)
+  const controlPct = appliedControlPct(env)  // 8.4.3: frozen into the task state with the variant
   // layout (a): a second, orthogonal arm (own salt) on the budget and full renders; control/compact stay as they are
   const inLayout = layoutA(s.sessionId, env), hint = env.ACE_RENDER_LAYOUT_A_HINT === '1'
   const budgetRender = (r: any) => inLayout ? renderLayoutBudget(r, tag, attrs, hint) : renderBudget(r, tag, attrs)
@@ -112,14 +182,14 @@ export async function renderArm($: any, resp: any, tag: string, attrs: string, s
   const reinject = cohort === 'full' ? budgetRender(resp).context as string : ''
   if (cohort === 'full' && seen?.size) {
     resp = { ...resp, similar_patterns: (resp.similar_patterns || []).filter((p: any) => !seen.has(p?.id)) }
-    if (!resp.similar_patterns.length) return { cohort, layout: undefined as string | null | undefined, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: reinject, truncated: false }
+    if (!resp.similar_patterns.length) return { cohort, controlPct, layout: undefined as string | null | undefined, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: reinject, truncated: false }
   }
-  if (cohort === 'control') return { cohort, layout: null as string | null | undefined, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: '', truncated: false }
+  if (cohort === 'control') return { cohort, controlPct, layout: null as string | null | undefined, context: null as string | null, ids: [] as string[], rlog: {} as Record<string, number>, patterns: [] as any[], rendered: '', truncated: false }
   const r = cohort === 'compact' ? renderCompact(resp, tag, attrs) : cohort === 'budget' ? budgetRender(resp)
     : inLayout ? renderLayoutFull(resp, tag, attrs, hint) : renderFull(resp, tag, attrs)
   const rendered = cohort === 'full' ? reinject : r.context
   // layout: the render_layout to store; null = rendered without layout (clears an earlier value), undefined = nothing rendered (keeps it)
-  return { cohort, layout: (inLayout ? layoutValue(env) : null) as string | null | undefined, context: r.context as string | null, ids: r.ids, rlog: r.rlog, patterns: r.patterns, rendered, truncated: cohort === 'full' && r.shown < r.total }
+  return { cohort, controlPct, layout: (inLayout ? layoutValue(env) : null) as string | null | undefined, context: r.context as string | null, ids: r.ids, rlog: r.rlog, patterns: r.patterns, rendered, truncated: cohort === 'full' && r.shown < r.total }
 }
 // relevance-log label of a render: the arm, '+layout_a' when the layout arm rendered it (render_variant itself stays budget|full)
 export const cohortLabel = (r: { cohort: string; layout?: string | null }) => r.cohort + layoutLabel(r.layout)
@@ -186,6 +256,8 @@ export async function onPrompt($: any, L: Load, e: any): Promise<any> {
   if (authHeld) $.ui.log(authHeld)
   const sink = await sinkNotice($, s)
   if (sink) $.ui.log(sink)
+  const fuLine = await followupNotice($, s, L)
+  if (fuLine) $.ui.log(fuLine)
   const tsid = uuid()
   // A running task keeps its anchor, tools and state. The new prompt waits on disk: if a turn starts with its text it
   // is its own task (turn.start). If it was delivered into the running turn its work lands in that task's learn, its
@@ -228,7 +300,7 @@ export async function onPrompt($: any, L: Load, e: any): Promise<any> {
   const r = await renderArm($, sr.resp, 'ace-patterns', 'agent-type="main"', s, new Set(seen))
   if (r.cohort === 'full' && r.ids.length) await writePrivate($, seenFile, JSON.stringify([...new Set([...seen, ...r.ids])]))
   await save({ ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, tsid, userPrompt: e.text, rendered: r.rendered, hook: 'UserPromptSubmit',
-    renderVariant: r.cohort, renderLayout: r.layout, contents: injectedContents(r.patterns, r.ids), evalStats: evalStats(r.patterns, sr.resp.similar_patterns || []) })
+    renderVariant: r.cohort, renderControlPct: r.controlPct, renderLayout: r.layout, contents: injectedContents(r.patterns, r.ids), evalStats: evalStats(r.patterns, sr.resp.similar_patterns || []) })
   const ds = domainsSummary(sr.resp)
   if (Object.keys(ds).length) {
     L.domains = domainNames(ds)

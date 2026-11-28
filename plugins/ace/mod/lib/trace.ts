@@ -557,8 +557,8 @@ export function buildTrace(a: {
   // per-source counters (Haiku, H2), 0 when none; 8.2.7: the ids themselves per source (ids only, injected order, <= 50)
   usedIds?: { used_ids_model: number; used_ids_tokens: number; used_ids_model_list?: string[]; used_ids_tokens_list?: string[] }
   downvote?: number[]  // the previous main task's evidenced ids after a user rejection
-  downvoteDetect?: { detect_source?: unknown; model_conf?: unknown }  // 8.3.0: how the rejection was found (read from the pending file; validated here)
-  upvote?: number[]; upvoteDetect?: { detect_source?: unknown; model_conf?: unknown }  // the previous main task's evidenced ids after a user approval
+  downvoteDetect?: { detect_source?: unknown; model_conf?: unknown; unresolved?: unknown; target_retrieval_id?: unknown }  // 8.3.0: how the rejection was found (read from the pending file; validated here)
+  upvote?: number[]; upvoteDetect?: { detect_source?: unknown; model_conf?: unknown; unresolved?: unknown; target_retrieval_id?: unknown }  // the previous main task's evidenced ids after a user approval
   textCap?: number  // task + summary hard cap in chars (textCapChars(env ACE_TEXT_HARD_CAP_CHARS)), default TEXT_HARD_CAP_CHARS
   pluginVersion?: string  // 8.1.4: the manifest x.y.z (the version in X-ACE-Client)
   interactive?: boolean; promptOrigin?: string; humanPromptCount?: number  // 8.2.2: conversation origin, each only when known
@@ -566,6 +566,7 @@ export function buildTrace(a: {
   legacySummaryCap?: number  // fullSteps false: the 8.3.0 summary cap (2000; 4000 for a SubagentHandback report)
   fullSteps?: boolean  // false = ACE_TRACE_FULL_STEPS=0: 8.3.0 steps (action/result summaries only, no tool_input / tool_response)
   hardCap?: number  // full steps: the hard byte cap (hardCapBytes(env ACE_TRACE_HARD_CAP_BYTES)), default TRACE_HARD_CAP_BYTES
+  followup?: unknown  // 8.4.3: the pending follow-up taken at this main learn (io/state.ts takeFollowup)
   evidenceSource?: 'both' | 'model' | 'tokens' | 'none'  // turn.ts dispatch: where the used ids came from (H1 Haiku / H2 tokens)
 }) {
   const { success, failed_steps } = taskOutcome(a.tools)  // 8.1.3: end outcome + informational count
@@ -600,8 +601,14 @@ export function buildTrace(a: {
   trace.used_ids_tokens = a.usedIds?.used_ids_tokens ?? 0
   trace.used_ids_model_list = (a.usedIds?.used_ids_model_list ?? []).slice(0, USED_IDS_LIST_CAP)  // 8.2.7: [] when none, never omitted
   trace.used_ids_tokens_list = (a.usedIds?.used_ids_tokens_list ?? []).slice(0, USED_IDS_LIST_CAP)
+  const upDetect = a.upvoteDetect?.detect_source === 'phrase' ? { detect_source: 'phrase' } : {}  // phrase only, never model_conf
   if (a.downvote?.length) trace.feedback = { kind: 'downvote', applied_log_ids: a.downvote, ...feedbackDetect(a.downvoteDetect) }  // never retrieval_id, never text
-  else if (a.upvote?.length) trace.feedback = { kind: 'upvote', applied_log_ids: a.upvote, ...(a.upvoteDetect?.detect_source === 'phrase' ? { detect_source: 'phrase' } : {}) }  // phrase only, never model_conf; up and down exclude each other
+  // 8.4.3 unresolved (feedback_unresolved): no applied_log_ids and no retrieval_id in the feedback; the target only as a UUID
+  else if (a.downvote && a.downvoteDetect?.unresolved === true) trace.feedback = { kind: 'downvote', ...unresolvedPart(a.downvoteDetect), detect_label: 'reject', ...feedbackDetect(a.downvoteDetect) }
+  else if (a.upvote?.length) trace.feedback = { kind: 'upvote', applied_log_ids: a.upvote, ...upDetect }  // up and down exclude each other
+  else if (a.upvote && a.upvoteDetect?.unresolved === true) trace.feedback = { kind: 'upvote', ...unresolvedPart(a.upvoteDetect), ...upDetect }
+  const fu = followupField(a.followup)  // 8.4.3: only a contract-valid follow-up (server-side judging)
+  if (fu) trace[FOLLOWUP_KEY] = fu
   trace.effort_level = a.effort
   trace.effort_weight = effortWeight(a.effort)
   if (a.git) trace.git = a.git
@@ -613,6 +620,19 @@ export function buildTrace(a: {
   return { trace, success, failed_steps, cap, textCaps }
 }
 
+// 8.4.3 trace.followup, locked server contract v1 (followup_judging): THE one place for its names. The server drops a followup with an
+// empty or > 640 code point text, a non-UUID target; so do we (nothing is sent). ts is ISO-8601 UTC with a trailing Z.
+export const FOLLOWUP_KEY = 'followup', FOLLOWUP_TEXT_MAX = 640
+export type Followup = { text: string; target_retrieval_id: string; applied_log_ids: number[]; ts: string }
+const unresolvedPart = (d: { target_retrieval_id?: unknown }) => ({ unresolved: true, ...(isUuid(d.target_retrieval_id) ? { target_retrieval_id: d.target_retrieval_id } : {}) })
+export const isUuid = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(v)
+const ISO_Z = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/
+export function followupField(d: any): Followup | undefined {
+  const text = d?.text, ids = d?.applied_log_ids
+  if (typeof text !== 'string' || !text.trim() || [...text].length > FOLLOWUP_TEXT_MAX) return undefined
+  if (!isUuid(d.target_retrieval_id) || !Array.isArray(ids) || !ids.every(Number.isInteger) || typeof d.ts !== 'string' || !ISO_Z.test(d.ts)) return undefined
+  return { text, target_retrieval_id: d.target_retrieval_id, applied_log_ids: ids, ts: d.ts }
+}
 // feedback.detect_source 'phrase'|'model'; feedback.model_conf (only with 'model') finite 0..1, 2 decimals; anything else is left out
 // (a legacy pending file from the Python path carries neither: the feedback stays {kind, applied_log_ids}).
 export function feedbackDetect(d: { detect_source?: unknown; model_conf?: unknown } | undefined): { detect_source?: 'phrase' | 'model'; model_conf?: number } {
