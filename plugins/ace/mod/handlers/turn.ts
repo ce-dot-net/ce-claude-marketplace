@@ -4,7 +4,7 @@ import { SINK_WRITE_SH } from '../lib/sh'
 import { logsSafe, nowIso, relLog } from '../io/log'
 import { LAUNCHER_MS, aceEnv, cliHead, engineScript, gitContext, ids } from '../io/spawn'
 import { authHeld, noteDeadAuth } from '../io/auth'
-import { type Load, type Sess, clearTools, cohortEnv, fullStepsEnabled, readState, stateFile, takeDownvote, takeTools, takeUpvote, uuid, type HookArgs, classicFresh, clearDeferred, deferFile, disabled, enqueue, ensure, pendingFile, pendingFile830, pendingMatches, readOrigin, refreshMarker } from '../io/state'
+import { type Load, type Sess, clearTools, cohortEnv, fullStepsEnabled, readState, stateFile, takeDownvote, takeFollowup, takeTools, takeUpvote, followupTargetFile, followupMode, uuid, type HookArgs, classicFresh, clearDeferred, deferFile, disabled, enqueue, ensure, pendingFile, pendingFile830, pendingMatches, readOrigin, refreshMarker } from '../io/state'
 import { appliedControlPct, layoutLabel, traceVariant } from '../lib/cohort'
 import { type ToolRec, appliedLogIds, parseAceReview, parseUsedIds, selfEvalPrompt, usedPatternIds } from '../lib/evidence'
 import { pyDumps, pyLoads } from '../lib/pyjson'
@@ -36,7 +36,7 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
   // record further down overwrites it once the evidenced ids are known (after the self-eval).
   const noteMain = async () => {
     if (key === 'main' && hook === 'Stop')
-      await writePrivate($, `${s.sdir}/last-main-applied.json`, JSON.stringify({ task_session_id: state?.task_session_id ?? null, applied_log_ids: [], at: await $.clock.now() / 1000, answer_tail: answerTail(answer) })).catch(() => {})
+      await writePrivate($, `${s.sdir}/last-main-applied.json`, JSON.stringify({ task_session_id: state?.task_session_id ?? null, applied_log_ids: [], at: await $.clock.now() / 1000, answer_tail: answerTail(answer), retrieval_id: state?.retrieval_id ?? null })).catch(() => {})  // 8.4.3: the target of an unresolved vote (the follow-up target has its own file)
   }
   if (!state) {
     await clearTools($, L, s, key)
@@ -62,7 +62,7 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
   const playbook: string[] = state.pattern_ids ?? []
   const rlog: Record<string, number> = state.retrieval_log_ids ?? {}
   const cenv = await cohortEnv($, s)
-  const variant = traceVariant(state.render_variant, s.sessionId, cenv), controlPct = appliedControlPct(cenv)  // §31: stored label, else the conversation arm
+  const variant = traceVariant(state.render_variant, s.sessionId, cenv), controlPct = typeof state.render_control_pct === 'number' ? state.render_control_pct : appliedControlPct(cenv)  // §31: stored label, else the conversation arm; 8.4.3: the share frozen at render
   const tokenUsed = usedPatternIds(playbook, state.pattern_contents ?? {}, usedText, recs.map(r => r.hay).filter(Boolean).join('\n'))
   const tsid: string | undefined = state.task_session_id ?? undefined
   const effort = effortEvent || await $.env.get('CLAUDE_EFFORT') || 'normal'
@@ -80,13 +80,18 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
     const modelList = playbook.filter(id => m.has(id)), tokenList = playbook.filter(id => tk.has(id))
     const bySource = { used_ids_model: modelList.length, used_ids_tokens: tokenList.length }
     // §31: used only (this agent's own tools, report, self-eval); for the 20-cap Haiku ids first, then H2 ids, injected order
-    const dv = key === 'main' && !park ? await takeDownvote($, s) : undefined
+    const dv = key === 'main' && !park ? await takeDownvote($, s, tsid) : undefined
     const downvote = dv?.ids
     // one feedback per trace: a pending downvote wins; a pending upvote then waits for the next main trace (within 6 h)
-    const uv = key === 'main' && !park && !downvote?.length ? await takeUpvote($, s) : undefined
+    const uv = key === 'main' && !park && !dv ? await takeUpvote($, s, tsid) : undefined  // dv: an unresolved downvote has [] ids
+    // 8.4.3: the pending follow-up (server-side judging), main only, never while parked
+    const followup = key === 'main' && !park ? await takeFollowup($, s, state.retrieval_id, L) : undefined
     const { ids: applied, capped } = appliedLogIds([...used.filter(id => m.has(id)), ...used.filter(id => !m.has(id))], rlog)
-    // the record a later rejection downvotes ([] too: rejecting a task without evidenced ids sends nothing)
-    if (key === 'main' && !park) await writePrivate($, `${s.sdir}/last-main-applied.json`, JSON.stringify({ task_session_id: tsid ?? null, applied_log_ids: applied, at: await $.clock.now() / 1000, answer_tail: answerTail(answer) })).catch(() => {})
+    // the record a later rejection downvotes ([] too: rejecting a task without evidenced ids sends nothing); 8.4.3: its retrieval_id is
+    // the target of a later follow-up (server-side judging)
+    if (key === 'main' && !park) await writePrivate($, `${s.sdir}/last-main-applied.json`, JSON.stringify({ task_session_id: tsid ?? null, applied_log_ids: applied, at: await $.clock.now() / 1000, answer_tail: answerTail(answer), retrieval_id: state.retrieval_id ?? null })).catch(() => {})
+    if (key === 'main' && !park && hook === 'Stop' && (await followupMode($, s)) !== 'off')  // 8.4.3: the follow-up target, only with the final record, only while follow-ups are on
+      await writePrivate($, followupTargetFile(s), JSON.stringify({ target_retrieval_id: state.retrieval_id ?? null, applied_log_ids: applied, task_session_id: tsid ?? null, at: await $.clock.now() / 1000 })).catch(() => {})
     let git: any
     try {
       git = await gitContext($, s.cwd)
@@ -94,7 +99,7 @@ export async function learn($: any, L: Load, s: Sess, key: string, answer: strin
       if (git && commits.length) git.session_commits = commits
     } catch { /* git context is optional */ }
     const { trace, success, failed_steps, cap, textCaps } = buildTrace({ userPrompt: prompt, tools: recs, answer, playbookUsed: playbook, agentType,
-      tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, forkOf: agentId ? state.fork_of_retrieval_id ?? undefined : undefined, appliedLogIds: applied, evidenceSource: source, usedIds: { ...bySource, used_ids_model_list: modelList, used_ids_tokens_list: tokenList }, downvote, downvoteDetect: dv, upvote: uv?.ids, upvoteDetect: uv,
+      tsid, agentId, parentTaskId: state.parent_task_id, retrievalId: state.retrieval_id ?? undefined, forkOf: agentId ? state.fork_of_retrieval_id ?? undefined : undefined, appliedLogIds: applied, evidenceSource: source, usedIds: { ...bySource, used_ids_model_list: modelList, used_ids_tokens_list: tokenList }, downvote, downvoteDetect: dv, upvote: uv?.ids, upvoteDetect: uv, followup,
       nowIso: await nowIso($), renderVariant: variant, renderControlPct: controlPct, renderLayout: state.render_layout, conversationId: s.sessionId, effort, git, textCap: textCapChars(await $.env.get('ACE_TEXT_HARD_CAP_CHARS')),
       pluginVersion: s.clientId.slice(s.clientId.lastIndexOf('/') + 1),
       interactive: L.interactive, ...await readOrigin($, s), hardCap: hardCapBytes(await $.env.get('ACE_TRACE_HARD_CAP_BYTES')), fullSteps: await fullStepsEnabled($, s), legacySummaryCap })
@@ -274,8 +279,11 @@ export async function turnComplete($: HookArgs<'turn.complete'>[0], L: Load, e: 
       // 8.3.0 (S1): a main answer to a HUMAN prompt that made no task (a short "warum?") is what a following reply reacts to: it replaces the
       // rejection record (no ids), so that reply cannot downvote the task before. A task-notification turn keeps the record (humanPrompt false).
       const human = L.humanPrompt; L.humanPrompt = false
+      // 8.4.3: a human turn ends the old follow-up target before anything branches (only this turn's final record may set a new one)
+      if ((human || e.reason !== 'answer' || e.isAborted || running) && await $.fs.exists(followupTargetFile(s)).catch(() => false))  // no rm process when there is none
+        await rm($, followupTargetFile(s)).catch(() => {})
       if (!anchor && human && e.reason === 'answer' && !e.isAborted)
-        await writePrivate($, `${s.sdir}/last-main-applied.json`, JSON.stringify({ task_session_id: null, applied_log_ids: [], at: await $.clock.now() / 1000, answer_tail: answerTail(e.answer) })).catch(() => {})
+        await writePrivate($, `${s.sdir}/last-main-applied.json`, JSON.stringify({ task_session_id: null, applied_log_ids: [], at: await $.clock.now() / 1000, answer_tail: answerTail(e.answer), retrieval_id: null })).catch(() => {})
       if (!anchor || (state && state.task_session_id !== anchor)) await clearTools($, L, s, 'main')
       else if (e.reason !== 'answer' || e.isAborted) { await clearDeferred($, L, s); await abstain($, L, s, 'main', state, e.reason, 'Stop') }
       else if (running && state) {  // §16 P2: state, tools and F-080 ids stay for the Stop after the notification

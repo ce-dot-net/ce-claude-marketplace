@@ -98,6 +98,17 @@ valid IBAN that starts inside another valid IBAN is not joined into one span (th
   inspect it. An invalid value sends nothing either. Search is not affected.
 - Upvotes: a positive reply is recognized only by a phrase (German or English, the whole reply), never by a model; a
   bare "ok" or "thanks" is no upvote.
+- Follow-up judging (privacy): only while the ACE server switches it on (`followup_judging`), the next trace links your
+  reply to the previous task so the server can judge it. Your prompt already goes out as the trace's task text (redacted), as
+  before. What is new is the link to the previous task, plus the text of replies whose own turn sends no trace (very short
+  replies, and turns without tool work, such as a quick question). The text is redacted first (secrets, e-mail, IBAN, phone numbers; names and postal addresses are NOT
+  detected), code, logs and long tokens are removed, and it is cut to about 600 characters (first and last 300). No assistant text
+  is sent. Never for headless, subagent or machine prompts. A one-line notice in the prompt band says when it is on.
+  `ACE_REJECTION_MODEL=0` stops the follow-up field and the notice (not the normal trace task). In the server's live mode the
+  plugin itself no longer turns your replies into up/downvotes.
+- Unresolved votes: only while the ACE server advertises `feedback_unresolved`, an up/downvote the plugin detects on a reply it cannot
+  tie to the previous task's used patterns is still sent. It carries a flag, the target search id (when known), how it was detected
+  (`detect_source`, and `model_conf` for a Haiku downvote) and, for downvotes only, the label `reject`. It carries no text.
 - Automatic update: only when the server says this plugin is below its minimum version, only in non-interactive
   sessions, at most once per target and per day, with the fixed command `claude plugin update ace@ce-dot-net-marketplace`.
   `ACE_AUTO_UPDATE=0` turns it off. Interactive sessions get an "Aktualisieren" button instead.

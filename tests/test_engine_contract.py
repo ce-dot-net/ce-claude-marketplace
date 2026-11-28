@@ -69,6 +69,22 @@ def test_search_recovers_switches_from_the_raw_body_on_older_core(fake_core):
     assert (out["feedback_downvote"], out["render_full_pct"]) == (False, 9)
 
 
+def test_search_recovers_followup_judging_from_the_raw_body_on_older_core(fake_core):
+    """8.4.3: followup_judging ("shadow" or true) rides the same capture list as feedback_downvote."""
+    bin_dir, log = fake_core
+    r = _search_js(bin_dir, {"query": "q", "org": "o", "project": "p"}, ACE_FAKE_CORE_MODE="raw_old")
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)["followup_judging"] == "shadow"
+
+
+def test_search_recovers_feedback_unresolved_from_the_raw_body_on_older_core(fake_core):
+    """8.4.3: feedback_unresolved (exactly true = on) rides the same capture list."""
+    bin_dir, log = fake_core
+    r = _search_js(bin_dir, {"query": "q", "org": "o", "project": "p"}, ACE_FAKE_CORE_MODE="raw_old")
+    assert r.returncode == 0, r.stderr
+    assert json.loads(r.stdout)["feedback_unresolved"] is True
+
+
 def test_search_passes_query_session_topk_and_context(fake_core):
     bin_dir, log = fake_core
     r = _search_js(bin_dir, {"query": "fix hook json", "org": "org_a", "project": "prj_b",
@@ -249,6 +265,25 @@ def test_real_core_search_body_carries_the_headless_fields(real, tmp_path, extra
     body = [q["body"] for q in srv.requests() if q["path"].startswith("/patterns/search")][0]
     assert {k: body[k] for k in ("interactive", "human_prompt_count") if k in body} == extra
     assert body["pattern"]["content"] == "hook json"
+
+
+SWITCHES_843 = {"followup_judging": "shadow", "feedback_unresolved": True, "feedback_downvote": True, "feedback_upvote": False,
+                "render_full_pct": 40, "render_control_pct": 10, "client_policy": {"min_plugin_version": "8.1.0"}, "full_steps": False}
+
+
+@needs_real
+def test_real_ace_cli_search_json_passes_every_server_switch_through(tmp_path):
+    """8.4.3 (deep check of the CLI fallback): the INSTALLED `ace-cli search --stdin --json` (its own @ace-sdk/core) prints every
+    top-level server switch of the /patterns/search answer unchanged, so the mod treats a CLI answer like an engine answer."""
+    srv = E.FakeServer(tmp_path, FAKE_SEARCH_EXTRA=json.dumps(SWITCHES_843))
+    try:
+        cli = subprocess.run([E.real_cli_path(), "search", "--stdin", "--json"], input="hook json",
+                             capture_output=True, text=True, env=E.sdk_env(tmp_path, srv), timeout=60)
+        assert cli.returncode == 0, cli.stderr
+        out = json.loads(cli.stdout)
+        assert {k: out.get(k, "<missing>") for k in SWITCHES_843} == SWITCHES_843
+    finally:
+        srv.stop()
 
 
 @needs_real

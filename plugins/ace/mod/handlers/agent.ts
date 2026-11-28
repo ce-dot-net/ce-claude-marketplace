@@ -59,7 +59,7 @@ export async function beforeSpawn($: any, L: Load, s: Sess, e: any) {
   }
   const r = await subagentRender($, s, sr, query, e.subagentType, tsid, t0, state.parentTaskId, { workflow: e.workflow?.runId, cache_hit: !!cached })
   return { out: r.context ? { ...e, prompt: `${e.prompt}\n\n${r.context}` } : e,
-    state: { ...state, ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort, renderLayout: r.layout,
+    state: { ...state, ids: r.ids, retrievalId: sr.resp.retrieval_id || null, rlog: r.rlog, rendered: r.rendered, renderVariant: r.cohort, renderControlPct: r.controlPct, renderLayout: r.layout,
       contents: injectedContents(r.patterns, r.ids) } }
 }
 

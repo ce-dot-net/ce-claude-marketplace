@@ -61,7 +61,7 @@ export async function search($: any, s: Sess, query: string, pin: string | undef
   if (eng) {
     const e = await engineSearch($, s, eng, query, sid, topK, budgetMs, origin)  // engine never pins: session_id is the task stamp
     const ms = await $.clock.now() - t0
-    if ('resp' in e) { await releaseAuth($, s); await storeFullPct($, s, e.resp); if (L) await serverReachable($, L).catch(() => undefined) }
+    if ('resp' in e) { await releaseAuth($, s); await storeFullPct($, s, e.resp, true); if (L) await serverReachable($, L).catch(() => undefined) }
     if ('resp' in e) return { resp: e.resp, error: undefined, ms, pinFailed: false, pinSkipped: undefined, pinMs: undefined, stderr: '', engine: 'lib', engineWhy: 'ok' }
     if ('timeout' in e) return { resp: null, error: 'timeout', ms, pinFailed: false, pinSkipped: undefined, pinMs: undefined, stderr: '', engine: 'lib', engineWhy: 'timeout' }
     engineWhy = 'lib failed: ' + e.why

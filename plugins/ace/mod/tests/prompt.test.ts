@@ -68,7 +68,9 @@ test('state: patterns-used-main.json is byte-identical to the Python writer (sha
   await submit($)
   const tsid = h.pin(h.searches()[0]!)!
   const text = h.files.get(`${SDIR}/patterns-used-main.json`)!
-  expect(text.split(tsid).join('__TSID__')).toBe(G.state_main_8)
+  // 8.4.3: plus ONE mod-only key, render_control_pct (the share frozen at render; the Python chain does not write it)
+  expect(JSON.parse(text).render_control_pct).toBe(0)
+  expect(text.replace(/, "render_control_pct": \d+/, '').split(tsid).join('__TSID__')).toBe(G.state_main_8)
 })
 
 test('state: user_prompt whole (full steps; was <= 4000), rendered_context <= 10000 and a complete envelope, F-080 ids of the injected set', async ($, on) => {

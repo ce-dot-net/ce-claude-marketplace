@@ -23,6 +23,7 @@ export function dataRootFromPluginRoot(home: string, root: string, name: string,
 export const USER_PROMPT_MAX = 200_000  // = TEXT_HARD_CAP_CHARS: the trace's task cap decides, never this store (was 4000)
 export type StateUpdate = { ids?: string[]; retrievalId?: string | null; rlog?: Record<string, number>; tsid?: string | null
   userPrompt?: string; rendered?: string; hook?: string; parentTaskId?: string; agentType?: string; renderVariant?: string; renderLayout?: string | null
+  renderControlPct?: number  // 8.4.3: the control share that applied when render_variant was rendered (frozen for the trace)
   contents?: Record<string, string>; evalStats?: { avg_relevance: number; domains: number }
   searchOrg?: string; searchProject?: string
   forkOf?: string }  // mod-only: a fork's parent retrieval_id (ACE_FORK_RETRIEVAL_ID=1) -> trace.fork_of  // 8.2.6: the binding the search ran with = where the learn goes
@@ -49,6 +50,8 @@ export function mergeState(prior: any, u: StateUpdate): any {
   if (rv) state.render_variant = rv
   const rl = u.renderLayout === undefined ? p.render_layout : u.renderLayout  // layout-a arm: set only when it ACTUALLY rendered; null = rendered without it (clears), undefined = keep
   if (typeof rl === 'string' && LAYOUT_A_VALUES.includes(rl)) state.render_layout = rl
+  const rcp = u.renderControlPct ?? p.render_control_pct  // 8.4.3: written with render_variant, read back at learn (trace render_control_pct)
+  if (typeof rcp === 'number' && Number.isInteger(rcp) && rcp >= 0 && rcp <= 100) state.render_control_pct = rcp
   const pc: Record<string, string> = { ...(p.pattern_contents && typeof p.pattern_contents === 'object' ? p.pattern_contents : {}) }
   for (const [id, t] of Object.entries(u.contents ?? {})) if (isValidPatternId(id) && typeof t === 'string' && t) pc[id] = cpSlice(t, CONTENT_CAP)
   if (Object.keys(pc).length) state.pattern_contents = pc  // §31 (Python writes it after its optional keys too)
