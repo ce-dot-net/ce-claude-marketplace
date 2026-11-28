@@ -5,6 +5,115 @@ All notable changes to the ACE Plugin will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [8.4.3] - 2026-11-28
+
+Mod chain only. No new env knobs. While the server advertises neither `followup_judging`
+nor `feedback_unresolved`, every trace, vote file, log row and model call is byte-identical to 8.4.2 (golden test `mod/tests/vote_golden.test.ts`, captured on 8.4.2,
+28 scenarios incl. the whole sent trace, learn argv, parked queue bodies and sink files). One exception: `render_control_pct` is now
+frozen when the patterns are rendered. If the control share changes between the render and the learn, the trace differs from 8.4.2.
+
+### Added
+- Server-side follow-up judging (`followup_judging`, locked server contract v1). The server, not the client, judges how a user's
+  reply rates the previous main task. The next MAIN trace carries `trace.followup = {text, target_retrieval_id, applied_log_ids, ts}`.
+  - **What is new on the wire:** the reply itself already leaves the machine as before, as the next task's `task` text (redacted). The
+    follow-up field adds the link to the previous task (its retrieval id and evidenced ids). Text newly leaves only from replies
+    whose own turn sends no trace: short replies (under 12 code points by default, `prompt_too_short`) and turns the learn skips
+    (`trivial_task`, `no_substantial_work`, e.g. a question answered without tool work).
+  - `text`: the human-written part of the reply. It is redacted first (secrets plus the redactor's personal-data layer: e-mail, IBAN,
+    phone numbers). Then code blocks, stack traces, JSON, diff lines, log / error / shell lines without prose, long tokens (hashes,
+    base64, long paths) and path lists are dropped. It is cut to the first 300 + ` […] ` + the last 300 code points when longer than
+    600 (so about 600 characters). The input is capped at 200k code points before the redactor runs. **The redaction does not catch
+    names or postal addresses.** An empty human part sends nothing.
+  - `target_retrieval_id` / `applied_log_ids`: the previous main task's retrieval id and evidenced ids (may be `[]`). They come from a
+    local `followup-target.json`. That file is written only with a task's final record, and only while the switch is on (so the
+    first follow-up after the switch turns on can be missed). It is removed at every human main turn end: an in-process existence
+    check runs first, and the removal itself (an `rm -rf` subprocess) runs only when the file exists. So an aborted, deferred or task-less turn, or a reply in the self-eval window, sends nothing. No valid UUID: nothing is sent.
+    `last-main-applied.json` (local only) now also stores the task's `retrieval_id`. `ts`: ISO-8601 UTC (`...Z`).
+  - No assistant text is sent with it (the server joins the context from the previous trace).
+  - **When it is sent:** only for a human, interactive main-agent prompt, never for headless, subagent, fork, machine or
+    task-notification prompts. It must come within 6 h of the previous task, and only once per previous task.
+  - **When a pending follow-up is dropped unsent at the next main learn:**
+    - `ACE_REJECTION_MODEL=0` is set by now, or the session is headless (e.g. resumed with `-p`);
+    - the follow-up or its target task is 6 h old or older;
+    - the switch was withdrawn;
+    - it fails the contract (empty, more than 640 code points, non-UUID target).
+
+    A parked learn (held login) does not take it. Queue, replay and `ACE_TRACE_SINK` carry the field unchanged.
+  - **The switch comes only from the server.** It is `followup_judging` in a `/patterns/search` answer, stored in ONE file per
+    org/project (`followup-judging-<hash>.json`, a short hash of org and project; a search of another project never touches it; the
+    old global `followup-judging.json` is ignored). It is valid 7 days; a future `at` beyond 5 minutes counts as invalid. A present
+    key always counts. A missing key means off only on an engine answer (`engine/search.js` reads the raw server body); an ace-cli
+    fallback answer without the key keeps the stored value (an ace-cli on an older core may drop unknown keys; the pinned ace-cli
+    4.4.5 with core 3.11.0 passes all eight server switches through, verified against the fake server). Local cache hits never write.
+    - Exactly the string `"shadow"`: the follow-up is sent AND the client keeps its own phrase / Haiku vote path exactly as in
+      8.4.2 (the server compares).
+    - Exactly `true` (live): the follow-up is sent and the client produces no vote of its own at all, also when a follow-up gate
+      failed. So in live mode, headless sessions and `ACE_REJECTION_MODEL=0` users give no feedback signal.
+    - Anything else (`false`, `"true"`, `1`, stale, another project's value) or an engine answer WITHOUT the key: off at once.
+    - In live mode a reply in the self-eval window (before the previous task's final record) gives no signal at all.
+    - In live mode the signal is also lost when the switch flips between the prompt and the next main learn (the pending follow-up is
+      dropped). A rolling server deploy with mixed nodes can cause such flips.
+  - **Off switch:** `ACE_REJECTION_MODEL=0` (existing) stops the follow-up field and the notice. It does not stop the normal trace,
+    whose `task` still carries the redacted prompt.
+  - While it is on, the prompt band shows one line per conversation: the redacted follow-up text (about 600 characters) goes to the
+    server for judging.
+  - While the switch is on (never when off), every human main prompt check logs one text-free relevance-log row `followup_check`:
+    `mode`, `failed`, `prev_ids`, and `sent_chars` when queued. `failed` is null when queued, else `headless`, `model_off`
+    (`ACE_REJECTION_MODEL=0`), `no_target` (no target file: no task yet, or the turn after it was aborted, deferred, task-less or still
+    in its self-eval window; these cannot be told apart), `stale_target` (6 h or older), `no_uuid`, `task_sent`, `empty_human`,
+    `session_gone` (the session directory was removed meanwhile) or `write_failed` (the pending follow-up could not be written; in
+    shadow mode the client vote still runs). A row that itself cannot be written is skipped.
+- Unresolved votes (server capability `feedback_unresolved`, exactly `true` in a `/patterns/search` answer; stored like
+  `followup_judging`, one `feedback-unresolved-<hash>.json` per org/project, 7 days, the same engine / ace-cli rule). Up to
+  8.4.2 a vote the client detected was dropped when it could not be tied to the evidenced ids of a fresh previous task. With the
+  capability it is sent at the next main learn as `trace.feedback = {kind, unresolved: true, target_retrieval_id, detect_label, detect_source, model_conf}`:
+  - `empty_ids` (the previous task had no evidenced ids): the target is that task's retrieval id.
+  - `prev_stale`: the target is the older task's retrieval id when there is a record, even if it is 6 h old or older.
+  - **Haiku only with a target:** the model path runs only when the record has a valid UUID retrieval id. With no record, or a
+    record without one (a task-less answer, the Python / 8.4.2 format), only the phrase path runs. So model votes always carry a
+    target, and phrase votes may go out without one. `rejection_check` failed is then `no_prev_record` or `no_target_record`. This
+    deliberately differs from the server contract, which also accepts model votes without a target; it saves the model calls.
+  - **What is sent:** only the flag, the target UUID (left out when it is not a valid UUID), `detect_label: "reject"` (downvotes only)
+    and the detection fields as before. No text, no `applied_log_ids`, no `retrieval_id` in the feedback (the trace's own
+    `applied_log_ids` are unchanged).
+  - **Detection:** as before (phrase, or Haiku at confidence 0.8 or more, no model when headless), for downvotes and phrase upvotes.
+    `too_long` and `switch_off` still send nothing.
+  - One vote per task as before. A vote without a task id (no record, or a task-less record) locks the previous answer by its record
+    time, so an untargeted downvote is never followed by an untargeted upvote; a new record opens the next vote. A vote on the very task whose self-evaluation is still running stays pending for the next main
+    learn. It also takes that task's lock, so a later reply to the same task cannot add a resolved vote with its ids.
+    `last-main-applied.json` keeps the task's `retrieval_id` from the Stop on. A vote after an aborted task aims at the task before
+    it (the aborted one writes no record).
+  - `rejection_check` / `upvote_check` rows of such a vote carry `unresolved: true` (`failed` null when queued).
+  - These rows and `rejection_detected` also carry `target: true|false` and, when false, `no_target_reason`: `no_prev_record` (no
+    `last-main-applied.json` record) or `no_prev_retrieval` (a record without a valid retrieval id, e.g. a task-less answer). An
+    untargeted vote is still sent (the server books nothing for it), so untargeted votes are a measurable quantity: count them by
+    `no_target_reason`. The target is fixed when the vote is written, so the row shows what is sent.
+  - With `followup_judging`: `"shadow"` sends both (the follow-up and the unresolved vote); live sends no client vote at all.
+  - Cost with the capability on: Haiku also runs on `empty_ids` and `prev_stale` prompts whose record has a valid retrieval id. By an
+    estimate from a local log measurement that is roughly four times as many model calls. Without such a record there is no model
+    call (phrase only).
+  - Without the capability every trace, vote file, log row and model call is byte-identical to 8.4.2 (golden test, also with
+    `feedback_unresolved` / `followup_judging` answered as `false`, `"true"`, `1` or `null`). Not identical, and without any change in
+    behaviour: extra local reads. The follow-up mode file is read at every human prompt, and the unresolved file whenever 8.4.2
+    would stop at `prev_stale` / `empty_ids`.
+  - `no_prev_record` / `no_target_record` are logged only when the model would otherwise have run; headless, `ACE_REJECTION_MODEL=0`
+    or an empty text keep the 8.4.2 value `no_phrase`.
+- `render_control_pct` in the trace is now the control share that applied when the patterns were rendered. It is stored in the task
+  state next to `render_variant` and read back at the learn, instead of being recomputed then. An unchanged share gives the same value
+  as before; a state without the stored value falls back to the learn-time value.
+- Server contract note: the field names live in one builder (`mod/lib/trace.ts` `followupField`) and follow the server's locked v1;
+  a later rename is a one-line change.
+
+### Dogfood
+- The switch can be set by hand in the plugin data root (marketplace install: `~/.claude/plugins/data/ace-ce-dot-net-marketplace/`):
+  `followup-judging-<h>.json` = `{"mode": "shadow" | "live", "at": <epoch seconds>, "org": "<org id>", "project": "<project id>"}`
+  (and `feedback-unresolved-<h>.json` = `{"on": true, ...}` with the same fields), where `<h>` is the first 16 hex digits of
+  sha256(`<org id>` + NUL + `<project id>`). The org and project must match the session exactly. The file expires 7 days after
+  `at`. The next engine search answer overwrites it, and an engine answer without the key sets it to off. For a dogfood run the
+  server has to advertise the key, or only ace-cli fallback searches may run.
+
 ## [8.4.2] - 2026-11-26
 
 ### Changed
